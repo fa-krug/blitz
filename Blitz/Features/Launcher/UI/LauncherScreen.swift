@@ -194,6 +194,16 @@ struct LauncherScreen: PaletteScreen {
         return values
     }
 
+    /// Rows whose alias the query spells outright, best first; a space after it opens their fields.
+    func rowsAliased() -> [Int] {
+        rows.indices.filter { index in
+            guard case .entry(let app) = rows[index],
+                let alias = core.aliases.alias(for: app.preferenceKey)
+            else { return false }
+            return LauncherOrder.spellsAlias(vm.query, alias)
+        }
+    }
+
     private func quicklink(for entry: AppEntry) -> Quicklink? {
         Quicklink.id(fromEntryID: entry.id).flatMap(core.quicklinks.quicklink)
     }

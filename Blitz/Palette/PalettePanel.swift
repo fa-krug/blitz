@@ -19,6 +19,8 @@ final class PalettePanel: NSPanel {
     var onFieldEditorFocused: ((NSTextInputContext) -> Void)?
     /// Inline argument fields use arrows at their text boundaries to continue their focus ring.
     var onHeaderFieldBoundaryArrow: ((HeaderFieldBoundary) -> Bool)?
+    /// A bare space with the caret after the last character, before it is typed into the text.
+    var onTrailingSpace: (() -> Bool)?
     /// Arms hover from `sendEvent`, the one place both event streams pass through.
     weak var paletteState: PaletteState? {
         didSet {
@@ -47,6 +49,16 @@ final class PalettePanel: NSPanel {
             return .trailing
         default: return nil
         }
+    }
+
+    /// Never mid-composition: an input method takes space to pick its candidate.
+    private func isTrailingSpace(_ event: NSEvent) -> Bool {
+        guard Int(event.keyCode) == kVK_Space,
+            event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
+            let editor = fieldEditor, !editor.hasMarkedText()
+        else { return false }
+        let caret = editor.selectedRange()
+        return caret.length == 0 && caret.location == (editor.string as NSString).length
     }
 
     /// Mirrors the field editor's marked text. docs/features/palette.md#ime-composition
@@ -196,6 +208,9 @@ final class PalettePanel: NSPanel {
         if event.type == .keyDown, let boundary = headerFieldBoundary(for: event),
             onHeaderFieldBoundaryArrow?(boundary) == true
         {
+            return
+        }
+        if event.type == .keyDown, isTrailingSpace(event), onTrailingSpace?() == true {
             return
         }
         // The controller owns the chords the field editor or a missing main menu would eat.

@@ -37,6 +37,8 @@ struct RootPaletteView: View {
     @State private var menuSelection = 0
     /// The argument field whose choices are up, so `menuContent` can rebuild the same menu.
     @State private var argumentOptionsField: String?
+    /// The field a space after an alias opened, focused once its row's fields have mounted.
+    @State private var aliasArgumentField: String?
     @State private var menuPanel = MenuPanelController()
     /// The palette's own window, reported by `WindowReader`; the menu hangs off its frame.
     @State private var hostWindow: NSWindow?
@@ -314,6 +316,7 @@ struct RootPaletteView: View {
                     WindowReader {
                         hostWindow = $0
                         installHeaderArrowHandler(in: $0)
+                        installAliasSpaceHandler(in: $0)
                     }
                 )
                 // The window's frame is the size source, so the glass and clip stay matched.
@@ -450,6 +453,7 @@ struct RootPaletteView: View {
             .onDisappear {
                 menuPanel.hide()
                 (hostWindow as? PalettePanel)?.onHeaderFieldBoundaryArrow = nil
+                (hostWindow as? PalettePanel)?.onTrailingSpace = nil
             }
             // The first show builds this view after `prepare`, so no handler saw that reset.
             .onAppear {
@@ -740,6 +744,7 @@ struct RootPaletteView: View {
         .frame(maxWidth: .infinity)
         // Set after the show, so the field it names is focused rather than the search field.
         .onChange(of: vm.pendingArgumentEntryID) { focusPendingArgument() }
+        .onChange(of: aliasArgumentField) { focusAliasArgument() }
         .onChange(of: argumentFocused) { _, field in vm.noteEditingField(field != nil) }
         .onChange(of: quickAI.pendingAttachments.map(\.id)) { refreshAttachmentsMenu() }
     }
@@ -1357,6 +1362,32 @@ struct RootPaletteView: View {
             }
             return true
         }
+    }
+
+    /// Space after a typed alias does what ⇥ would on that row: `gh blitz` fills the first field.
+    private func installAliasSpaceHandler(in window: NSWindow?) {
+        guard let panel = window as? PalettePanel else { return }
+        panel.onTrailingSpace = {
+            guard vm.mode == .launcher, !menuOpen, !vm.isControlListOpen, !isCollapsed,
+                argumentFocused == nil, let launcher = screen as? LauncherScreen
+            else { return false }
+            for row in launcher.rowsAliased() {
+                let accessory = launcher.headerAccessory(at: row, focus: $argumentFocused)
+                guard let field = accessory?.field(after: nil, backwards: false) else { continue }
+                vm.selection = row
+                scroll = ScrollIntent(kind: .follow)
+                aliasArgumentField = field
+                return true
+            }
+            return false
+        }
+    }
+
+    private func focusAliasArgument() {
+        guard let field = aliasArgumentField else { return }
+        argumentFocused = field
+        searchFocused = false
+        aliasArgumentField = nil
     }
 
     /// AppKit selects the whole query as the field editor comes back, which is the wanted reset.

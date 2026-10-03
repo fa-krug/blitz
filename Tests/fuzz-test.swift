@@ -244,6 +244,14 @@ struct FuzzTest {
             "a mid-word alias hit stays under the sensitivity",
             rank("term", [Item(name: "Ghostty", alias: "myterm")]).isEmpty)
         check(
+            "a space after an alias spells it outright",
+            LauncherOrder.spellsAlias("GH", "gh")
+                && LauncherOrder.spellsAlias("toggle light / dark", "toggle light / dark"))
+        check(
+            "…but never a prefix, a longer query or an empty one",
+            !LauncherOrder.spellsAlias("g", "gh") && !LauncherOrder.spellsAlias("gh blitz", "gh")
+                && !LauncherOrder.spellsAlias(" ", " "))
+        check(
             "a term the query prefixes reaches back to shorter queries",
             first(
                 "s",

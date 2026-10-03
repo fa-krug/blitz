@@ -198,6 +198,13 @@ these invariants:
   `searchFocused = argumentFocused == nil` resolved to `false` and Tab out of the last argument
   focused nothing; AppKit's key-view loop then answered the next presses instead. Both writes come
   from one local value.
+- **Space after an alias is a second way in.** A bare space with the caret at the end of a query that
+  spells a row's alias outright (`LauncherOrder.spellsAlias`, rule 1's own test) is swallowed by
+  `PalettePanel.onTrailingSpace` before the field editor types it; the row is selected and its first
+  field focused, so `gh blitz` lands `blitz` in the argument just as `gh` ⇥ `blitz` does. A row
+  without fields lets the space through, and so does marked text — an input method picks with space.
+  The focus is deferred through `aliasArgumentField`, because a row the selection just moved to has
+  not mounted its fields yet and a `@FocusState` aimed at a missing field is dropped.
 - Returning focus this way leaves the query selected, because AppKit selects the whole string as the
   field editor comes back — here that is the wanted reset rather than the hazard it is under ↵.
 - A field declaring `options=` is **chosen, not typed**: it hands back a `PopoverMenuContent` and the
@@ -502,6 +509,7 @@ Most ⌘/⌃ chords reach SwiftUI's `onKeyPress` fine. Several kinds do not. All
 handled in `PalettePanel.sendEvent` before `super` hands the event to the responder chain:
 
 - **A bare backspace** — the field editor consumes it as an edit (`onBareBackspace`).
+- **A trailing space** — typed into the text otherwise; an alias claims it (`onTrailingSpace`).
 - **Chords with no main menu item** — ⌘, and ⌘w, which an app with a menu bar would never see here.
 - **The physical number-row slots.** `FavoriteSlots` matches ⌘1…⌘0 by key code before fixed command
   chords, then publishes the resolved position to the active screen. Only the launcher and clipboard
