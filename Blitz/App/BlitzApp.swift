@@ -4,7 +4,7 @@ import SwiftUI
 struct BlitzApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
-    // Channel-aware: "Blitz", "Blitz Dev", or "Blitz Beta".
+    // Channel-aware: "Blitz" or "Blitz Dev".
     private let appName = Bundle.main.appDisplayName
 
     /// Two independent items: one preference each, no state either can read off the other.

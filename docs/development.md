@@ -52,7 +52,7 @@ persisted thing is keyed by bundle id — `~/Library/Preferences/<id>.plist` (se
 bindings), `~/Library/Application Support/<id>/` (the onboarding marker, Notes, snippets, quicklinks,
 clipboard history, calculator history, launch ranking and frequent emoji; Notes and snippets unless
 a folder is chosen),
-`~/Library/Caches/<id>/` (exchange rates, the update check, staged downloads), the opt-in
+`~/Library/Caches/<id>/` (exchange rates, Sparkle's downloads), the opt-in
 `~/.config/blitz-dev/settings.json` (`blitz` on stable), the `SMAppService`
 login item, and the Accessibility / Input Monitoring (TCC) grants — so a local build can neither read
 nor clobber an installed app's state, and both run side by side.

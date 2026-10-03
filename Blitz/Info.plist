@@ -75,5 +75,17 @@
 	<string>Blitz uses Bluetooth access only when you run the Toggle Bluetooth action.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Blitz</string>
+	<!-- Sparkle. The appcast is public; the zip it names sits in the private repo and is fetched
+	     with this token, which release.yml injects. Empty in every other build, which never updates. -->
+	<key>BlitzUpdateFeedToken</key>
+	<string></string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/fa-krug/blitz-updates/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>JYUnkXhw2Tb0HlyvNGrsTW/vIbXKUZKXwJQuGrG74qE=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<false/>
 </dict>
 </plist>

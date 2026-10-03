@@ -68,7 +68,7 @@ Two further guards on that rule:
   product, so `allowsBundleIDPrefixMatch` requires three components. `com.adobe` still matches itself.
 - **An installed sibling owns its own artifacts.** If any _other_ installed app's bundle ID is a
   longer match for the same component, that app owns it. Without this, uninstalling `de.fa-krug.blitz`
-  would also trash `de.fa-krug.blitz.beta` and `…​.dev` — separate products that merely share a
+  would also trash `de.fa-krug.blitz.dev` — a separate product that merely shares a
   namespace, which is exactly the channel-isolation invariant in reverse.
 
 **`groupContainer`** — strips a leading `group.` and/or a 10-character Team ID (uppercase

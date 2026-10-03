@@ -65,7 +65,7 @@ Add a token rather than a magic number when introducing a new value.
 
 `AppSettings.interfaceSize` scales the palette and the surfaces that float with it — the ⌘K menu, the
 extension list panel, Quick Actions, dialogs and HUDs. Settings, Onboarding,
-Support, Update, About and Notes never scale.
+Support, About and Notes never scale.
 
 `DesignSystem/InterfaceMetrics.swift` stores **only a scale** and derives every value from the `Theme`
 literal, so `Theme` stays the one place a number is written down. **In any view a scaled surface can
@@ -583,7 +583,7 @@ style; `.thinScrollbar()` on the scroll view draws a hairline thumb (`Color.prim
 
 Routing: the palette lists (App Launcher, Clipboard history, Emoji, File Search, Calculator history) use
 `.thinScrollbar()` + `.hideNativeScrollers()`; the Clipboard preview (right pane), every Settings
-pane and the update window take the native scroller as-is. Don't reintroduce native scrollers on the palette lists.
+pane takes the native scroller as-is. Don't reintroduce native scrollers on the palette lists.
 
 **Native scrollers are overlay app-wide, set once.** `AppDelegate.applicationWillFinishLaunching`
 writes `AppleShowScrollBars = WhenScrolling` into Blitz's own defaults domain, which outranks the
@@ -697,7 +697,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   transcript scrolls under it. `.fullSizeContentView` and `titlebarSeparatorStyle = .none` stay — the
   content still runs under the bar, and a hairline would split the surface the band unifies. Both also
   clear `isMovableByWindowBackground`: stock Settings isn't dragged by its content, and a drag across a
-  transcript selects text. Onboarding, Updates, Support and Command Output keep the transparent
+  transcript selects text. Onboarding, Support and Command Output keep the transparent
   titlebar they were tuned for. Never hand-draw a header band; a main surface takes the system's
   material, not `glassEffect`.
 - `SettingsComponents.swift` holds only what more than one pane or editor needs: **`SettingsRow`**,

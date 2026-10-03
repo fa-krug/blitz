@@ -1,423 +1,222 @@
 name: Release
 
-# Shown in the Actions list instead of a bare "Release" — carries the version + channel.
-run-name: "Blitz ${{ inputs.version }} · ${{ inputs.channel }} #${{ github.run_number }}"
-
-# Manually triggered from the Actions tab. Pick a channel and a base version;
-# beta builds get an auto-incrementing suffix so re-running never collides.
+# Every push to main ships: Developer ID-signed, notarized, and offered through Sparkle.
 on:
-  workflow_dispatch:
-    inputs:
-      channel:
-        description: "Release channel"
-        type: choice
-        options: [beta, stable]
-        default: beta
-      version:
-        description: "Base version, e.g. 0.2.0 (no channel suffix)"
-        type: string
-        required: true
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
-  # Dispatches the Website workflow, whose version and changelog are read at build time.
-  actions: write
 
 jobs:
-  build:
-    runs-on: macos-26
-    # Consumed by the `universal` job, so the channel identity is derived in exactly one place.
-    outputs:
-      full_version: ${{ steps.meta.outputs.full_version }}
-      display_name: ${{ steps.meta.outputs.display_name }}
-      bundle_id: ${{ steps.meta.outputs.bundle_id }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Select Xcode 26
-        run: |
-          XCODE_PATH="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n1)"
-          if [ -z "$XCODE_PATH" ]; then
-            echo "::error::No Xcode 26.x found on this runner. Installed Xcodes:"
-            ls /Applications | grep -i xcode || true
-            exit 1
-          fi
-          echo "Using $XCODE_PATH"
-          echo "DEVELOPER_DIR=$XCODE_PATH/Contents/Developer" >> "$GITHUB_ENV"
-
-      - name: Compute release metadata
-        id: meta
-        run: |
-          CHANNEL="${{ github.event.inputs.channel }}"
-          BASE_VERSION="${{ github.event.inputs.version }}"
-          # Each channel is a distinct, side-by-side app: its own display name + bundle id,
-          # and its own Homebrew cask in the abue-ammar/homebrew-blitz tap.
-          case "$CHANNEL" in
-            beta)   SUFFIX="-beta.${GITHUB_RUN_NUMBER}";  DISPLAY="Blitz Beta";  BUNDLE="de.fa-krug.blitz.beta";  CASK="blitz@beta";  PRERELEASE=true ;;
-            stable) SUFFIX="";                            DISPLAY="Blitz";       BUNDLE="de.fa-krug.blitz";       CASK="blitz";       PRERELEASE=false ;;
-          esac
-          FULL="${BASE_VERSION}${SUFFIX}"
-          {
-            echo "full_version=${FULL}"
-            echo "display_name=${DISPLAY}"
-            echo "bundle_id=${BUNDLE}"
-            echo "cask_name=${CASK}"
-            echo "dmg_file=Blitz-${FULL}.dmg"
-            echo "zip_file=Blitz-${FULL}.zip"
-            echo "prerelease=${PRERELEASE}"
-          } >> "$GITHUB_OUTPUT"
-
-      # Import the stable self-signed identity into a temp keychain so every release is signed with
-      # the SAME cert — that constant signature is what keeps users' Accessibility (TCC) grant alive
-      # across updates. Generate/rotate the secrets per docs/signing.md.
-      - name: Import signing certificate
-        env:
-          P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
-        run: |
-          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KPW="$(openssl rand -base64 24)"
-          echo "${P12_BASE64}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security create-keychain -p "$KPW" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KPW" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "${P12_PASSWORD}" -A -T /usr/bin/codesign
-          # Let codesign use the key without an interactive prompt.
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KPW" "$KEYCHAIN" >/dev/null
-          # Prepend to the search list so xcodebuild's codesign finds "Blitz Self-Signed".
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
-          rm -f "$RUNNER_TEMP/cert.p12"
-
-      # Build the signed .app into an ephemeral DerivedData dir. Channel identity (name, bundle id,
-      # version) comes from build-setting overrides so beta/stable ship side-by-side.
-      - name: Build app
-        env:
-          VERSION: ${{ steps.meta.outputs.full_version }}
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-          BUNDLE_ID: ${{ steps.meta.outputs.bundle_id }}
-          BUILD_NUMBER: ${{ github.run_number }}
-        run: |
-          # ARCHS pinned to what this channel has always shipped: trusting ARCHS_STANDARD is what
-          # let a thin arm64 build reach Intel users once already (compat/README.md).
-          xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Blitz Self-Signed" \
-            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
-            PRODUCT_NAME="$DISPLAY_NAME" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            build
-
-      # Apple silicon users pay for no Intel slice: assert the download stays thin. Both binaries —
-      # a bundled helper is shipped code too, and nothing else would catch a stray slice in it.
-      - name: Assert the build is arm64-only
-        env:
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-        run: |
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
-          for BIN in "$APP/Contents/MacOS/${DISPLAY_NAME}" "$APP/Contents/Helpers/ClipboardTextHelper"; do
-            SLICES="$(lipo -archs "$BIN")"
-            if [ "$SLICES" != "arm64" ]; then
-              echo "::error::${BIN##*/}: expected arm64 alone, got '$SLICES'"
-              exit 1
-            fi
-          done
-
-      # Notarization rejects a nested binary without the hardened runtime, and the helper is signed
-      # by a separate embed phase — so assert the flag reached it rather than trusting Xcode.
-      - name: Assert the signature is notarizable
-        env:
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-        run: ./Scripts/verify-signature.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
-
-      # Two artifacts from one build: the DMG people download and the cask installs, and the zip
-      # the in-app updater installs — it expands with `ditto` instead of mounting a volume.
-      - name: Package DMG and ZIP
-        env:
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-          DMG_FILE: ${{ steps.meta.outputs.dmg_file }}
-          ZIP_FILE: ${{ steps.meta.outputs.zip_file }}
-        run: |
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
-          STAGE="$(mktemp -d)"
-          cp -R "$APP" "$STAGE/"
-          ln -s /Applications "$STAGE/Applications"
-          mkdir -p dist
-          diskutil image create from "$STAGE" --format UDZO --volumeName "$DISPLAY_NAME" "dist/${DMG_FILE}"
-          # `ditto -c -k --keepParent --sequesterRsrc` is the only zip that leaves the code
-          # signature verifiable; plain `zip` drops symlinks and breaks the seal.
-          ditto -c -k --keepParent --sequesterRsrc "$APP" "dist/${ZIP_FILE}"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: Blitz-${{ steps.meta.outputs.full_version }}
-          path: dist/
-
-      # The changelog GitHub derives from the merged PRs, with the install text below a marker the
-      # update window cuts at. Nothing is committed anywhere — see docs/release.md.
-      - name: Compose release notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          CHANNEL: ${{ github.event.inputs.channel }}
-          TAG: v${{ steps.meta.outputs.full_version }}
-          SHA: ${{ github.sha }}
-          VERSION: ${{ steps.meta.outputs.full_version }}
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-          BUNDLE_ID: ${{ steps.meta.outputs.bundle_id }}
-          CASK: ${{ steps.meta.outputs.cask_name }}
-        run: ./Scripts/release-notes.sh "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP/changelog.md"
-
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="v${{ steps.meta.outputs.full_version }}"
-          PRERELEASE_FLAG=""
-          if [ "${{ steps.meta.outputs.prerelease }}" = "true" ]; then
-            PRERELEASE_FLAG="--prerelease"
-          fi
-          # --notes-file, never --generate-notes: gh prepends --notes to generated notes, which would
-          # put the install boilerplate back above the changelog.
-          gh release create "$TAG" \
-            "dist/${{ steps.meta.outputs.dmg_file }}" \
-            "dist/${{ steps.meta.outputs.zip_file }}" \
-            --title "${{ steps.meta.outputs.display_name }} ${{ steps.meta.outputs.full_version }}" \
-            --notes-file "$RUNNER_TEMP/notes.md" \
-            $PRERELEASE_FLAG
-
-      - name: Update Homebrew cask
-        env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          CASK: ${{ steps.meta.outputs.cask_name }}
-          VERSION: ${{ steps.meta.outputs.full_version }}
-          DMG_FILE: ${{ steps.meta.outputs.dmg_file }}
-        run: |
-          if [ -z "${TAP_TOKEN}" ]; then
-            echo "::warning::HOMEBREW_TAP_TOKEN secret not set — skipping cask bump. Add it to enable auto-updates of the tap."
-            exit 0
-          fi
-          SHA="$(shasum -a 256 "dist/${DMG_FILE}" | awk '{print $1}')"
-          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/abue-ammar/homebrew-blitz.git" tap
-          CASK_FILE="tap/Casks/${CASK}.rb"
-          if [ ! -f "$CASK_FILE" ]; then
-            echo "::error::$CASK_FILE not found in tap."
-            exit 1
-          fi
-          sed -i '' -E "s|^  version \".*\"|  version \"${VERSION}\"|" "$CASK_FILE"
-          sed -i '' -E "s|^  sha256 \".*\"|  sha256 \"${SHA}\"|" "$CASK_FILE"
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Casks/${CASK}.rb"
-          if git diff --cached --quiet; then
-            echo "No cask changes to commit."
-          else
-            git commit -m "${CASK} ${VERSION}"
-            git push
-          fi
-
-      # The site bakes the latest version and the changelog in at build time, so a stable release
-      # rebuilds it. A dispatch is the one event GITHUB_TOKEN may start another workflow with.
-      - name: Rebuild the website
-        if: github.event.inputs.channel == 'stable'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run website.yml --repo "$GITHUB_REPOSITORY" --ref main
-
-      # Announce the release in the Discord release channel. A Components V2 (flags 32768) card:
-      # channel-tinted container, title + right-aligned Download button, changelog, Homebrew block.
-      # No-ops with a warning if the webhook secret isn't set.
-      - name: Announce on Discord
-        if: success()
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          CHANNEL: ${{ github.event.inputs.channel }}
-          DISPLAY_NAME: ${{ steps.meta.outputs.display_name }}
-          VERSION: ${{ steps.meta.outputs.full_version }}
-          CASK: ${{ steps.meta.outputs.cask_name }}
-          TAG: v${{ steps.meta.outputs.full_version }}
-        run: |
-          if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
-            echo "::warning::DISCORD_WEBHOOK_URL secret not set — skipping Discord announcement."
-            exit 0
-          fi
-          if [ "${CHANNEL}" = "stable" ]; then COLOR=3066993; else COLOR=15844367; fi
-          RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
-          INSTALL="brew install --cask abue-ammar/blitz/${CASK}"
-          # Build with jq so backticks stay literal (printf in single quotes escaped them,
-          # which Discord rendered as verbatim backticks instead of a code block).
-          # Components V2 forbids a top-level `content`, so @everyone is a text component, and
-          # without allowed_mentions Discord renders the ping as inert text.
-          jq -n \
-            --argjson color "${COLOR}" \
-            --arg heading "## 🚀 ${DISPLAY_NAME} ${VERSION}" \
-            --arg sub "Now available on the **${CHANNEL}** channel." \
-            --arg install "${INSTALL}" \
-            --arg url "${RELEASE_URL}" \
-            --rawfile changelog "${RUNNER_TEMP}/changelog.md" \
-            '{
-              flags: 32768,
-              allowed_mentions: { parse: ["everyone"] },
-              components: [
-                { type: 10, content: "@everyone" },
-                { type: 17, accent_color: $color, components: [
-                  { type: 9,
-                    components: [ { type: 10, content: ($heading + "\n" + $sub) } ],
-                    accessory: { type: 2, style: 5, label: "Download", url: $url }
-                  },
-                  { type: 14 },
-                  { type: 10, content: ($changelog | rtrimstr("\n")) },
-                  { type: 14 },
-                  { type: 10, content: ("**Install / update via Homebrew**\n```\n" + $install + "\n```") }
-                ] }
-              ]
-            }' > payload.json
-          curl -fsS -X POST -H "Content-Type: application/json" -d @payload.json \
-            "${DISCORD_WEBHOOK_URL}?with_components=true"
-
-  # macOS 26 is the last release to boot on Intel, so stable also ships a universal build under its
-  # own cask. Same tag, version, bundle id and signature — only the slices and filenames differ, so
-  # nothing here can change what the Apple silicon job above publishes.
-  universal:
-    needs: build
-    if: github.event.inputs.channel == 'stable'
+  release:
     runs-on: macos-26
     env:
-      VERSION: ${{ needs.build.outputs.full_version }}
-      DISPLAY_NAME: ${{ needs.build.outputs.display_name }}
-      BUNDLE_ID: ${{ needs.build.outputs.bundle_id }}
-      CASK: blitz-universal
+      SPARKLE_VERSION: "1.27.3"
+      ARCHIVE_PATH: ${{ github.workspace }}/build/Blitz.xcarchive
+      EXPORT_PATH: ${{ github.workspace }}/build/export
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Select Xcode 26
+      - name: Select latest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      # Sparkle orders updates by CFBundleVersion, so every release must carry a larger one.
+      - name: Compute build number
+        run: echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Read build settings
+        id: settings
         run: |
-          XCODE_PATH="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n1)"
-          if [ -z "$XCODE_PATH" ]; then
-            echo "::error::No Xcode 26.x found on this runner. Installed Xcodes:"
-            ls /Applications | grep -i xcode || true
-            exit 1
-          fi
-          echo "Using $XCODE_PATH"
-          echo "DEVELOPER_DIR=$XCODE_PATH/Contents/Developer" >> "$GITHUB_ENV"
+          SETTINGS=$(xcodebuild -project Blitz.xcodeproj -target Blitz \
+            -showBuildSettings -configuration Release 2>/dev/null)
+          get() { echo "$SETTINGS" | awk -F' = ' "/ $1 = /{print \$2; exit}"; }
+          echo "marketing_version=$(get MARKETING_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "min_system=$(get MACOSX_DEPLOYMENT_TARGET)" >> "$GITHUB_OUTPUT"
 
-      # The SAME identity as the thin build, and a hard failure if it is missing: the in-app updater
-      # compares the staged bundle's leaf certificate against the running app's before installing.
-      - name: Import signing certificate
+      - name: Stamp build number
+        run: /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" Blitz/Info.plist
+
+      - name: Inject update-feed token
         env:
-          P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+          UPDATE_FEED_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
         run: |
-          if [ -z "${P12_BASE64}" ]; then
-            echo "::error::SIGNING_P12_BASE64 not set — a differently-signed build cannot self-update."
-            exit 1
-          fi
+          /usr/libexec/PlistBuddy -c "Set :BlitzUpdateFeedToken $UPDATE_FEED_TOKEN" Blitz/Info.plist
+
+      - name: Import Developer ID certificate
+        env:
+          CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KPW="$(openssl rand -base64 24)"
-          echo "${P12_BASE64}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          KPW="$(uuidgen)"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KPW" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KPW" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "${P12_PASSWORD}" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KPW" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
-          rm -f "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KPW" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | sed s/\"//g)
+          rm "$RUNNER_TEMP/cert.p12"
 
-      - name: Build app
-        env:
-          BUILD_NUMBER: ${{ github.run_number }}
+      - name: Archive
         run: |
-          xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Release \
+          xcodebuild archive \
+            -project Blitz.xcodeproj \
+            -scheme Blitz \
+            -destination "generic/platform=macOS" \
+            -archivePath "$ARCHIVE_PATH" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Blitz Self-Signed" \
-            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
-            PRODUCT_NAME="$DISPLAY_NAME" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            build
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM=HS26J3YA63 \
+            ENABLE_HARDENED_RUNTIME=YES \
+            OTHER_CODE_SIGN_FLAGS="--timestamp"
 
-      # A silently-dropped ARCHS override would publish a thin build under the universal name, which
-      # is the one mistake this whole channel exists to prevent. A thin bundled helper is the quiet
-      # version of it: the app still boots on Intel and only its OCR stops working.
-      - name: Assert both slices on the shipping binaries
+      - name: Export (Developer ID)
         run: |
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
-          PLIST_MIN="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
-          echo "LSMinimumSystemVersion=$PLIST_MIN"
-          if [ "$PLIST_MIN" != "26.0" ]; then
-            echo "::error::expected LSMinimumSystemVersion 26.0, got $PLIST_MIN"
-            exit 1
-          fi
-          for BIN in "$APP/Contents/MacOS/${DISPLAY_NAME}" "$APP/Contents/Helpers/ClipboardTextHelper"; do
-            SLICES="$(lipo -archs "$BIN")"
-            echo "${BIN##*/}: arch=$SLICES"
-            for A in arm64 x86_64; do
-              case " $SLICES " in
-                *" $A "*) ;;
-                *) echo "::error::${BIN##*/}: no $A slice — this is not a universal build"; exit 1 ;;
-              esac
-              MINOS="$(xcrun vtool -arch "$A" -show-build-version "$BIN" | awk '/minos/{print $2}')"
-              if [ "$MINOS" != "26.0" ]; then
-                echo "::error::${BIN##*/} $A: expected a macOS 26.0 floor, got minos=$MINOS"
-                exit 1
-              fi
-            done
-          done
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist Scripts/developer-id-export-options.plist
 
+      - name: Locate app
+        id: app
+        run: |
+          APP=$(ls -d "$EXPORT_PATH"/*.app | head -1)
+          echo "path=$APP" >> "$GITHUB_OUTPUT"
+          echo "version=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Contents/Info.plist")" >> "$GITHUB_OUTPUT"
+
+      # A nested binary without the runtime flag is the most common notarization rejection.
       - name: Assert the signature is notarizable
-        run: ./Scripts/verify-signature.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
+        run: ./Scripts/verify-signature.sh "${{ steps.app.outputs.path }}"
 
-      - name: Package DMG and ZIP
+      - name: Notarize and staple
+        env:
+          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
+          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
+          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
+          APP: ${{ steps.app.outputs.path }}
         run: |
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/${DISPLAY_NAME}.app"
-          STAGE="$(mktemp -d)"
-          cp -R "$APP" "$STAGE/"
-          ln -s /Applications "$STAGE/Applications"
-          mkdir -p dist
-          diskutil image create from "$STAGE" --format UDZO --volumeName "$DISPLAY_NAME" \
-            "dist/Blitz-Universal-${VERSION}.dmg"
-          ditto -c -k --keepParent --sequesterRsrc "$APP" "dist/Blitz-Universal-${VERSION}.zip"
+          echo "$AC_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/ac_key.p8"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/ac_key.p8" \
+            --key-id "$AC_API_KEY_ID" \
+            --issuer "$AC_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          rm "$RUNNER_TEMP/ac_key.p8"
 
-      - uses: actions/upload-artifact@v7
-        with:
-          name: Blitz-Universal-${{ needs.build.outputs.full_version }}
-          path: dist/
+      # `--sequesterRsrc` keeps the seal verifiable; plain `zip` drops symlinks and breaks it.
+      - name: Package
+        id: package
+        env:
+          APP: ${{ steps.app.outputs.path }}
+          VERSION: ${{ steps.app.outputs.version }}
+        run: |
+          ASSET="Blitz-$VERSION.zip"
+          ditto -c -k --keepParent --sequesterRsrc "$APP" "$GITHUB_WORKSPACE/$ASSET"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
 
-      # Upload, never create: the build job owns the release. Uploading second also keeps the thin
-      # zip first in the asset list, so clients predating architecture-aware selection still take it.
-      - name: Attach to the GitHub Release
+      - name: Sign update (EdDSA)
+        id: sign
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          ASSET: ${{ steps.package.outputs.asset }}
+        run: |
+          curl -L -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          OUT=$("$RUNNER_TEMP/sparkle/bin/sign_update" -s "$SPARKLE_ED_PRIVATE_KEY" "$GITHUB_WORKSPACE/$ASSET")
+          SIG=$(printf '%s\n' "$OUT" | sed -nE 's/.*edSignature="([^"]+)".*/\1/p' | head -1)
+          LEN=$(printf '%s\n' "$OUT" | sed -nE 's/.*length="([^"]+)".*/\1/p' | head -1)
+          echo "signature=$SIG" >> "$GITHUB_OUTPUT"
+          echo "length=$LEN" >> "$GITHUB_OUTPUT"
+
+      - name: Publish update (binary → private feed, appcast → public feed)
         env:
           GH_TOKEN: ${{ github.token }}
+          APPCAST_DEPLOY_KEY: ${{ secrets.APPCAST_DEPLOY_KEY }}
+          MARKETING_VERSION: ${{ steps.settings.outputs.marketing_version }}
+          MIN_SYSTEM: ${{ steps.settings.outputs.min_system }}
+          VERSION: ${{ steps.app.outputs.version }}
+          ASSET: ${{ steps.package.outputs.asset }}
+          ED_SIG: ${{ steps.sign.outputs.signature }}
+          LENGTH: ${{ steps.sign.outputs.length }}
         run: |
-          gh release upload "v${VERSION}" \
-            "dist/Blitz-Universal-${VERSION}.dmg" \
-            "dist/Blitz-Universal-${VERSION}.zip"
+          # The <enclosure> points at this PRIVATE repo's Contents API zip; Sparkle downloads it
+          # authenticated through the token the app sends in its httpHeaders.
+          WORK="$RUNNER_TEMP/feed"
+          mkdir -p "$WORK"
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="utf-8"?>' \
+            '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">' \
+            '  <channel><title>Blitz</title></channel>' \
+            '</rss>' > "$WORK/appcast.xml"
+          URL="https://api.github.com/repos/${{ github.repository }}/contents/$ASSET?ref=update-feed"
+          python3 Scripts/update-appcast.py \
+            --appcast "$WORK/appcast.xml" \
+            --version "$VERSION" \
+            --short-version "$MARKETING_VERSION" \
+            --min-system "$MIN_SYSTEM" \
+            --url "$URL" \
+            --signature "$ED_SIG" \
+            --length "$LENGTH" \
+            --title "Blitz $MARKETING_VERSION (build $VERSION)" \
+            --pubdate "$(date "+%a, %d %b %Y %H:%M:%S %z")"
 
-      - name: Update Homebrew cask
-        env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          if [ -z "${TAP_TOKEN}" ]; then
-            echo "::warning::HOMEBREW_TAP_TOKEN secret not set — skipping cask bump."
-            exit 0
-          fi
-          SHA="$(shasum -a 256 "dist/Blitz-Universal-${VERSION}.dmg" | awk '{print $1}')"
-          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/abue-ammar/homebrew-blitz.git" tap
-          CASK_FILE="tap/Casks/${CASK}.rb"
-          if [ ! -f "$CASK_FILE" ]; then
-            echo "::error::$CASK_FILE not found in tap."
-            exit 1
-          fi
-          sed -i '' -E "s|^  version \".*\"|  version \"${VERSION}\"|" "$CASK_FILE"
-          sed -i '' -E "s|^  sha256 \".*\"|  sha256 \"${SHA}\"|" "$CASK_FILE"
-          cd tap
+          # 1) Private binary: force-push ONLY the zip to this repo's update-feed branch.
+          ZIPWORK="$RUNNER_TEMP/zipfeed"
+          mkdir -p "$ZIPWORK"
+          cp "$GITHUB_WORKSPACE/$ASSET" "$ZIPWORK/$ASSET"
+          cd "$ZIPWORK"
+          git init -q
+          git checkout -q -b update-feed
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Casks/${CASK}.rb"
-          if git diff --cached --quiet; then
-            echo "No cask changes to commit."
-          else
-            git commit -m "${CASK} ${VERSION}"
-            git push
-          fi
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$ASSET"
+          git commit -q -m "Publish binary for build $VERSION"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:update-feed
+
+          # 2) Public appcast: metadata + signature only, pushed to fa-krug/blitz-updates over SSH
+          #    with its scoped deploy key. raw.githubusercontent ignores Sparkle's Accept header.
+          mkdir -p ~/.ssh
+          printf '%s\n' "$APPCAST_DEPLOY_KEY" > ~/.ssh/appcast_key
+          chmod 600 ~/.ssh/appcast_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/appcast_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
+          PUBWORK="$RUNNER_TEMP/pub"
+          git clone --depth 1 git@github.com:fa-krug/blitz-updates.git "$PUBWORK"
+          cp "$WORK/appcast.xml" "$PUBWORK/appcast.xml"
+          cd "$PUBWORK"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          git commit -q -m "Publish appcast for build $VERSION" || echo "appcast unchanged"
+          git push origin HEAD:main
+          rm -f ~/.ssh/appcast_key
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ steps.package.outputs.asset }}
+          VERSION: ${{ steps.app.outputs.version }}
+          MARKETING_VERSION: ${{ steps.settings.outputs.marketing_version }}
+        run: |
+          TAG="build-$VERSION"
+          gh release create "$TAG" "$GITHUB_WORKSPACE/$ASSET" \
+            --title "Blitz $MARKETING_VERSION (build $VERSION)" \
+            --notes "Developer ID-signed + notarized build $VERSION from ${{ github.sha }}." \
+            --latest \
+          || gh release upload "$TAG" "$GITHUB_WORKSPACE/$ASSET" --clobber

@@ -8,13 +8,12 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Manual
-    # Stable self-signed identity so macOS keeps the Accessibility grant across rebuilds.
-    # Create it once — see docs/signing.md.
+    # Local builds only: release.yml signs with Developer ID. Create it once — see docs/signing.md.
     CODE_SIGN_IDENTITY: "Blitz Self-Signed"
     SWIFT_STRICT_CONCURRENCY: complete
   configs:
@@ -46,6 +45,9 @@ targets:
       - path: NOTICE.md
         buildPhase: resources
     dependencies:
+      # Vendored rather than SwiftPM, the same Sparkle 1.27.3 build Pointa ships.
+      - framework: Frameworks/Sparkle.framework
+        embed: true
       - target: ClipboardTextHelper
         link: false
         embed: true
@@ -64,9 +66,8 @@ targets:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
       configs:
-        # Debug is its own channel, like beta/stable in release.yml: a distinct bundle id means a
-        # locally-run build gets its own prefs, caches, TCC grants and login item instead of
-        # inheriting — and corrupting — the installed app's state.
+        # Debug is its own channel: a distinct bundle id means a locally-run build gets its own
+        # prefs, caches, TCC grants and login item instead of inheriting the installed app's state.
         Debug:
           PRODUCT_NAME: Blitz Dev
           PRODUCT_BUNDLE_IDENTIFIER: de.fa-krug.blitz.dev
@@ -79,9 +80,8 @@ targets:
       - Blitz/Features/Clipboard/Service/ClipboardTextHelper.swift
     settings:
       base:
-        # release.yml passes PRODUCT_NAME on the xcodebuild line, which hits every target: without
-        # these two pinned, a channel build renames the executable `ClipboardTextWorker` looks for
-        # and gives the module a name with a space in it.
+        # Pinned so a PRODUCT_NAME override on the xcodebuild line, which hits every target, can't
+        # rename the executable `ClipboardTextWorker` looks for or put a space in the module name.
         EXECUTABLE_NAME: ClipboardTextHelper
         PRODUCT_MODULE_NAME: ClipboardTextHelper
         SKIP_INSTALL: YES

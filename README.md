@@ -4,9 +4,6 @@
 RAM.**
 
 <p align="center">
-  <a href="https://github.com/fa-krug/blitz/releases/latest">
-    <img alt="Latest release"
-         src="https://img.shields.io/github/v/release/abue-ammar/blitz?sort=semver&style=flat&label=release&color=1F6FEB"></a>
   <img alt="Swift 6.0"
        src="https://img.shields.io/badge/Swift-6.0-F05138?style=flat&logo=swift&logoColor=white">
   <img alt="macOS 26 or later"
@@ -14,18 +11,16 @@ RAM.**
   <a href="LICENSE">
     <img alt="License: AGPL-3.0"
          src="https://img.shields.io/badge/License-AGPL--3.0-3DA639?style=flat"></a>
-  <a href="https://discord.gg/v2Eeb4QQy3">
-    <img alt="Join the Blitz Discord"
-         src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white"></a>
   <a href="https://github.com/sponsors/fa-krug">
     <img alt="Support Blitz"
          src="https://img.shields.io/badge/Support-Tip%20the%20dev-EA4AAA?style=flat&logo=polar&logoColor=white"></a>
 </p>
 
-SwiftUI and AppKit, **zero third-party dependencies**, no Electron and no telemetry. It also **runs
-real Raycast extensions**, rendered as native SwiftUI. Free, open source, and staying that way.
+SwiftUI and AppKit, no Electron and no telemetry; the only third-party code is the Sparkle updater.
+It also **runs real Raycast extensions**, rendered as native SwiftUI.
 
-For anything private, email [iabueammar@gmail.com](mailto:iabueammar@gmail.com).
+Blitz is a fork of [Tinycast](https://github.com/abue-ammar/tinycast) by Abue Ammar, renamed and
+shipped through the same release pipeline as [Pointa](https://github.com/fa-krug/pointa).
 
 <p align="center">
   <img src="docs/screenshot.png" alt="Blitz command palette" width="720">
@@ -33,14 +28,8 @@ For anything private, email [iabueammar@gmail.com](mailto:iabueammar@gmail.com).
 
 ## Support
 
-Blitz is **free, and it stays that way**. If it earns a place in your daily flow, a one-off tip helps
-keep it actively maintained. GitHub Sponsors isn't available in my country, so please support here:
-
-<p align="center">
-  <a href="https://github.com/sponsors/fa-krug">
-    <img alt="Support Blitz" width="188" height="44" src="docs/support-button.svg"></a><br>
-  <sub>Payments are handled securely by <a href="https://polar.sh">Polar.sh</a>.</sub>
-</p>
+If Blitz earns a place in your daily flow, you can support it through
+[GitHub Sponsors](https://github.com/sponsors/fa-krug).
 
 ## Features
 
@@ -79,30 +68,10 @@ keep it actively maintained. GitHub Sponsors isn't available in my country, so p
 
 ## Install
 
-First, add the tap:
-
-```sh
-brew trust --tap abue-ammar/blitz   # required for third-party taps
-brew tap abue-ammar/blitz
-```
-
-Then run the one line that matches your Mac:
-
-| Your Mac                         | Install                                  |
-| -------------------------------- | ---------------------------------------- |
-| Apple silicon, macOS 26 or newer | `brew install --cask blitz`           |
-| Intel, macOS 26                  | `brew install --cask blitz-universal` |
-
-Not sure which you have? **Apple menu → About This Mac.** Homebrew checks too, and refuses the
-wrong one.
-
-Want early builds? `brew install --cask blitz@beta` puts `Blitz Beta.app` beside the stable
-app, with its own settings and permissions. Apple silicon, macOS 26+.
-
-Homebrew clears the macOS quarantine flag on every install and update, so there is nothing else to
-run. Downloading a DMG from [Releases](https://github.com/fa-krug/blitz/releases) instead?
-Blitz is self-signed, so clear the flag once:
-`xattr -dr com.apple.quarantine "/Applications/Blitz.app"`.
+Download the latest `Blitz-<build>.zip` from [Releases](https://github.com/fa-krug/blitz/releases),
+unzip it and move `Blitz.app` to `/Applications`. Builds are Developer ID-signed and notarized, so
+Gatekeeper opens them without any `xattr` step. From then on Blitz keeps itself up to date through
+Sparkle — see [docs/release.md](docs/release.md).
 
 ## Permissions
 
@@ -121,37 +90,16 @@ disabled, and keystrokes are matched locally, never stored and never sent anywhe
 
 ## Building from source
 
-See **[docs/development.md](docs/development.md)** for the toolchain, build, packaging, release and
-website workflows. **[docs/](docs/README.md)** indexes everything else — architecture, engineering
+See **[docs/development.md](docs/development.md)** for the toolchain and build, and
+**[docs/release.md](docs/release.md)** for how a push to `main` becomes an update. **[docs/](docs/README.md)** indexes everything else — architecture, engineering
 standards, the design system and one document per feature.
 
 ## Contributing
 
-> [!IMPORTANT]
-> **Open an issue before you write code — this is mandatory.** Get the bug or the feature agreed on
-> first; discussing it in the issue (or on [Discord](https://discord.gg/v2Eeb4QQy3)) is strongly
-> encouraged. A PR that doesn't close an issue marked `approved` is closed automatically however good
-> the patch is, and the work is wasted. Docs-only fixes are the one exception.
->
-> Blitz's feature set is deliberately closed, and "another launcher has it" is not a reason on its
-> own. Ask whether a feature is wanted before you ask for it.
-
-Read **[CONTRIBUTING.md](CONTRIBUTING.md)** first — it covers the memory budget every PR is held to,
-the before/after video requirement for visual changes, and why features get declined. Every PR fills
-in the **[pull request template](.github/PULL_REQUEST_TEMPLATE.md)**. Security issues go through
+Read **[CONTRIBUTING.md](CONTRIBUTING.md)** first — it covers the memory budget every PR is held to
+and the before/after video requirement for visual changes. Every PR fills in the
+**[pull request template](.github/PULL_REQUEST_TEMPLATE.md)**. Security issues go through
 [SECURITY.md](SECURITY.md), not the issue tracker.
-
-Questions, ideas, or just want to follow along? **[Join the Discord](https://discord.gg/v2Eeb4QQy3)**.
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=abue-ammar%2Fblitz&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=abue-ammar/blitz&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=abue-ammar/blitz&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=abue-ammar/blitz&type=date&legend=top-left" />
- </picture>
-</a>
 
 ## License
 
