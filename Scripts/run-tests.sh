@@ -566,7 +566,8 @@ run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
                            Blitz/Features/Settings/SettingsNavigationState.swift \
                            Blitz/Features/Settings/SettingsSearchCatalog.swift \
                            $L/SearchRelevance.swift
-run updates-test           Blitz/Features/Updates/Model/*.swift
+run updates-test           Blitz/Features/Updates/Model/*.swift \
+                           Blitz/Features/Updates/Service/BundleSignature.swift
 run support-test           Blitz/Features/Support/Model/*.swift
 run ai-provider-test       Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/*.swift \

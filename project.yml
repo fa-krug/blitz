@@ -13,7 +13,8 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Manual
-    # Local builds only: release.yml signs with Developer ID. Create it once — see docs/signing.md.
+    # Stable self-signed identity so macOS keeps the Accessibility grant across rebuilds.
+    # Create it once — see docs/signing.md.
     CODE_SIGN_IDENTITY: "Blitz Self-Signed"
     SWIFT_STRICT_CONCURRENCY: complete
   configs:
@@ -45,9 +46,6 @@ targets:
       - path: NOTICE.md
         buildPhase: resources
     dependencies:
-      # Vendored rather than SwiftPM, the same Sparkle 1.27.3 build Pointa ships.
-      - framework: Frameworks/Sparkle.framework
-        embed: true
       - target: ClipboardTextHelper
         link: false
         embed: true

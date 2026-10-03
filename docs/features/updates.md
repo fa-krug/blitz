@@ -1,40 +1,131 @@
 # Updates
 
-Blitz updates through [Sparkle](https://sparkle-project.org) 1.27.3 — the same vendored build and
-the same feed layout Pointa uses. `UpdateCoordinator` is a thin wrapper: Sparkle owns the check, the
-prompt, the download, EdDSA and code-signature verification, the install and the relaunch.
+Blitz checks this repo's GitHub Releases once a day, offers the newest release in a native window
+with its release notes, installs it and relaunches. There is no Sparkle and no appcast: the public
+release list is the feed.
 
 ## Invariants
 
-- **Only a CI release updates itself.** `release.yml` injects `BlitzUpdateFeedToken` into
-  `Info.plist`; every other build carries an empty string, gets no `SUUpdater` at all, hides the
-  Check for Updates command, and answers the menu item with a notice. That keeps `Blitz Dev.app`
-  from ever being replaced by a release bundle.
-- **The appcast is public, the binary is not.** `SUFeedURL` is
-  `raw.githubusercontent.com/fa-krug/blitz-updates/main/appcast.xml` — a static host that ignores
-  the `Accept: application/rss+xml` header Sparkle forces. Its `<enclosure>` is this private repo's
-  Contents API URL on the `update-feed` branch, which Sparkle downloads with the token, sent as
-  `Authorization: Bearer …` together with `Accept: application/vnd.github.raw` in `httpHeaders`.
-- **Every update is signed twice.** The zip carries an EdDSA signature checked against
-  `SUPublicEDKey`, and the app inside must carry the same Developer ID signature as the running copy.
-- **Blitz schedules the checks, not Sparkle.** `automaticallyChecksForUpdates` is off and
-  `SUEnableAutomaticChecks` is `false`, so Sparkle never asks for permission and never runs its own
-  timer. `UpdateCoordinator.start()` checks 30 s after launch and then daily.
-- **An automatic check defers to whatever the user is doing.** Sparkle's prompt would land on top of
-  it, so the pump asks `AppCore.canInterruptUser` — `UpdateReadiness` over
-  `AppCore.currentActivity`, the same gate the support reminder uses — and retries every two minutes
-  while the user is busy. The manual command always checks.
-- **Relaunching goes through `NSApp.terminate`.** Sparkle 1 quits the app that way after installing,
-  which is what flushes a pending note draft and hands back the Hyper Key's HID-level remap.
-- **Nothing about updates is persisted in `AppSettings`.** Sparkle keeps its own state (last check,
-  skipped version) in the app's user defaults, keyed by the bundle id like everything else.
-- **Sparkle's windows are the one exception to "Blitz presents its own dialogs".** The update alert,
-  progress and relaunch windows are Sparkle's own AppKit UI.
-- **Sparkle's networking is likewise its own.** It fetches the appcast and the zip on its own
-  session, not the private `.ephemeral` one every Blitz-owned networked feature uses.
+- **The archive is a zip, never the DMG.** A zip expands with `ditto`; a DMG would have to be mounted,
+  which means a volume, a Spotlight handle and a detach that can fail. A release published without a
+  zip is not installable and is not offered.
+- **The zip is chosen by architecture.** A release carries one `-Universal-` zip, which every Mac
+  takes. Intel is offered *nothing* without one, since a thin build would install and then refuse to
+  launch; Apple silicon would prefer a thin zip if a release ever carried one.
+- **Nobody runs `xattr` after the first install.** An archive Blitz fetched itself is not quarantined — macOS sets
+  that flag for sandboxed downloaders and for apps that opt in with `LSFileQuarantineEnabled`, and
+  Blitz is neither. `Quarantine` checks anyway through `getxattr`/`removexattr` rather than the
+  `xattr` tool, and an app that still carries the flag is refused rather than installed.
+- **The signature is the only integrity guarantee.** A downloaded bundle is trusted when its seal
+  validates, nested helper included, *and* it either satisfies the Developer ID requirement pinned in
+  `BundleSignature` or carries the byte-identical leaf certificate the running app does. The
+  requirement names team `HS26J3YA63`, so a certificate renewal strands nobody. Releases are
+  self-signed for now, so today every update passes through the leaf match; the requirement is
+  already in place so that a later switch to Developer ID reaches every installed copy. `notarized`
+  is deliberately not in the requirement — it resolves the ticket through `syspolicyd` or the
+  network, so an offline Mac would refuse a bundle the chain already proves is ours.
+- **A build only ever updates within its own channel.** The channels are separate bundle ids installed
+  side by side; crossing would mean installing a different app. `de.fa-krug.blitz.dev` never updates
+  at all, and does not advertise the command.
+- **Nothing is installed unless every check passes.** Bundle id, version and signature are all checked
+  on the expanded copy before `replaceItemAt` runs, and the running app survives any failure untouched.
+- **Relaunching goes through `NSApp.terminate`, never `exit`.** That is what flushes a pending note
+  draft and hands back the Hyper Key's HID-level caps remap, which outlives the process.
+- **An automatic prompt defers to whatever the user is doing, and is never spent unshown.**
+  `UpdateReadiness` withholds it while a snippet is expanding, an extension command is running, an
+  uninstall is trashing, a shortcut is being recorded, a prompt or dialog is up, or the palette is
+  open. A withheld prompt is still owed: `presentIfAvailable` answers `false`, the version is left
+  unannounced, and the pump re-offers it every two minutes for half an hour before falling back to
+  the daily rhythm. That is what a hand-launched copy depends on — its one announcement falls 30 s
+  in, straight into the palette the user opened the app to use, where a launch-at-login copy would
+  have found the desktop idle. The window itself still appears at most once per version per launch:
+  `announcedVersion` is set the moment an offer lands, so re-offering can never turn into nagging.
+  Readiness is asked again at the click.
+- **Nothing about updates is persisted in `AppSettings`.** The feature owns one cache file, so no
+  `AppSettingsKey` and no `SettingsBackupCoverage` entry exist for it.
+- **The window shows the changelog and nothing else.** A body may carry install instructions below
+  `<!-- blitz:install -->`, and `ReleaseNotes.summary` — the single reader of that marker, called
+  where the feed is parsed so the cache holds the cut text too — drops them. CI publishes GitHub's
+  generated changelog without the marker, so it comes back whole.
+- **The notes are laid out by `ReleaseNotesView`, which is this feature's own.** `AttributedString`
+  parses inline styling only; headings and bullets are placed by hand or they arrive as literal `##`
+  and `*`. `ExtensionMarkdownView` does the same job and is deliberately not reused — an extension's
+  views never leave `Features/Extensions/`.
+- **`@handle` and `#304` are linked by the app, never by the release body.** GitHub autolinks both on
+  the web, and a bare mention is what notifies the contributor, so the published body keeps them
+  plain and `ReleaseNotes` spells them as Markdown links on the way to the window. Both point at
+  `ReleaseFeed.repository`, the one place the repo is named.
+
+## Channel and version
+
+`ReleaseChannel` is derived from the bundle id, and nothing else:
+
+| Bundle id | Channel | Takes |
+| --- | --- | --- |
+| `de.fa-krug.blitz` | `.stable` | releases |
+| `de.fa-krug.blitz.beta` | `.beta` | prereleases |
+| anything else | `.development` | nothing |
+
+`release.yml` publishes stable releases only, so no beta build exists today; the row is the
+updater's, inherited from Tinycast, and costs nothing until one does.
+
+`AppVersion` parses `MAJOR.MINOR.PATCH` and `MAJOR.MINOR.PATCH-beta.N` with semver precedence: a
+prerelease sorts below the release it leads to, and `beta.10` above `beta.9`. Everything else parses
+to nil, so an off-shape tag can never be offered as an update. A release whose tag disagrees with
+its `prerelease` flag is treated as mis-published and skipped.
+
+Intel is *not* a channel. Every release is one universal build under the stable tag, version, bundle
+id and signature, so an Intel Mac resolves to `.stable` like any other; `ReleaseArchitecture` picks
+the asset, and nothing about identity changes.
+
+## Checking
+
+`UpdateCheckStore` copies `CurrencyRateStore`: a private `.ephemeral`, `urlCache = nil` session, a
+self-rescheduling pump, and one atomic JSON file.
+
+```text
+~/Library/Caches/<bundle-id>/update-check.json
+```
+
+It holds `lastCheckedAt`, the newest release seen, and the version the user dismissed. Freshness is
+measured from `lastCheckedAt`, so relaunching never re-asks GitHub; the interval is 24 h, dropping to
+2 h after a failed attempt, and the first check waits 30 s so it never lands in the login rush. The
+request carries a `User-Agent`, which the GitHub API rejects requests without.
+
+**Later means skip.** It records the version, so that release stops asking; a newer one still asks.
+Check for Updates ignores the record and always offers whatever is newer than what is running.
+
+## Installing
+
+One route, whatever the install came from:
+
+1. Stream the zip into `~/Library/Caches/<bundle-id>/Updates/`, with real byte progress and a Cancel
+   that actually aborts the transfer.
+2. `ditto -x -k` it into a staging folder, and take whatever `.app` lands there — the bundle is named
+   for its channel, so it is `Blitz Beta.app` on beta.
+3. Check quarantine natively; clear it if somehow present, and refuse the update if it survives.
+4. Verify the bundle id, the version, and that the code signature is valid and proves the bundle is
+   ours — by the pinned Developer ID requirement, or by the running app's own leaf certificate.
+5. `FileManager.replaceItemAt`. The staging folder is on the same volume as `/Applications`, which is
+   what lets this be atomic. A non-writable `/Applications` is reported, not worked around; there is
+   no privileged helper.
+6. Offer Relaunch, which spawns a detached waiter that reopens the app once this process exits —
+   `open` on a bundle id that is still running would only re-activate the instance on its way out.
+
+Nothing here touches `~/Library/Preferences`, `~/Library/Caches` or `Application Support`, so no
+setting, clipboard entry, note or snippet is affected by an update.
 
 ## Releasing into it
 
-See [release.md](../release.md). In short, every push to `main` builds, signs, notarizes, zips with
-`ditto -c -k --keepParent --sequesterRsrc`, signs the zip with `sign_update`, force-pushes the zip
-alone to `update-feed`, and pushes a one-item `appcast.xml` to `fa-krug/blitz-updates`.
+`.github/workflows/release.yml` runs on every push to `main` and publishes one asset,
+`Blitz-Universal-<version>.zip`, under the tag `v<version>`. The version is `MAJOR.MINOR` from
+`project.yml` with the workflow's run number as the patch, so every release is strictly newer than
+the last and is never a prerelease. The zip is made with
+
+```sh
+ditto -c -k --keepParent --sequesterRsrc "$APP" "dist/$ZIP_FILE"
+```
+
+which is the only zip that leaves the code signature verifiable — plain `zip` drops symlinks and
+breaks the seal, and the signature check above would then reject every update. The release body is
+GitHub's generated changelog. See [release.md](../release.md).

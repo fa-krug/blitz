@@ -16,7 +16,7 @@ RAM.**
          src="https://img.shields.io/badge/Support-Tip%20the%20dev-EA4AAA?style=flat&logo=polar&logoColor=white"></a>
 </p>
 
-SwiftUI and AppKit, no Electron and no telemetry; the only third-party code is the Sparkle updater.
+SwiftUI and AppKit, **zero third-party dependencies**, no Electron and no telemetry.
 It also **runs real Raycast extensions**, rendered as native SwiftUI.
 
 Blitz is a fork of [Tinycast](https://github.com/abue-ammar/tinycast) by Abue Ammar, renamed and
@@ -68,10 +68,15 @@ If Blitz earns a place in your daily flow, you can support it through
 
 ## Install
 
-Download the latest `Blitz-<build>.zip` from [Releases](https://github.com/fa-krug/blitz/releases),
-unzip it and move `Blitz.app` to `/Applications`. Builds are Developer ID-signed and notarized, so
-Gatekeeper opens them without any `xattr` step. From then on Blitz keeps itself up to date through
-Sparkle — see [docs/release.md](docs/release.md).
+Download the latest `Blitz-Universal-<version>.zip` from
+[Releases](https://github.com/fa-krug/blitz/releases/latest), unzip it and move `Blitz.app` to
+`/Applications`. Blitz is self-signed rather than notarized, so clear the quarantine flag once:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Blitz.app
+```
+
+From then on Blitz updates itself from the same releases, with no further steps.
 
 ## Permissions
 

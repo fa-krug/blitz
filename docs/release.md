@@ -1,52 +1,43 @@
 # Release
 
 How a build reaches a user. The local development loop is in [development.md](development.md);
-the local signing identity is in [signing.md](signing.md). This is the same pipeline Pointa uses.
+the signing identities are in [signing.md](signing.md).
 
 ## Every push to `main` is a release
 
 `.github/workflows/release.yml` runs on every push to `main` that touches more than Markdown or
 `docs/`. One job on a `macos-26` runner:
 
-1. **Build number.** `CFBundleVersion` is the workflow's run number, stamped into `Blitz/Info.plist`.
-   Sparkle orders updates by it, so it only ever grows. The marketing version is `MARKETING_VERSION`
-   in `project.yml` — bump it there when a release deserves a new one.
-2. **Token.** `UPDATE_FEED_TOKEN` is written into `BlitzUpdateFeedToken` in `Info.plist`; it is what
-   lets the shipped app download the private zip (see [features/updates.md](features/updates.md)).
-3. **Archive and export** with the Developer ID identity of team `HS26J3YA63`, hardened runtime on,
-   through `Scripts/developer-id-export-options.plist`.
-4. **`Scripts/verify-signature.sh`** asserts the runtime flag on the app and on
-   `Contents/Helpers/ClipboardTextHelper`, an intact seal, and an entitlement for every usage string.
-5. **Notarize and staple** with an App Store Connect API key.
-6. **Package** `Blitz-<build>.zip` with `ditto -c -k --keepParent --sequesterRsrc` — the only zip that
-   keeps the code signature verifiable.
-7. **Sign the update** with Sparkle 1.27.3's `sign_update` and the EdDSA private key.
-8. **Publish.** The zip alone is force-pushed to this repo's `update-feed` branch, so the binary stays
-   private. `Scripts/update-appcast.py` writes a one-item `appcast.xml` whose enclosure is the
-   Contents API URL of that zip, and it is pushed to the public `fa-krug/blitz-updates` repo over SSH.
-9. **GitHub Release** `build-<build>` with the zip attached, for a first install by hand.
+1. **Version.** `MAJOR.MINOR` comes from `MARKETING_VERSION` in `project.yml`; the patch is the
+   workflow's run number, so each release is strictly newer than the last and the updater offers
+   it. `CURRENT_PROJECT_VERSION` is the run number too. Bump `MAJOR.MINOR` in `project.yml` when a
+   release deserves it.
+2. **Sign.** The release identity from `SIGNING_P12_BASE64` / `SIGNING_P12_PASSWORD` is imported into
+   a throwaway keychain. It is the same `Blitz Self-Signed` identity every release, which keeps the
+   Accessibility grant alive and is what the updater trusts.
+3. **Build** a universal (`arm64 x86_64`) Release `Blitz.app`, and assert both slices on the app and
+   on `Contents/Helpers/ClipboardTextHelper`.
+4. **`Scripts/verify-signature.sh`** asserts the hardened runtime on both binaries, an intact seal,
+   no `get-task-allow`, and an entitlement for every usage string.
+5. **Package** `Blitz-Universal-<version>.zip` with `ditto -c -k --keepParent --sequesterRsrc` — the
+   only zip that keeps the code signature verifiable.
+6. **Publish** a GitHub Release `v<version>` with that zip and GitHub's generated changelog.
 
-There is a single channel; no beta, no DMG, no Homebrew cask. `Scripts/update-appcast-test.py`
-covers the appcast writer: `python3 Scripts/update-appcast-test.py`.
+The in-app updater reads those releases directly; see [features/updates.md](features/updates.md).
+There is one channel: no beta, no DMG, no Homebrew cask.
 
 ## One-time setup
 
-| Secret on this repo | What it is |
-| --- | --- |
-| `DEVELOPER_ID_CERT_P12` | base64 of the Developer ID Application `.p12` |
-| `DEVELOPER_ID_CERT_PASSWORD` | its password |
-| `AC_API_KEY_ID`, `AC_API_ISSUER_ID` | App Store Connect API key for `notarytool` |
-| `AC_API_KEY_P8` | base64 of that key's `.p8` |
-| `SPARKLE_ED_PRIVATE_KEY` | the EdDSA private key matching `SUPublicEDKey` in `Info.plist` |
-| `UPDATE_FEED_TOKEN` | fine-grained PAT, **Contents: read-only** on this repo alone |
-| `APPCAST_DEPLOY_KEY` | private half of a deploy key with write access on `fa-krug/blitz-updates` |
+Two secrets, created by the one command in [signing.md §2](signing.md#2-create-the-release-identity-once):
+`SIGNING_P12_BASE64` and `SIGNING_P12_PASSWORD`. Without them the workflow stops at the signing step.
 
-The public `fa-krug/blitz-updates` repo needs a `main` branch to push to. `SUPublicEDKey` is
-Pointa's, so the same `SPARKLE_ED_PRIVATE_KEY` secret works for both apps; to give Blitz its own,
-run Sparkle's `generate_keys`, replace the key in `Info.plist` and set the new private key.
+## Not notarized
 
-The token ships inside every copy of the app, which is why it must be read-only and scoped to this
-one repository.
+Releases are self-signed, so a downloaded copy is quarantined and Gatekeeper refuses it until the
+flag is cleared once: `xattr -dr com.apple.quarantine /Applications/Blitz.app`. Updates installed by
+the app never need it. The updater already trusts Developer ID builds from team `HS26J3YA63`, so
+notarizing later is a change to `release.yml` alone — see
+[signing.md](signing.md#the-developer-id-migration).
 
 ## Pull request review
 

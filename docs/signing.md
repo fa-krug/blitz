@@ -1,15 +1,16 @@
 # Signing
 
-Two identities, one per kind of build:
+Blitz is signed with **stable self-signed identities** called `Blitz Self-Signed`. Keeping the
+_same_ identity on every build is what makes macOS remember the Accessibility permission across
+rebuilds and updates — ad-hoc signing changes every build and macOS forgets the grant. It is also
+what the updater checks before it installs a release.
 
-- **Releases** are signed by CI with the **Developer ID Application** identity of team `HS26J3YA63`,
-  then notarized — the same identity and flow as Pointa. It lives only in the release workflow's
-  secrets; see [release.md](release.md#one-time-setup).
-- **Local dev builds** sign with a **stable self-signed identity** called `Blitz Self-Signed`.
-  Keeping the _same_ identity on every build is what makes macOS remember the Accessibility
-  permission across rebuilds — ad-hoc signing changes every build and macOS forgets the grant.
+There are two, with the same name and separate keys:
 
-You create the self-signed identity **once**.
+- **your local one** (§1), in your login keychain, for dev builds, and
+- **the release one** (§2), which lives only in two GitHub secrets the release workflow imports.
+
+Releases are not notarized. How a later switch to Developer ID works is [below](#the-developer-id-migration).
 
 ## 1. Create the `Blitz Self-Signed` identity (once)
 
@@ -44,6 +45,30 @@ security find-identity -p codesigning | grep "Blitz Self-Signed"
 
 Now local builds (Xcode, VS Code F5, `xcodebuild`) sign with it, and you grant Accessibility once.
 
+## 2. Create the release identity (once)
+
+Run on any machine with `openssl` and `gh` (authed with admin on the repo). Nothing touches a
+keychain, so it works over SSH too:
+
+```sh
+mkdir -p ~/blitz-signing && chmod 700 ~/blitz-signing && cd ~/blitz-signing && \
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout key.pem -out cert.pem \
+  -subj "/CN=Blitz Self-Signed" -addext "basicConstraints=critical,CA:false" \
+  -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=critical,codeSigning" && \
+openssl rand -base64 24 | tr -d '\n' > password.txt && \
+openssl pkcs12 -export -inkey key.pem -in cert.pem -name "Blitz Self-Signed" \
+  -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
+  -out release.p12 -passout file:password.txt && rm key.pem cert.pem && \
+base64 < release.p12 | tr -d '\n' | gh secret set SIGNING_P12_BASE64 --repo fa-krug/blitz && \
+gh secret set SIGNING_P12_PASSWORD --repo fa-krug/blitz < password.txt
+```
+
+The 3DES/SHA-1 bundle is deliberate: it is the PKCS#12 flavour every macOS `security import` reads.
+
+**Keep `~/blitz-signing/` backed up** (a password manager is fine). Every installed copy trusts
+only this identity: if it is lost and replaced, the updater refuses the next release, and every user
+has to download it by hand and grant Accessibility again.
+
 ## Hardened runtime
 
 **Release only**, on both targets: `ENABLE_HARDENED_RUNTIME: YES`, which notarization requires. Debug
@@ -77,11 +102,33 @@ hardened-runtime entitlement.
 
 `./Scripts/verify-signature.sh <path-to-.app>` asserts all of this — the runtime flag on the app *and*
 on `Contents/Helpers/ClipboardTextHelper`, an intact nested seal, no `get-task-allow`, and an
-entitlement for every usage string `Info.plist` declares. The release job runs it before notarizing:
+entitlement for every usage string `Info.plist` declares. The release job runs it before packaging:
 a nested binary missing the runtime flag is the most common notarization rejection, and a usage string
 missing its entitlement ships a permission that can never be granted.
 
-## Quarantine
+## The Developer ID migration
 
-Releases are notarized and stapled, so Gatekeeper opens a downloaded copy without an `xattr` step,
-and Sparkle installs updates without one too.
+`BundleSignature` already accepts a bundle signed under Apple's Developer ID chain by team
+`HS26J3YA63`, even though releases are self-signed. That is deliberate: the updater compares
+signatures before it installs, so the code that trusts the new identity has to reach users *before*
+the first build carrying it. Until then it accepts the running app's own leaf, which is how every
+self-signed release installs.
+
+The requirement pins the team rather than the certificate, so a Developer ID renewal strands nobody.
+It deliberately omits the `notarized` keyword — that resolves a ticket through `syspolicyd` or the
+network, and the updater verifies in a cache directory Gatekeeper has never assessed, so an offline
+Mac would refuse a bundle the chain already proves is ours.
+
+Switching means signing and notarizing in `release.yml` with the Developer ID certificate and an
+App Store Connect API key; `project.yml` keeps signing local builds with `Blitz Self-Signed`.
+
+## Quarantine (separate from signing)
+
+macOS quarantines anything downloaded from the internet, and Gatekeeper blocks a self-signed app
+with an "unverified developer" warning. The first copy is cleared once by hand:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Blitz.app
+```
+
+Updates never need it: an archive Blitz downloads itself is not quarantined.

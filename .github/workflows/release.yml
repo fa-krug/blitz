@@ -1,6 +1,7 @@
 name: Release
 
-# Every push to main ships: Developer ID-signed, notarized, and offered through Sparkle.
+# Every push to main ships: a self-signed universal build, published as the GitHub Release the
+# in-app updater reads. Not notarized — see docs/release.md.
 on:
   push:
     branches: [main]
@@ -18,205 +19,100 @@ permissions:
 jobs:
   release:
     runs-on: macos-26
-    env:
-      SPARKLE_VERSION: "1.27.3"
-      ARCHIVE_PATH: ${{ github.workspace }}/build/Blitz.xcarchive
-      EXPORT_PATH: ${{ github.workspace }}/build/export
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Select latest Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-
-      # Sparkle orders updates by CFBundleVersion, so every release must carry a larger one.
-      - name: Compute build number
-        run: echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
-
-      - name: Read build settings
-        id: settings
+      - name: Select Xcode 26
         run: |
-          SETTINGS=$(xcodebuild -project Blitz.xcodeproj -target Blitz \
-            -showBuildSettings -configuration Release 2>/dev/null)
-          get() { echo "$SETTINGS" | awk -F' = ' "/ $1 = /{print \$2; exit}"; }
-          echo "marketing_version=$(get MARKETING_VERSION)" >> "$GITHUB_OUTPUT"
-          echo "min_system=$(get MACOSX_DEPLOYMENT_TARGET)" >> "$GITHUB_OUTPUT"
+          XCODE_PATH="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n1)"
+          if [ -z "$XCODE_PATH" ]; then
+            echo "::error::No Xcode 26.x found on this runner. Installed Xcodes:"
+            ls /Applications | grep -i xcode || true
+            exit 1
+          fi
+          echo "Using $XCODE_PATH"
+          echo "DEVELOPER_DIR=$XCODE_PATH/Contents/Developer" >> "$GITHUB_ENV"
 
-      - name: Stamp build number
-        run: /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" Blitz/Info.plist
+      # The patch is the run number, so every push is strictly newer than the last and the updater
+      # offers it. Bump MAJOR.MINOR in project.yml when a release deserves it.
+      - name: Compute version
+        id: meta
+        run: |
+          BASE="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
+          VERSION="${BASE%.*}.${GITHUB_RUN_NUMBER}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "zip_file=Blitz-Universal-${VERSION}.zip" >> "$GITHUB_OUTPUT"
 
-      - name: Inject update-feed token
+      # The same self-signed identity on every release is what keeps users' Accessibility grant
+      # alive across updates, and what the updater checks before it installs. See docs/signing.md.
+      - name: Import signing certificate
         env:
-          UPDATE_FEED_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
+          P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
         run: |
-          /usr/libexec/PlistBuddy -c "Set :BlitzUpdateFeedToken $UPDATE_FEED_TOKEN" Blitz/Info.plist
-
-      - name: Import Developer ID certificate
-        env:
-          CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
-        run: |
+          if [ -z "${P12_BASE64}" ]; then
+            echo "::error::SIGNING_P12_BASE64 is not set — see docs/signing.md."
+            exit 1
+          fi
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KPW="$(uuidgen)"
-          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          KPW="$(openssl rand -base64 24)"
+          echo "${P12_BASE64}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KPW" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KPW" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KPW" "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN" \
-            $(security list-keychains -d user | sed s/\"//g)
-          rm "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "${P12_PASSWORD}" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KPW" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
+          rm -f "$RUNNER_TEMP/cert.p12"
 
-      - name: Archive
+      # One universal build serves every Mac: Intel takes it, and Apple silicon falls back to it.
+      - name: Build app
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          xcodebuild archive \
-            -project Blitz.xcodeproj \
-            -scheme Blitz \
-            -destination "generic/platform=macOS" \
-            -archivePath "$ARCHIVE_PATH" \
+          xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Developer ID Application" \
-            DEVELOPMENT_TEAM=HS26J3YA63 \
-            ENABLE_HARDENED_RUNTIME=YES \
-            OTHER_CODE_SIGN_FLAGS="--timestamp"
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Blitz Self-Signed" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            build
 
-      - name: Export (Developer ID)
+      # A thin helper inside a universal app boots on Intel and silently loses clipboard OCR.
+      - name: Assert both slices on the shipping binaries
         run: |
-          xcodebuild -exportArchive \
-            -archivePath "$ARCHIVE_PATH" \
-            -exportPath "$EXPORT_PATH" \
-            -exportOptionsPlist Scripts/developer-id-export-options.plist
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
+          for BIN in "$APP/Contents/MacOS/Blitz" "$APP/Contents/Helpers/ClipboardTextHelper"; do
+            SLICES="$(lipo -archs "$BIN")"
+            for A in arm64 x86_64; do
+              case " $SLICES " in
+                *" $A "*) ;;
+                *) echo "::error::${BIN##*/}: missing $A (got '$SLICES')"; exit 1 ;;
+              esac
+            done
+          done
 
-      - name: Locate app
-        id: app
-        run: |
-          APP=$(ls -d "$EXPORT_PATH"/*.app | head -1)
-          echo "path=$APP" >> "$GITHUB_OUTPUT"
-          echo "version=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Contents/Info.plist")" >> "$GITHUB_OUTPUT"
+      - name: Assert the signature is sound
+        run: ./Scripts/verify-signature.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
 
-      # A nested binary without the runtime flag is the most common notarization rejection.
-      - name: Assert the signature is notarizable
-        run: ./Scripts/verify-signature.sh "${{ steps.app.outputs.path }}"
-
-      - name: Notarize and staple
-        env:
-          AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
-          AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
-          AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
-          APP: ${{ steps.app.outputs.path }}
-        run: |
-          echo "$AC_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/ac_key.p8"
-          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
-            --key "$RUNNER_TEMP/ac_key.p8" \
-            --key-id "$AC_API_KEY_ID" \
-            --issuer "$AC_API_ISSUER_ID" \
-            --wait
-          xcrun stapler staple "$APP"
-          rm "$RUNNER_TEMP/ac_key.p8"
-
-      # `--sequesterRsrc` keeps the seal verifiable; plain `zip` drops symlinks and breaks it.
+      # `ditto -c -k --keepParent --sequesterRsrc` is the only zip that leaves the code signature
+      # verifiable; plain `zip` drops symlinks and the updater would refuse every update.
       - name: Package
-        id: package
         env:
-          APP: ${{ steps.app.outputs.path }}
-          VERSION: ${{ steps.app.outputs.version }}
+          ZIP_FILE: ${{ steps.meta.outputs.zip_file }}
         run: |
-          ASSET="Blitz-$VERSION.zip"
-          ditto -c -k --keepParent --sequesterRsrc "$APP" "$GITHUB_WORKSPACE/$ASSET"
-          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          ditto -c -k --keepParent --sequesterRsrc \
+            "$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app" "dist/${ZIP_FILE}"
 
-      - name: Sign update (EdDSA)
-        id: sign
-        env:
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          ASSET: ${{ steps.package.outputs.asset }}
-        run: |
-          curl -L -o "$RUNNER_TEMP/sparkle.tar.xz" \
-            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
-          mkdir -p "$RUNNER_TEMP/sparkle"
-          tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
-          OUT=$("$RUNNER_TEMP/sparkle/bin/sign_update" -s "$SPARKLE_ED_PRIVATE_KEY" "$GITHUB_WORKSPACE/$ASSET")
-          SIG=$(printf '%s\n' "$OUT" | sed -nE 's/.*edSignature="([^"]+)".*/\1/p' | head -1)
-          LEN=$(printf '%s\n' "$OUT" | sed -nE 's/.*length="([^"]+)".*/\1/p' | head -1)
-          echo "signature=$SIG" >> "$GITHUB_OUTPUT"
-          echo "length=$LEN" >> "$GITHUB_OUTPUT"
-
-      - name: Publish update (binary → private feed, appcast → public feed)
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          APPCAST_DEPLOY_KEY: ${{ secrets.APPCAST_DEPLOY_KEY }}
-          MARKETING_VERSION: ${{ steps.settings.outputs.marketing_version }}
-          MIN_SYSTEM: ${{ steps.settings.outputs.min_system }}
-          VERSION: ${{ steps.app.outputs.version }}
-          ASSET: ${{ steps.package.outputs.asset }}
-          ED_SIG: ${{ steps.sign.outputs.signature }}
-          LENGTH: ${{ steps.sign.outputs.length }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          ZIP_FILE: ${{ steps.meta.outputs.zip_file }}
         run: |
-          # The <enclosure> points at this PRIVATE repo's Contents API zip; Sparkle downloads it
-          # authenticated through the token the app sends in its httpHeaders.
-          WORK="$RUNNER_TEMP/feed"
-          mkdir -p "$WORK"
-          printf '%s\n' \
-            '<?xml version="1.0" encoding="utf-8"?>' \
-            '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">' \
-            '  <channel><title>Blitz</title></channel>' \
-            '</rss>' > "$WORK/appcast.xml"
-          URL="https://api.github.com/repos/${{ github.repository }}/contents/$ASSET?ref=update-feed"
-          python3 Scripts/update-appcast.py \
-            --appcast "$WORK/appcast.xml" \
-            --version "$VERSION" \
-            --short-version "$MARKETING_VERSION" \
-            --min-system "$MIN_SYSTEM" \
-            --url "$URL" \
-            --signature "$ED_SIG" \
-            --length "$LENGTH" \
-            --title "Blitz $MARKETING_VERSION (build $VERSION)" \
-            --pubdate "$(date "+%a, %d %b %Y %H:%M:%S %z")"
-
-          # 1) Private binary: force-push ONLY the zip to this repo's update-feed branch.
-          ZIPWORK="$RUNNER_TEMP/zipfeed"
-          mkdir -p "$ZIPWORK"
-          cp "$GITHUB_WORKSPACE/$ASSET" "$ZIPWORK/$ASSET"
-          cd "$ZIPWORK"
-          git init -q
-          git checkout -q -b update-feed
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$ASSET"
-          git commit -q -m "Publish binary for build $VERSION"
-          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:update-feed
-
-          # 2) Public appcast: metadata + signature only, pushed to fa-krug/blitz-updates over SSH
-          #    with its scoped deploy key. raw.githubusercontent ignores Sparkle's Accept header.
-          mkdir -p ~/.ssh
-          printf '%s\n' "$APPCAST_DEPLOY_KEY" > ~/.ssh/appcast_key
-          chmod 600 ~/.ssh/appcast_key
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/appcast_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
-          PUBWORK="$RUNNER_TEMP/pub"
-          git clone --depth 1 git@github.com:fa-krug/blitz-updates.git "$PUBWORK"
-          cp "$WORK/appcast.xml" "$PUBWORK/appcast.xml"
-          cd "$PUBWORK"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add appcast.xml
-          git commit -q -m "Publish appcast for build $VERSION" || echo "appcast unchanged"
-          git push origin HEAD:main
-          rm -f ~/.ssh/appcast_key
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ASSET: ${{ steps.package.outputs.asset }}
-          VERSION: ${{ steps.app.outputs.version }}
-          MARKETING_VERSION: ${{ steps.settings.outputs.marketing_version }}
-        run: |
-          TAG="build-$VERSION"
-          gh release create "$TAG" "$GITHUB_WORKSPACE/$ASSET" \
-            --title "Blitz $MARKETING_VERSION (build $VERSION)" \
-            --notes "Developer ID-signed + notarized build $VERSION from ${{ github.sha }}." \
-            --latest \
-          || gh release upload "$TAG" "$GITHUB_WORKSPACE/$ASSET" --clobber
+          gh release create "v${VERSION}" "dist/${ZIP_FILE}" \
+            --target "$GITHUB_SHA" \
+            --title "Blitz ${VERSION}" \
+            --generate-notes \
+            --latest

@@ -7,13 +7,7 @@ also redistributes the third-party material recorded below, under the terms stat
 
 Blitz is a modified fork of [Tinycast](https://github.com/abue-ammar/tinycast), Copyright (C) 2026
 Abue Ammar, released under the GNU Affero General Public License v3. Blitz renames the app and
-replaces its distribution and update mechanism; everything else derives from Tinycast.
-
-## Sparkle — `Frameworks/Sparkle.framework`
-
-The in-app updater is [Sparkle](https://sparkle-project.org) 1.27.3, embedded unmodified. Sparkle
-is MIT licensed; its licence and the notices of the code it bundles ship inside the framework at
-`Sparkle.framework/Resources/LICENSE`.
+replaces its release pipeline; everything else derives from Tinycast.
 
 ## Brand marks — `Blitz/Assets.xcassets/AIBrand*.imageset`
 

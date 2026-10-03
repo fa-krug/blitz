@@ -3,9 +3,8 @@
 A native macOS menu-bar launcher: fuzzy app launcher, global and per-app hotkeys, a text/image
 clipboard history, an inline calculator, a floating note, snippets, quicklinks, window management
 and an emoji picker. It also **runs Raycast extensions** natively, in JavaScriptCore.
-SwiftUI + AppKit, running as an accessory with no Dock icon (`LSUIElement`). The one third-party
-dependency is Sparkle 1.27.3, vendored in `Frameworks/` for updates. A fork of
-[Tinycast](https://github.com/abue-ammar/tinycast), shipped through the same pipeline as Pointa.
+SwiftUI + AppKit, running as an accessory with no Dock icon (`LSUIElement`). Zero third-party
+dependencies. A fork of [Tinycast](https://github.com/abue-ammar/tinycast).
 
 ## Posture: latest-only, always
 
@@ -43,8 +42,7 @@ system-wide chord, and HIToolbox's TIS APIs remain the public input-source mecha
 | `Blitz/Windows/` | the non-palette AppKit surfaces: `Dialog/`, `HUD/`, `About/`, `AppWindowController` |
 | `Blitz/Features/` | one folder per feature; larger ones split `Model/` `Service/` `UI/` `Settings/` |
 | `Tests/` | the standalone harnesses — one Swift file each, no XCTest target |
-| `Scripts/` | every executable script: test runner, data generators, release helpers, linting, editor setup |
-| `Frameworks/` | the vendored `Sparkle.framework` — never edited, replaced whole on an upgrade |
+| `Scripts/` | every executable script: test runner, data generators, packaging, linting, editor setup |
 
 | Read it before you | Doc |
 | --- | --- |
@@ -75,8 +73,7 @@ feature's doc, under its own `## Invariants`.
   a dark one only when the task is to change Dark. `AppAppearance` drives `NSApp.appearance`, and
   `.system` maps to `nil` so AppKit follows macOS on its own.
 - **Blitz presents its own dialogs — never `NSAlert` or a system popover.** A question
-  goes through `DialogController`, a report through a HUD via `HUDPresenter`. Sparkle's update
-  windows are the one exception.
+  goes through `DialogController`, a report through a HUD via `HUDPresenter`.
 - **A networked feature fetches on a private `.ephemeral`, `urlCache = nil` session**, never
   `URLSession.shared`, so its own cache file stays the only copy on disk. `CurrencyRateStore` is the
   reference — copy it rather than inventing a second shape. A flag that grants a capability is never
