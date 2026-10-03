@@ -1,6 +1,6 @@
 # AI providers and chat
 
-Tinycast has one app-wide provider layer for features that need text generation. Chat chooses its
+Blitz has one app-wide provider layer for features that need text generation. Chat chooses its
 model from Quick AI's header or the AI Chat composer, and `AIChatCoordinator.provider(for:)`
 builds that chat's route through `AIProviderFactory` to stream an `AIRequest`.
 Chat is the first consumer and [Quick Actions](quick-actions.md) the second; the provider layer
@@ -38,18 +38,18 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `.executable` or `.missing`, and `.missing` fails the check and the turn. The lookup is never a
   fallback for a path that was set: falling back would run another copy and hide the mistake the path
   was set to fix.
-- **A reader's variable never replaces one Tinycast sets.** `InstalledAIKind.managedEnvironment` is
+- **A reader's variable never replaces one Blitz sets.** `InstalledAIKind.managedEnvironment` is
   what keeps a tool inside the chat — OpenCode's deny-all configuration, Claude's account MCP switch —
   and `InstalledAILaunch.inherited(for:)` drops a reader's variable of the same name, along with
   `NO_COLOR` and the `TC_MCP_` names that carry MCP secrets to Codex. Names are stored in
   `aiInstalledOverrides` and values in the login Keychain (`KeychainSecretStore.installedAIEnvironment`),
   read only for a tool that has variables.
-- **Every request carries Tinycast's own preamble, and the user's text goes after it.**
+- **Every request carries Blitz's own preamble, and the user's text goes after it.**
   `AIInstructions.compose` builds `AIRequest.instructions`: a fixed preamble that tells the model
   where it is running and what the app can do, then whatever Settings → AI holds. The preamble
   keeps the model a general-purpose assistant — the app facts are reference for when the user asks,
   never a scope limit — and asks for honest comparisons; it does not instruct the model to favour
-  Tinycast over anything else. It is not shown in the pane, and `AIPreamble.swift` holds the only
+  Blitz over anything else. It is not shown in the pane, and `AIPreamble.swift` holds the only
   copy of it — edit the prompt there, not here. `compose` returns `nil` when the user has turned
   the system prompt off, and every transport drops a nil instruction, so a turn then carries none.
 - **API keys live only in the login Keychain.** `AIConnection` persists the provider, endpoint and
@@ -109,7 +109,7 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   answer carries its sources without a second request.
 - **Tools are chosen per chat.** The composer's tools menu switches MCP off for the chat or turns
   single servers off (`ChatToolScope`, held on `AIChatState`, not stored); `@server` still narrows
-  one turn inside that. The scope binds both shapes alike: Tinycast's loop is offered only the
+  one turn inside that. The scope binds both shapes alike: Blitz's loop is offered only the
   allowed servers' tools, and a Codex or Claude turn is handed only the allowed servers. A route that
   cannot call tools shows the menu disabled and says why.
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
@@ -140,20 +140,20 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   reader *removed*; a Mac with Apple Intelligence switched off keeps its stored selection and is told
   why, because silently moving someone from a free, private, local model onto a billed endpoint is
   the one redirection this feature must never perform.
-- **Installed commands reuse their own login.** Tinycast launches the user's `codex`, `claude`, `grok` or
+- **Installed commands reuse their own login.** Blitz launches the user's `codex`, `claude`, `grok` or
   `opencode` executable without asking for or storing another key. Codex inherits the user's normal
-  home and credential-store setting; Claude, Grok, OpenCode and Cursor inherit their normal configuration. Tinycast
+  home and credential-store setting; Claude, Grok, OpenCode and Cursor inherit their normal configuration. Blitz
   never reads those credential files, browser cookies or undocumented web endpoints. A Codex route
   with no account is ready only when `account/read` explicitly says `requiresOpenaiAuth: false`.
-- **Codex runs Tinycast's MCP servers and nothing else.** The app-server still launches with every
+- **Codex runs Blitz's MCP servers and nothing else.** The app-server still launches with every
   feature flag off and a read-only, network-disabled sandbox, and every server request but one is
   declined. What changed is the list: the servers the reader configured for their own Codex are
-  disabled by name at launch — which they were not before, so they used to start inside Tinycast
+  disabled by name at launch — which they were not before, so they used to start inside Blitz
   threads — and the servers [MCP](mcp.md) supplies take their place when a chat has any, under
-  names of their own (`tinycast-<handle>`) so that no table of the reader's merges into one. A
+  names of their own (`blitz-<handle>`) so that no table of the reader's merges into one. A
   launch that cannot read the reader's list, or cannot address a name on it, does not start. A turn
   that arms none keeps `approvalPolicy: "never"`; a turn that arms some uses `"untrusted"`, where
-  a tool call becomes an elicitation Tinycast answers from the reader's own trust setting.
+  a tool call becomes an elicitation Blitz answers from the reader's own trust setting.
 - **Tool calling is a decorator, except where the CLI is the client.** `AIToolLoopProvider` wraps a
   route and re-streams the turn until the model stops asking, so a route with no tools behaves
   exactly as it did and `AIChatState` reduces one more pair of events. Codex and the Claude command
@@ -180,15 +180,15 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `--disallowedTools "*"` comes off because it removes the MCP tools too, `--max-turns` carries
   the round cap instead of the constant 1, or is left out on Unlimited, and
   `--permission-mode default` with an ask rule per server keeps the reader's own allow rules and
-  default mode from answering before Tinycast does.
+  default mode from answering before Blitz does.
   Grok runs with `--deny *`,
   `dontAsk` permissions and a workspace sandbox, and never `--always-approve`, so a user's always-approve
   config cannot arm tools for this route. OpenCode runs `--pure` with deny-all permissions, disabled
   sharing and a private working directory. Cursor runs `agent -p --mode ask` with `--trust` against
-  Tinycast's private workspace and never `--force` / `--yolo` / `--approve-mcps`; ask mode blocks edits.
-  Each deletes the session or chat it created once the child exits, and Tinycast never reaches into the
+  Blitz's private workspace and never `--force` / `--yolo` / `--approve-mcps`; ask mode blocks edits.
+  Each deletes the session or chat it created once the child exits, and Blitz never reaches into the
   user's own config to do it. **Only Claude keeps the user's MCP servers out of the process**, through
-  `--strict-mcp-config` — whether the config it names is empty or Tinycast's own — and even that
+  `--strict-mcp-config` — whether the config it names is empty or Blitz's own — and even that
   yields to an installed managed MCP policy, which makes the CLI reject both flags and leaves MCP
   on that route the organization's decision; the Providers row says so.
   Grok, OpenCode and Cursor load the global config either way,
@@ -298,16 +298,16 @@ as `.codex`, so an existing selection survives the rename.
 
 The base URL stays editable for every preset because gateways and organization proxies are legitimate
 destinations. `AIHTTPConfiguration.endpointURL` accepts a complete endpoint or appends the transport's
-completion path. Gemini requests identify Tinycast through `x-goog-api-client`; OpenRouter requests
+completion path. Gemini requests identify Blitz through `x-goog-api-client`; OpenRouter requests
 carry the app title.
 
 Each connection has an ordered, deduplicated list of exact model identifiers. While its editor is open,
-Tinycast asks the configured provider for the models available to the entered key and uses the result
+Blitz asks the configured provider for the models available to the entered key and uses the result
 for search-as-you-type completion and validation. It never renders the whole provider catalog at once;
 selected models stay visible and search shows at most twelve additions. Discovery is debounced,
 cacheless and never persists the typed key. A
 custom gateway may not implement a model-list endpoint, so exact identifiers can always be entered
-manually. Tinycast does not ship or guess an API catalog that can become stale. Codex gets its models
+manually. Blitz does not ship or guess an API catalog that can become stale. Codex gets its models
 and reasoning efforts from `model/list`; OpenCode gets identifiers and model-specific variants from
 `opencode models --pure --verbose`. Claude answers an `initialize` control request — written to a
 stream-json `-p` run that then gets no prompt, so no model is called — with its own `/model` list;
@@ -315,14 +315,14 @@ stream-json `-p` run that then gets no prompt, so no model is called — with it
 another), names each by the version its alias points at today ("Claude Opus 5.5"), and takes each
 one's `supportedEffortLevels`. The version is in `description` before a " · " on an older CLI and in
 `displayName` on a newer one, which describes a model without it; the name is read from whichever
-has it. The same answer carries the account, which `claudeAccount` reads for the Overview page. A model the CLI starts offering appears without a Tinycast release. Cursor lists models
+has it. The same answer carries the account, which `claudeAccount` reads for the Overview page. A model the CLI starts offering appears without a Blitz release. Cursor lists models
 from `agent --list-models` after `agent status --format json` confirms a login.
 
 Turning thinking off is a reasoning effort, not a second control: `reasoningOptions(for:)` answers with
 the connection's catalogued efforts, or — for a connection with no catalog to publish one — `Default`
 and `None`. `takesThinkingField` decides who gets that pair: an OpenAI-shaped preset whose base URL is
 not that preset's own, because a preset pointed away from its own API is a gateway, and a gateway is
-the only destination Tinycast can offer the switch to honestly. Picking `None` sends
+the only destination Blitz can offer the switch to honestly. Picking `None` sends
 `"thinking": {"type": "disabled"}`, which is how DeepSeek and the endpoints that copied its contract
 answer without reasoning first. A vendor API is never offered the pair and so is never sent a field it
 does not define — which matters precisely because the preset alone says nothing about the destination
@@ -468,8 +468,8 @@ menu's own chords, and dies with the window.
   changes shape), a web-search toggle when the route offers search, a context gauge, and Send/Stop.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
   last reply's `contextTokens` against the model's window when the route reported one, and
-  `ChatSession.historyBytes` against Tinycast's history budget otherwise — orange from 80%, red at
-  100%. Hovering it raises Tinycast's own card (never a popover), drawn inside the transcript's
+  `ChatSession.historyBytes` against Blitz's history budget otherwise — orange from 80%, red at
+  100%. Hovering it raises Blitz's own card (never a popover), drawn inside the transcript's
   frame at its bottom edge — just above the composer and inside the window whatever its size — and
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
@@ -497,7 +497,7 @@ belonged to a process that is gone, so it reads back as failed — the same repa
 streaming gets.
 
 `ChatHistoryStore` writes `ai-chats.sqlite3` below the bundle-specific Application Support directory.
-It uses the system SQLite already linked by Tinycast, stores no provider credentials, and repairs a
+It uses the system SQLite already linked by Blitz, stores no provider credentials, and repairs a
 reply left streaming by a prior process into an interrupted failure when loaded.
 
 ## Palette integration
@@ -559,7 +559,7 @@ window, and every chat action either surface sends — is the nineteenth feature
   the selection reading **Apple Intelligence** without asking for anything.
 - With it switched off in System Settings, the pane says so and chat says so; neither moves the
   reader onto a configured API connection.
-- Install and sign in to each supported command outside Tinycast, choose one of its discovered models,
+- Install and sign in to each supported command outside Blitz, choose one of its discovered models,
   and confirm Chat and each model-backed Quick Action use it without showing a credential field.
 - Sign out of an installed command, press Check Again, and confirm its models leave both pickers while
   the stored selection is repaired according to the normal routing rule.
@@ -596,7 +596,7 @@ window, and every chat action either surface sends — is the nineteenth feature
   rows, the call cap and a custom provider's access without an account),
   `installed-ai-test` (Claude/Grok/OpenCode/Cursor flags, prompt
   framing, streaming and cleanup, and Claude's private MCP configuration, control channel, round
-  cap and managed-policy branch, a reader's variables against Tinycast's own, and a set command
+  cap and managed-policy branch, a reader's variables against Blitz's own, and a set command
   path that runs or fails) and `apple-intelligence-test` (status copy, snapshot deltas,
   transcript assembly, error mapping, plus one real generation when this Mac can run one), all in
   `run-tests.sh`.
@@ -622,7 +622,7 @@ deletes afterwards, Claude's title request, and Codex's app-server and its `mcp 
 `InstalledAIManager` and `CodexAppServerClient` ask for them at each launch through `launchSettings`,
 so an edit takes the next one, and `AISettingsStore.launchRevisions` lets `AppCore` check again only
 the tool that was edited — Codex by stopping its server, which restarts on demand. The
-commands are never installed by Tinycast; Settings links to their own install docs and offers a sign-in
+commands are never installed by Blitz; Settings links to their own install docs and offers a sign-in
 command to copy. `InstalledAIManager` probes Claude, Grok, OpenCode and Cursor off-main, in parallel.
 Claude's auth status gates an `initialize` control request, and `InstalledAIModel.claudeCatalog` builds
 its model list from the answer. OpenCode's successful model list is both its auth check and catalog.
@@ -632,13 +632,13 @@ Grok's `models` output is the catalog, but a signed-out CLI still exits 0 and pr
 
 `ChatGPTSubscriptionManager` retains its historical type name but now owns only the installed Codex
 app-server lifecycle and discovered account metadata. Production never sets `CODEX_HOME`, so the
-server uses the same login and credential store as the user's normal Codex command. Tinycast supplies
+server uses the same login and credential store as the user's normal Codex command. Blitz supplies
 only a private working directory. The server stops after ten idle minutes, when AI is switched off or
 when the app terminates, and restarts on demand. Account state, model availability and rate-limit
 windows come from the supported app-server protocol. A custom Codex provider can report no account
-and `requiresOpenaiAuth: false`; Tinycast then loads its models and runs turns without inventing an
+and `requiresOpenaiAuth: false`; Blitz then loads its models and runs turns without inventing an
 account or asking for `codex login`. A missing or true flag still requires sign-in. A running server
-rereads `config.toml` at every `account/read`, but Tinycast keeps what a check found, account or
+rereads `config.toml` at every `account/read`, but Blitz keeps what a check found, account or
 provider, beside the models and rate limits it read with it, until the next check; a turn that finds
 nothing to run on leaves Codex signed out and stops the server, as a check does.
 
@@ -652,7 +652,7 @@ was never the process's to begin with. See [MCP](mcp.md) for what goes on the la
 
 It creates an ephemeral thread for each request, injects prior user/assistant messages, and
 streams agent-message deltas, plus `item/started` for the reasoning and web-search items that feed the
-bubble's status line. System messages become developer instructions alongside Tinycast's fixed
+bubble's status line. System messages become developer instructions alongside Blitz's fixed
 boundary, which forbids every tool except the MCP tools an armed turn supplies. Cancellation interrupts the active turn, including one the server has started but
 not yet named: Stop arms that thread, and whichever of `turn/started` or the `turn/start` response
 names the turn first spends a single `turn/interrupt` on it.
@@ -663,7 +663,7 @@ developer instructions say whether the model may reach the web so the two cannot
 out as `image` input parts with data URLs, and as `input_image` when prior turns are injected.
 
 `InstalledCLITurnRunner` handles Claude, Grok, OpenCode and Cursor behind the same provider protocol. It
-frames Tinycast's instructions and bounded conversation history as stdin (or a private `--prompt-file` for
+frames Blitz's instructions and bounded conversation history as stdin (or a private `--prompt-file` for
 Grok, whose CLI requires a path), consumes newline-delimited JSON, and never puts prompt text on the
 process command line. Claude uses stream JSON, `--effort` and no session persistence, and takes every
 turn as one framed `stream-json` user line. With servers armed it keeps stdin open for the consent
@@ -694,12 +694,12 @@ transport code at all.
 | Route | Web search | Images | PDFs | MCP tools |
 | --- | --- | --- | --- | --- |
 | Apple Intelligence | never — it reaches nothing | never — the model is text-only | never | never |
-| Codex | thread-scoped `web_search` config | `image` input part | never — the app-server takes no document part | Tinycast's servers, added as launch overrides; the reader's own are disabled by name |
-| Claude command | never | base64 `image` block in its stream-json user message | never | Tinycast's servers, through `--strict-mcp-config` and a private config file — an empty one when there are none, and neither flag under a managed MCP policy |
+| Codex | thread-scoped `web_search` config | `image` input part | never — the app-server takes no document part | Blitz's servers, added as launch overrides; the reader's own are disabled by name |
+| Claude command | never | base64 `image` block in its stream-json user message | never | Blitz's servers, through `--strict-mcp-config` and a private config file — an empty one when there are none, and neither flag under a managed MCP policy |
 | Grok command | never | never | never | the global config still loads — `--deny *` refuses the call |
 | OpenCode command | never | never | never | the global config still loads — `permission: deny` refuses the call |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
-| OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Tinycast does not read | `tools` + `role: "tool"` turns |
+| OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
 | OpenAI | not offered | `image_url` part, assumed supported | `file` part with `filename` and a `file_data` data URL | `tools` + `role: "tool"` turns |
 | Gemini / compatible | not offered | `image_url` part, assumed supported | never — a gateway that has not implemented the part bills the upload before rejecting it | `tools` + `role: "tool"` turns |
 | Anthropic | not offered | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
@@ -725,7 +725,7 @@ It's still excluded from backups — which Mac may send prompts to a search engi
 Nothing *guesses* at a capability: images ride on what the model's own catalog said, and a vendor
 API that does not take one simply returns its error. What is gated is only what a route provably
 cannot carry — a PDF to a text transport — refused at the composer with a HUD naming the reason.
-`AIModelCapabilities.documents` is true only for the two HTTP shapes whose bodies Tinycast writes;
+`AIModelCapabilities.documents` is true only for the two HTTP shapes whose bodies Blitz writes;
 a gateway that has not implemented the `file` part would bill the upload before rejecting it, which
 is why documents are *not* assumed the way images are. An attachment is never dropped on the way
 out: answering a question about a document the model never received is the one outcome this must
@@ -804,7 +804,7 @@ width and clipped the search field well short of the button.
 
 ## Settings and backup boundary
 
-Settings → AI is a normal grouped `Form` inside Tinycast's existing Settings window. Its top AI
+Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI
 section owns the feature switch and the **Providers → Manage…** action, and **Default model** below
 it picks the app-wide route and its reasoning effort. A
 pick in Quick AI's header or the AI Chat composer sets that chat's model and moves this default with
@@ -827,7 +827,7 @@ control (`AIProviderTab`), and the chosen page is kept from one provider to the 
   (`AIModelChecklist`): a `Form` realizes every row it holds, and OpenCode offers over four hundred.
 - **Advanced**, on an installed tool only, holds the command path and the variables, saved as each
   field is left. It stays while the tool is off, so a wrong path can be fixed before it is switched
-  on. A name Tinycast sets itself says its value is not used.
+  on. A name Blitz sets itself says its value is not used.
 
 An API connection has the first two pages, and the on-device model, with one, shows no control. The
 panel draws its Liquid Glass behind its content rather than around it
@@ -854,7 +854,7 @@ preamble is the part that is billed on every turn for every user and has no othe
 disables the editor rather than hiding it, so what is being withheld stays readable. One thing it
 deliberately cannot reach: every installed CLI route prepends its own instruction never to run
 commands or touch files, and never to invoke a tool beyond the MCP tools an armed Codex or Claude
-turn supplies. That is a sandbox boundary on a local CLI, not Tinycast describing itself, and a user
+turn supplies. That is a sandbox boundary on a local CLI, not Blitz describing itself, and a user
 switch must not be able to lift it.
 
 `mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).

@@ -17,7 +17,7 @@
 - **Paste as Plain Text writes `ClipboardItem.plainText` and nothing else**: the text itself, or a
   file entry's path without its `public.file-url`. An image has none, so it gets no plain row, a
   plain-text default pastes it as it is, and ⌃⌘↵ on it falls back to ⌘↵ as on every other screen.
-- **Clipboard writes stamp a private `internalType` marker** so the poller skips Tinycast's own writes.
+- **Clipboard writes stamp a private `internalType` marker** so the poller skips Blitz's own writes.
   If the writer and the poller ever disagree, the app re-captures its own pastes in a loop.
 - **Paste Sequentially never promotes, and its walk is frozen at the first press.** `PasteSequence`
   keeps every entry's id, newest first, and resolves each against the live history, so a promotion
@@ -36,7 +36,7 @@
 - **A `.file` entry references the file where it lies and never copies it.** Its absolute path is
   the `text` column, so the trigram index finds it by name or by folder for free, and `imagePath`
   stays nil — which is what keeps `prune`, `deleteBlob` and `owns` from ever reaching a file
-  Tinycast did not write. `kind` is a plain `TEXT` column, so the case cost no migration; an older
+  Blitz did not write. `kind` is a plain `TEXT` column, so the case cost no migration; an older
   build simply fails to decode the row.
 - **A colour is parsed from the text on demand, never stored.** `ColorValue` is the single parser
   behind the clipboard's swatches and the launcher's colour card, so the two can never disagree
@@ -49,7 +49,7 @@
   captured.
 - **No recognition ever runs in the app process.** `ClipboardTextWorker` spawns one bundled
   `ClipboardTextHelper` per item and reaps it, which is the whole reason Vision's and PDFKit's
-  allocations do not accumulate in Tinycast. The helper is handed a path and answers with text.
+  allocations do not accumulate in Blitz. The helper is handed a path and answers with text.
 
 ## Poll-based capture
 
@@ -62,7 +62,7 @@ branch untouched.
 
 `ClipboardManager.fileURLs(on:volatileRoots:)` takes both the pasteboard and the roots as
 parameters, so `pasteboard-test` can drive an `NSPasteboard.withUniqueName()` and its own scratch
-tree: a harness that touched `NSPasteboard.general` would land in the reader's own running Tinycast
+tree: a harness that touched `NSPasteboard.general` would land in the reader's own running Blitz
 as a genuine copy. `PasteboardFiles` reads each item's own `public.file-url`, so a copied `http` URL stays a link;
 returns nil rather than an empty array, so the text branch runs; caps a batch at
 `maxCapturedFiles`, so a Finder select-all cannot insert ten thousand rows on one tick; and
@@ -75,11 +75,11 @@ the cap, and even a rejected modern file URL suppresses the legacy filenames fal
 `PasteboardFiles.urls(on:)` that attachments use is the same reader with no limit and no test.
 
 `ClipboardManager` runs a 0.5s `Timer` watching `NSPasteboard.general.changeCount`. To avoid
-re-capturing Tinycast's own writes, every write stamps a private `internalType` marker on the
+re-capturing Blitz's own writes, every write stamps a private `internalType` marker on the
 pasteboard and the poller skips anything carrying it.
 
 `stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
-`isCapturing` flag that `prepareForTinycastPasteboardMutation` reads — so a paste Tinycast performs
+`isCapturing` flag that `prepareForBlitzPasteboardMutation` reads — so a paste Blitz performs
 itself no longer drains the pasteboard into history either.
 
 Existing clips survive being switched off, since a history is captured rather than authored and
@@ -374,7 +374,7 @@ at launch.
 
 ## Referenced files
 
-A file copied in Finder is recorded as a reference, never as a copy: Tinycast writes nothing to
+A file copied in Finder is recorded as a reference, never as a copy: Blitz writes nothing to
 disk for it, and the row's path points at the original wherever it lies. That is the whole reason
 `imagePath` stays nil for a `.file` row — `owns()` is the one ownership rule, and a path it never
 sees can never be deleted by `deleteBlob` or a retention cut. `clipboard-test`'s
@@ -437,7 +437,7 @@ Support, on the boot volume, which is the same volume as almost every drop targe
 there defaults to a move, and a move carries the blob out of the history and strands its row. Only
 an `NSDraggingSource` can answer `sourceOperationMaskFor`, and `RowPressView` answers `.copy` for
 every context. SwiftUI's `onDrag` takes an `NSItemProvider` and nothing else. A `.file` row is
-copy-only for the reverse reason: the path is the user's own file, and Tinycast must not move it.
+copy-only for the reverse reason: the path is the user's own file, and Blitz must not move it.
 
 **It claims mouse-down, like `WindowDragHandle` does, because the hosting view eats the click
 first.** The overlay owns the whole press: select on the way down, activate on a double click, and
@@ -472,7 +472,7 @@ entry — text, image or file — into `PaletteCoordinator.targetApp` through `P
 ⌘V goes to that app's pid, and nothing is activated or promoted. An image or file gone from disk
 writes nothing, so the same press moves on to the next entry.
 
-**A press drains the poller before it writes**, through `prepareForTinycastPasteboardMutation`. A
+**A press drains the poller before it writes**, through `prepareForBlitzPasteboardMutation`. A
 copy made inside the 0.5s poll interval would otherwise be overwritten unrecorded, and the walk
 would start one entry too old.
 
@@ -480,7 +480,7 @@ would start one entry too old.
 user copied since, and a pause of `PasteSequence.idleTimeout` (60s) since the last paste does the
 same; either starts the walk over from the newest entry. Past the oldest entry a press shows
 **Nothing left to paste** rather than wrapping. The pasteboard keeps the last entry pasted, as after
-any other Tinycast paste.
+any other Blitz paste.
 
 **A press within `PasteSequence.settleInterval` (0.25s) of the last paste is dropped, not queued.**
 `pasteInPlace` writes the pasteboard at once and posts ⌘V 50ms later, and the target reads the

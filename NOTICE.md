@@ -1,17 +1,29 @@
 # Third-party notices
 
-Tinycast is licensed under the GNU Affero General Public License v3 — see [LICENSE](LICENSE). It
+Blitz is licensed under the GNU Affero General Public License v3 — see [LICENSE](LICENSE). It
 also redistributes the third-party material recorded below, under the terms stated for each.
 
-## Brand marks — `Tinycast/Assets.xcassets/AIBrand*.imageset`
+## Tinycast — the upstream project
+
+Blitz is a modified fork of [Tinycast](https://github.com/abue-ammar/tinycast), Copyright (C) 2026
+Abue Ammar, released under the GNU Affero General Public License v3. Blitz renames the app and
+replaces its distribution and update mechanism; everything else derives from Tinycast.
+
+## Sparkle — `Frameworks/Sparkle.framework`
+
+The in-app updater is [Sparkle](https://sparkle-project.org) 1.27.3, embedded unmodified. Sparkle
+is MIT licensed; its licence and the notices of the code it bundles ship inside the framework at
+`Sparkle.framework/Resources/LICENSE`.
+
+## Brand marks — `Blitz/Assets.xcassets/AIBrand*.imageset`
 
 Sixteen monochrome template SVGs, ~300 B–2 KB each, drawn beside a model's name in the model
 picker and the chat header, and beside a provider in Settings, so a route is recognisable at a
 glance.
 
-Every mark is the trademark of the company it identifies. Tinycast uses them only to name that
+Every mark is the trademark of the company it identifies. Blitz uses them only to name that
 company's own models inside its own UI. No affiliation, sponsorship or endorsement is implied, and
-none of these companies has reviewed or approved Tinycast.
+none of these companies has reviewed or approved Blitz.
 
 ### Simple Icons — thirteen marks
 
@@ -21,7 +33,7 @@ none of these companies has reviewed or approved Tinycast.
 The Simple Icons **project** is released under CC0 1.0 Universal. Its own disclaimer is explicit
 that this does not extend to every mark the project carries: the icons depict third-party brands
 whose trademarks stay with their owners, and the absence of licence data for a given icon does not
-imply the icon is unlicensed. Anyone redistributing Tinycast, or reusing these files from it,
+imply the icon is unlicensed. Anyone redistributing Blitz, or reusing these files from it,
 should read the disclaimer and satisfy themselves about the brands involved:
 <https://github.com/simple-icons/simple-icons/blob/develop/DISCLAIMER.md>.
 
@@ -92,13 +104,13 @@ licence. The room model, the layout and grid engines, arrangement reading, windo
 parking and its ledger, the pass that walks into a room, and the animated layout preview all
 follow that project. Every adapted file says so on its first line, with a link to the licence:
 
-- `Tinycast/Features/WindowManagement/Model/`: `Room.swift`, `RoomWindow.swift`,
+- `Blitz/Features/WindowManagement/Model/`: `Room.swift`, `RoomWindow.swift`,
   `RoomLayoutKind.swift`, `RoomLayoutEngine.swift`, `RoomGrid.swift`, `RoomArrangement.swift`,
   `RoomWindowMatcher.swift`, `RoomParking.swift`, `RoomParkingLedger.swift`, `RoomPlan.swift` and
   `RoomMinimumSizeStore.swift`
-- `Tinycast/Features/WindowManagement/Service/`: `RoomRunner.swift`, `RoomWindowSweep.swift`, and
+- `Blitz/Features/WindowManagement/Service/`: `RoomRunner.swift`, `RoomWindowSweep.swift`, and
   the window-number lookup in `AXWindowAccess.swift`
-- `Tinycast/Features/WindowManagement/UI/`: `RoomCoordinator.swift`, `RoomsScreen.swift`,
+- `Blitz/Features/WindowManagement/UI/`: `RoomCoordinator.swift`, `RoomsScreen.swift`,
   `RoomPickerScreen.swift`, `RoomPreviewController.swift` and `RoomPreviewView.swift`
 - `Tests/window-room-test.swift`, whose cases follow Rooms' own tests
 

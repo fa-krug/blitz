@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // oxlint-disable no-unused-vars
-// Generate Tinycast/Features/Emoji/Model/EmojiData.generated.swift from Unicode + CLDR data, plus
-// one CLDR keyword pack per KEYWORD_LOCALES entry under Tinycast/Resources/EmojiKeywords/.
+// Generate Blitz/Features/Emoji/Model/EmojiData.generated.swift from Unicode + CLDR data, plus
+// one CLDR keyword pack per KEYWORD_LOCALES entry under Blitz/Resources/EmojiKeywords/.
 //
 // Usage: node Scripts/gen-emoji.js [cache-dir]
 // Downloads every source; a cache dir is read first and keeps what was fetched. Commit the output.
@@ -460,7 +460,7 @@ async function main() {
   const out = path.resolve(
     __dirname,
     "..",
-    "Tinycast/Features/Emoji/Model/EmojiData.generated.swift",
+    "Blitz/Features/Emoji/Model/EmojiData.generated.swift",
   );
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const body = records.join("\n");
@@ -474,7 +474,7 @@ async function main() {
   );
   console.log(`wrote ${out} (${records.length} records)`);
 
-  const packDir = path.resolve(__dirname, "..", "Tinycast/Resources/EmojiKeywords");
+  const packDir = path.resolve(__dirname, "..", "Blitz/Resources/EmojiKeywords");
   fs.rmSync(packDir, { recursive: true, force: true });
   fs.mkdirSync(packDir, { recursive: true });
   locales.forEach((locale, i) => {

@@ -1,4 +1,4 @@
-// Entry point. Installs the polyfills and the module registry, then exposes `__tinycast` — the only
+// Entry point. Installs the polyfills and the module registry, then exposes `__blitz` — the only
 // thing Swift calls into.
 
 import "./polyfills.js";
@@ -36,7 +36,7 @@ defineModule("@raycast/api", raycastApi);
 // react-dom only appears in bundles defensively; make the import resolve and the calls explain.
 defineModule("react-dom", {
   render: () => {
-    throw new Error("react-dom is not available — Tinycast renders extensions natively.");
+    throw new Error("react-dom is not available — Blitz renders extensions natively.");
   },
   createPortal: (children) => children,
   flushSync: (fn) => fn?.(),
@@ -86,11 +86,11 @@ class Session {
 
 
 const hostCalls = {
-  render: (sessionId, json) => globalThis.__tinycastHost.render(sessionId, json),
-  failed: (sessionId, message) => globalThis.__tinycastHost.failed(sessionId, message),
+  render: (sessionId, json) => globalThis.__blitzHost.render(sessionId, json),
+  failed: (sessionId, message) => globalThis.__blitzHost.failed(sessionId, message),
   navigationDepthChanged: (sessionId, depth) =>
-    globalThis.__tinycastHost.navigationDepthChanged(sessionId, String(depth)),
-  finished: (sessionId) => globalThis.__tinycastHost.finished(sessionId),
+    globalThis.__blitzHost.navigationDepthChanged(sessionId, String(depth)),
+  finished: (sessionId) => globalThis.__blitzHost.finished(sessionId),
 };
 
 setUncaughtHandler((error) => {
@@ -105,10 +105,10 @@ setUncaughtHandler((error) => {
 });
 
 setFieldCommandHandler((command, fieldId) => {
-  globalThis.__tinycastHost.fieldCommand(String(command), String(fieldId ?? ""));
+  globalThis.__blitzHost.fieldCommand(String(command), String(fieldId ?? ""));
 });
 
-globalThis.__tinycast = {
+globalThis.__blitz = {
   /// Called once, before any command runs.
   boot(configJson) {
     const config = JSON.parse(configJson);

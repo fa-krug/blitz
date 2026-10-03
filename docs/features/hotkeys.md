@@ -57,7 +57,7 @@ System Settings panes use `boundPaneBundleIDs`; custom commands, quicklinks, win
 and custom window sizes use their stable UUIDs in `boundCustomCommandIDs`, `boundQuicklinkIDs`,
 `boundWindowLayoutIDs`, `boundWindowRoomIDs` and `boundCustomWindowSizeIDs`. Those five are the per-item case — unlike a fixed catalog, there is no `allCases` to walk — so each needs an index for `start()`
 to re-register from
-and to prune bindings whose record was deleted while Tinycast wasn't running. That prune is why
+and to prune bindings whose record was deleted while Blitz wasn't running. That prune is why
 `QuicklinkStore` loads at launch even when the feature is off
 (see [quicklinks.md](quicklinks.md#hotkeys)).
 Apple Shortcuts keep the same kind of index in `boundAppleShortcutIDs`, pruned not at launch but after
@@ -67,7 +67,7 @@ the first successful read of the library, since a failed read looks exactly like
 Snippets index `StoredSnippet.ID`, the file's path, in `boundSnippetIDs`. The store runs only while
 the feature is on, so they are swept not at launch but on every snapshot, by
 `removeSnippetBindings`; a file that fails to parse still counts, since it is mid-edit rather than
-gone. A rename outside Tinycast or a new Snippets Folder therefore drops the shortcut, and none
+gone. A rename outside Blitz or a new Snippets Folder therefore drops the shortcut, and none
 travels in a backup, where an imported snippet lands at a new path
 (see [snippets.md](snippets.md#shortcuts)).
 
@@ -174,7 +174,7 @@ order instead of racing as independent detached tasks and leaving the wrong fina
 
 Because the remap is asynchronous, there is a fallback for the window before it takes hold: the key
 still arrives as Caps Lock, so the tap rides the modifier path instead. The LED toggles during that
-window — that is un-remapped HID behaviour, not something Tinycast can stop.
+window — that is un-remapped HID behaviour, not something Blitz can stop.
 
 Once remapped, Caps Lock arrives as **keyDown/keyUp** rather than `flagsChanged`. Both ends are
 converted into Left Control `flagsChanged` transitions, so everything downstream sees the Hyper chord

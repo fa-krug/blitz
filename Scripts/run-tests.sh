@@ -11,7 +11,7 @@ set -uo pipefail
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$0")/.." || exit 1
 
-BIN="${TMPDIR:-/tmp}/tinycast-harness"
+BIN="${TMPDIR:-/tmp}/blitz-harness"
 mkdir -p "$BIN"
 
 # `--exec` is the worker half: xargs re-enters here once per queued harness.
@@ -35,10 +35,10 @@ if [ "${1:-}" = "--exec" ]; then
     # macOS ships no `timeout`, so the worker polls; a wedged harness must fail, not stall the suite.
     ticks=0
     while kill -0 "$pid" 2>/dev/null; do
-        if [ "$ticks" -ge $((TINYCAST_TEST_TIMEOUT * 5)) ]; then
+        if [ "$ticks" -ge $((BLITZ_TEST_TIMEOUT * 5)) ]; then
             { pkill -KILL -P "$pid"; kill -KILL "$pid"; wait "$pid"; } 2>/dev/null
-            printf '\n[run-tests] killed after %ss without finishing\n' "$TINYCAST_TEST_TIMEOUT" >> "$BIN/$name.log"
-            fail "timed out after ${TINYCAST_TEST_TIMEOUT}s"
+            printf '\n[run-tests] killed after %ss without finishing\n' "$BLITZ_TEST_TIMEOUT" >> "$BIN/$name.log"
+            fail "timed out after ${BLITZ_TEST_TIMEOUT}s"
         fi
         ticks=$((ticks + 1))
         sleep 0.2
@@ -64,7 +64,7 @@ only="${1:-}"
 # xcodebuild never compiles the harnesses, so without this nothing in Tests/ resolves in an editor.
 # The source lists below are the only copy, which is why this lives here rather than in its own script.
 emit_db=0
-DB="${TMPDIR:-/tmp}/tinycast-compile-db.json"
+DB="${TMPDIR:-/tmp}/blitz-compile-db.json"
 if [ "$only" = "--index" ]; then
     emit_db=1
     only=""
@@ -113,386 +113,386 @@ run() {
     printf '%s %s %s %s\n' "$pri" "$name" "$opt" "$*" >> "$QUEUE"
 }
 
-L=Tinycast/Features/Launcher/Model
+L=Blitz/Features/Launcher/Model
 run slow -O fuzz-test      $L/SearchRelevance.swift $L/ScriptRomanization.swift \
                            $L/LauncherMatch.swift $L/EntryNaming.swift $L/LauncherOrder.swift \
                            $L/LauncherRankingStore.swift $L/LauncherSuggestions.swift
 run file-search-test       $L/SearchRelevance.swift \
-                           Tinycast/Features/FileSearch/Model/*.swift
-run file-search-session-test Tinycast/Platform/Signposts.swift \
+                           Blitz/Features/FileSearch/Model/*.swift
+run file-search-session-test Blitz/Platform/Signposts.swift \
                              $L/SearchRelevance.swift \
-                             Tinycast/Features/FileSearch/Model/*.swift \
-                             Tinycast/Features/FileSearch/Service/*.swift
+                             Blitz/Features/FileSearch/Model/*.swift \
+                             Blitz/Features/FileSearch/Service/*.swift
 run menu-search-test       $L/SearchRelevance.swift \
-                           Tinycast/Features/MenuSearch/Model/*.swift \
-                           Tinycast/Features/MenuSearch/Service/*.swift
+                           Blitz/Features/MenuSearch/Model/*.swift \
+                           Blitz/Features/MenuSearch/Service/*.swift
 run window-switch-test     $L/SearchRelevance.swift \
-                           Tinycast/Features/WindowSwitcher/Model/*.swift
-run index file-search-performance Tinycast/Platform/Signposts.swift \
+                           Blitz/Features/WindowSwitcher/Model/*.swift
+run index file-search-performance Blitz/Platform/Signposts.swift \
                            $L/SearchRelevance.swift \
-                           Tinycast/Features/FileSearch/Model/*.swift \
-                           Tinycast/Features/FileSearch/Service/FileSearchService.swift
+                           Blitz/Features/FileSearch/Model/*.swift \
+                           Blitz/Features/FileSearch/Service/FileSearchService.swift
 run ranking-test           $L/SearchRelevance.swift $L/ScriptRomanization.swift \
                            $L/LauncherMatch.swift $L/LauncherRankingStore.swift
 run scopes-test            $L/SearchScopes.swift
-run app-name-test          Tinycast/Platform/AppDisplayName.swift \
-                           Tinycast/Platform/BundleLocalization.swift \
+run app-name-test          Blitz/Platform/AppDisplayName.swift \
+                           Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift
 run favorites-test         $L/FavoriteSlots.swift
-run apple-shortcut-test    Tinycast/Features/AppleShortcuts/Model/*.swift
-run calc-test              Tinycast/Features/Calculator/Model/*.swift
-run index calc-performance Tinycast/Features/Calculator/Model/*.swift
-run calendar-test          Tinycast/Features/Calendar/Model/*.swift
-run clipboard-test         Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFileKind.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorFormat.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift
+run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/*.swift
+run calc-test              Blitz/Features/Calculator/Model/*.swift
+run index calc-performance Blitz/Features/Calculator/Model/*.swift
+run calendar-test          Blitz/Features/Calendar/Model/*.swift
+run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
-Q=Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift
-run clipboard-search-test  Tinycast/Features/Clipboard/Model/*.swift $Q
-run paste-sequence-test    Tinycast/Features/Clipboard/Model/*.swift $Q
-run clipboard-text-test    Tinycast/Features/Clipboard/Model/*.swift $Q \
-                           Tinycast/Features/Clipboard/Service/ClipboardTextExtractor.swift \
-                           Tinycast/Features/Clipboard/Service/ClipboardTextIndexer.swift \
-                           Tinycast/Features/Clipboard/Service/ClipboardTextWorker.swift \
-                           Tinycast/Platform/ProcessExit.swift
-run pasteboard-test        Tinycast/Platform/PasteboardFiles.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFileKind.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorFormat.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift \
-                           Tinycast/Features/Clipboard/Service/ClipboardManager.swift \
-                           Tinycast/Features/Clipboard/Service/Paster.swift
+Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
+run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q
+run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q
+run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
+                           Blitz/Features/Clipboard/Service/ClipboardTextExtractor.swift \
+                           Blitz/Features/Clipboard/Service/ClipboardTextIndexer.swift \
+                           Blitz/Features/Clipboard/Service/ClipboardTextWorker.swift \
+                           Blitz/Platform/ProcessExit.swift
+run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Clipboard/Service/ClipboardManager.swift \
+                           Blitz/Features/Clipboard/Service/Paster.swift
 run index clipboard-file-performance \
-                           Tinycast/Platform/PasteboardFiles.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFileKind.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorFormat.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift \
-                           Tinycast/Features/Clipboard/Service/ClipboardManager.swift
-run emoji-test             Tinycast/Features/Emoji/Model/EmojiCatalog.swift \
-                           Tinycast/Features/Emoji/Model/EmojiGridGeometry.swift \
-                           Tinycast/Features/Emoji/Model/EmojiData.generated.swift
-run emoji-search-test      Tinycast/Features/Emoji/Model/EmojiCatalog.swift \
-                           Tinycast/Features/Emoji/Model/EmojiData.generated.swift \
-                           Tinycast/Features/Emoji/Service/EmojiIndex.swift \
-                           Tinycast/Features/Emoji/Service/FrequentEmojiStore.swift \
-                           Tinycast/Features/Emoji/Service/PinnedEmojiStore.swift \
-                           Tinycast/Features/Launcher/Model/SearchRelevance.swift \
-                           Tinycast/Platform/AppPaths.swift Tinycast/Platform/Memo.swift
+                           Blitz/Platform/PasteboardFiles.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Clipboard/Service/ClipboardManager.swift
+run emoji-test             Blitz/Features/Emoji/Model/EmojiCatalog.swift \
+                           Blitz/Features/Emoji/Model/EmojiGridGeometry.swift \
+                           Blitz/Features/Emoji/Model/EmojiData.generated.swift
+run emoji-search-test      Blitz/Features/Emoji/Model/EmojiCatalog.swift \
+                           Blitz/Features/Emoji/Model/EmojiData.generated.swift \
+                           Blitz/Features/Emoji/Service/EmojiIndex.swift \
+                           Blitz/Features/Emoji/Service/FrequentEmojiStore.swift \
+                           Blitz/Features/Emoji/Service/PinnedEmojiStore.swift \
+                           Blitz/Features/Launcher/Model/SearchRelevance.swift \
+                           Blitz/Platform/AppPaths.swift Blitz/Platform/Memo.swift
 run index emoji-search-performance \
-                           Tinycast/Features/Emoji/Model/EmojiCatalog.swift \
-                           Tinycast/Features/Emoji/Model/EmojiData.generated.swift \
-                           Tinycast/Features/Emoji/Service/EmojiIndex.swift \
-                           Tinycast/Features/Emoji/Service/FrequentEmojiStore.swift \
-                           Tinycast/Features/Launcher/Model/SearchRelevance.swift \
-                           Tinycast/Platform/AppPaths.swift Tinycast/Platform/Memo.swift
-run palette-selection-test Tinycast/Features/PaletteRowIndex.swift \
-                           Tinycast/Features/Emoji/Model/EmojiGridGeometry.swift
-run appearance-test        Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/Settings/AppAppearance.swift
-run interface-size-test    Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/Settings/InterfaceSize.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionFormMetrics.swift
-run palette-placement-test Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/Settings/InterfaceSize.swift \
-                           Tinycast/Palette/PalettePlacement.swift
-run scroll-reveal-test     Tinycast/DesignSystem/Scrolling/SelectionReveal.swift
-run redaction-test         Tinycast/DesignSystem/RedactedPlaceholder.swift
-run keyboard-focus-test    Tinycast/DesignSystem/Interaction/KeyboardFocus.swift
-run ai-instructions-test   Tinycast/Features/AI/Model/AIInstructions.swift \
-                           Tinycast/Features/AI/Model/AIPreamble.swift
-run hover-arming-test      Tinycast/Palette/HoverArming.swift \
-                           Tinycast/Palette/PaletteState.swift \
-                           Tinycast/Palette/PaletteMode.swift \
-                           Tinycast/Features/Emoji/Model/EmojiCatalog.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFileKind.swift \
-                           Tinycast/Features/FileSearch/Model/FileSearchFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorFormat.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift
-run palette-escape-test    Tinycast/Palette/PaletteMode.swift \
-                           Tinycast/Palette/PaletteEscapeAction.swift \
-                           Tinycast/Palette/CommandEscapeTap.swift \
-                           Tinycast/Features/Settings/EscapeKeyBehavior.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift
-run palette-navigation-test Tinycast/Palette/PaletteState.swift \
-                           Tinycast/Palette/PaletteMode.swift \
-                           Tinycast/Palette/HoverArming.swift \
-                           Tinycast/Features/Emoji/Model/EmojiCatalog.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ClipboardFileKind.swift \
-                           Tinycast/Features/FileSearch/Model/FileSearchFilter.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorFormat.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift
-run palette-filter-test    Tinycast/Palette/PaletteMode.swift \
-                           Tinycast/Palette/PaletteFilterAction.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift
-run action-menu-search-test Tinycast/Palette/ActionMenuSearchQuery.swift \
-                            Tinycast/Features/Launcher/Model/SearchRelevance.swift
-run palette-shortcut-test  Tinycast/Palette/PaletteShortcut.swift
-run ascii-layout-test      Tinycast/Platform/ASCIIKeyboardLayout.swift
-run palette-tab-test       Tinycast/Palette/PaletteMode.swift \
-                           Tinycast/Palette/PaletteTabAction.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift
-run fallback-test          Tinycast/Features/Launcher/Model/Fallback.swift \
-                           Tinycast/Features/Launcher/Model/CommandID.swift \
-                           Tinycast/Features/HotKeys/Model/HotKeyAction.swift \
-                           Tinycast/Features/QuickActions/Model/QuickAction.swift \
-                           Tinycast/Features/QuickActions/Model/BuiltInQuickAction.swift \
-                           Tinycast/Features/QuickActions/Model/CustomQuickAction.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/SystemActions/Model/SystemAction.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/Snippets/Model/Snippet.swift
-run dictionary-test        Tinycast/Features/Dictionary/Model/DictionaryEntry.swift \
-                           Tinycast/Features/Dictionary/Model/DictionaryMarkup.swift
-run hotkey-test            Tinycast/Features/HotKeys/Model/DoubleTapModifier.swift \
-                           Tinycast/Features/HotKeys/Model/DoubleTapDetector.swift \
-                           Tinycast/Features/HotKeys/Model/GlobeTapDetector.swift \
-                           Tinycast/Features/HotKeys/Model/HotKeyBinding.swift \
-                           Tinycast/Features/HotKeys/Model/HotKeySpelling.swift \
-                           Tinycast/Features/HotKeys/Model/HyperKey.swift \
-                           Tinycast/Platform/ASCIIKeyboardLayout.swift \
-                           Tinycast/Features/HotKeys/Service/KeyShortcut.swift \
-                           Tinycast/Features/HotKeys/Model/HotKeyAction.swift \
-                           Tinycast/Features/QuickActions/Model/QuickAction.swift \
-                           Tinycast/Features/QuickActions/Model/BuiltInQuickAction.swift \
-                           Tinycast/Features/QuickActions/Model/CustomQuickAction.swift \
-                           Tinycast/Features/Launcher/Model/CommandID.swift \
-                           Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/SystemActions/Model/SystemAction.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/Snippets/Model/Snippet.swift
-run callout-test          Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/HotKeys/UI/CalloutPlacement.swift
-run icon-cache-test        Tinycast/Platform/Appearance.swift \
-                           Tinycast/Platform/Images/IconCache.swift
-run entry-icon-test        Tinycast/Platform/Appearance.swift \
-                           Tinycast/Platform/Images/IconCache.swift \
-                           Tinycast/Platform/Images/FileIconStamp.swift
-run ext-icon-test          Tinycast/Platform/Appearance.swift \
-                           Tinycast/Platform/AppDisplayName.swift \
-                           Tinycast/Platform/Images/IconCache.swift \
-                           Tinycast/Platform/Compression/Zlib.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionBootConfig.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionLaunchType.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionManifest.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionRefreshPolicy.swift \
-                           Tinycast/Features/Extensions/Model/ExtensionRefreshState.swift \
-                           Tinycast/Features/Extensions/Model/RenderNode.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionCatalog.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionFetcher.swift \
-                           Tinycast/Platform/ProcessExit.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionNodeShims.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionOAuthKeychain.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionOAuthSession.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionRuntime.swift \
-                           Tinycast/Features/Extensions/Service/ExtensionIconCache.swift \
-                           Tinycast/Features/Extensions/UI/ExtensionAnimatedImage.swift \
-                           Tinycast/Features/Extensions/UI/ExtensionImage.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift
-run system-action-test     Tinycast/Features/SystemActions/Model/SystemAction.swift
-run volume-test            Tinycast/Features/SystemActions/Model/VolumeLevel.swift
-run window-command-test    Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCycle.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowActionMemory.swift
-run window-preset-test     Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowShortcutPreset.swift \
-                           Tinycast/Features/HotKeys/Model/DoubleTapModifier.swift \
-                           Tinycast/Features/HotKeys/Model/HotKeyBinding.swift \
-                           Tinycast/Features/HotKeys/Model/HyperKey.swift \
-                           Tinycast/Platform/ASCIIKeyboardLayout.swift \
-                           Tinycast/Features/HotKeys/Service/KeyShortcut.swift
-run space-gesture-test     Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/SpaceGesture.swift
-run window-layout-test     Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCycle.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayout.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutPlan.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutStore.swift \
-                           Tinycast/Features/WindowManagement/Model/CustomWindowSize.swift \
-                           Tinycast/Features/WindowManagement/Model/CustomWindowSizeStore.swift
-run window-room-test       Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCycle.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayout.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutPlan.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomLayoutKind.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomLayoutEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomGrid.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomWindow.swift \
-                           Tinycast/Features/WindowManagement/Model/Room.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomWindowMatcher.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomParking.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomPlan.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomArrangement.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomStore.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomMinimumSizeStore.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomParkingLedger.swift
-run window-file-test       Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowCycle.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayout.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
-                           Tinycast/Features/WindowManagement/Model/CustomWindowSize.swift \
-                           Tinycast/Features/WindowManagement/Model/Room.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomWindow.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomLayoutKind.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomGrid.swift \
-                           Tinycast/Features/WindowManagement/Model/RoomLayoutEngine.swift \
-                           Tinycast/Features/WindowManagement/Model/WindowManagementFileFormat.swift \
-                           Tinycast/Features/Settings/Model/SettingsFileJSON.swift \
-                           Tinycast/Features/Settings/Model/SettingsFileIdentity.swift
-run custom-command-test    Tinycast/Platform/PseudoTerminal.swift \
-                           Tinycast/Platform/ProcessExit.swift \
-                           Tinycast/Features/CustomCommands/Model/CustomCommand.swift \
-                           Tinycast/Features/CustomCommands/Model/RaycastScriptImport.swift \
-                           Tinycast/Features/CustomCommands/Service/ShellCommandRunner.swift
-run uninstall-test         Tinycast/Features/Uninstall/Model/UninstallTarget.swift \
-                           Tinycast/Features/Uninstall/Model/UninstallSearchRoot.swift \
-                           Tinycast/Features/Uninstall/Model/UninstallRules.swift \
-                           Tinycast/Features/Uninstall/Model/UninstallProtection.swift \
-                           Tinycast/Features/Uninstall/Model/UninstallPlan.swift
-run quicklink-test         Tinycast/Features/Quicklinks/Model/Quicklink.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkDestination.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkStore.swift \
-                           Tinycast/Features/Quicklinks/Model/QuicklinkArchive.swift \
-                           Tinycast/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
-run slow snippets-test     Tinycast/Platform/NotificationToken.swift \
-                           Tinycast/Platform/HealthTicker.swift \
-                           Tinycast/Platform/AccessibilityText.swift \
-                           Tinycast/Features/Snippets/Model/*.swift \
-                           Tinycast/Features/Snippets/Service/*.swift \
-                           Tinycast/Features/TextInjection/Service/*.swift
-run notes-test             Tinycast/Platform/Signposts.swift \
+                           Blitz/Features/Emoji/Model/EmojiCatalog.swift \
+                           Blitz/Features/Emoji/Model/EmojiData.generated.swift \
+                           Blitz/Features/Emoji/Service/EmojiIndex.swift \
+                           Blitz/Features/Emoji/Service/FrequentEmojiStore.swift \
+                           Blitz/Features/Launcher/Model/SearchRelevance.swift \
+                           Blitz/Platform/AppPaths.swift Blitz/Platform/Memo.swift
+run palette-selection-test Blitz/Features/PaletteRowIndex.swift \
+                           Blitz/Features/Emoji/Model/EmojiGridGeometry.swift
+run appearance-test        Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/AppAppearance.swift
+run interface-size-test    Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/InterfaceSize.swift \
+                           Blitz/Features/Extensions/Model/ExtensionFormMetrics.swift
+run palette-placement-test Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/InterfaceSize.swift \
+                           Blitz/Palette/PalettePlacement.swift
+run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
+run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
+run keyboard-focus-test    Blitz/DesignSystem/Interaction/KeyboardFocus.swift
+run ai-instructions-test   Blitz/Features/AI/Model/AIInstructions.swift \
+                           Blitz/Features/AI/Model/AIPreamble.swift
+run hover-arming-test      Blitz/Palette/HoverArming.swift \
+                           Blitz/Palette/PaletteState.swift \
+                           Blitz/Palette/PaletteMode.swift \
+                           Blitz/Features/Emoji/Model/EmojiCatalog.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/FileSearch/Model/FileSearchFilter.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run palette-escape-test    Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/PaletteEscapeAction.swift \
+                           Blitz/Palette/CommandEscapeTap.swift \
+                           Blitz/Features/Settings/EscapeKeyBehavior.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run palette-navigation-test Blitz/Palette/PaletteState.swift \
+                           Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/HoverArming.swift \
+                           Blitz/Features/Emoji/Model/EmojiCatalog.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/FileSearch/Model/FileSearchFilter.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run palette-filter-test    Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/PaletteFilterAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run action-menu-search-test Blitz/Palette/ActionMenuSearchQuery.swift \
+                            Blitz/Features/Launcher/Model/SearchRelevance.swift
+run palette-shortcut-test  Blitz/Palette/PaletteShortcut.swift
+run ascii-layout-test      Blitz/Platform/ASCIIKeyboardLayout.swift
+run palette-tab-test       Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/PaletteTabAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run fallback-test          Blitz/Features/Launcher/Model/Fallback.swift \
+                           Blitz/Features/Launcher/Model/CommandID.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyAction.swift \
+                           Blitz/Features/QuickActions/Model/QuickAction.swift \
+                           Blitz/Features/QuickActions/Model/BuiltInQuickAction.swift \
+                           Blitz/Features/QuickActions/Model/CustomQuickAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/SystemActions/Model/SystemAction.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift
+run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
+                           Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
+                           Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
+                           Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
+                           Blitz/Features/HotKeys/Model/HotKeySpelling.swift \
+                           Blitz/Features/HotKeys/Model/HyperKey.swift \
+                           Blitz/Platform/ASCIIKeyboardLayout.swift \
+                           Blitz/Features/HotKeys/Service/KeyShortcut.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyAction.swift \
+                           Blitz/Features/QuickActions/Model/QuickAction.swift \
+                           Blitz/Features/QuickActions/Model/BuiltInQuickAction.swift \
+                           Blitz/Features/QuickActions/Model/CustomQuickAction.swift \
+                           Blitz/Features/Launcher/Model/CommandID.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/SystemActions/Model/SystemAction.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift
+run callout-test          Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/HotKeys/UI/CalloutPlacement.swift
+run icon-cache-test        Blitz/Platform/Appearance.swift \
+                           Blitz/Platform/Images/IconCache.swift
+run entry-icon-test        Blitz/Platform/Appearance.swift \
+                           Blitz/Platform/Images/IconCache.swift \
+                           Blitz/Platform/Images/FileIconStamp.swift
+run ext-icon-test          Blitz/Platform/Appearance.swift \
+                           Blitz/Platform/AppDisplayName.swift \
+                           Blitz/Platform/Images/IconCache.swift \
+                           Blitz/Platform/Compression/Zlib.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Extensions/Model/ExtensionBootConfig.swift \
+                           Blitz/Features/Extensions/Model/ExtensionLaunchType.swift \
+                           Blitz/Features/Extensions/Model/ExtensionManifest.swift \
+                           Blitz/Features/Extensions/Model/ExtensionRefreshPolicy.swift \
+                           Blitz/Features/Extensions/Model/ExtensionRefreshState.swift \
+                           Blitz/Features/Extensions/Model/RenderNode.swift \
+                           Blitz/Features/Extensions/Service/ExtensionCatalog.swift \
+                           Blitz/Features/Extensions/Service/ExtensionFetcher.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Features/Extensions/Service/ExtensionNodeShims.swift \
+                           Blitz/Features/Extensions/Service/ExtensionOAuthKeychain.swift \
+                           Blitz/Features/Extensions/Service/ExtensionOAuthSession.swift \
+                           Blitz/Features/Extensions/Service/ExtensionRuntime.swift \
+                           Blitz/Features/Extensions/Service/ExtensionIconCache.swift \
+                           Blitz/Features/Extensions/UI/ExtensionAnimatedImage.swift \
+                           Blitz/Features/Extensions/UI/ExtensionImage.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
+run system-action-test     Blitz/Features/SystemActions/Model/SystemAction.swift
+run volume-test            Blitz/Features/SystemActions/Model/VolumeLevel.swift
+run window-command-test    Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCycle.swift \
+                           Blitz/Features/WindowManagement/Model/WindowPlacementEngine.swift \
+                           Blitz/Features/WindowManagement/Model/WindowActionMemory.swift
+run window-preset-test     Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/WindowShortcutPreset.swift \
+                           Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
+                           Blitz/Features/HotKeys/Model/HyperKey.swift \
+                           Blitz/Platform/ASCIIKeyboardLayout.swift \
+                           Blitz/Features/HotKeys/Service/KeyShortcut.swift
+run space-gesture-test     Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/SpaceGesture.swift
+run window-layout-test     Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCycle.swift \
+                           Blitz/Features/WindowManagement/Model/WindowPlacementEngine.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayout.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutPlan.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutStore.swift \
+                           Blitz/Features/WindowManagement/Model/CustomWindowSize.swift \
+                           Blitz/Features/WindowManagement/Model/CustomWindowSizeStore.swift
+run window-room-test       Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCycle.swift \
+                           Blitz/Features/WindowManagement/Model/WindowPlacementEngine.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayout.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutPlan.swift \
+                           Blitz/Features/WindowManagement/Model/RoomLayoutKind.swift \
+                           Blitz/Features/WindowManagement/Model/RoomLayoutEngine.swift \
+                           Blitz/Features/WindowManagement/Model/RoomGrid.swift \
+                           Blitz/Features/WindowManagement/Model/RoomWindow.swift \
+                           Blitz/Features/WindowManagement/Model/Room.swift \
+                           Blitz/Features/WindowManagement/Model/RoomWindowMatcher.swift \
+                           Blitz/Features/WindowManagement/Model/RoomParking.swift \
+                           Blitz/Features/WindowManagement/Model/RoomPlan.swift \
+                           Blitz/Features/WindowManagement/Model/RoomArrangement.swift \
+                           Blitz/Features/WindowManagement/Model/RoomStore.swift \
+                           Blitz/Features/WindowManagement/Model/RoomMinimumSizeStore.swift \
+                           Blitz/Features/WindowManagement/Model/RoomParkingLedger.swift
+run window-file-test       Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCycle.swift \
+                           Blitz/Features/WindowManagement/Model/WindowPlacementEngine.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutAnchor.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutDisplay.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayout.swift \
+                           Blitz/Features/WindowManagement/Model/WindowLayoutGeometry.swift \
+                           Blitz/Features/WindowManagement/Model/CustomWindowSize.swift \
+                           Blitz/Features/WindowManagement/Model/Room.swift \
+                           Blitz/Features/WindowManagement/Model/RoomWindow.swift \
+                           Blitz/Features/WindowManagement/Model/RoomLayoutKind.swift \
+                           Blitz/Features/WindowManagement/Model/RoomGrid.swift \
+                           Blitz/Features/WindowManagement/Model/RoomLayoutEngine.swift \
+                           Blitz/Features/WindowManagement/Model/WindowManagementFileFormat.swift \
+                           Blitz/Features/Settings/Model/SettingsFileJSON.swift \
+                           Blitz/Features/Settings/Model/SettingsFileIdentity.swift
+run custom-command-test    Blitz/Platform/PseudoTerminal.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift \
+                           Blitz/Features/CustomCommands/Model/RaycastScriptImport.swift \
+                           Blitz/Features/CustomCommands/Service/ShellCommandRunner.swift
+run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift \
+                           Blitz/Features/Uninstall/Model/UninstallSearchRoot.swift \
+                           Blitz/Features/Uninstall/Model/UninstallRules.swift \
+                           Blitz/Features/Uninstall/Model/UninstallProtection.swift \
+                           Blitz/Features/Uninstall/Model/UninstallPlan.swift
+run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
+                           Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
+run slow snippets-test     Blitz/Platform/NotificationToken.swift \
+                           Blitz/Platform/HealthTicker.swift \
+                           Blitz/Platform/AccessibilityText.swift \
+                           Blitz/Features/Snippets/Model/*.swift \
+                           Blitz/Features/Snippets/Service/*.swift \
+                           Blitz/Features/TextInjection/Service/*.swift
+run notes-test             Blitz/Platform/Signposts.swift \
                            $L/SearchRelevance.swift \
-                           Tinycast/Features/Notes/Model/*.swift \
-                           Tinycast/Features/Notes/Service/*.swift
-run notes-editor-test      Tinycast/Platform/Signposts.swift \
-                           Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Platform/NotificationToken.swift \
-                           Tinycast/Features/TextInjection/Service/InjectableTextView.swift \
-                           Tinycast/Features/Notes/Model/NoteDocument.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdown.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdownParser.swift \
-                           Tinycast/Features/Notes/Model/NoteInlineScanner.swift \
-                           Tinycast/Features/Notes/Model/NoteEditPlan.swift \
-                           Tinycast/Features/Notes/Model/NoteEditAction.swift \
-                           Tinycast/Features/Notes/Model/NoteFormatting.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdownEditing.swift \
-                           Tinycast/Features/Notes/Model/NoteRevealPolicy.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownTypography.swift \
-                           Tinycast/Features/Notes/UI/NoteBlockDecoration.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownStyler.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownRenderer.swift \
-                           Tinycast/Features/Notes/UI/NoteCheckboxGeometry.swift \
-                           Tinycast/Features/Notes/UI/NoteBlockLayoutFragment.swift \
-                           Tinycast/Features/Notes/UI/NoteLayoutFragmentProvider.swift \
-                           Tinycast/Features/Notes/UI/NoteTextViewEditing.swift \
-                           Tinycast/Features/Notes/UI/NoteTextView.swift \
-                           Tinycast/Features/Notes/UI/NoteEditorView.swift
+                           Blitz/Features/Notes/Model/*.swift \
+                           Blitz/Features/Notes/Service/*.swift
+run notes-editor-test      Blitz/Platform/Signposts.swift \
+                           Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Platform/NotificationToken.swift \
+                           Blitz/Features/TextInjection/Service/InjectableTextView.swift \
+                           Blitz/Features/Notes/Model/NoteDocument.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdown.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdownParser.swift \
+                           Blitz/Features/Notes/Model/NoteInlineScanner.swift \
+                           Blitz/Features/Notes/Model/NoteEditPlan.swift \
+                           Blitz/Features/Notes/Model/NoteEditAction.swift \
+                           Blitz/Features/Notes/Model/NoteFormatting.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdownEditing.swift \
+                           Blitz/Features/Notes/Model/NoteRevealPolicy.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownTypography.swift \
+                           Blitz/Features/Notes/UI/NoteBlockDecoration.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownStyler.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownRenderer.swift \
+                           Blitz/Features/Notes/UI/NoteCheckboxGeometry.swift \
+                           Blitz/Features/Notes/UI/NoteBlockLayoutFragment.swift \
+                           Blitz/Features/Notes/UI/NoteLayoutFragmentProvider.swift \
+                           Blitz/Features/Notes/UI/NoteTextViewEditing.swift \
+                           Blitz/Features/Notes/UI/NoteTextView.swift \
+                           Blitz/Features/Notes/UI/NoteEditorView.swift
 run -O index notes-editor-performance \
-                           Tinycast/Platform/Signposts.swift \
-                           Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Platform/NotificationToken.swift \
-                           Tinycast/Features/TextInjection/Service/InjectableTextView.swift \
-                           Tinycast/Features/Notes/Model/NoteDocument.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdown.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdownParser.swift \
-                           Tinycast/Features/Notes/Model/NoteInlineScanner.swift \
-                           Tinycast/Features/Notes/Model/NoteEditPlan.swift \
-                           Tinycast/Features/Notes/Model/NoteEditAction.swift \
-                           Tinycast/Features/Notes/Model/NoteFormatting.swift \
-                           Tinycast/Features/Notes/Model/NoteMarkdownEditing.swift \
-                           Tinycast/Features/Notes/Model/NoteRevealPolicy.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownTypography.swift \
-                           Tinycast/Features/Notes/UI/NoteBlockDecoration.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownStyler.swift \
-                           Tinycast/Features/Notes/UI/NoteMarkdownRenderer.swift \
-                           Tinycast/Features/Notes/UI/NoteCheckboxGeometry.swift \
-                           Tinycast/Features/Notes/UI/NoteBlockLayoutFragment.swift \
-                           Tinycast/Features/Notes/UI/NoteLayoutFragmentProvider.swift \
-                           Tinycast/Features/Notes/UI/NoteTextViewEditing.swift \
-                           Tinycast/Features/Notes/UI/NoteTextView.swift \
-                           Tinycast/Features/Notes/UI/NoteEditorView.swift
-run slow -O raycast-test   Tinycast/Features/Backup/Model/RaycastImportError.swift \
-                           Tinycast/Features/Backup/Service/RaycastDecoder.swift \
-                           Tinycast/Features/Backup/Service/Scrypt.swift \
-                           Tinycast/Platform/Compression/Zlib.swift
-run settings-backup-test   Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/Backup/Model/SettingsBackupCoverage.swift
-run settings-file-test     Tinycast/Features/Settings/Model/*.swift \
-                           Tinycast/Features/Settings/Service/SettingsFileMonitor.swift \
-                           Tinycast/Features/Settings/Service/SettingsFileRepository.swift \
-                           Tinycast/Platform/AppPaths.swift
-run backup-archive-test    Tinycast/Platform/AppPaths.swift \
-                           Tinycast/Features/Backup/Model/BackupArchive.swift \
-                           Tinycast/Features/Backup/Model/BackupBundle.swift \
-                           Tinycast/Features/Backup/Model/BackupCategory.swift \
-                           Tinycast/Features/Backup/Model/BackupClipboardItem.swift \
-                           Tinycast/Features/Backup/Model/BackupManifest.swift \
-                           Tinycast/Features/Backup/Service/BackupStaging.swift
-E=Tinycast/Features/Extensions
+                           Blitz/Platform/Signposts.swift \
+                           Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Platform/NotificationToken.swift \
+                           Blitz/Features/TextInjection/Service/InjectableTextView.swift \
+                           Blitz/Features/Notes/Model/NoteDocument.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdown.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdownParser.swift \
+                           Blitz/Features/Notes/Model/NoteInlineScanner.swift \
+                           Blitz/Features/Notes/Model/NoteEditPlan.swift \
+                           Blitz/Features/Notes/Model/NoteEditAction.swift \
+                           Blitz/Features/Notes/Model/NoteFormatting.swift \
+                           Blitz/Features/Notes/Model/NoteMarkdownEditing.swift \
+                           Blitz/Features/Notes/Model/NoteRevealPolicy.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownTypography.swift \
+                           Blitz/Features/Notes/UI/NoteBlockDecoration.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownStyler.swift \
+                           Blitz/Features/Notes/UI/NoteMarkdownRenderer.swift \
+                           Blitz/Features/Notes/UI/NoteCheckboxGeometry.swift \
+                           Blitz/Features/Notes/UI/NoteBlockLayoutFragment.swift \
+                           Blitz/Features/Notes/UI/NoteLayoutFragmentProvider.swift \
+                           Blitz/Features/Notes/UI/NoteTextViewEditing.swift \
+                           Blitz/Features/Notes/UI/NoteTextView.swift \
+                           Blitz/Features/Notes/UI/NoteEditorView.swift
+run slow -O raycast-test   Blitz/Features/Backup/Model/RaycastImportError.swift \
+                           Blitz/Features/Backup/Service/RaycastDecoder.swift \
+                           Blitz/Features/Backup/Service/Scrypt.swift \
+                           Blitz/Platform/Compression/Zlib.swift
+run settings-backup-test   Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/Backup/Model/SettingsBackupCoverage.swift
+run settings-file-test     Blitz/Features/Settings/Model/*.swift \
+                           Blitz/Features/Settings/Service/SettingsFileMonitor.swift \
+                           Blitz/Features/Settings/Service/SettingsFileRepository.swift \
+                           Blitz/Platform/AppPaths.swift
+run backup-archive-test    Blitz/Platform/AppPaths.swift \
+                           Blitz/Features/Backup/Model/BackupArchive.swift \
+                           Blitz/Features/Backup/Model/BackupBundle.swift \
+                           Blitz/Features/Backup/Model/BackupCategory.swift \
+                           Blitz/Features/Backup/Model/BackupClipboardItem.swift \
+                           Blitz/Features/Backup/Model/BackupManifest.swift \
+                           Blitz/Features/Backup/Service/BackupStaging.swift
+E=Blitz/Features/Extensions
 run symbols-test           $E/Service/SymbolCatalog.swift
 run ext-cleanup-test       $E/Service/ExtensionCleanup.swift \
                            $E/Service/ExtensionCatalog.swift \
-                           Tinycast/Platform/AppDisplayName.swift \
+                           Blitz/Platform/AppDisplayName.swift \
                            $E/Model/ExtensionManifest.swift \
                            $E/Model/ExtensionLaunchType.swift \
                            $E/Model/ExtensionRefreshPolicy.swift \
                            $E/Model/ExtensionRefreshState.swift
 run ext-refresh-test       $E/Model/ExtensionManifest.swift \
-                           Tinycast/Platform/AppDisplayName.swift \
+                           Blitz/Platform/AppDisplayName.swift \
                            $E/Model/ExtensionLaunchType.swift \
                            $E/Model/ExtensionRefreshPolicy.swift \
                            $E/Model/ExtensionRefreshState.swift
@@ -527,11 +527,11 @@ run slow ext-test          -parse-as-library \
                            $E/Service/ExtensionCommandMetadataStore.swift \
                            $E/UI/ExtensionMenuBarController.swift \
                            $E/UI/ExtensionMenuBarImage.swift \
-                           Tinycast/Platform/Appearance.swift \
-                           Tinycast/Platform/AppDisplayName.swift \
-                           Tinycast/Platform/Images/IconCache.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Platform/Appearance.swift \
+                           Blitz/Platform/AppDisplayName.swift \
+                           Blitz/Platform/Images/IconCache.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
                            $E/Model/ExtensionBootConfig.swift \
                            $E/Model/ExtensionDeepLink.swift \
                            $E/Model/ExtensionLaunchType.swift \
@@ -545,7 +545,7 @@ run slow ext-test          -parse-as-library \
                            $E/Model/ExtensionSearchAccessory.swift \
                            $E/Service/ExtensionCatalog.swift \
                            $E/Service/ExtensionFetcher.swift \
-                           Tinycast/Platform/ProcessExit.swift \
+                           Blitz/Platform/ProcessExit.swift \
                            $E/Service/ExtensionIconCache.swift \
                            $E/Service/ExtensionNodeShims.swift \
                            $E/Service/ExtensionOAuthKeychain.swift \
@@ -557,136 +557,136 @@ run slow ext-test          -parse-as-library \
                            $E/UI/ExtensionImage.swift \
                            $E/UI/ExtensionScreen.swift \
                            $L/SearchRelevance.swift \
-                           Tinycast/Platform/Compression/Zlib.swift \
-                           Tinycast/Features/Clipboard/Model/ColorValue.swift \
-                           Tinycast/Features/Clipboard/Model/ColorSpaces.swift
-run settings-history-test  Tinycast/Features/Settings/SettingsTab.swift \
-                           Tinycast/Features/Settings/SettingsHistory.swift \
-                           Tinycast/Features/Settings/SettingsAnchor.swift \
-                           Tinycast/Features/Settings/SettingsNavigationState.swift \
-                           Tinycast/Features/Settings/SettingsSearchCatalog.swift \
+                           Blitz/Platform/Compression/Zlib.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
+run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
+                           Blitz/Features/Settings/SettingsHistory.swift \
+                           Blitz/Features/Settings/SettingsAnchor.swift \
+                           Blitz/Features/Settings/SettingsNavigationState.swift \
+                           Blitz/Features/Settings/SettingsSearchCatalog.swift \
                            $L/SearchRelevance.swift
-run updates-test           Tinycast/Features/Updates/Model/*.swift \
-                           Tinycast/Features/Updates/Service/BundleSignature.swift
-run support-test           Tinycast/Features/Support/Model/*.swift
-run ai-provider-test       Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/*.swift \
-                           Tinycast/Features/AI/Settings/AISettingsStore.swift
-run ai-chat-test           Tinycast/Features/AI/Model/AIRequest.swift \
-                           Tinycast/Features/AI/Model/AIConnection.swift \
-                           Tinycast/Features/AI/Model/AppleIntelligence.swift \
-                           Tinycast/Features/AI/Model/AIAttachmentPolicy.swift \
-                           Tinycast/Features/AI/Model/AIRetention.swift \
-                           Tinycast/Features/AI/Model/AITool.swift \
-                           Tinycast/Features/AI/Model/JSONValue.swift \
-                           Tinycast/Features/AI/Model/ChatMessage.swift \
-                           Tinycast/Features/AI/Model/ChatSession.swift \
-                           Tinycast/Features/AI/Model/ChatChoices.swift \
-                           Tinycast/Features/AI/Model/ChatReferences.swift \
-                           Tinycast/Features/AI/Model/ChatTitle.swift \
-                           Tinycast/Features/AI/Model/ChatFind.swift \
-                           Tinycast/Features/AI/Model/ChatCitations.swift \
-                           Tinycast/Features/AI/Model/ChatToolScope.swift \
-                           Tinycast/Features/AI/Model/MarkdownBlock.swift \
-                           Tinycast/Features/AI/Model/MarkdownMath.swift \
-                           Tinycast/Features/AI/Model/MathFormula.swift \
-                           Tinycast/Features/AI/Model/MathNode.swift \
-                           Tinycast/Features/AI/Model/MathSymbolCatalog.swift \
-                           Tinycast/Features/AI/Service/AIProvider.swift \
-                           Tinycast/Features/AI/Service/ChatHistoryStore.swift \
-                           Tinycast/Features/AI/Service/AIToolLoopProvider.swift \
-                           Tinycast/Features/AI/UI/AIChatState.swift \
-                           Tinycast/Features/AI/UI/AIChatSurfacesState.swift \
-                           Tinycast/Features/AI/UI/ChatFindState.swift
-run chat-markdown-test     Tinycast/Platform/Appearance.swift \
-                           Tinycast/DesignSystem/Theme.swift \
-                           Tinycast/DesignSystem/InterfaceMetrics.swift \
-                           Tinycast/Features/Settings/InterfaceSize.swift \
-                           Tinycast/Features/AI/Model/AIRequest.swift \
-                           Tinycast/Features/AI/Model/AITool.swift \
-                           Tinycast/Features/AI/Model/JSONValue.swift \
-                           Tinycast/Features/AI/Model/ChatMessage.swift \
-                           Tinycast/Features/AI/Model/ChatChoices.swift \
-                           Tinycast/Features/AI/Model/ChatReferences.swift \
-                           Tinycast/Features/AI/Model/ChatCitations.swift \
-                           Tinycast/Features/AI/Model/ChatFind.swift \
-                           Tinycast/Features/AI/Model/MarkdownBlock.swift \
-                           Tinycast/Features/AI/Model/MarkdownMath.swift \
-                           Tinycast/Features/AI/Model/MathFormula.swift \
-                           Tinycast/Features/AI/Model/MathNode.swift \
-                           Tinycast/Features/AI/Model/MathSymbolCatalog.swift \
-                           Tinycast/Features/AI/UI/ChatTextHighlight.swift \
-                           Tinycast/Features/AI/UI/ChatMarkdownRenderer.swift \
-                           Tinycast/Features/AI/UI/MathAttachmentCell.swift \
-                           Tinycast/Features/AI/UI/MathBox.swift \
-                           Tinycast/Features/AI/UI/MathFont.swift \
-                           Tinycast/Features/AI/UI/MathLayoutEngine.swift
-run mcp-test               Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/AIConnection.swift \
-                           Tinycast/Features/AI/Model/AppleIntelligence.swift \
-                           Tinycast/Features/AI/Model/AITool.swift \
-                           Tinycast/Features/AI/Model/AIToolServer.swift \
-                           Tinycast/Features/AI/Model/JSONValue.swift \
-                           Tinycast/Features/MCP/Model/*.swift \
-                           Tinycast/Features/MCP/Settings/MCPSettingsStore.swift
-run -O text-diff-test      Tinycast/Features/QuickActions/Model/TextDiffEngine.swift
-run index text-diff-performance Tinycast/Features/QuickActions/Model/TextDiffEngine.swift
-run quick-action-test      Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/AIConnection.swift \
-                           Tinycast/Features/AI/Model/AppleIntelligence.swift \
-                           Tinycast/Features/AI/Model/ChatGPTSubscription.swift \
-                           Tinycast/Features/AI/Model/InstalledAI.swift \
-                           Tinycast/Features/QuickActions/Model/*.swift \
-                           Tinycast/Features/QuickActions/Settings/QuickActionSettingsStore.swift
-run apple-intelligence-test Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/*.swift \
-                           Tinycast/Features/AI/Service/AIProvider.swift \
-                           Tinycast/Features/AI/Service/AppleIntelligenceProvider.swift
-run mcp-oauth-test         Tinycast/Platform/ExecutableLocator.swift \
-                           Tinycast/Platform/ProcessExit.swift \
-                           Tinycast/Platform/KeychainSecretStore.swift \
-                           Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/AIConnection.swift \
-                           Tinycast/Features/AI/Model/AppleIntelligence.swift \
-                           Tinycast/Features/AI/Model/AITool.swift \
-                           Tinycast/Features/AI/Model/AIToolServer.swift \
-                           Tinycast/Features/AI/Model/AIStreamDecoder.swift \
-                           Tinycast/Features/AI/Model/AIThinkTagDecoder.swift \
-                           Tinycast/Features/AI/Model/AIRequest.swift \
-                           Tinycast/Features/AI/Model/JSONValue.swift \
-                           Tinycast/Features/MCP/Model/*.swift \
-                           Tinycast/Features/MCP/Service/*.swift
-run slow mcp-stdio-test    Tinycast/Platform/ExecutableLocator.swift \
-                           Tinycast/Platform/ProcessExit.swift \
-                           Tinycast/Platform/KeychainSecretStore.swift \
-                           Tinycast/Features/Settings/AppSettingsKey.swift \
-                           Tinycast/Features/AI/Model/AIConnection.swift \
-                           Tinycast/Features/AI/Model/AppleIntelligence.swift \
-                           Tinycast/Features/AI/Model/AITool.swift \
-                           Tinycast/Features/AI/Model/AIToolServer.swift \
-                           Tinycast/Features/AI/Model/AIStreamDecoder.swift \
-                           Tinycast/Features/AI/Model/AIThinkTagDecoder.swift \
-                           Tinycast/Features/AI/Model/AIRequest.swift \
-                           Tinycast/Features/AI/Model/JSONValue.swift \
-                           Tinycast/Features/MCP/Model/*.swift \
-                           Tinycast/Features/MCP/Service/*.swift
-run slow codex-turn-test   Tinycast/Platform/AppPaths.swift \
-                           Tinycast/Features/AI/Model/*.swift \
-                           Tinycast/Features/AI/Service/AIProvider.swift \
-                           Tinycast/Features/AI/Service/ChatGPTSubscriptionManager.swift \
-                           Tinycast/Features/AI/Service/CodexAppServerClient.swift \
-                           Tinycast/Features/AI/Service/InstalledAIProbe.swift \
-                           Tinycast/Platform/ExecutableLocator.swift \
-                           Tinycast/Platform/ProcessExit.swift \
-                           Tinycast/Features/AI/Service/CodexTurnRunner.swift
-run installed-ai-test     Tinycast/Features/AI/Model/*.swift \
-                          Tinycast/Features/AI/Service/AIProvider.swift \
-                          Tinycast/Platform/AppPaths.swift \
-                          Tinycast/Platform/ExecutableLocator.swift \
-                          Tinycast/Platform/ProcessExit.swift \
-                          Tinycast/Features/AI/Service/InstalledCLIProvider.swift \
-                          Tinycast/Features/AI/Service/InstalledAIProbe.swift \
-                          Tinycast/Features/AI/Service/InstalledAIManager.swift
+run updates-test           Blitz/Features/Updates/Model/*.swift \
+                           Blitz/Features/Updates/Service/BundleSignature.swift
+run support-test           Blitz/Features/Support/Model/*.swift
+run ai-provider-test       Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/*.swift \
+                           Blitz/Features/AI/Settings/AISettingsStore.swift
+run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
+                           Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AppleIntelligence.swift \
+                           Blitz/Features/AI/Model/AIAttachmentPolicy.swift \
+                           Blitz/Features/AI/Model/AIRetention.swift \
+                           Blitz/Features/AI/Model/AITool.swift \
+                           Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatSession.swift \
+                           Blitz/Features/AI/Model/ChatChoices.swift \
+                           Blitz/Features/AI/Model/ChatReferences.swift \
+                           Blitz/Features/AI/Model/ChatTitle.swift \
+                           Blitz/Features/AI/Model/ChatFind.swift \
+                           Blitz/Features/AI/Model/ChatCitations.swift \
+                           Blitz/Features/AI/Model/ChatToolScope.swift \
+                           Blitz/Features/AI/Model/MarkdownBlock.swift \
+                           Blitz/Features/AI/Model/MarkdownMath.swift \
+                           Blitz/Features/AI/Model/MathFormula.swift \
+                           Blitz/Features/AI/Model/MathNode.swift \
+                           Blitz/Features/AI/Model/MathSymbolCatalog.swift \
+                           Blitz/Features/AI/Service/AIProvider.swift \
+                           Blitz/Features/AI/Service/ChatHistoryStore.swift \
+                           Blitz/Features/AI/Service/AIToolLoopProvider.swift \
+                           Blitz/Features/AI/UI/AIChatState.swift \
+                           Blitz/Features/AI/UI/AIChatSurfacesState.swift \
+                           Blitz/Features/AI/UI/ChatFindState.swift
+run chat-markdown-test     Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/InterfaceSize.swift \
+                           Blitz/Features/AI/Model/AIRequest.swift \
+                           Blitz/Features/AI/Model/AITool.swift \
+                           Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatChoices.swift \
+                           Blitz/Features/AI/Model/ChatReferences.swift \
+                           Blitz/Features/AI/Model/ChatCitations.swift \
+                           Blitz/Features/AI/Model/ChatFind.swift \
+                           Blitz/Features/AI/Model/MarkdownBlock.swift \
+                           Blitz/Features/AI/Model/MarkdownMath.swift \
+                           Blitz/Features/AI/Model/MathFormula.swift \
+                           Blitz/Features/AI/Model/MathNode.swift \
+                           Blitz/Features/AI/Model/MathSymbolCatalog.swift \
+                           Blitz/Features/AI/UI/ChatTextHighlight.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
+                           Blitz/Features/AI/UI/MathAttachmentCell.swift \
+                           Blitz/Features/AI/UI/MathBox.swift \
+                           Blitz/Features/AI/UI/MathFont.swift \
+                           Blitz/Features/AI/UI/MathLayoutEngine.swift
+run mcp-test               Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AppleIntelligence.swift \
+                           Blitz/Features/AI/Model/AITool.swift \
+                           Blitz/Features/AI/Model/AIToolServer.swift \
+                           Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/MCP/Model/*.swift \
+                           Blitz/Features/MCP/Settings/MCPSettingsStore.swift
+run -O text-diff-test      Blitz/Features/QuickActions/Model/TextDiffEngine.swift
+run index text-diff-performance Blitz/Features/QuickActions/Model/TextDiffEngine.swift
+run quick-action-test      Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AppleIntelligence.swift \
+                           Blitz/Features/AI/Model/ChatGPTSubscription.swift \
+                           Blitz/Features/AI/Model/InstalledAI.swift \
+                           Blitz/Features/QuickActions/Model/*.swift \
+                           Blitz/Features/QuickActions/Settings/QuickActionSettingsStore.swift
+run apple-intelligence-test Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/*.swift \
+                           Blitz/Features/AI/Service/AIProvider.swift \
+                           Blitz/Features/AI/Service/AppleIntelligenceProvider.swift
+run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Platform/KeychainSecretStore.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AppleIntelligence.swift \
+                           Blitz/Features/AI/Model/AITool.swift \
+                           Blitz/Features/AI/Model/AIToolServer.swift \
+                           Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
+                           Blitz/Features/AI/Model/AIRequest.swift \
+                           Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/MCP/Model/*.swift \
+                           Blitz/Features/MCP/Service/*.swift
+run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Platform/KeychainSecretStore.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AppleIntelligence.swift \
+                           Blitz/Features/AI/Model/AITool.swift \
+                           Blitz/Features/AI/Model/AIToolServer.swift \
+                           Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
+                           Blitz/Features/AI/Model/AIRequest.swift \
+                           Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/MCP/Model/*.swift \
+                           Blitz/Features/MCP/Service/*.swift
+run slow codex-turn-test   Blitz/Platform/AppPaths.swift \
+                           Blitz/Features/AI/Model/*.swift \
+                           Blitz/Features/AI/Service/AIProvider.swift \
+                           Blitz/Features/AI/Service/ChatGPTSubscriptionManager.swift \
+                           Blitz/Features/AI/Service/CodexAppServerClient.swift \
+                           Blitz/Features/AI/Service/InstalledAIProbe.swift \
+                           Blitz/Platform/ExecutableLocator.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Features/AI/Service/CodexTurnRunner.swift
+run installed-ai-test     Blitz/Features/AI/Model/*.swift \
+                          Blitz/Features/AI/Service/AIProvider.swift \
+                          Blitz/Platform/AppPaths.swift \
+                          Blitz/Platform/ExecutableLocator.swift \
+                          Blitz/Platform/ProcessExit.swift \
+                          Blitz/Features/AI/Service/InstalledCLIProvider.swift \
+                          Blitz/Features/AI/Service/InstalledAIProbe.swift \
+                          Blitz/Features/AI/Service/InstalledAIManager.swift
 
 if [ "$emit_db" -eq 1 ]; then
     printf ']\n' >> "$DB"
@@ -709,8 +709,8 @@ if [ "$ran" -eq 0 ]; then
 fi
 
 # `sort -s` is stable, so the slow harnesses lead and everything else keeps its declaration order.
-JOBS="${TINYCAST_TEST_JOBS:-$(sysctl -n hw.ncpu)}"
-export TINYCAST_TEST_TIMEOUT="${TINYCAST_TEST_TIMEOUT:-300}"
+JOBS="${BLITZ_TEST_JOBS:-$(sysctl -n hw.ncpu)}"
+export BLITZ_TEST_TIMEOUT="${BLITZ_TEST_TIMEOUT:-300}"
 started=$SECONDS
 
 # Numbers each result, and names what is still running whenever the output goes quiet.
