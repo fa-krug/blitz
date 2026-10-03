@@ -344,10 +344,11 @@ memos on the store's revision.
 A launcher row shows its entry's alias as a small chip after the name, so what a badge-bearing
 result will answer to is visible without opening anything.
 
-An alias also opens its row's arguments: typing it and then a space selects the row and moves the
-caret into its first inline field, the way ⇥ does, so `gh blitz` fills a GitHub search without the
-Tab. Only an exact alias on a row that has fields claims the space; anything else types it as usual
-(see [palette.md](palette.md#inline-row-arguments)).
+An alias also enters its row: typing it and then a space selects the row and moves the caret into
+its first inline field, the way ⇥ does, so `gh blitz` fills a GitHub search without the Tab. An
+extension command with a view of its own and no fields opens instead, and what is typed next searches
+inside it. Only an exact alias on one of those rows claims the space; anything else types it as
+usual (see [palette.md](palette.md#inline-row-arguments)).
 
 Editing lives in Settings only — an alias is one-time configuration like a shortcut, not a
 per-invocation action, so the ⌘K menu stays out of it. Visibility is the one exception, and only in

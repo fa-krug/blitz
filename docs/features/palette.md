@@ -202,7 +202,10 @@ these invariants:
   spells a row's alias outright (`LauncherOrder.spellsAlias`, rule 1's own test) is swallowed by
   `PalettePanel.onTrailingSpace` before the field editor types it; the row is selected and its first
   field focused, so `gh blitz` lands `blitz` in the argument just as `gh` ⇥ `blitz` does. A row
-  without fields lets the space through, and so does marked text — an input method picks with space.
+  without fields that is an extension `view` command opens instead, and the keystrokes after the space
+  land in its search bar — the push clears the query, and the `searchTextHandler` replay covers
+  typing that beats the command's first render. Any other row lets the space through, and so does
+  marked text — an input method picks with space.
   The focus is deferred through `aliasArgumentField`, because a row the selection just moved to has
   not mounted its fields yet and a `@FocusState` aimed at a missing field is dropped.
 - Returning focus this way leaves the query selected, because AppKit selects the whole string as the

@@ -215,6 +215,14 @@ final class ExtensionCoordinator {
         return command.arguments
     }
 
+    /// True for a command that renders its own screen rather than running headless.
+    func opensView(_ entry: AppEntry) -> Bool {
+        guard entry.kind == .extensionCommand, let (_, command) = extensions.resolve(entry) else {
+            return false
+        }
+        return command.mode == .view
+    }
+
     /// Escape past an empty search field: pop the extension's own stack, then leave the command.
     func exitExtensionScreen() {
         Task {

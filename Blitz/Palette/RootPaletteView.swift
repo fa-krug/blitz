@@ -1364,7 +1364,7 @@ struct RootPaletteView: View {
         }
     }
 
-    /// Space after a typed alias does what ⇥ would on that row: `gh blitz` fills the first field.
+    /// Space after a typed alias enters its row: its first field, or its view to search in.
     private func installAliasSpaceHandler(in window: NSWindow?) {
         guard let panel = window as? PalettePanel else { return }
         panel.onTrailingSpace = {
@@ -1373,11 +1373,16 @@ struct RootPaletteView: View {
             else { return false }
             for row in launcher.rowsAliased() {
                 let accessory = launcher.headerAccessory(at: row, focus: $argumentFocused)
-                guard let field = accessory?.field(after: nil, backwards: false) else { continue }
-                vm.selection = row
-                scroll = ScrollIntent(kind: .follow)
-                aliasArgumentField = field
-                return true
+                if let field = accessory?.field(after: nil, backwards: false) {
+                    vm.selection = row
+                    scroll = ScrollIntent(kind: .follow)
+                    aliasArgumentField = field
+                    return true
+                }
+                if launcher.opensView(at: row) {
+                    launcher.activate(at: row)
+                    return true
+                }
             }
             return false
         }

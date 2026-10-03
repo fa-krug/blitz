@@ -416,7 +416,8 @@ screens hold (see [palette.md](palette.md)).
   root, which would tear the command down before its `await confirmAlert(…)` ever returns.
 - **Command arguments** — a command declaring `arguments` shows inline fields sized to their
   placeholders, right after the typed text. Tab walks search field → each
-  argument → back, and a space after the command's alias enters the first one; Left/Right do the same only when their caret reaches a field boundary. Returning
+  argument → back, and a space after the command's alias enters the first one (a `view` command
+  without arguments opens on that space, its search bar taking what is typed next); Left/Right do the same only when their caret reaches a field boundary. Returning
   to the search field selects its query, so Right first places the caret at its end and then enters
   the first argument. ↵ from any of them runs the command with the values as `props.arguments`; a blank
   required argument blocks the launch and focuses the offending field. The fields get their own

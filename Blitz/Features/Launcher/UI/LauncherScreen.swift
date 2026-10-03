@@ -194,7 +194,7 @@ struct LauncherScreen: PaletteScreen {
         return values
     }
 
-    /// Rows whose alias the query spells outright, best first; a space after it opens their fields.
+    /// Rows whose alias the query spells outright, best first; a space after it opens them.
     func rowsAliased() -> [Int] {
         rows.indices.filter { index in
             guard case .entry(let app) = rows[index],
@@ -202,6 +202,11 @@ struct LauncherScreen: PaletteScreen {
             else { return false }
             return LauncherOrder.spellsAlias(vm.query, alias)
         }
+    }
+
+    /// An extension command with a screen of its own, whose search the next keystrokes fill.
+    func opensView(at selection: Int) -> Bool {
+        entry(at: selection).map(core.extensionCoordinator.opensView) ?? false
     }
 
     private func quicklink(for entry: AppEntry) -> Quicklink? {
