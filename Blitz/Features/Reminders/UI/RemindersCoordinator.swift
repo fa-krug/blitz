@@ -135,12 +135,8 @@ final class RemindersCoordinator {
         core.hideProgress()
         switch result {
         case .success(let draft):
-            guard store.create(draft) else {
-                await reportNoList()
-                return
-            }
-            let due = draft.due.map { " · " + $0.title(now: Date(), calendar: .current) } ?? ""
-            core.showMessage("Added “\(draft.trimmedTitle)”\(due)")
+            // A model can misread a sentence, so its guess is shown for ↵ rather than written.
+            await create(startingFrom: draft)
         case .failure(let error):
             // What was typed is never lost: it seeds the manual prompt.
             guard
