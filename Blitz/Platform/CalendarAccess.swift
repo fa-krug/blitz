@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the Mac will let Blitz read of the user's calendar.
+/// What the Mac will let Blitz reach of the user's calendar, or of their reminders.
 enum CalendarAccess: Sendable {
     case notDetermined
     case granted

@@ -489,8 +489,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `onChoose(index)` still dispatches against `DialogRequest.actions`' original order, so a caller
   never has to think about layout position when it builds a request. Every role uses the regular
   callout face; semantic roles change colour, never weight. `dialogButtonHeight 34` is shared by the
-  actions, dialog text fields and New Event segmented choices. The fields and segmented choices use
-  the non-pill `row 10` radius.
+  actions, dialog text fields and `DialogChoiceRow`, the segmented choice New Event and the reminder
+  prompt share. The fields and segmented choices use the non-pill `row 10` radius.
 - **Keys.** `DialogPanel.sendEvent` intercepts Esc and ↵ directly instead of relying on SwiftUI
   `onKeyPress`, so the keys work without anything inside the dialog holding focus. Buttons don't print
   a key cap; after `tooltipDelay` of deliberate hover, `.tooltip(keyCap:)` fades in the shared

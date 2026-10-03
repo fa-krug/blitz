@@ -45,6 +45,7 @@ final class AppCore {
     let regionNumberFormat = RegionNumberFormatMonitor()
     let calendarStore = CalendarStore()
     let meetingClock = MeetingClock()
+    let remindersStore = RemindersStore()
     let updateChecker = UpdateCheckStore()
     let supportReminders: SupportReminderStore
     let emojiIndex = EmojiIndex()
@@ -184,6 +185,9 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var calendarCoordinator = CalendarCoordinator(
         store: calendarStore, clock: meetingClock, appIndex: appIndex, settings: settings,
         paletteCoordinator: paletteCoordinator, core: self)
+    @ObservationIgnored private(set) lazy var remindersCoordinator = RemindersCoordinator(
+        store: remindersStore, appIndex: appIndex, settings: settings,
+        paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var fileSearchCoordinator = FileSearchCoordinator(
         settings: settings, appIndex: appIndex, session: fileSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, windowController: windowController, core: self)
@@ -317,11 +321,13 @@ final class AppCore {
                 case .menuSearch: self?.menuSearchCoordinator.load()
                 case .switchWindows: self?.windowSwitchCoordinator.load()
                 case .rooms, .roomWindows: self?.roomCoordinator.load()
+                case .reminders: self?.remindersCoordinator.remindersWillShow()
                 default: break
                 }
             }
             updateCoordinator.applyEnabled()
             calendarCoordinator.applyEnabled()
+            remindersCoordinator.applyEnabled()
             Task { await appIndex.refresh() }
             Task { await emojiIndex.load(languages: Locale.preferredLanguages) }
             currencyRates.start()
@@ -585,6 +591,16 @@ final class AppCore {
             guardrails: .permissiveContentTransformations)
     }
 
+    /// The app's default model; the sentence parsed is the reader's own, so guardrails relax.
+    func smartReminderProvider() throws -> any AIProvider {
+        guard let selection = aiSettings.defaultModel else {
+            throw AIProviderError.unavailable("Choose a model in Settings \u{2192} AI.")
+        }
+        return try AIProviderFactory.make(
+            selection: selection, settings: aiSettings, subscription: chatGPTSubscription,
+            installedAI: installedAI, guardrails: .permissiveContentTransformations)
+    }
+
     // MARK: - Feature switches
 
     private func observeFeatureSwitches() {
@@ -633,7 +649,12 @@ final class AppCore {
                 $0.menuSearchCoordinator.applyEnabled()
             })
         track({ _ = $0.notesEnabled }, reproject: { $0.notesCoordinator.applyEnabled() })
-        track({ _ = $0.aiEnabled }, reproject: { $0.aiChatCoordinator.applyEnabled() })
+        track(
+            { _ = $0.aiEnabled },
+            reproject: {
+                $0.aiChatCoordinator.applyEnabled()
+                $0.remindersCoordinator.applyCommands()
+            })
         track(
             {
                 _ = $0.aiEnabled
@@ -643,6 +664,7 @@ final class AppCore {
             { _ = $0.quickActionsEnabled },
             reproject: { $0.quickActionCoordinator.applyEnabled() })
         track({ _ = $0.calendarEnabled }, reproject: { $0.calendarCoordinator.applyEnabled() })
+        track({ _ = $0.remindersEnabled }, reproject: { $0.remindersCoordinator.applyEnabled() })
         track(
             {
                 _ = $0.calendarShowInLauncher
@@ -868,6 +890,16 @@ final class AppCore {
     /// The new-event prompt, for the same reason.
     func createEvent() async -> EventDraft? {
         await dialogs.createEvent()
+    }
+
+    /// The reminder prompt, for the same reason.
+    func editReminder(_ draft: ReminderDraft, isNew: Bool) async -> ReminderDraft? {
+        await dialogs.editReminder(draft, isNew: isNew)
+    }
+
+    /// The Smart Reminder prompt, for the same reason.
+    func describeReminder() async -> String? {
+        await dialogs.describeReminder()
     }
 
     /// The snippet argument prompt, for the same reason.

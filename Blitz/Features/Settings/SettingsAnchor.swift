@@ -90,6 +90,10 @@ extension SettingsAnchor {
     static let calendarMenuBar = Self(tab: .calendar, title: "Menu Bar")
     static let calendarCalendars = Self(tab: .calendar, title: "Calendars")
 
+    static let remindersReminders = Self(tab: .reminders, title: "Reminders")
+    static let remindersCommands = Self(tab: .reminders, title: "Commands")
+    static let remindersLists = Self(tab: .reminders, title: "Lists")
+
     static let extensionsExtensions = Self(tab: .extensions, title: "Extensions")
     static let extensionsCompatibility = Self(tab: .extensions, title: "Compatibility")
     static let extensionsInstalled = Self(tab: .extensions, title: "Installed")
@@ -98,6 +102,7 @@ extension SettingsAnchor {
 
     static let permissionsAccessibility = Self(tab: .permissions, title: "Accessibility")
     static let permissionsCalendars = Self(tab: .permissions, title: "Calendars")
+    static let permissionsReminders = Self(tab: .permissions, title: "Reminders")
 
     static let backupExport = Self(tab: .backup, title: "Export")
     static let backupImport = Self(tab: .backup, title: "Import")

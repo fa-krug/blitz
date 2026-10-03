@@ -143,6 +143,7 @@ run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/*.swift
 run calc-test              Blitz/Features/Calculator/Model/*.swift
 run index calc-performance Blitz/Features/Calculator/Model/*.swift
 run calendar-test          Blitz/Features/Calendar/Model/*.swift
+run reminders-test         Blitz/Features/Reminders/Model/*.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \

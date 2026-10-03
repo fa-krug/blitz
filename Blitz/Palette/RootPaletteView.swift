@@ -19,6 +19,7 @@ struct RootPaletteView: View {
     @Environment(CalendarStore.self) private var calendarStore
     /// Observed so the join card's countdown redraws on the minute boundary.
     @Environment(MeetingClock.self) private var meetingClock
+    @Environment(RemindersStore.self) private var remindersStore
     @Environment(UninstallSession.self) private var uninstall
     @Environment(QuicklinkStore.self) private var quicklinks
     @Environment(SnippetsStore.self) private var snippets
@@ -92,6 +93,9 @@ struct RootPaletteView: View {
                 openActions: openActions)
         case .meetingDetails:
             return MeetingDetailsScreen(store: calendarStore, core: core)
+        case .reminders:
+            return RemindersScreen(
+                store: remindersStore, core: core, vm: vm, openActions: openActions)
         case .clipboard:
             return ClipboardScreen(
                 store: store, core: core, vm: vm, openActions: openActions,
