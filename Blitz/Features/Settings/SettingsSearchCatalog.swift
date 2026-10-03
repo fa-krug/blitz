@@ -110,8 +110,8 @@ enum SettingsSearchCatalog {
     static let entries: [SettingsSearchEntry] =
         general + applications + systemSettings + systemActions + commands + quicklinks
         + appleShortcuts + fallbacks + clipboard + snippets + fileSearch + windowManagement
-        + navigation + notes + calendar + emoji + ai + quickActions + extensions + permissions
-        + backup + about
+        + navigation + notes + calendar + reminders + emoji + ai + quickActions + extensions
+        + permissions + backup + about
 
     private static let general: [SettingsSearchEntry] = [
         .init(pane: .general, keywords: ["preferences", "settings"]),
@@ -551,6 +551,21 @@ enum SettingsSearchCatalog {
             keywords: ["accounts", "sources", "choose", "icloud", "google"])
     ]
 
+    private static let reminders: [SettingsSearchEntry] = [
+        .init(
+            pane: .reminders,
+            keywords: ["todo", "to-do", "tasks", "due", "checklist"]),
+        .init(
+            .remindersReminders, "Manage reminders from Blitz",
+            keywords: ["todo", "tasks", "permission"]),
+        .init(
+            group: .remindersCommands, "Reminders commands",
+            keywords: ["shortcut", "launcher", "create reminder", "smart", "ai", "natural language"]),
+        .init(
+            group: .remindersLists, "Lists",
+            keywords: ["accounts", "sources", "choose", "icloud", "exchange"])
+    ]
+
     private static let extensions: [SettingsSearchEntry] = [
         .init(
             pane: .extensions,
@@ -592,7 +607,10 @@ enum SettingsSearchCatalog {
             keywords: ["paste", "keystrokes", "privacy", "grant"]),
         .init(
             .permissionsCalendars, "Calendars",
-            keywords: ["events", "privacy", "grant", "eventkit"])
+            keywords: ["events", "privacy", "grant", "eventkit"]),
+        .init(
+            .permissionsReminders, "Reminders",
+            keywords: ["todo", "tasks", "privacy", "grant", "eventkit"])
     ]
 
     private static let backup: [SettingsSearchEntry] = [

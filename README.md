@@ -56,6 +56,8 @@ If Blitz earns a place in your daily flow, you can support it through
   files, and more.
 - **Calendar and meetings** — your next meeting on the empty palette and in the menu bar, one key to
   join it, or let it join itself.
+- **Reminders** — every open reminder in the palette to edit, complete or delete, and Smart Reminder:
+  type `Greg wants tomorrow a cake` and get `Give Greg a cake`, due tomorrow.
 - **Notes** — an unlimited collection of plain Markdown files in one floating editor, searchable from
   the palette and rendered as you write.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.

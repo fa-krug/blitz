@@ -16,6 +16,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
     case schedule
     /// One meeting's read-only page, pushed from that meeting's own actions.
     case meetingDetails
+    case reminders
     case uninstall
     case quicklinks
     case snippets
@@ -40,6 +41,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .roomWindows: return "macwindow.badge.plus"
         case .schedule: return "calendar"
         case .meetingDetails: return "calendar"
+        case .reminders: return "checklist"
         case .uninstall: return "trash"
         case .quicklinks: return Quicklink.sfSymbol
         case .snippets: return "curlybraces"
@@ -62,6 +64,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .roomWindows: return "Search windows, or type an app to add…"
         case .schedule: return "Search your schedule…"
         case .meetingDetails: return "Meeting details"
+        case .reminders: return "Search reminders…"
         case .uninstall: return "Filter files and folders by name…"
         case .quicklinks: return "Search quicklinks…"
         case .snippets: return "Search snippets…"

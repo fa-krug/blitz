@@ -91,6 +91,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
 | `calc-test` | all of `Calculator/Model/` |
 | `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets |
+| `reminders-test` | all of `Reminders/Model/` — due dates, ordering and sections, reading a Smart Reminder reply |
 | `clipboard-search-test` | Ordinary and OCR result ordering, opt-in lifecycle, cancellation, pins and type filters |
 | `clipboard-text-test` | Apple Vision/PDF extraction, scheduling, retry backoff and recovery |
 | `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |
@@ -643,6 +644,22 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   the five appears in Settings ▸ Commands
 - Export with auto join and camera preview on, import onto a clean profile: both come back **off**,
   while the menu-bar settings carry over
+
+### Reminders
+
+- Turning Reminders on asks with Blitz's dialog first, then macOS; dismissing either leaves it off
+- My Reminders lists open reminders under Overdue, Today, Tomorrow, Upcoming and No Due Date; a
+  reminder ticked off on a phone leaves the open list without a relaunch
+- ↵ edits: changing only the title keeps an alarm set in Reminders.app; changing the time moves it
+- ⌘↵ and a click on the circle complete; ⌘⌫ asks before deleting; ⌘O opens the reminder itself
+- Smart Reminder with `Greg wants tomorrow a cake` opens New Reminder filled with `Give Greg a cake`
+  due tomorrow, and nothing is written until ↵; Esc creates nothing. `call mum friday 5pm` fills the
+  coming Friday at 17:00, and saving it sets an alarm
+- Smart Reminder's ✕ on the progress pill stops it and creates nothing; a model failure offers
+  `Write It Myself` with the sentence as the title
+- With AI off, Smart Reminder leaves the launcher and its shortcut does nothing; My Reminders and
+  Create Reminder are unaffected
+- Export with Reminders on, import onto a clean profile: it comes back **off**
 
 ### System actions and window management
 

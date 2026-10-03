@@ -38,11 +38,23 @@ struct DialogRequest {
 enum DialogAccessory {
     case volume(VolumeState)
     case eventDraft(EventDraftState)
+    case reminderDraft(ReminderDraftState)
+    case smartReminder(SmartReminderState)
     case snippetArguments(SnippetArgumentsState)
 
     /// Whether ←/→/↑/↓ belong to the control rather than to whatever has focus inside it.
     var claimsArrowKeys: Bool {
         if case .volume = self { return true }
         return false
+    }
+
+    /// False while the primary action has nothing it could write, as a greyed-out button would be.
+    @MainActor var acceptsPrimaryAction: Bool {
+        switch self {
+        case .eventDraft(let state): state.draft.isValid
+        case .reminderDraft(let state): state.draft.isValid
+        case .smartReminder(let state): state.isValid
+        case .volume, .snippetArguments: true
+        }
     }
 }

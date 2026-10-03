@@ -90,6 +90,37 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.draft
     }
 
+    /// `isNew` only words the dialog; the caller decides whether the draft creates or edits.
+    func editReminder(_ draft: ReminderDraft, isNew: Bool) async -> ReminderDraft? {
+        let state = ReminderDraftState(draft: draft, now: Date())
+        let request = DialogRequest(
+            title: isNew ? "New Reminder" : "Edit Reminder",
+            message: isNew ? "It goes on your default Reminders list." : nil,
+            symbol: "checklist", tone: .neutral,
+            actions: [
+                DialogAction(title: isNew ? "Create" : "Save"),
+                DialogAction(title: "Cancel", role: .cancel)
+            ],
+            defaultIndex: 0, cancelIndex: 1, accessory: .reminderDraft(state))
+        guard await present(request) == 0, state.draft.isValid else { return nil }
+        return state.draft
+    }
+
+    func describeReminder() async -> String? {
+        let state = SmartReminderState()
+        let request = DialogRequest(
+            title: "Smart Reminder",
+            message: "Say it the way you'd say it. AI writes the title and picks the due date.",
+            symbol: "wand.and.stars", tone: .neutral,
+            actions: [
+                DialogAction(title: "Create"),
+                DialogAction(title: "Cancel", role: .cancel)
+            ],
+            defaultIndex: 0, cancelIndex: 1, accessory: .smartReminder(state))
+        guard await present(request) == 0, state.isValid else { return nil }
+        return state.trimmedNote
+    }
+
     func fillSnippetArguments(
         snippetName: String, arguments: [SnippetTemplateEngine.MissingArgument]
     ) async -> [String: String]? {
@@ -115,7 +146,8 @@ final class DialogController: NSObject, NSWindowDelegate {
             let width =
                 switch request.accessory {
                 case nil, .volume: metrics.size.dialogCompactWidth
-                case .eventDraft, .snippetArguments: metrics.size.dialogWidth
+                case .eventDraft, .reminderDraft, .smartReminder, .snippetArguments:
+                    metrics.size.dialogWidth
                 }
             let content = hostingView(
                 DialogView(
@@ -169,10 +201,8 @@ final class DialogController: NSObject, NSWindowDelegate {
 
     /// A refused primary action leaves the dialog up, as a greyed-out button would.
     private static func accepts(_ index: Int, for request: DialogRequest) -> Bool {
-        guard index == request.defaultIndex, case .eventDraft(let state) = request.accessory else {
-            return true
-        }
-        return state.draft.isValid
+        guard index == request.defaultIndex else { return true }
+        return request.accessory?.acceptsPrimaryAction ?? true
     }
 
     /// Resumes before the fade finishes, so a confirmation isn't held up by animation.

@@ -207,6 +207,12 @@ final class LauncherCoordinator {
             calendarCoordinator.openNextMeetingInCalendar()
         case .createEvent:
             calendarCoordinator.createEvent()
+        case .myReminders:
+            core.remindersCoordinator.showReminders()
+        case .createReminder:
+            core.remindersCoordinator.createReminder()
+        case .smartReminder:
+            core.remindersCoordinator.createSmartReminder()
         case .showNotes:
             dismissPalette()
             notesCoordinator.toggle()
