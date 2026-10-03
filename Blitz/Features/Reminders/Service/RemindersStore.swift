@@ -22,6 +22,8 @@ final class RemindersStore {
     @ObservationIgnored private var changeObserver: NotificationToken?
     /// Reminders are fetched asynchronously, so a newer reload cancels the one still in flight.
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    /// A change notice queued just before `stop` must not bring a stopped store back to life.
+    @ObservationIgnored private var isRunning = false
 
     init() {
         hiddenListIDs = Set(defaults.stringArray(forKey: hiddenKey) ?? [])
@@ -35,12 +37,14 @@ final class RemindersStore {
     // MARK: - Lifecycle
 
     func start() {
+        isRunning = true
         refreshAccess()
         guard access == .granted else { return }
         reload()
     }
 
     func stop() {
+        isRunning = false
         reloadTask?.cancel()
         reloadTask = nil
         changeObserver = nil
@@ -77,6 +81,7 @@ final class RemindersStore {
     // MARK: - Reading
 
     func reload() {
+        guard isRunning else { return }
         reloadTask?.cancel()
         reloadTask = Task { [weak self] in await self?.load() }
     }

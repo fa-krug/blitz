@@ -59,8 +59,11 @@ struct RemindersSettingsView: View {
         .formStyle(.grouped)
         .settingsScrollTarget(.reminders)
         .releasesFocusOnOutsideClick()
-        // The lists are only read while the feature runs, so a grant made in Settings lands here.
-        .onAppear { store.refreshAccess() }
+        // Nothing announces a grant made in System Settings, so the pane reads the lists itself.
+        .onAppear {
+            store.refreshAccess()
+            if !store.hasLoaded { store.reload() }
+        }
     }
 
     /// Routed through the coordinator so enabling, which is also consent, confirms first.

@@ -5,13 +5,13 @@ import SwiftUI
 @Observable
 final class ReminderDraftState {
     enum DueKind: CaseIterable {
-        case none
+        case noDate
         case day
         case dayAndTime
 
         var title: String {
             switch self {
-            case .none: "No Date"
+            case .noDate: "No Date"
             case .day: "Date"
             case .dayAndTime: "Date & Time"
             }
@@ -27,7 +27,7 @@ final class ReminderDraftState {
     init(draft: ReminderDraft, now: Date) {
         title = draft.title
         notes = draft.notes
-        dueKind = draft.due.map { $0.time == nil ? .day : .dayAndTime } ?? .none
+        dueKind = draft.due.map { $0.time == nil ? .day : .dayAndTime } ?? .noDate
         dueDate =
             draft.due?.date(in: .current)
             ?? Calendar.current.dateInterval(of: .hour, for: now)?.end ?? now
@@ -36,7 +36,7 @@ final class ReminderDraftState {
     var draft: ReminderDraft {
         let due: ReminderDue? =
             switch dueKind {
-            case .none: nil
+            case .noDate: nil
             case .day: ReminderDue(date: dueDate, includesTime: false, calendar: .current)
             case .dayAndTime: ReminderDue(date: dueDate, includesTime: true, calendar: .current)
             }
@@ -68,7 +68,9 @@ struct ReminderDraftFields: View {
             )
             .datePickerStyle(.field)
             .labelsHidden()
-            .disabled(state.dueKind == .none)
+            .disabled(state.dueKind == .noDate)
+            // A live NSDatePicker may not re-lay out when its components change, so it is rebuilt.
+            .id(state.dueKind == .dayAndTime)
         }
         .onAppear { focused = true }
     }
