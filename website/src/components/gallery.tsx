@@ -6,7 +6,6 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { Slide } from "yet-another-react-lightbox";
 import { galleryItems, type GalleryItem } from "../data/gallery";
-import { asset } from "../lib/asset";
 import { cn } from "../lib/cn";
 import { Section } from "./ui/section";
 
@@ -14,13 +13,8 @@ import { Section } from "./ui/section";
 const GalleryLightbox = dynamic(() => import("./gallery-lightbox"));
 
 // The grid thumbnail: an explicit thumb, else a video's poster, else the image.
-// `unoptimized` images keep their src verbatim, so `basePath` has to be added
-// here — next/image only prefixes it when the optimizer is in play.
 const tileImage = (item: GalleryItem) =>
-  asset(
-    item.thumb ??
-      (item.type === "video" ? (item.poster ?? item.src) : item.src),
-  );
+  item.thumb ?? (item.type === "video" ? (item.poster ?? item.src) : item.src);
 
 // One gallery item → one lightbox slide. Images carry title/description for the
 // Captions plugin; videos use the Video plugin's `sources` shape.
@@ -28,16 +22,16 @@ function toSlide(item: GalleryItem): Slide {
   if (item.type === "video") {
     return {
       type: "video",
-      poster: item.poster ? asset(item.poster) : undefined,
+      poster: item.poster,
       width: item.width,
       height: item.height,
       title: item.title,
       description: item.caption,
-      sources: [{ src: asset(item.src), type: "video/mp4" }],
+      sources: [{ src: item.src, type: "video/mp4" }],
     };
   }
   return {
-    src: asset(item.src),
+    src: item.src,
     title: item.title,
     description: item.caption,
     width: item.width,
@@ -74,8 +68,8 @@ export function Gallery() {
       id="gallery"
       index={2}
       label="In action"
-      title="The real app, not a mockup."
-      intro="The palette up top is a recreation. These are captured from Tinycast itself. Open any of them full size."
+      title="Straight from the app."
+      intro="The palette at the top of this page is a recreation. These screenshots come from Tinycast itself. Click one to see it full size."
     >
       <div className="overflow-hidden rounded-xl border border-border/70 bg-surface shadow-xs">
         <div className="flex min-h-11 items-center gap-3 border-b border-border/60 px-4 py-1.5 font-mono text-micro uppercase text-fg-muted">

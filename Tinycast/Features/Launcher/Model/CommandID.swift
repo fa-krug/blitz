@@ -2,13 +2,16 @@ import Foundation
 
 /// Built-in launcher actions, surfaced alongside the user-authored ones.
 enum CommandID: String, CaseIterable, Sendable {
-    case aiChat = "command:ai-chat"
+    /// The palette's chat keeps the id it shipped with, so its hotkeys and fallback still reach it.
+    case quickAI = "command:ai-chat"
+    case aiChat = "command:ai-chat-window"
     case fixGrammar = "command:fix-grammar"
     case rewrite = "command:rewrite"
     case translate = "command:translate"
     case summarize = "command:summarize"
     case calculatorHistory = "command:calculator-history"
     case clipboardHistory = "command:clipboard-history"
+    case pasteSequentially = "command:paste-sequentially"
     case searchEmoji = "command:search-emoji"
     case searchFiles = "command:search-files"
     case searchMenuItems = "command:search-menu-items"
@@ -16,6 +19,7 @@ enum CommandID: String, CaseIterable, Sendable {
     case openCamera = "command:open-camera"
     case openInBrowser = "command:open-in-browser"
     case runShellCommand = "command:run-shell-command"
+    case define = "command:define"
     case joinNextMeeting = "command:join-next-meeting"
     case mySchedule = "command:my-schedule"
     case createEvent = "command:create-event"
@@ -26,6 +30,8 @@ enum CommandID: String, CaseIterable, Sendable {
     case searchNotes = "command:search-notes"
     case createWindowLayout = "command:create-window-layout"
     case captureWindowLayout = "command:capture-window-layout"
+    case switchRoom = "command:switch-room"
+    case createRoom = "command:create-room"
     case createQuicklink = "command:create-quicklink"
     case searchQuicklinks = "command:search-quicklinks"
     case importQuicklinks = "command:import-quicklinks"
@@ -43,6 +49,7 @@ enum CommandID: String, CaseIterable, Sendable {
 
     var name: String {
         switch self {
+        case .quickAI: return "Quick AI"
         case .aiChat: return "AI Chat"
         case .fixGrammar: return BuiltInQuickAction.fixGrammar.title
         case .rewrite: return BuiltInQuickAction.rewrite.title
@@ -50,6 +57,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .summarize: return BuiltInQuickAction.summarize.title
         case .calculatorHistory: return "Calculator History"
         case .clipboardHistory: return "Clipboard History"
+        case .pasteSequentially: return "Paste Sequentially"
         case .searchEmoji: return "Search Emoji & Symbols"
         case .searchFiles: return "Search Files"
         case .searchMenuItems: return "Search Menu Bar Items"
@@ -57,6 +65,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .openCamera: return "Open Camera"
         case .openInBrowser: return "Open in Browser"
         case .runShellCommand: return "Run Shell Command"
+        case .define: return "Define Word"
         case .joinNextMeeting: return "Join Next Meeting"
         case .mySchedule: return "My Schedule"
         case .createEvent: return "Create Event"
@@ -67,6 +76,8 @@ enum CommandID: String, CaseIterable, Sendable {
         case .searchNotes: return "Search Notes"
         case .createWindowLayout: return "Create Window Layout"
         case .captureWindowLayout: return "Create Layout from Current Windows"
+        case .switchRoom: return "Switch Room"
+        case .createRoom: return "Create Room"
         case .createQuicklink: return "Create Quicklink"
         case .searchQuicklinks: return "Search Quicklinks"
         case .importQuicklinks: return "Import Quicklinks"
@@ -77,7 +88,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .importSettings: return "Import Backup"
         case .importFromRaycast: return "Import from Raycast"
         case .checkForUpdates: return "Check for Updates"
-        case .settings: return "Settings"
+        case .settings: return "Tinycast Settings"
         case .about: return "About Tinycast"
         case .support: return "Support Tinycast"
         case .quit: return "Quit Tinycast"
@@ -86,21 +97,23 @@ enum CommandID: String, CaseIterable, Sendable {
 
     var sfSymbol: String {
         switch self {
-        case .aiChat: return "sparkles"
+        case .quickAI: return "sparkles"
+        case .aiChat: return "bubble.left.and.bubble.right"
         case .fixGrammar: return BuiltInQuickAction.fixGrammar.symbol
         case .rewrite: return BuiltInQuickAction.rewrite.symbol
         case .translate: return BuiltInQuickAction.translate.symbol
         case .summarize: return BuiltInQuickAction.summarize.symbol
         case .calculatorHistory: return "plus.forwardslash.minus"
         case .clipboardHistory: return "doc.on.clipboard"
-        // This pair renders opposite to its name on the target SF Symbols runtime.
-        case .searchEmoji: return "face.smiling.inverse"
+        case .pasteSequentially: return "list.bullet.clipboard"
+        case .searchEmoji: return "face.smiling"
         case .searchFiles: return "doc.text.magnifyingglass"
         case .searchMenuItems: return "menubar.rectangle"
         case .switchWindows: return "macwindow.on.rectangle"
         case .openCamera: return "camera"
         case .openInBrowser: return "globe"
         case .runShellCommand: return "terminal"
+        case .define: return "book.closed"
         case .joinNextMeeting: return "video.fill"
         case .mySchedule: return "calendar"
         case .createEvent: return "calendar.badge.plus"
@@ -111,6 +124,8 @@ enum CommandID: String, CaseIterable, Sendable {
         case .searchNotes: return "text.magnifyingglass"
         case .createWindowLayout: return "plus.rectangle.on.rectangle"
         case .captureWindowLayout: return "macwindow.badge.plus"
+        case .switchRoom: return "door.left.hand.open"
+        case .createRoom: return "rectangle.stack.badge.plus"
         case .createQuicklink: return "link.badge.plus"
         case .searchQuicklinks: return Quicklink.sfSymbol
         case .importQuicklinks: return "square.and.arrow.down"
@@ -145,6 +160,27 @@ enum CommandID: String, CaseIterable, Sendable {
         case .translate: return .translate
         case .summarize: return .summarize
         default: return nil
+        }
+    }
+
+    /// Queries this command wins until the user opens a rival more.
+    var boostedTerms: Set<String> {
+        switch self {
+        case .quickAI: ["ai"]
+        case .aiChat: ["chat"]
+        default: []
+        }
+    }
+
+    /// Suggested, highest first, until the user's own habits fill the section.
+    var suggestionPriority: Int? {
+        switch self {
+        case .clipboardHistory: 80
+        case .searchFiles: 70
+        case .mySchedule: 60
+        case .searchEmoji: 50
+        case .createQuicklink, .createSnippet: 30
+        default: nil
         }
     }
 

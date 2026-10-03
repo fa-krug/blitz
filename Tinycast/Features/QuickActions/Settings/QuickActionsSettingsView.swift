@@ -20,21 +20,24 @@ struct QuickActionsSettingsView: View {
         Form {
             Section {
                 Toggle(isOn: enabledBinding) {
-                    SettingsRowTitle(.quickActionsQuickActions, "Enable Quick Actions")
-                    Text(
-                        "Act on the text you have selected in any app. Nothing is read until you "
-                            + "press a shortcut.")
+                    SettingsFeatureToggleLabel(
+                        anchor: .quickActionsQuickActions, title: "Enable Quick Actions",
+                        subtitle: "Act on selected text. Nothing is read until you press a shortcut.")
                 }
                 if appSettings.quickActionsEnabled, !isTrusted {
                     // Every shortcut fails without it; better said here than found one press later.
-                    SettingsRow(
-                        title: "Accessibility permission required",
-                        subtitle: "Tinycast can't read your selection until it is granted."
-                    ) {
+                    HStack(alignment: .center, spacing: Theme.Spacing.lg) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.Colors.destructive)
+                            .foregroundStyle(.orange)
                             .frame(width: Theme.Size.settingsRowIcon)
-                    } trailing: {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                            Text("Accessibility permission required")
+                                .foregroundStyle(.orange)
+                            Text("Needed to read your selection.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.Spacing.lg)
                         Button("Open System Settings") { Permissions.openAccessibilitySettings() }
                     }
                 }
@@ -52,8 +55,8 @@ struct QuickActionsSettingsView: View {
         .formStyle(.grouped)
         .settingsScrollTarget(.quickActions)
         .onReceive(refreshTimer) { _ in isTrusted = Permissions.isAccessibilityTrusted() }
-        .sheet(item: $editingAction) { action in
-            InstructionsEditorSheet(
+        .settingsEditorPanel(item: $editingAction) { action in
+            InstructionsEditorPanel(
                 action: action,
                 instructionOverride: store.settings.instructionOverride(for: action),
                 modelOverride: store.modelOverride(for: .builtIn(action))
@@ -62,8 +65,8 @@ struct QuickActionsSettingsView: View {
                 store.setModelOverride(modelOverride, for: .builtIn(action))
             }
         }
-        .sheet(item: $customEditing) { request in
-            CustomQuickActionEditorSheet(
+        .settingsEditorPanel(item: $customEditing) { request in
+            CustomQuickActionEditorPanel(
                 request: request,
                 model: request.action.flatMap { store.modelOverride(for: .custom($0)) })
         }
@@ -110,13 +113,9 @@ struct QuickActionsSettingsView: View {
         } header: {
             SettingsSectionHeader(.quickActionsActions)
         } footer: {
-            Text(
-                "Replace puts the result straight into your document — undo in the app you were in "
-                    + "brings it back. Preview shows it in a panel first. The checkbox lists the "
-                    + "action in the launcher; its shortcut works either way."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text("Replace writes into your document, and undo restores it. Preview shows a panel first.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -161,6 +160,7 @@ struct QuickActionsSettingsView: View {
         Toggle("", isOn: launcherBinding(entry))
             .labelsHidden()
             .toggleStyle(.checkbox)
+            .launcherVisibilityHelp()
             .accessibilityLabel("Show \(title) in launcher")
     }
 
@@ -171,22 +171,18 @@ struct QuickActionsSettingsView: View {
                 select: store.select,
                 modelLabel: {
                     SettingsRowTitle(.quickActionsModel, "Model")
-                    Text("Used by every action without a model of its own, except Translate.")
+                    Text("Unless an action sets its own.")
                 },
                 effortLabel: {
                     SettingsRowTitle(.quickActionsModel, "Reasoning effort")
-                    Text("Applied when the selected model supports reasoning effort.")
                 }
             )
         } header: {
             SettingsSectionHeader(.quickActionsModel)
         } footer: {
-            Text(
-                "Separate from chat's model on purpose: a shortcut you press all day should not "
-                    + "bill an API every time. Apple Intelligence runs on this Mac for nothing."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text("Separate from AI Chat's, so frequent use needn't bill an API.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -199,17 +195,13 @@ struct QuickActionsSettingsView: View {
                 }
             } label: {
                 SettingsRowTitle(.quickActionsTranslate, "Translate to")
-                Text("The panel can still translate into another language once it is open.")
             }
         } header: {
             SettingsSectionHeader(.quickActionsTranslate)
         } footer: {
-            Text(
-                "Translation uses Apple's own translator on this Mac, so it costs nothing and "
-                    + "reaches no provider. A language downloads the first time you use it."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text("Apple's translator, on this Mac. A language downloads on first use.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -279,7 +271,7 @@ struct QuickActionsSettingsView: View {
         {
             unavailable.insert(.codex)
         }
-        for kind in [InstalledAIKind.claude, .openCode] {
+        for kind in InstalledAIKind.managedCLIKinds {
             let phase = core.installedAI.status(for: kind).phase
             guard
                 !aiSettings.enabledInstalledProviders.contains(kind)
@@ -292,8 +284,8 @@ struct QuickActionsSettingsView: View {
             fallback: aiSettings.defaultModel)
     }
 
-    private struct InstructionsEditorSheet: View {
-        @Environment(\.dismiss) private var dismiss
+    private struct InstructionsEditorPanel: View {
+        @Environment(\.settingsEditorDismiss) private var dismiss
         @State private var instructions: String
         @State private var model: AIModelSelection?
 
@@ -316,43 +308,36 @@ struct QuickActionsSettingsView: View {
 
         var body: some View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                Text("Customize \(action.title)")
-                    .font(.title2.weight(.bold))
-
-                Text("Tell Tinycast how you want \(action.title) to handle your selected text.")
-                    .foregroundStyle(.secondary)
+                SettingsEditorHeader(
+                    title: "Customize \(action.title)",
+                    subtitle: "Tell Tinycast how you want \(action.title) to handle your selected text."
+                )
 
                 TextEditor(text: $instructions)
                     .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(Theme.Spacing.sm)
-                    .frame(height: Theme.Size.editorTextHeight * 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                            .fill(Theme.Colors.cardFill)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                            .strokeBorder(Theme.Colors.cardStroke, lineWidth: 1)
-                    )
+                    .settingsEditorTextArea(height: Theme.Size.editorTextHeight * 2)
 
                 QuickActionModelPicker(selection: $model)
 
-                HStack {
+                HStack(spacing: Theme.Spacing.md) {
                     Button("Use Default") { instructions = builtIn }
+                        .buttonStyle(.modalAction(.standard, fillsWidth: false))
                         .disabled(instructions == builtIn)
                     Spacer()
                     Button("Cancel") { dismiss() }
+                        .buttonStyle(.modalAction(.cancel))
                         .keyboardShortcut(.cancelAction)
                     Button("Save") {
                         onSave(instructions == builtIn ? nil : instructions, model)
                         dismiss()
                     }
+                    .buttonStyle(.modalAction(.primary))
                     .keyboardShortcut(.defaultAction)
                 }
             }
-            .padding(Theme.Spacing.xxl)
+            .padding(Theme.Spacing.dialogInset)
             .frame(width: Theme.Size.editorSheetWidth)
+            .settingsEditorPanelSurface()
         }
     }
 }

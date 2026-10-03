@@ -16,10 +16,6 @@ struct FeatureCommandsSection: View {
             }
         } header: {
             SettingsSectionHeader(anchor)
-        } footer: {
-            Text("A shortcut works even when its command is hidden from the launcher.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
@@ -30,9 +26,12 @@ struct FeatureCommandRow: View {
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
-        SettingsRow(title: entry.name) {
+        SettingsRow(
+            title: entry.name,
+            labelOpacity: visibility.isItemVisible(entry) ? 1 : 0.45
+        ) {
             AppIconView(app: entry)
-                .frame(width: Theme.Size.settingsRowIcon, height: Theme.Size.settingsRowIcon)
+                .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
         } trailing: {
             AliasField(entry: entry)
             if let action = entry.hotKeyAction {
@@ -41,6 +40,7 @@ struct FeatureCommandRow: View {
             Toggle("", isOn: visibilityBinding)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
+                .launcherVisibilityHelp()
                 .accessibilityLabel("Show \(entry.name) in launcher")
         }
     }

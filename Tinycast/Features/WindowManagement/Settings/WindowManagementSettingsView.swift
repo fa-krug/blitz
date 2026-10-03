@@ -3,25 +3,29 @@ import SwiftUI
 struct WindowManagementSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(AppCore.self) private var core
+    @State private var editor: WindowLayoutEditRequest?
     @State private var pendingDeletion: WindowLayout?
     @State private var customSizeEdit: CustomWindowSizeEditRequest?
+    @State private var chosenPreset: WindowShortcutPreset?
 
     var body: some View {
         @Bindable var settings = settings
-        @Bindable var core = core
         return Form {
             FeatureSwitchSection(
                 anchor: .windowManagementWindowManagement,
                 enableTitle: "Enable window management",
-                enableSubtitle:
-                    "Moves the window you were last in, using the Accessibility permission Tinycast already uses to paste.",
-                launcherSubtitle: "Find the window commands in launcher search.",
+                enableSubtitle: "Moves the last window you used. Needs Accessibility.",
                 isEnabled: $settings.windowManagementEnabled,
-                showsInLauncher: $settings.windowManagementShowInLauncher)
+                showsInLauncher: $settings.windowManagementShowInLauncher,
+                showsIcon: true,
+                showsHeader: false)
 
             Group {
                 options
-                WindowLayoutsSection(onDelete: { pendingDeletion = $0 })
+                WindowLayoutsSection(
+                    onEdit: { editor = WindowLayoutEditRequest(layout: $0) },
+                    onDelete: { pendingDeletion = $0 })
+                RoomsSection()
                 FeatureCommandsSection(
                     owner: .windowManagement, anchor: .windowManagementLayoutCommands)
                 CustomWindowSizesSection(onEdit: {
@@ -33,12 +37,16 @@ struct WindowManagementSettingsView: View {
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.windowManagement)
-        // Presented from the pane, so the two launcher commands can open it too.
-        .sheet(item: $core.pendingWindowLayoutEdit) { request in
-            WindowLayoutEditorSheet(request: request)
+        .settingsEditorPanel(item: $editor) { request in
+            WindowLayoutEditorPanel(request: request)
         }
-        .sheet(item: $customSizeEdit) { request in
-            CustomWindowSizeEditorSheet(request: request)
+        .onChange(of: core.pendingWindowLayoutEdit?.id, initial: true) { _, _ in
+            guard let request = core.pendingWindowLayoutEdit else { return }
+            editor = request
+            core.pendingWindowLayoutEdit = nil
+        }
+        .settingsEditorPanel(item: $customSizeEdit) { request in
+            CustomWindowSizeEditorPanel(request: request)
         }
         .alert(item: $pendingDeletion) { layout in
             Alert(
@@ -68,12 +76,39 @@ struct WindowManagementSettingsView: View {
                     Text("\(settings.windowGap) pt")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
-                    Stepper("Gap between windows", value: $settings.windowGap, in: 0...64, step: 2)
-                        .labelsHidden()
+                    Stepper(
+                        "Gap between windows", value: $settings.windowGap,
+                        in: WindowPlacementEngine.gapRange, step: 2
+                    )
+                    .labelsHidden()
                 }
             } label: {
                 SettingsRowTitle(.windowManagementOptions, "Gap between windows")
-                Text("Points left between tiled windows and around the screen edge.")
+                Text("Between tiled windows and screen edges.")
+            }
+
+            LabeledContent {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Picker("Shortcut preset", selection: $chosenPreset) {
+                        Text("Choose…").tag(WindowShortcutPreset?.none)
+                        ForEach(WindowShortcutPreset.allCases) { preset in
+                            Text(preset.title).tag(Optional(preset))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    Button("Apply") {
+                        guard let chosenPreset else { return }
+                        Task { await core.windowShortcutPresetCoordinator.apply(chosenPreset) }
+                    }
+                    // Live bindings decide, so one edit to an applied preset re-enables it.
+                    .disabled(
+                        chosenPreset == nil
+                            || chosenPreset == core.windowShortcutPresetCoordinator.matchingPreset)
+                }
+            } label: {
+                SettingsRowTitle(.windowManagementOptions, "Shortcut preset")
+                Text("Fills in another app's shortcuts. Others stay as they are.")
             }
         } header: {
             SettingsSectionHeader(.windowManagementOptions)
@@ -108,7 +143,7 @@ private struct WindowCommandSettingsRow: View {
             Toggle("", isOn: visibilityBinding)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
-                .help("Show in launcher")
+                .launcherVisibilityHelp()
                 .accessibilityLabel("Show \(command.name) in launcher")
         }
     }

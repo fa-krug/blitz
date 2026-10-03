@@ -17,7 +17,7 @@ RAM.**
   <a href="https://discord.gg/v2Eeb4QQy3">
     <img alt="Join the Tinycast Discord"
          src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white"></a>
-  <a href="https://buy.polar.sh/polar_cl_NDVFC20DKQpLcNawsh97QzbARBXD3WNn8v35R0mbJmT">
+  <a href="https://tinycast.dev/support">
     <img alt="Support Tinycast"
          src="https://img.shields.io/badge/Support-Tip%20the%20dev-EA4AAA?style=flat&logo=polar&logoColor=white"></a>
 </p>
@@ -37,7 +37,7 @@ Tinycast is **free, and it stays that way**. If it earns a place in your daily f
 keep it actively maintained. GitHub Sponsors isn't available in my country, so please support here:
 
 <p align="center">
-  <a href="https://buy.polar.sh/polar_cl_NDVFC20DKQpLcNawsh97QzbARBXD3WNn8v35R0mbJmT">
+  <a href="https://tinycast.dev/support">
     <img alt="Support Tinycast" width="188" height="44" src="docs/support-button.svg"></a><br>
   <sub>Payments are handled securely by <a href="https://polar.sh">Polar.sh</a>.</sub>
 </p>
@@ -50,6 +50,8 @@ keep it actively maintained. GitHub Sponsors isn't available in my country, so p
 - **Per-app hotkeys** — bind a key to an app; press it to toggle (focus/hide).
 - **Search Files** — open files and folders from the folders you choose, through Spotlight, with no
   index of our own.
+- **Dictionary** — look a word up with the Define Word command, or define whatever you typed from the
+  launcher's fallbacks, read from the Mac's own dictionaries.
 - **Clipboard history** — text and images, searchable, pasted back into the app you were using.
 - **Calculator** — do math, unit, live currency and crypto conversions inline, right in the palette.
 - **Quicklinks** — turn a URL, search, file or deeplink into a command, with placeholders for typed
@@ -66,9 +68,11 @@ keep it actively maintained. GitHub Sponsors isn't available in my country, so p
 - **Calendar and meetings** — your next meeting on the empty palette and in the menu bar, one key to
   join it, or let it join itself.
 - **Notes** — an unlimited collection of plain Markdown files in one floating editor, searchable from
-  the palette.
+  the palette and rendered as you write.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.
-- **AI chat** — use your own key or an installed AI account, chat from the palette. Off out of the box, like every AI feature.
+- **AI chat** — use your own key or an installed AI account: ask Quick AI from the palette, or keep
+  longer conversations in the AI Chat window, with a searchable, pinnable history. Off out of the box,
+  like every AI feature.
 - **Quick Actions** — fix grammar, rewrite, translate or summarize the selected text in any app.
 - **Raycast extensions** — run the ones you already have natively, rendered as SwiftUI.
 - **Backup and import** — export your settings to a file, or import your setup from Raycast.
@@ -84,11 +88,10 @@ brew tap abue-ammar/tinycast
 
 Then run the one line that matches your Mac:
 
-| Your Mac                                           | Install                                  |
-| -------------------------------------------------- | ---------------------------------------- |
-| Apple silicon, macOS 26 or newer                   | `brew install --cask tinycast`           |
-| Intel, macOS 26                                    | `brew install --cask tinycast-universal` |
-| macOS 15 Sequoia <sub>(no longer maintained)</sub> | `brew install --cask tinycast-sequoia`   |
+| Your Mac                         | Install                                  |
+| -------------------------------- | ---------------------------------------- |
+| Apple silicon, macOS 26 or newer | `brew install --cask tinycast`           |
+| Intel, macOS 26                  | `brew install --cask tinycast-universal` |
 
 Not sure which you have? **Apple menu → About This Mac.** Homebrew checks too, and refuses the
 wrong one.
@@ -139,6 +142,16 @@ in the **[pull request template](.github/PULL_REQUEST_TEMPLATE.md)**. Security i
 [SECURITY.md](SECURITY.md), not the issue tracker.
 
 Questions, ideas, or just want to follow along? **[Join the Discord](https://discord.gg/v2Eeb4QQy3)**.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=abue-ammar%2Ftinycast&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=abue-ammar/tinycast&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=abue-ammar/tinycast&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=abue-ammar/tinycast&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 

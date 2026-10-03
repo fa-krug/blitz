@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One action's own route, staged by the editor sheet that presents it until Save.
+/// One action's own route, staged by the editor panel that presents it until Save.
 struct QuickActionModelPicker: View {
     @Binding var selection: AIModelSelection?
 
@@ -17,9 +17,6 @@ struct QuickActionModelPicker: View {
                     effortLabel: { Text("Reasoning effort") })
             }
             .labelsHidden()
-            Text("Same as Quick Actions follows the Model section of the Quick Actions pane.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }

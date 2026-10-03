@@ -29,9 +29,16 @@ struct BackupSettingsView: View {
         runningApps.runningBundleIDs.contains(where: BackupActions.isRaycastBundleID)
     }
 
+    /// Turning it on may ask first, so the switch follows the setting rather than the click.
+    private var settingsFileSync: Binding<Bool> {
+        Binding(
+            get: { core.settings.settingsFileEnabled },
+            set: { enabled in Task { await BackupActions.setSettingsFileEnabled(enabled, core: core) } })
+    }
+
     private var raycastFileSubtitle: String {
         guard let name = raycastFile?.lastPathComponent else {
-            return "Choose a .rayconfig file exported from Raycast v2.0 or newer."
+            return "A .rayconfig file from Raycast 2.0 or later."
         }
         return "\(name) — \(isRaycastExport ? "Raycast export" : "not a Raycast export")"
     }
@@ -47,7 +54,7 @@ struct BackupSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.backupExport, "Export Backup")
-                    Text("Choose what to include, then save it as a single .tinycast file.")
+                    Text("The ticked items, as one .tinycast file.")
                 }
                 BackupCategorySelection(selection: $exportSelection)
                 if let backupStatus { statusRow(backupStatus) }
@@ -74,7 +81,6 @@ struct BackupSettingsView: View {
                         }
                     } label: {
                         Text("Import")
-                        Text("Only the categories you tick are restored.")
                     }
                 }
             } header: {
@@ -89,8 +95,8 @@ struct BackupSettingsView: View {
                     Text(raycastFileSubtitle)
                 }
                 LabeledContent {
-                    SecureField(
-                        "Passphrase", text: $passphrase, prompt: Text("Export password")
+                    RevealableSecureField(
+                        title: "Passphrase", text: $passphrase, prompt: Text("Export password")
                     )
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
@@ -100,8 +106,9 @@ struct BackupSettingsView: View {
                     .onSubmit(runRaycastImport)
                 } label: {
                     Text("Passphrase")
-                    Text("The password you set when exporting from Raycast.")
                 }
+                RaycastImportSelection(selection: $selection)
+                conflictNotice
                 LabeledContent {
                     if importing {
                         ProgressView().controlSize(.small)
@@ -111,13 +118,27 @@ struct BackupSettingsView: View {
                     }
                 } label: {
                     Text("Import")
-                    Text("Choose what to bring over, then import.")
                 }
-                RaycastImportSelection(selection: $selection)
-                conflictNotice
                 if let status { statusRow(status) }
             } header: {
                 SettingsSectionHeader(.backupImportFromRaycast)
+            }
+
+            Section {
+                Toggle(isOn: settingsFileSync) {
+                    SettingsRowTitle(.backupSettingsFile, "Sync settings file")
+                    Text(BackupActions.settingsFilePath)
+                }
+                if core.settings.settingsFileEnabled {
+                    LabeledContent {
+                        Button("Show in Finder", action: BackupActions.revealSettingsFile)
+                    } label: {
+                        Text("Settings changed here are written to the file, and edits to it apply here.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                SettingsSectionHeader(.backupSettingsFile)
             }
         }
         .formStyle(.grouped)
@@ -139,7 +160,7 @@ struct BackupSettingsView: View {
             }
         } else {
             Label(
-                "Tip: unset the matching Raycast shortcuts to avoid conflicts.",
+                "Unset matching Raycast shortcuts to avoid conflicts.",
                 systemImage: "info.circle"
             )
             .foregroundStyle(.secondary)
@@ -160,7 +181,7 @@ struct BackupSettingsView: View {
 
     private var backupFileSubtitle: String {
         guard let name = backupFile?.lastPathComponent else {
-            return "Choose a .tinycast file exported from Tinycast."
+            return "A .tinycast file exported from Tinycast."
         }
         return openedManifest == nil ? "\(name) — couldn't be read" : name
     }

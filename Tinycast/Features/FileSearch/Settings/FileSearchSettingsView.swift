@@ -8,12 +8,12 @@ struct FileSearchSettingsView: View {
         return Form {
             Section {
                 Toggle(isOn: $settings.fileSearchEnabled) {
-                    SettingsRowTitle(.fileSearchFileSearch, "Enable File Search")
-                    Text("Find files and folders through the system Spotlight index, only on demand.")
+                    SettingsFeatureToggleLabel(
+                        anchor: .fileSearchFileSearch, title: "Enable File Search",
+                        subtitle: "Uses the Spotlight index, only when you search.")
                 }
-            } header: {
-                SettingsSectionHeader(.fileSearchFileSearch)
             }
+            .settingsAnchor(.fileSearchFileSearch)
 
             FeatureCommandsSection(owner: .fileSearch, anchor: .fileSearchCommands)
                 .settingsEnabled(settings.fileSearchEnabled)
@@ -39,7 +39,11 @@ private struct FileSearchScopesSection: View {
     var body: some View {
         Section {
             ForEach(settings.fileSearchScopes, id: \.self) { scope in
-                ScopeRow(scope: scope, isMissing: missing.contains(scope)) {
+                SettingsScopeRow(
+                    scope: scope,
+                    path: FileSearchScope.expand(scope, homeDirectory: home).path,
+                    isMissing: missing.contains(scope)
+                ) {
                     settings.fileSearchScopes.removeAll { $0 == scope }
                 }
             }
@@ -56,14 +60,9 @@ private struct FileSearchScopesSection: View {
         } header: {
             SettingsSectionHeader(.fileSearchSearchScopes)
         } footer: {
-            Text(
-                """
-                Your home folder expands to its visible folders and cloud drives, never to its Library. \
-                An empty list searches nothing.
-                """
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text("Home covers its visible folders and cloud drives, never Library.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .onAppear(perform: refreshMissing)
         .onChange(of: settings.fileSearchScopes) { _, _ in refreshMissing() }
@@ -92,39 +91,6 @@ private struct FileSearchScopesSection: View {
     }
 }
 
-private struct ScopeRow: View {
-    let scope: String
-    let isMissing: Bool
-    let onRemove: () -> Void
-
-    var body: some View {
-        LabeledContent {
-            HStack(spacing: Theme.Spacing.sm) {
-                if isMissing {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .help("This location no longer exists.")
-                }
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove \(scope)")
-            }
-        } label: {
-            Label {
-                Text(scope)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(isMissing ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-            } icon: {
-                Image(systemName: "folder")
-            }
-        }
-    }
-}
-
 private struct FileSearchIgnoreSection: View {
     @Environment(AppSettings.self) private var settings
     @State private var draft = ""
@@ -145,15 +111,9 @@ private struct FileSearchIgnoreSection: View {
         } header: {
             SettingsSectionHeader(.fileSearchIgnorePatterns)
         } footer: {
-            Text(
-                """
-                A pattern without a slash matches any file or folder name, like *.tmp or node_modules; \
-                one with a slash matches the whole path, like **/[Cc]ache/**. The built-in patterns \
-                always apply.
-                """
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Text("No slash matches a name, like *.tmp. A slash matches the path, like **/[Cc]ache/**.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

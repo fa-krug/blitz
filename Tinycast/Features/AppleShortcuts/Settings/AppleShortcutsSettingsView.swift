@@ -20,12 +20,13 @@ struct AppleShortcutsSettingsView: View {
         return Form {
             Section {
                 Toggle(isOn: $settings.appleShortcutsEnabled) {
-                    SettingsRowTitle(.appleShortcutsAppleShortcuts, "Enable Apple Shortcuts")
-                    Text("Search and run the shortcuts you built in the Shortcuts app.")
+                    SettingsFeatureToggleLabel(
+                        anchor: .appleShortcutsAppleShortcuts,
+                        title: "Enable Apple Shortcuts",
+                        subtitle: "Run your shortcuts from the launcher.")
                 }
-            } header: {
-                SettingsSectionHeader(.appleShortcutsAppleShortcuts)
             }
+            .settingsAnchor(.appleShortcutsAppleShortcuts)
 
             if settings.appleShortcutsEnabled {
                 library
@@ -45,13 +46,6 @@ struct AppleShortcutsSettingsView: View {
             Button("Open Shortcuts") { core.appleShortcutCoordinator.openShortcutsApp() }
         } header: {
             SettingsSectionHeader(.appleShortcutsShortcuts)
-        } footer: {
-            Text(
-                "Create and edit shortcuts in the Shortcuts app. A shortcut works even when it is "
-                    + "hidden from the launcher."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
     }
 }

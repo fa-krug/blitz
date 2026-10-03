@@ -5,33 +5,33 @@ private struct Metrics {
     /// Owned here rather than in `DesignSystem`: an extension never moves a launcher surface.
     let interface: InterfaceMetrics
 
-    var width: CGFloat { interface.scaled(300) }
+    var width: CGFloat { interface.scaled(320) }
     /// The glyph slot plus its breathing room — the tallest thing a row contains.
     var rowHeight: CGFloat { interface.size.menuIcon + interface.spacing.md * 2 }
     var rowSpacing: CGFloat { 1 }
-    var separatorSpacing: CGFloat { interface.spacing.sm }
-    var fadeBand: CGFloat { interface.scaled(30) }
-    /// Six rows and half of the seventh, so a long panel reads as scrollable rather than clipped.
-    var visibleRows: CGFloat { 6.5 }
+    var listInset: CGFloat { interface.spacing.md }
+    /// Five rows and half of the sixth, so a long panel reads as scrollable rather than clipped.
+    var visibleRows: CGFloat { 5.5 }
     /// Rounded: a fractional height lands the glass edge on a half pixel.
     var rowsMaxHeight: CGFloat { (visibleRows * (rowHeight + rowSpacing)).rounded() }
     var headerHeight: CGFloat {
         interface.size.menuSectionHeader + interface.spacing.xs * 1.5 + rowSpacing
     }
-
-    /// Exact, because every row is one known height: no measuring pass, and no greedy scroll view.
-    func contentHeight(items: [ExtensionActionItem], hasHeader: Bool) -> CGFloat {
-        let rows = CGFloat(items.count)
-        let separators = CGFloat(items.dropFirst().filter(\.startsSection).count)
-        let regularGaps = max(rows - 1 - separators, 0)
-        let separatorHeight = separatorSpacing * 2 + Theme.Size.hairline
+    /// Exact, not measured; a capped viewport ends mid-row, never on a separator.
+    func extent(
+        items: [ExtensionActionItem], hasHeader: Bool, hairline: CGFloat
+    ) -> (content: CGFloat, viewport: CGFloat) {
         let header = hasHeader ? headerHeight : 0
-        return header + rows * rowHeight + regularGaps * rowSpacing
-            + separators * separatorHeight
-    }
-
-    func maximumHeight(hasHeader: Bool) -> CGFloat {
-        rowsMaxHeight + (hasHeader ? headerHeight : 0)
+        let capacity = rowsMaxHeight + header
+        var offset = header
+        var fold: CGFloat = 0
+        for (index, item) in items.enumerated() {
+            if index > 0 { offset += item.startsSection ? listInset * 2 + hairline : rowSpacing }
+            let midRow = (offset + rowHeight / 2).rounded(.down)
+            if midRow <= capacity { fold = midRow }
+            offset += rowHeight
+        }
+        return (offset, offset > capacity ? fold : offset)
     }
 }
 
@@ -47,6 +47,7 @@ struct ExtensionActionItem {
 /// The ⌘K panel of a running command; extension artwork and tints stay feature-owned.
 struct ExtensionActionsPanel: View {
     @Environment(\.metrics) private var metrics
+    @Environment(\.displayScale) private var displayScale
     var header: String?
     let items: [ExtensionActionItem]
     @Binding var selection: Int
@@ -58,35 +59,57 @@ struct ExtensionActionsPanel: View {
     @State private var hoverSelection: Int?
 
     private var panel: Metrics { Metrics(interface: metrics) }
+    /// One device pixel: a point-wide rule reads heavy against the glass.
+    private var hairline: CGFloat { 1 / displayScale }
 
     var body: some View {
-        let hasHeader = header != nil
-        let contentHeight = panel.contentHeight(items: items, hasHeader: hasHeader)
-        let maximumHeight = panel.maximumHeight(hasHeader: hasHeader)
         let shape = UnevenRoundedRectangle(
             topLeadingRadius: metrics.radius.menuPanel,
             bottomLeadingRadius: metrics.radius.menuPanel,
             bottomTrailingRadius: metrics.size.menuButton / 2,
             topTrailingRadius: metrics.radius.menuPanel,
             style: .continuous)
+        return VStack(spacing: 0) {
+            listContent
+            Rectangle()
+                .fill(Theme.Colors.separator)
+                .frame(height: hairline)
+                .accessibilityHidden(true)
+            ExtensionMenuSearchField(
+                placeholder: "Search for actions…", height: panel.rowHeight,
+                verticalOffset: -metrics.spacing.xxs / 2)
+        }
+        .frame(width: panel.width)
+        .glassEffect(.regular, in: shape)
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        if items.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                headerLabel
+                Text("No Results")
+                    .font(metrics.typography.menuRow)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: panel.rowHeight)
+            }
+            .padding(panel.listInset)
+        } else {
+            actionRows
+        }
+    }
+
+    private var actionRows: some View {
+        let extent = panel.extent(items: items, hasHeader: header != nil, hairline: hairline)
         return ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let header {
-                        Text(header)
-                            .font(metrics.typography.sectionHeader)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(height: metrics.size.menuSectionHeader, alignment: .leading)
-                            .padding(.horizontal, metrics.spacing.lg)
-                            .padding(.top, metrics.spacing.xs)
-                            .padding(.bottom, metrics.spacing.xs / 2)
-                        Color.clear.frame(height: panel.rowSpacing)
-                    }
                     // Index-as-id is stable: a panel's rows never reorder while it is open.
                     ForEach(items.indices, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 0) {
+                            // Inside the first row's target, so revealing that row brings the title.
+                            if index == 0 { headerLabel }
                             rowBoundary(before: index)
                             ExtensionActionRow(
                                 item: items[index],
@@ -98,14 +121,14 @@ struct ExtensionActionsPanel: View {
                         .id(index)
                     }
                 }
+                .padding(.horizontal, panel.listInset)
             }
-            .frame(height: min(contentHeight, maximumHeight))
-            .scrollBounceBehavior(
-                contentHeight > maximumHeight ? .always : .basedOnSize
-            )
+            // A margin, not padding: a revealed end row keeps its inset instead of meeting the edge.
+            .contentMargins(.vertical, panel.listInset, for: .scrollContent)
+            .frame(height: extent.viewport + panel.listInset * 2)
+            .scrollBounceBehavior(extent.content > extent.viewport ? .always : .basedOnSize)
             // `never`, not `hidden`: hidden still lets AppKit claim the scroller's gutter.
             .scrollIndicators(.never)
-            .overflowFade(band: panel.fadeBand, includingTop: true)
             .onChange(of: selection) {
                 let movedByPointer = hoverSelection == selection
                 hoverSelection = nil
@@ -114,9 +137,22 @@ struct ExtensionActionsPanel: View {
                 proxy.scrollTo(selection)
             }
         }
-        .padding(metrics.spacing.sm)
-        .frame(width: panel.width)
-        .glassEffect(.regular, in: shape)
+    }
+
+    @ViewBuilder
+    private var headerLabel: some View {
+        if let header {
+            Text(header)
+                .font(metrics.typography.sectionHeader)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(height: metrics.size.menuSectionHeader, alignment: .leading)
+                .padding(.horizontal, metrics.spacing.lg)
+                .padding(.top, metrics.spacing.xs)
+                .padding(.bottom, metrics.spacing.xs / 2)
+            Color.clear.frame(height: panel.rowSpacing)
+        }
     }
 
     @ViewBuilder
@@ -124,9 +160,10 @@ struct ExtensionActionsPanel: View {
         if index > 0, items[index].startsSection {
             Rectangle()
                 .fill(Theme.Colors.separator)
-                .frame(height: Theme.Size.hairline)
+                .frame(height: hairline)
                 .padding(.horizontal, metrics.spacing.md)
-                .padding(.vertical, panel.separatorSpacing)
+                // The list inset, so a row sits as far from this hairline as from the search one.
+                .padding(.vertical, panel.listInset)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         } else if index > 0 {

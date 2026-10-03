@@ -1,5 +1,6 @@
 import AppKit
 import Synchronization
+import UniformTypeIdentifiers
 
 struct IconCacheGeneration {
     private(set) var value = 0
@@ -41,6 +42,16 @@ struct SymbolTint: Hashable, Sendable {
     let color: NSColor
 }
 
+enum SystemSymbolName {
+    // This pair renders opposite to its name on the target SF Symbols runtime, in both appearances.
+    static func resolve(_ name: String) -> String {
+        switch name {
+        case "face.smiling": "face.smiling.inverse"
+        default: name
+        }
+    }
+}
+
 /// A feature sets one rather than branching `AppEntry`; `artwork` carries its extent.
 enum EntryIcon: Hashable, Sendable {
     /// The stamp is `FileIconStamp`'s: it moves when the file's icon does, retiring the old bitmap.
@@ -48,6 +59,8 @@ enum EntryIcon: Hashable, Sendable {
     case symbol(String)
     case tintedSymbol(name: String, tint: SymbolTint)
     case artwork(path: String, extent: CGFloat)
+    /// A declared type's icon, for a bundle whose own file icon is a placeholder.
+    case contentType(String)
 }
 
 struct IconSize: Hashable, Sendable {
@@ -270,9 +283,10 @@ enum IconCache {
     private static func glyph(named name: String, tint: NSColor) -> NSImage? {
         let config = NSImage.SymbolConfiguration(pointSize: 21, weight: .medium)
             .applying(.init(paletteColors: [tint]))
-        if let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(config)
-        {
+        if let symbol = NSImage(
+            systemSymbolName: SystemSymbolName.resolve(name), accessibilityDescription: nil
+        )?
+        .withSymbolConfiguration(config) {
             return symbol
         }
         guard let asset = NSImage(named: name) else { return nil }
@@ -320,6 +334,29 @@ enum IconCache {
         }.value.image
     }
 
+    static func contentTypeIcon(_ identifier: String) -> NSImage {
+        let key = contentTypeKey(identifier)
+        if let cached = cache.object(forKey: key) { return cached }
+        let (icon, cost) = downsampled(NSWorkspace.shared.icon(for: UTType(identifier) ?? .item))
+        cache.setObject(icon, forKey: key, cost: cost)
+        return icon
+    }
+
+    static func cachedContentTypeIcon(_ identifier: String) -> NSImage? {
+        cache.object(forKey: contentTypeKey(identifier))
+    }
+
+    static func loadContentTypeIconAsync(_ identifier: String) async -> NSImage? {
+        if let cached = cachedContentTypeIcon(identifier) { return cached }
+        return await Task.detached(priority: .userInitiated) {
+            Decoded(image: contentTypeIcon(identifier))
+        }.value.image
+    }
+
+    private static func contentTypeKey(_ identifier: String) -> NSString {
+        key("type:\(identifier)")
+    }
+
     private static func artworkKey(_ path: String, _ extent: CGFloat) -> NSString {
         key("artwork:\(extent):\(path)")
     }
@@ -333,6 +370,7 @@ enum IconCache {
         case .symbol(let name): return symbolIcon(named: name)
         case .tintedSymbol(let name, let tint): return symbolIcon(named: name, tint: tint)
         case .artwork(let path, let extent): return artwork(atPath: path, extent: extent)
+        case .contentType(let identifier): return contentTypeIcon(identifier)
         }
     }
 
@@ -342,6 +380,7 @@ enum IconCache {
         case .symbol(let name): return cachedSymbol(named: name)
         case .tintedSymbol(let name, let tint): return cachedSymbol(named: name, tint: tint)
         case .artwork(let path, let extent): return cachedArtwork(atPath: path, extent: extent)
+        case .contentType(let identifier): return cachedContentTypeIcon(identifier)
         }
     }
 
@@ -352,6 +391,7 @@ enum IconCache {
         case .tintedSymbol(let name, let tint): return await loadSymbolAsync(named: name, tint: tint)
         case .artwork(let path, let extent):
             return await loadArtworkAsync(atPath: path, extent: extent)
+        case .contentType(let identifier): return await loadContentTypeIconAsync(identifier)
         }
     }
 
@@ -409,7 +449,8 @@ enum IconCache {
             let rep = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8,
                 samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-                bytesPerRow: 0, bitsPerPixel: 0),
+                bitmapFormat: [], bytesPerRow: 0, bitsPerPixel: 32),
+            let data = rep.bitmapData,
             let ctx = NSGraphicsContext(bitmapImageRep: rep)
         else { return nil }
         rep.size = NSSize(width: pixels, height: pixels)
@@ -420,9 +461,10 @@ enum IconCache {
 
         var minX = pixels, maxX = -1, minY = pixels, maxY = -1
         for y in 0..<pixels {
+            let row = data.advanced(by: y * rep.bytesPerRow)
             for x in 0..<pixels {
-                // A faint antialiased edge isn't artwork; 0.06 keeps a drop shadow from counting.
-                guard let colour = rep.colorAt(x: x, y: y), colour.alphaComponent > 0.06 else {
+                // Alpha above 0.06 starts at byte 16; fainter shadows do not count as artwork.
+                guard row[x * 4 + 3] >= 16 else {
                     continue
                 }
                 minX = min(minX, x)

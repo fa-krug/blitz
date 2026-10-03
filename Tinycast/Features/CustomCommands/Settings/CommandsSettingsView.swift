@@ -11,6 +11,8 @@ struct CommandsSettingsView: View {
     var body: some View {
         @Bindable var settings = settings
         return Form {
+            LauncherCategorySwitchSection(kind: .command, anchor: .commandsCommands)
+
             LauncherItemsSection(
                 kind: .command,
                 anchor: .commandsCommands,
@@ -19,15 +21,13 @@ struct CommandsSettingsView: View {
             FeatureSwitchSection(
                 anchor: .commandsCustomCommands,
                 enableTitle: "Enable custom commands",
-                enableSubtitle:
-                    "Commands run with your user account in /bin/zsh, so use full executable paths.",
-                launcherSubtitle: "Find your commands in launcher search.",
+                enableSubtitle: "Run as you in /bin/zsh. Use full executable paths.",
                 isEnabled: $settings.customCommandsEnabled,
                 showsInLauncher: $settings.customCommandsShowInLauncher)
 
             Section {
                 if store.commands.isEmpty {
-                    Text("Add one to make it searchable from the launcher.")
+                    Text("No custom commands yet.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(sortedCommands) { command in
@@ -55,20 +55,17 @@ struct CommandsSettingsView: View {
                     SettingsRowTitle(.commandsCustomCommands, "Import Raycast Scripts")
                 }
             } footer: {
-                Text(
-                    "Name it, then add an alias or a shortcut if you want one. Importing reads a folder of "
-                        + "Raycast script commands, one command per script."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("Import reads a folder of Raycast script commands.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .settingsEnabled(settings.customCommandsEnabled)
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.commands)
         .releasesFocusOnOutsideClick()
-        .sheet(item: $editor) { target in
-            CustomCommandEditorSheet(command: target.command)
+        .settingsEditorPanel(item: $editor) { target in
+            CustomCommandEditorPanel(command: target.command)
         }
         .alert(item: $pendingDeletion) { command in
             Alert(

@@ -13,6 +13,8 @@ struct ExtensionListView: View {
     let onActivate: (Int) -> Void
     let onActions: (Int) -> Void
 
+    private static let detailListWidth: CGFloat = 290
+
     var body: some View {
         Group {
             if screen.items.isEmpty {
@@ -20,7 +22,7 @@ struct ExtensionListView: View {
             } else if screen.showsDetail {
                 HStack(spacing: 0) {
                     rowList
-                        .frame(width: metrics.size.clipboardListWidth)
+                        .frame(width: metrics.scaled(Self.detailListWidth))
                     Rectangle().fill(Theme.Colors.separator).frame(width: 1)
                     detailPane
                 }
@@ -156,7 +158,8 @@ struct ExtensionListView: View {
         {
             ExtensionDetailBody(
                 markdown: detail.string("markdown"), metadata: detail.node("metadata"),
-                isLoading: detail.bool("isLoading") ?? false, assetsPath: assetsPath)
+                isLoading: detail.bool("isLoading") ?? false, assetsPath: assetsPath,
+                stacksMetadata: true)
         } else {
             Color.clear
         }
@@ -183,7 +186,8 @@ private struct ExtensionItemRow: View {
         HStack(spacing: metrics.spacing.lg) {
             if let icon = node.props["icon"], icon != .null {
                 ExtensionIconView(
-                    resolved: ExtensionImage.resolve(icon, assetsPath: assetsPath, isDark: isDark))
+                    resolved: ExtensionImage.resolve(icon, assetsPath: assetsPath, isDark: isDark),
+                    size: metrics.size.resultRowIcon)
             }
             Text(node.string("title") ?? "")
                 .font(metrics.typography.rowTitle)

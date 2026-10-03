@@ -5,10 +5,8 @@ enum CalcTimeZone {
     static func evaluate(_ raw: String, now: Date, calendar: Calendar) -> CalcResult? {
         guard raw.count <= 128, raw.contains(where: \.isWhitespace) else { return nil }
         let inputWords = raw.split(whereSeparator: \.isWhitespace)
-        if inputWords.count >= 2, inputWords.last?.lowercased() == "time" {
-            let place = inputWords.dropLast().map { $0.lowercased() }
-            guard zone(named: place) != nil else { return nil }
-            return evaluate("time in \(place.joined(separator: " "))", now: now, calendar: calendar)
+        if let query = currentTimeQuery(inputWords.map { $0.lowercased() }) {
+            return evaluate(query, now: now, calendar: calendar)
         }
         guard inputWords.count >= 2,
             inputWords.contains(where: { connectors.contains($0.lowercased()) })
@@ -59,8 +57,9 @@ enum CalcTimeZone {
             target = calendar.timeZone
         }
 
-        guard var source = sourceMoment(
-            leading, allowZoneConnector: ahead == nil, now: now, calendar: calendar)
+        guard
+            var source = sourceMoment(
+                leading, allowZoneConnector: ahead == nil, now: now, calendar: calendar)
         else { return nil }
         if let ahead {
             guard let shifted = calendar.date(byAdding: ahead.component, value: ahead.count, to: source.date)
@@ -82,6 +81,29 @@ enum CalcTimeZone {
             sourceBadge: label(for: source.zone),
             targetBadge: label(for: target),
             payload: .value(display: time + dayNote, copyText: time))
+    }
+
+    private static func currentTimeQuery(_ words: [String]) -> String? {
+        if words.first == "time" || words.first == "timezone" {
+            var place = Array(words.dropFirst())
+            if words.first == "timezone", place.first == "in" { place.removeFirst() }
+            if zone(named: place) != nil { return "time in \(place.joined(separator: " "))" }
+        }
+
+        let destination = words.firstIndex(of: "to") ?? words.endIndex
+        var place = Array(words[..<destination])
+        if place.suffix(2) == ["time", "zone"] {
+            place.removeLast(2)
+        } else if place.last == "time" || place.last == "timezone" {
+            place.removeLast()
+        } else {
+            return nil
+        }
+        guard zone(named: place) != nil else { return nil }
+        guard destination < words.endIndex else { return "time in \(place.joined(separator: " "))" }
+        let target = Array(words[(destination + 1)...])
+        guard zone(named: target) != nil else { return nil }
+        return "time \(place.joined(separator: " ")) to \(target.joined(separator: " "))"
     }
 
     /// Splits a trailing `+ 2h` / `- 30 min` off the zone phrase it shifts.
@@ -427,7 +449,7 @@ enum CalcTimeZone {
     }
 
     private static func clockString(_ date: Date, zone: TimeZone, calendar: Calendar) -> String {
-        CalcDateFormatters.string(from: date, calendar: calendar, zone: zone, pattern: "h:mm a")
+        CalcDateFormatters.string(from: date, calendar: calendar, zone: zone, template: "jmm")
     }
 
     private static func dayOffsetNote(

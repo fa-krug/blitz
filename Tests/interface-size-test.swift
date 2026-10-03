@@ -46,6 +46,7 @@ struct InterfaceSizeTests {
         expect(m.spacing.md, Theme.Spacing.md, "spacing.md")
         expect(m.spacing.lg, Theme.Spacing.lg, "spacing.lg")
         expect(m.spacing.xl, Theme.Spacing.xl, "spacing.xl")
+        expect(m.spacing.dialogInset, Theme.Spacing.dialogInset, "spacing.dialogInset")
         expect(m.spacing.xxl, Theme.Spacing.xxl, "spacing.xxl")
         expect(m.spacing.xxxl, Theme.Spacing.xxxl, "spacing.xxxl")
         expect(
@@ -61,6 +62,7 @@ struct InterfaceSizeTests {
         expect(
             m.spacing.chatFollowTailSlack, Theme.Spacing.chatFollowTailSlack,
             "spacing.chatFollowTailSlack")
+        expect(m.spacing.chatLine, Theme.Spacing.chatLine, "spacing.chatLine")
 
         expect(m.radius.panel, Theme.Radius.panel, "radius.panel")
         expect(m.radius.row, Theme.Radius.row, "radius.row")
@@ -69,22 +71,30 @@ struct InterfaceSizeTests {
         expect(m.radius.menuRow, Theme.Radius.menuRow, "radius.menuRow")
         expect(m.radius.barControl, Theme.Radius.barControl, "radius.barControl")
         expect(m.radius.menuPanel, Theme.Radius.menuPanel, "radius.menuPanel")
+        expect(m.radius.dialogSymbol, Theme.Radius.dialogSymbol, "radius.dialogSymbol")
         expect(m.radius.dialog, Theme.Radius.dialog, "radius.dialog")
         expect(m.radius.thumbnail, Theme.Radius.thumbnail, "radius.thumbnail")
         expect(m.radius.glyph, Theme.Radius.glyph, "radius.glyph")
         expect(m.radius.attachmentChip, Theme.Radius.attachmentChip, "radius.attachmentChip")
         expect(m.radius.card, Theme.Radius.card, "radius.card")
         expect(m.radius.keyCap, Theme.Radius.keyCap, "radius.keyCap")
+        expect(m.radius.tooltip, Theme.Radius.tooltip, "radius.tooltip")
 
         expect(m.size.panelWidth, Theme.Size.panelWidth, "size.panelWidth")
         expect(m.size.panelHeight, Theme.Size.panelHeight, "size.panelHeight")
         expect(m.size.headerHeight, Theme.Size.headerHeight, "size.headerHeight")
         expect(m.size.headerIconSlot, Theme.Size.headerIconSlot, "size.headerIconSlot")
+        expect(
+            m.size.searchFieldMinWidth, Theme.Size.searchFieldMinWidth, "size.searchFieldMinWidth")
         expect(m.size.headerPadding, Theme.Size.headerPadding, "size.headerPadding")
         expect(m.size.compactHeight, Theme.Size.compactHeight, "size.compactHeight")
         expect(m.size.bottomBarHeight, Theme.Size.bottomBarHeight, "size.bottomBarHeight")
         expect(m.size.barButtonHeight, Theme.Size.barButtonHeight, "size.barButtonHeight")
         expect(m.size.rowIcon, Theme.Size.rowIcon, "size.rowIcon")
+        expect(m.size.resultRowIcon, Theme.Size.resultRowIcon, "size.resultRowIcon")
+        expect(m.size.colorDot, Theme.Size.colorDot, "size.colorDot")
+        expect(m.size.calendarBarWidth, Theme.Size.calendarBarWidth, "size.calendarBarWidth")
+        expect(m.size.calendarBarHeight, Theme.Size.calendarBarHeight, "size.calendarBarHeight")
         expect(m.size.keyCap, Theme.Size.keyCap, "size.keyCap")
         expect(m.size.compactKeyCap, Theme.Size.compactKeyCap, "size.compactKeyCap")
         expect(m.size.heroKeyCap, Theme.Size.heroKeyCap, "size.heroKeyCap")
@@ -121,8 +131,6 @@ struct InterfaceSizeTests {
         expect(m.size.chatImageThumb, Theme.Size.chatImageThumb, "size.chatImageThumb")
         expect(m.size.chatAttachmentGlyph, Theme.Size.chatAttachmentGlyph, "size.chatAttachmentGlyph")
         expect(m.size.chatAttachmentThumb, Theme.Size.chatAttachmentThumb, "size.chatAttachmentThumb")
-        expect(
-            m.size.chatAttachmentRemove, Theme.Size.chatAttachmentRemove, "size.chatAttachmentRemove")
         expect(m.size.chatAttachmentInset, Theme.Size.chatAttachmentInset, "size.chatAttachmentInset")
         expect(m.size.quickActionPanel, Theme.Size.quickActionPanel, "size.quickActionPanel")
         expect(
@@ -135,13 +143,22 @@ struct InterfaceSizeTests {
         expect(
             m.size.quickActionPanelMinBody, Theme.Size.quickActionPanelMinBody,
             "size.quickActionPanelMinBody")
+        expect(
+            m.size.dialogCompactWidth, Theme.Size.dialogCompactWidth,
+            "size.dialogCompactWidth")
         expect(m.size.dialogWidth, Theme.Size.dialogWidth, "size.dialogWidth")
+        expect(
+            m.size.dialogButtonHeight, Theme.Size.dialogButtonHeight,
+            "size.dialogButtonHeight")
+        expect(m.size.dialogSymbol, Theme.Size.dialogSymbol, "size.dialogSymbol")
+        expect(
+            m.size.dialogSymbolContainer, Theme.Size.dialogSymbolContainer,
+            "size.dialogSymbolContainer")
         expect(m.size.dialogIcon, Theme.Size.dialogIcon, "size.dialogIcon")
         expect(m.size.hudMaxWidth, Theme.Size.hudMaxWidth, "size.hudMaxWidth")
         expect(m.size.hudWidth, Theme.Size.hudWidth, "size.hudWidth")
         expect(m.size.hudHeight, Theme.Size.hudHeight, "size.hudHeight")
         expect(m.size.volumeTrackHeight, Theme.Size.volumeTrackHeight, "size.volumeTrackHeight")
-        expect(m.size.volumeKnob, Theme.Size.volumeKnob, "size.volumeKnob")
         expect(m.size.volumeReadout, Theme.Size.volumeReadout, "size.volumeReadout")
 
         expect(m.typography.searchFieldSize, Theme.Typography.searchFieldSize, "typography.searchField")
@@ -223,6 +240,11 @@ struct InterfaceSizeTests {
             expect(
                 m.size.menuRowHeight, m.size.menuIcon + m.spacing.md * 2,
                 "a menu row is its glyph slot plus breathing room at \(size.rawValue)")
+            let dialogButtonReduction =
+                ((Theme.Size.menuButton - Theme.Size.dialogButtonHeight) * size.scale).rounded()
+            expect(
+                m.size.dialogButtonHeight, m.size.menuButton - dialogButtonReduction,
+                "a dialog button stays the scaled reduction below a menu button at \(size.rawValue)")
 
             let form = ExtensionFormMetrics(scale: size.scale)
             expect(
@@ -247,26 +269,35 @@ struct InterfaceSizeTests {
             ("spacing.xxs", m.spacing.xxs), ("spacing.xs", m.spacing.xs),
             ("spacing.sm", m.spacing.sm), ("spacing.md", m.spacing.md),
             ("spacing.lg", m.spacing.lg), ("spacing.xl", m.spacing.xl),
+            ("spacing.dialogInset", m.spacing.dialogInset),
             ("spacing.xxl", m.spacing.xxl), ("spacing.xxxl", m.spacing.xxxl),
             ("spacing.sectionHeaderBottom", m.spacing.sectionHeaderBottom),
             ("spacing.sectionSpacing", m.spacing.sectionSpacing),
             ("spacing.emojiSectionSpacing", m.spacing.emojiSectionSpacing),
             ("spacing.chatTranscriptBottom", m.spacing.chatTranscriptBottom),
             ("spacing.chatFollowTailSlack", m.spacing.chatFollowTailSlack),
+            ("spacing.chatLine", m.spacing.chatLine),
             ("radius.panel", m.radius.panel), ("radius.row", m.radius.row),
             ("radius.emojiCell", m.radius.emojiCell), ("radius.menu", m.radius.menu),
             ("radius.menuRow", m.radius.menuRow),
             ("radius.barControl", m.radius.barControl), ("radius.menuPanel", m.radius.menuPanel),
+            ("radius.dialogSymbol", m.radius.dialogSymbol),
             ("radius.dialog", m.radius.dialog), ("radius.thumbnail", m.radius.thumbnail),
             ("radius.glyph", m.radius.glyph), ("radius.attachmentChip", m.radius.attachmentChip),
             ("radius.card", m.radius.card), ("radius.keyCap", m.radius.keyCap),
+            ("radius.tooltip", m.radius.tooltip),
             ("size.panelWidth", m.size.panelWidth), ("size.panelHeight", m.size.panelHeight),
             ("size.headerHeight", m.size.headerHeight),
             ("size.headerIconSlot", m.size.headerIconSlot),
+            ("size.searchFieldMinWidth", m.size.searchFieldMinWidth),
             ("size.headerPadding", m.size.headerPadding),
             ("size.compactHeight", m.size.compactHeight),
             ("size.bottomBarHeight", m.size.bottomBarHeight),
             ("size.barButtonHeight", m.size.barButtonHeight), ("size.rowIcon", m.size.rowIcon),
+            ("size.resultRowIcon", m.size.resultRowIcon),
+            ("size.colorDot", m.size.colorDot),
+            ("size.calendarBarWidth", m.size.calendarBarWidth),
+            ("size.calendarBarHeight", m.size.calendarBarHeight),
             ("size.keyCap", m.size.keyCap), ("size.compactKeyCap", m.size.compactKeyCap),
             ("size.heroKeyCap", m.size.heroKeyCap), ("size.menuButton", m.size.menuButton),
             ("size.checkbox", m.size.checkbox), ("size.menuWidth", m.size.menuWidth),
@@ -288,18 +319,22 @@ struct InterfaceSizeTests {
             ("size.chatImageThumb", m.size.chatImageThumb),
             ("size.chatAttachmentGlyph", m.size.chatAttachmentGlyph),
             ("size.chatAttachmentThumb", m.size.chatAttachmentThumb),
-            ("size.chatAttachmentRemove", m.size.chatAttachmentRemove),
             ("size.chatAttachmentInset", m.size.chatAttachmentInset),
             ("size.quickActionPanel", m.size.quickActionPanel),
             ("size.quickActionHeaderIcon", m.size.quickActionHeaderIcon),
             ("size.quickActionScrollFade", m.size.quickActionScrollFade),
             ("size.quickActionPanelBody", m.size.quickActionPanelBody),
             ("size.quickActionPanelMinBody", m.size.quickActionPanelMinBody),
-            ("size.dialogWidth", m.size.dialogWidth), ("size.dialogIcon", m.size.dialogIcon),
+            ("size.dialogCompactWidth", m.size.dialogCompactWidth),
+            ("size.dialogWidth", m.size.dialogWidth),
+            ("size.dialogButtonHeight", m.size.dialogButtonHeight),
+            ("size.dialogSymbol", m.size.dialogSymbol),
+            ("size.dialogSymbolContainer", m.size.dialogSymbolContainer),
+            ("size.dialogIcon", m.size.dialogIcon),
             ("size.hudMaxWidth", m.size.hudMaxWidth), ("size.hudWidth", m.size.hudWidth),
             ("size.hudHeight", m.size.hudHeight),
             ("size.volumeTrackHeight", m.size.volumeTrackHeight),
-            ("size.volumeKnob", m.size.volumeKnob), ("size.volumeReadout", m.size.volumeReadout)
+            ("size.volumeReadout", m.size.volumeReadout)
         ]
     }
 }

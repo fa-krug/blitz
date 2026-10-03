@@ -11,48 +11,28 @@ struct FallbacksSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text(
-                    "Every search offers these below its results, under “Use … with”. "
-                        + "Each one takes what you typed as its input."
-                )
-                .foregroundStyle(.secondary)
-            } header: {
-                SettingsSectionHeader(.fallbacksFallbacks)
-            }
-
-            Section {
                 let fallbacks = fallbacks
                 if fallbacks.isEmpty {
-                    Text("Nothing to offer — the features these belong to are switched off.")
+                    Text("Nothing to offer — their features are off.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } else {
-                    // One row holding a lazy stack: a `Form` realizes every row it is handed.
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(fallbacks.enumerated()), id: \.element) { index, fallback in
-                            if index > 0 { Divider() }
-                            FallbackRow(fallback: fallback, order: fallbacks, index: index)
-                                .padding(.vertical, Self.rowPadding)
-                        }
+                    ForEach(Array(fallbacks.enumerated()), id: \.element) { index, fallback in
+                        FallbackRow(fallback: fallback, order: fallbacks, index: index)
                     }
-                    .padding(.vertical, -Self.rowPadding)
                 }
+            } header: {
+                SettingsSectionHeader(.fallbacksFallbacks)
             } footer: {
-                Text(
-                    "A quicklink appears here once its link contains an {argument}, "
-                        + "which the query fills in."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("Shown below every search as “Use … with”. Includes quicklinks with an {argument}.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.fallbacks)
         .releasesFocusOnOutsideClick()
     }
-
-    /// A grouped `Form` row's own vertical padding.
-    private static let rowPadding: CGFloat = 15
 }
 
 private struct FallbackRow: View {
@@ -68,7 +48,7 @@ private struct FallbackRow: View {
         if let entry = core.fallbackCoordinator.entry(for: fallback) {
             SettingsRow(title: entry.name, subtitle: entry.kindLabel) {
                 AppIconView(app: entry)
-                    .frame(width: Theme.Size.settingsRowIcon, height: Theme.Size.settingsRowIcon)
+                    .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
             } trailing: {
                 Button {
                     move(by: -1)

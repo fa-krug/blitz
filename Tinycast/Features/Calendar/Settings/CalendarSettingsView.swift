@@ -12,11 +12,12 @@ struct CalendarSettingsView: View {
                 anchor: .calendarCalendar,
                 enableTitle: "Join meetings from Tinycast",
                 enableSubtitle:
-                    "Reads \(core.calendarCoordinator.span.possessivePhrase) events to find join "
-                    + "links. Nothing leaves this Mac.",
-                launcherSubtitle: "List individual meetings alongside apps and commands.",
+                    "Reads \(settings.calendarSpan.possessivePhrase) events for join links. "
+                    + "Nothing leaves this Mac.",
                 isEnabled: enabledBinding,
-                showsInLauncher: $settings.calendarShowInLauncher)
+                showsInLauncher: $settings.calendarShowInLauncher,
+                showsIcon: true,
+                showsHeader: false)
 
             Section {
                 Picker(selection: $settings.calendarLauncherLimit) {
@@ -24,8 +25,7 @@ struct CalendarSettingsView: View {
                         Text(limit.title).tag(limit)
                     }
                 } label: {
-                    SettingsRowTitle(.calendarSchedule, "Upcoming meetings in launcher")
-                    Text("Choose how many upcoming meetings appear alongside apps and commands.")
+                    SettingsRowTitle(.calendarCalendar, "Upcoming meetings in launcher")
                 }
             }
             .settingsEnabled(settings.calendarEnabled && settings.calendarShowInLauncher)
@@ -34,7 +34,7 @@ struct CalendarSettingsView: View {
                 Section {
                     SettingsRow(
                         title: "Calendar access is needed",
-                        subtitle: "Allow Tinycast to read events and find meeting links."
+                        subtitle: "Needed to read events and find join links."
                     ) {
                         Button("Allow Calendar Access…") {
                             core.calendarCoordinator.setCalendarEnabled(true)
@@ -45,22 +45,12 @@ struct CalendarSettingsView: View {
                 Section {
                     SettingsRow(
                         title: "Calendar access is off",
-                        subtitle: "Turn Tinycast on under Privacy & Security ▸ Calendars."
+                        subtitle: "Allow it in Privacy & Security ▸ Calendars."
                     ) {
                         Button("Open System Settings…") { Permissions.openCalendarSettings() }
                     }
                 }
             }
-
-            Section {
-                Toggle(isOn: $settings.calendarIncludesTomorrow) {
-                    SettingsRowTitle(.calendarSchedule, "Include Tomorrow's Events")
-                    Text("Read tomorrow as well as the rest of today, everywhere meetings appear.")
-                }
-            } header: {
-                SettingsSectionHeader(.calendarSchedule)
-            }
-            .settingsEnabled(settings.calendarEnabled)
 
             Section {
                 Picker(selection: $settings.joinWindowMinutes) {
@@ -69,11 +59,11 @@ struct CalendarSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.calendarJoining, "Show the join card")
-                    Text("How early the card appears, and how long past the start it stays.")
+                    Text("Before and after a meeting starts.")
                 }
                 Toggle(isOn: $settings.autoJoinMeetings) {
                     SettingsRowTitle(.calendarJoining, "Auto Join Meetings")
-                    Text("Automatically join meetings as they start.")
+                    Text("As they start.")
                 }
                 Toggle(isOn: $settings.autoJoinConfirms) {
                     SettingsRowTitle(.calendarJoining, "Confirm before joining")
@@ -82,8 +72,9 @@ struct CalendarSettingsView: View {
                 .settingsEnabled(settings.autoJoinMeetings)
                 Toggle(isOn: $settings.cameraPreview) {
                     SettingsRowTitle(.calendarJoining, "Camera Preview")
-                    Text("Open camera preview before joining meetings.")
+                    Text("Before joining a meeting.")
                 }
+                MeetingBrowserPicker(selection: $settings.meetingBrowserBundleID)
             } header: {
                 SettingsSectionHeader(.calendarJoining)
             }
@@ -96,9 +87,15 @@ struct CalendarSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.calendarMenuBar, "Calendar in Menu Bar")
-                    Text(
-                        "Its own menu bar item, showing a meeting icon or its title and countdown."
-                    )
+                    Text("Separate from the Tinycast icon.")
+                }
+                Picker(selection: $settings.calendarSpan) {
+                    ForEach(MeetingSpan.allCases) { span in
+                        Text(span.title).tag(span)
+                    }
+                } label: {
+                    SettingsRowTitle(.calendarMenuBar, "Days to Show")
+                    Text("In the menu, My Schedule and launcher search.")
                 }
                 Picker(selection: $settings.menuBarEvents) {
                     ForEach(MenuBarEvents.allCases) { lead in
@@ -106,14 +103,16 @@ struct CalendarSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.calendarMenuBar, "Show Upcoming Events")
-                    Text(
-                        "When the next event reaches the menu bar. Today includes the next 30 "
-                            + "minutes after midnight."
-                    )
+                    Text("When the next event appears.")
                 }
                 .settingsEnabled(settings.calendarMenuBarDisplay != .disabled)
                 Toggle(isOn: $settings.menuBarLinkedEventsOnly) {
                     SettingsRowTitle(.calendarMenuBar, "Only show events with meetings")
+                }
+                .toggleStyle(.checkbox)
+                .settingsEnabled(settings.calendarMenuBarDisplay != .disabled)
+                Toggle(isOn: $settings.calendarMenuBarHidesWhenEmpty) {
+                    SettingsRowTitle(.calendarMenuBar, "Hide when there are no upcoming events")
                 }
                 .toggleStyle(.checkbox)
                 .settingsEnabled(settings.calendarMenuBarDisplay != .disabled)
@@ -123,7 +122,7 @@ struct CalendarSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.calendarMenuBar, "Hide Current Event")
-                    Text("Choose whether to hide a started event or show its time left.")
+                    Text("Once it has started.")
                 }
                 .settingsEnabled(settings.calendarMenuBarDisplay != .disabled)
             } header: {
@@ -153,6 +152,33 @@ struct CalendarSettingsView: View {
     }
 }
 
+private struct MeetingBrowserPicker: View {
+    @Binding var selection: String?
+    @State private var browsers: [MeetingLauncher.Browser] = []
+
+    var body: some View {
+        Picker(selection: installedSelection) {
+            Text("Default Browser").tag(String?.none)
+            Divider()
+            ForEach(browsers) { browser in
+                Text(browser.name).tag(Optional(browser.id))
+            }
+        } label: {
+            SettingsRowTitle(.calendarJoining, "Open Meeting Links In")
+            Text("When no meeting app handles the link.")
+        }
+        .onAppear { browsers = MeetingLauncher.installedBrowsers() }
+    }
+
+    /// A browser since removed reads as the default, which is what joining falls back to.
+    private var installedSelection: Binding<String?> {
+        Binding(
+            get: { browsers.contains { $0.id == selection } ? selection : nil },
+            set: { selection = $0 }
+        )
+    }
+}
+
 /// Machine-local by nature, so these live on the store and never travel in a backup.
 private struct CalendarPickerSection: View {
     @Environment(CalendarStore.self) private var store
@@ -175,23 +201,14 @@ private struct CalendarPickerSection: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
             } else {
-                // One row holding a lazy stack: a `Form` realizes every row it is handed.
-                LazyVStack(spacing: 0) {
-                    ForEach(calendars) { calendar in
-                        if calendar.id != calendars.first?.id { Divider() }
-                        CalendarRow(calendar: calendar)
-                            .padding(.vertical, Self.rowPadding)
-                    }
+                ForEach(calendars) { calendar in
+                    CalendarRow(calendar: calendar)
                 }
-                .padding(.vertical, -Self.rowPadding)
             }
         } header: {
             SettingsSectionHeader(.calendarCalendars)
         }
     }
-
-    /// A grouped `Form` row's own vertical padding.
-    private static let rowPadding: CGFloat = 15
 
     private var emptyMessage: String {
         if !query.isEmpty { return "No matches for “\(query)”." }

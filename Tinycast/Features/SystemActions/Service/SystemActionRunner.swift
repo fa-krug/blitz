@@ -101,9 +101,12 @@ enum SystemActionRunner {
         case .volume100:
             try setVolume(1)
         case .showDesktop:
-            try await runProcess(
-                "/System/Applications/Mission Control.app/Contents/MacOS/Mission Control",
-                arguments: ["1"])
+            // Executing the binary directly is SIGKILLed; only a LaunchServices launch is allowed.
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.arguments = ["1"]
+            _ = try await NSWorkspace.shared.openApplication(
+                at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"),
+                configuration: configuration)
         case .toggleAppearance:
             // The script returns the resulting state, so the confirmation can name it.
             let result = try await runAppleScript(
@@ -166,6 +169,15 @@ enum SystemActionRunner {
             return SystemActionFeedback(on ? "Bluetooth On" : "Bluetooth Off")
         }
         return nil
+    }
+
+    /// Finder writes the key only once the box is changed, so an absent key is its default: on.
+    static var finderWarnsBeforeEmptyingTrash: Bool {
+        let key = "WarnOnEmptyTrash"
+        guard let finder = UserDefaults(suiteName: "com.apple.finder"),
+            finder.object(forKey: key) != nil
+        else { return true }
+        return finder.bool(forKey: key)
     }
 
     static func currentVolume() throws -> Float32 {
@@ -474,15 +486,13 @@ enum SystemActionRunner {
         let root = AXUIElementCreateApplication(app.processIdentifier)
         var dismissed = 0
         for _ in 0..<100 {
-            // The tree is rebuilt every pass: pressing one control invalidates its siblings.
-            let notifications = notificationElements(in: root, depth: 0)
-            guard !notifications.isEmpty else { return dismissed }
-            guard let button = notifications.compactMap({ dismissControl(in: $0, depth: 0) }).first
-            else {
+            // The tree is rebuilt every pass: dismissing one notification invalidates its siblings.
+            guard let notification = firstNotification(in: root, depth: 0) else { return dismissed }
+            guard let action = dismissAction(of: notification) else {
                 throw SystemActionFailure(
                     "This version of Notification Center exposes no dismiss control Tinycast can use.")
             }
-            let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
+            let result = AXUIElementPerformAction(notification, action as CFString)
             guard result == .success || result == .invalidUIElement else {
                 throw SystemActionFailure("Notification Center did not allow a notification to be dismissed.")
             }
@@ -493,38 +503,23 @@ enum SystemActionRunner {
     }
 
     /// Matched on AX subrole, so the search never depends on the UI language.
-    private static func notificationElements(in element: AXUIElement, depth: Int) -> [AXUIElement] {
-        guard depth < 20 else { return [] }
-        let subrole = axString(element, attribute: kAXSubroleAttribute as CFString)?.lowercased()
-        if let subrole, subrole.contains("notificationcenter") { return [element] }
-        return axChildren(element).flatMap { notificationElements(in: $0, depth: depth + 1) }
-    }
-
-    /// The close control; never an arbitrary button, a notification's own rows press too.
-    private static func dismissControl(in element: AXUIElement, depth: Int) -> AXUIElement? {
+    private static func firstNotification(in element: AXUIElement, depth: Int) -> AXUIElement? {
         guard depth < 20 else { return nil }
-        if canPress(element) {
-            let subrole = axString(element, attribute: kAXSubroleAttribute as CFString)?.lowercased()
-            if subrole == (kAXCloseButtonSubrole as String).lowercased() { return element }
-            let text = [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
-                .compactMap { axString(element, attribute: $0 as CFString) }
-                .joined(separator: " ").lowercased()
-            if text.contains("clear all") || text == "close" || text.contains("dismiss") {
-                return element
-            }
-        }
+        let subrole = axString(element, attribute: kAXSubroleAttribute as CFString)?.lowercased()
+        if let subrole, subrole.contains("notificationcenter") { return element }
         for child in axChildren(element) {
-            if let found = dismissControl(in: child, depth: depth + 1) { return found }
+            if let found = firstNotification(in: child, depth: depth + 1) { return found }
         }
         return nil
     }
 
-    private static func canPress(_ element: AXUIElement) -> Bool {
+    /// A banner offers "Close" and a stack "Clear All" as custom actions; neither has a button.
+    private static func dismissAction(of notification: AXUIElement) -> String? {
         var actions: CFArray?
-        guard AXUIElementCopyActionNames(element, &actions) == .success,
+        guard AXUIElementCopyActionNames(notification, &actions) == .success,
             let names = actions as? [String]
-        else { return false }
-        return names.contains(kAXPressAction)
+        else { return nil }
+        return names.first { $0.hasPrefix("Name:Close\n") || $0.hasPrefix("Name:Clear All\n") }
     }
 
     private static func axChildren(_ element: AXUIElement) -> [AXUIElement] {
@@ -619,12 +614,11 @@ enum SystemActionRunner {
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = stdout
             process.standardError = stderr
-            do { try process.run() } catch {
+            do { try process.runObservingExit().wait() } catch {
                 throw SystemActionFailure(
                     "\(URL(fileURLWithPath: executable).lastPathComponent) could not start: \(error.localizedDescription)"
                 )
             }
-            process.waitUntilExit()
             let outData = stdout.fileHandleForReading.readDataToEndOfFile()
             let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
             return ProcessOutput(
