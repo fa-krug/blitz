@@ -62,6 +62,12 @@ enum LauncherOrder {
             .map(\.0)
     }
 
+    /// Rule 1's exact hit, so a space after an alias opens the row that alias ranks first.
+    static func spellsAlias(_ query: String, _ alias: String) -> Bool {
+        let typed = Query(query).typed
+        return !typed.isEmpty && SearchText(alias, transliterated: false).units == typed.units
+    }
+
     // MARK: - One entry's match
 
     private struct Candidate {
