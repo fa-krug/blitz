@@ -14,9 +14,8 @@ without re-registering. "Show in launcher" only hides the section; shortcuts kee
 
 ## Invariants
 
-- **`Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` and
-  `Service/CustomCommandArgumentSession.swift` stay free of AppKit and SwiftUI** (Foundation plus Darwin
-  for `mkstemp`) so `custom-command-test` can compile them standalone. That is why the confirmation gate
+- **`Model/CustomCommand.swift` and `Service/ShellCommandRunner.swift` stay free of AppKit and
+  SwiftUI** (Foundation plus Darwin for `mkstemp`) so `custom-command-test` can compile them standalone. That is why the confirmation gate
   lives in `CustomCommandCoordinator` and not in the runner.
 - A command that runs arbitrary shell is a security surface: the confirmation step cannot be bypassed, and
   an import of executable commands warns before it applies.
@@ -36,7 +35,7 @@ bundle-scoped `UserDefaults`. Each command has a stable UUID. Its launcher entry
 `hotkey.customCommand.<uuid>` plus the `boundCustomCommandIDs` index.
 
 Editing preserves the UUID and therefore its alias, favorite, visibility, and hotkey references. The row's
-**Enabled** checkbox is the only writer of `isEnabled`, so the editor sheet carries the flag through a
+**Enabled** checkbox is the only writer of `isEnabled`, so the editor panel carries the flag through a
 save rather than offering a second control for it. Deleting
 goes through `AppCore`, which unregisters the hotkey and clears those references before removing the
 command. Native settings backups include both commands and bindings; import warns before accepting
@@ -57,16 +56,16 @@ The command text is deliberately not searchable. Only the user-facing name enter
 
 - `/bin/zsh -lc <command>`, or `/bin/zsh -ilc <command>` when the command's **Load shell
   environment** flag is on
-- `tinycast` as `$0`, then the collected argument values as `$1`, `$2`, …
+- `blitz` as `$0`, then the collected argument values as `$1`, `$2`, …
 - the command's own **Run In** folder, or the home directory when it names none
 - standard input reading EOF immediately
-- `TINYCAST=1` added to the inherited environment
+- `BLITZ=1` added to the inherited environment
 - up to 8 KiB of standard error retained for a failure dialog
 - standard output discarded
 
 **Show output** takes a different route entirely — see [Show output](#show-output). Nothing else does.
 
-No Terminal window or pseudo-terminal is created. `waitUntilExit` blocks for the whole life of the
+No Terminal window or pseudo-terminal is created. The exit wait blocks for the whole life of the
 command, so it runs on a private concurrent `DispatchQueue` rather than a cooperative-pool thread a
 long `brew upgrade` would hold for minutes. The streaming path blocks the same queue on `read`.
 
@@ -80,7 +79,7 @@ command exits **127**. That is the single most common way a custom command fails
 It is per-command and off by default, because turning it on runs whatever the user's shell startup
 does — oh-my-zsh's auto-update (`git pull`, network, seconds), powerlevel10k's `gitstatusd`,
 `compinit` rewriting `~/.zcompdump`, or an `exec` that replaces the shell so the command never runs at
-all. `TINYCAST=1` exists so an rc file can skip those sections: `[[ -n $TINYCAST ]] && return`.
+all. `BLITZ=1` exists so an rc file can skip those sections: `[[ -n $BLITZ ]] && return`.
 
 Measured cost: ~10 ms for `-lc`, ~65 ms for `-ilc` against a real-world `~/.zshrc` (~11 ms against a
 minimal one — the interactive shell itself is ~2 ms, the rest is the user's own config).
@@ -89,8 +88,8 @@ Interactive prompts still cannot block. Standard input is `/dev/null` — or, un
 pty already sent EOF — so a `read` gets EOF and
 returns non-zero, and a launchd-launched app has no controlling terminal, so `/dev/tty` fails with
 `device not configured`. A dev build launched _from a terminal_ inherits that terminal's tty, so an rc
-file reading `/dev/tty` can hang there but not for real users. There is **no timeout** — Tinycast never kills a
-running command except through the output window's Stop button, and a command outlives Tinycast
+file reading `/dev/tty` can hang there but not for real users. There is **no timeout** — Blitz never kills a
+running command except through the output window's Stop button, and a command outlives Blitz
 quitting.
 
 Because standard error surfaces only on a non-zero exit and only its last 8 KiB, rc-file startup noise
@@ -98,28 +97,37 @@ is dropped while the actual error survives.
 
 ### Arguments
 
-A command may declare an ordered list of arguments, each a name and an optional/required flag. Running
-one opens `PaletteMode.customCommandArguments`, the last screen of its kind: the palette's own search
-field _is_ the input, one argument at a time, with the field's placeholder naming
-the pending one and the body listing every argument, its `$n` slot, and what has been answered. ↵
-advances, a bare backspace steps back and refills the field, and Escape abandons the run. `↵` is held
-while a required argument is empty, which also hides the footer pill.
+A command may declare **up to three** arguments, each a name and an optional/required flag — Raycast's
+own cap, and what keeps the fields on screen. `CustomCommandArgument.sanitized` enforces it on every
+path in, so a stored or imported command carrying more keeps its first three and drops the rest, the
+way Raycast ignores an `argument4`. The editor's **Add** stops at three.
 
-Because the form is a palette mode rather than a header accessory, **every entry point gets it** —
-launcher row, favorite slot and global hotkey alike — through the one `runCustomCommand(id:)` funnel.
-That is the whole reason it is not an inline strip beside the search field the way an extension
-command's arguments are: a hotkey has no selected row to hang one off.
+They are filled **inline beside the search field** when the command's row is selected in root search,
+as a quicklink's are (see [palette.md](palette.md#inline-row-arguments)).
+`CustomCommandArgumentsAccessory` builds the strip; Tab walks into it, and ↵ with a required field
+still empty focuses that field instead of running — Raycast's rule. An optional field left empty is
+never marked as owed.
+
+**The fields are keyed by position, not name** — `CustomCommandArgument.fieldID(at:)`, `$1` to `$3` —
+because two arguments may share a name, and keying by name would give them one value and one focus.
+`CustomCommand.positionalValues(from:)` turns the fields back into `$n` order, or nil while a required
+one is empty.
+
+`runCustomCommand(id:values:)` is still the one funnel for every entry point. A launcher row hands it
+the typed values; a **global hotkey or favorite slot** hands it none. Either way, a required value still
+missing opens root search onto that command alone — the query seeded with its name, its row the only
+one listed, its first empty field focused — through `PaletteCoordinator.showArguments(of:values:)`.
+That is what Raycast does for a hotkey. The row is listed even when the command is hidden from the
+launcher, since its shortcut still has to be answered; typing anything else returns to a normal search.
 
 Values reach zsh as **positional parameters**, never as text substituted into the command:
 
 ```
-/bin/zsh -lc '<command>' tinycast <value1> <value2> …
+/bin/zsh -lc '<command>' blitz <value1> <value2> …
 ```
 
 so the script reads them as `$1`, `$2`, and a value containing `; rm -rf ~` is a string, not a second
 command. An optional argument submitted empty still occupies its slot, so `$2` never becomes `$3`.
-`CustomCommandArgumentSession` owns the pending run; it holds values positionally for the same reason,
-which is why two arguments may share a name without colliding.
 
 ### Show output
 
@@ -173,9 +181,10 @@ the success pill is skipped for the same reason.
 #### Consequences worth knowing
 
 - **rc-file noise is now visible.** With **Load shell environment** on, anything `~/.zshrc` writes
-  reaches the log. The guard is the documented `[[ -n $TINYCAST ]] && return`.
-- **Stop is the one exception** to "Tinycast never kills a running command". Only the button does it;
+  reaches the log. The guard is the documented `[[ -n $BLITZ ]] && return`.
+- **Stop is the one exception** to "Blitz never kills a running command". Only the button does it;
   a second command superseding the window never touches the first.
+- Escape closes the window without stopping its command.
 
 #### The ad-hoc run
 
@@ -212,7 +221,7 @@ so the gate lives there and neither path can bypass it. The palette hides before
 floating panel and would sit above it. The dialog shows the command text as well as its name; ↵ runs
 it and Escape cancels, with Cancel rendered on the left of the two buttons. It carries the `terminal`
 glyph the command's launcher row uses, and reads neutral rather than destructive — running a command the
-user wrote themselves wants a deliberate second tap, not a red alarm. The gate is Tinycast's own
+user wrote themselves wants a deliberate second tap, not a red alarm. The gate is Blitz's own
 dialog, not an `NSAlert` ([ui.md](../ui.md#dialogs--hud)): presentation is `async` with no nested run loop,
 and the presenter itself refuses a second dialog while one is up, so a held shortcut can't stack them.
 
@@ -225,8 +234,8 @@ command showing its output reports through the window instead.
 
 ### Reporting
 
-Tinycast dismisses an open palette before starting a custom command. With **Show output** off, a zero
-exit status is silent; a launch failure or non-zero status opens a Tinycast dialog with the bounded
+Blitz dismisses an open palette before starting a custom command. With **Show output** off, a zero
+exit status is silent; a launch failure or non-zero status opens a Blitz dialog with the bounded
 error detail. When the
 status is 127 and **Load shell environment** is off, the dialog adds a one-line hint and an **Open
 Settings…** button that lands on the Commands pane — the hint is gated on the status alone, not
@@ -242,7 +251,8 @@ Foundation-only harness. Verify by hand:
 3. Pressing the command's hotkey while its dialog is up does not stack a second dialog.
 4. A gated command triggered by hotkey with no palette open still confirms.
 5. An rc-file-only alias with the flag off shows the 127 hint, and **Open Settings…** opens the pane.
-6. A command with arguments triggered by hotkey opens the argument form, not the command.
+6. A command with arguments triggered by hotkey opens root search on that row alone, first required
+   field focused — including a command hidden from the launcher.
 7. A gated command with arguments asks for every value first, and confirms only once.
 8. Running a second output-showing command reuses the one window and does **not** kill the first.
 9. A long command's output appears while it runs, not at the end; scrolling up stops the follow.
@@ -255,7 +265,8 @@ Foundation-only harness. Verify by hand:
     nothing. A folder holding no script commands says so instead of reporting zero.
 14. Re-importing the same folder says nothing was left to import, rather than reporting zero.
 15. An imported command with arguments asks for them and the script receives them — the `"$@"`
-    forwarding has no harness coverage of the palette form that fills it.
+    forwarding has no harness coverage of the inline fields that fill it.
+16. Two arguments sharing a name are separate fields; ↵ with a required one empty focuses it.
 
 ## Importing Raycast scripts
 

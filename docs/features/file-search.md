@@ -12,12 +12,13 @@ feature is enabled in Settings.
   feature uses `MDQuery`; `NSMetadataQuery` has no source-result cap and can break the 100 MB budget on
   a broad filename.
 - **Everything under `Model/` stays Foundation-only and pure**, `FileSearchIgnoreList`'s `import Darwin`
-  and `FileSearchFilter`'s `UniformTypeIdentifiers` included — value types with no environment of their
-  own. `file-search-test` compiles the shipped files together with the existing pure fuzzy scorer.
-- **Search is filename-only, and every list comes from Spotlight.** Tinycast creates no content index,
+  and the `UniformTypeIdentifiers` of `FileSearchFilter` and `FileSearchPreviewKind` included — value
+  types with no environment of their own. `file-search-test` compiles the shipped files together with
+  the existing pure fuzzy scorer.
+- **Search is filename-only, and every list comes from Spotlight.** Blitz creates no content index,
   history, query cache, watcher or search data — the blank screen's Recently Used rows are one more
   Spotlight query over the configured scopes, read from the system's own `kMDItemLastUsedDate` and
-  `kMDItemFSContentChangeDate`, never from anything Tinycast recorded. The type filter narrows *which*
+  `kMDItemFSContentChangeDate`, never from anything Blitz recorded. The type filter narrows *which*
   files Spotlight is asked for; it never adds a second pass over the ones it returned.
 - **The filter belongs to the query, not to the rows.** `FileSearchSession` keys its de-dup and its
   supersession check on the query and the filter together, so narrowing re-runs the same words rather
@@ -25,7 +26,7 @@ feature is enabled in Settings.
 - **Hidden paths and application-bundle contents are structural, not patterns.** They are what keeps
   the feature permission-free, so no user setting can re-admit them. Everything else that is dropped
   comes from the ignore list.
-- **`~/Library` is never a scope Tinycast picks by itself.** A configured home root expands into its
+- **`~/Library` is never a scope Blitz picks by itself.** A configured home root expands into its
   visible children plus the two cloud-storage roots instead. A user who adds a folder under `~/Library`
   by hand gets what they asked for.
 - **The shipped ignore rules are compiled in and never persisted.** `fileSearchIgnorePatterns` stores
@@ -34,12 +35,21 @@ feature is enabled in Settings.
 - **File Search is off by default, and off means no entry point or Spotlight work.** A nonempty query
   on that screen is the first operation that searches, and the global shortcut no-ops while the
   feature switch is off.
-- **Tinycast asks for no file permission.** Hidden metadata items and application bundles are filtered,
+- **Blitz asks for no file permission.** Hidden metadata items and application bundles are filtered,
   and Spotlight or TCC omissions produce a thinner result set rather than a prompt for Full Disk Access.
 - **A superseded query never publishes.** The session cancels its pending task and checks cancellation
   after the synchronous Spotlight call, so a late result cannot replace the newer query's rows. Editing
   the scopes or the patterns cancels the session for the same reason: a result found under the old
   rules must not land under the new ones.
+- **Share is the one system popover, and the palette stays up under it.** `AGENTS.md` keeps Blitz's
+  own dialogs because a question or a report is Blitz's to word. A share sheet is neither: it is
+  AirDrop, Mail and Messages, and re-drawing it would mean re-implementing the transports and losing
+  whatever the system adds. So this row hands off, and the two rules it does keep are that the palette
+  is never hidden and that the row stays visible beside the sheet — which is what anchoring to
+  `PaletteWindowController.anchorView` buys. The picker is retained on the coordinator, because it
+  dies with its last reference, and `NSItemProvider(contentsOf:)` failing (a file that vanished between
+  the query and the keystroke) leaves the palette exactly as it was, which is the only failure this row
+  can have.
 
 ## Query path
 
@@ -133,7 +143,7 @@ revision check, then the same worker runs only the newest pending query. Leaving
 cancels and clears the session as well.
 
 `FileSearchService.search` emits a `FileSearchService.search` interval on the shared
-`com.tinycast.perf` signpost subsystem. `Tests/file-search-performance.swift` exercises the same service
+`de.fa-krug.blitz.perf` signpost subsystem. `Tests/file-search-performance.swift` exercises the same service
 against the current user's Spotlight index and reports first-run and repeated-query latency; it stays
 outside `run-tests.sh` because filesystem contents and Spotlight state are machine-dependent.
 
@@ -154,7 +164,7 @@ magnitude, not budgets; rerun the benchmark after query-policy work.
 draws. The list uses the shared Results header, row metrics, edge dissolve, thin scrollbar and scroll
 intent; its header reads **Recently Used** on the blank screen and **Results** under a query. A row shows
 a fitted native file icon and the full filename — a folder prefixed by its parent's name, dimmed, since
-half the folder hits on a developer machine are some `src` or `Tinycast`. The path itself is the preview's
+half the folder hits on a developer machine are some `src` or `Blitz`. The path itself is the preview's
 `Where` row rather than a second column the narrow list has no width for. A click selects and a double
 click opens, both through `onRowClick`, which answers on the press: `.onTapGesture(count: 2)` makes the
 single tap wait out the system's double-click interval first, and that wait *is* the second a click used
@@ -167,9 +177,20 @@ icons after File Search closes. Persistent launcher icons remain in their own ca
 The preview pane is the file itself over an Information block — Name, Where, Type, Size, Created,
 Modified. The stage is **16:9 and sized before the block beneath it**, which then scrolls in whatever is
 left; without that layout priority the aspect ratio shrinks to the leftover height instead of claiming
-it. `FileSearchSurface` picks what draws the file: `FileSearchMediaPlayer` for movies and audio, since
-QuickLook draws a movie's first frame but never plays one inside a non-activating panel, and
-`QuickLookSurface` for everything else, which renders a document better than a monospaced `Text` would.
+it. `FileSearchPreviewKind` picks what draws the file, and `FileSearchSurface` mounts it:
+
+| Kind | Surface | Why not QuickLook |
+| --- | --- | --- |
+| movies, audio | `FileSearchMediaPlayer` | it draws a movie's first frame but never plays one inside a non-activating panel |
+| PDF | `PDFSurface`, PDFKit in process | it draws a PDF in an out-of-process `NSRemoteView` that never scrolls inside the palette |
+| text QuickLook shows as an icon | `PlainTextSurface` | it renders only a declared `public.text` type as text |
+| everything else | `QuickLookSurface` | — |
+
+The extension decides without touching the disk, except where it cannot: an undeclared extension
+(`.jsx`, `.vue`) or `.ts`, which the system declares as MPEG-TS video. Those read their first 256 KB
+off the main actor once per selection — no NUL and valid UTF-8 is text, anything else falls back to
+what the extension declares. `PlainTextSurface` copies QuickLook's own text preview (fixed-pitch 11pt,
+3pt inset, unselectable), so a `.jsx` reads like a `.swift`.
 **Only the ⌘Y overlay autoplays.** `autoplays` is the surface's one parameter and the pane leaves it
 off: arrow-keying a list must not start a movie, while opening Quick Look on one is the ask itself.
 The player view is `KeyboardFocusRefusing` either way, so clicking its transport leaves the caret in
@@ -203,6 +224,7 @@ not outlive the window.
 | Open File / Open Folder | ↵ | `NSWorkspace`'s asynchronous configuration API; hides the palette without restoring focus, and reports a failure through the dialog controller |
 | Show in Finder | ⌘↵ | reveals and dismisses |
 | Quick Look | ⌘Y | the in-panel overlay above |
+| Share… | — | `NSSharingServicePicker`, anchored to the palette's trailing edge so the row it was opened from stays visible beside it. Escape or a click elsewhere dismisses it, and the palette is never hidden, so the flow returns to the same row. There is no chord: the destinations are the system's, and it is the only place a system popover is right |
 | Copy File | ⇧⌘C | the file itself on the pasteboard through `PasteboardFiles.write`, which declares `.fileURL` and the path as `.string` |
 | Copy Name | ⌥⌘C | through `Paster`, palette stays open |
 | Copy Path | ⌃⌘C | the standardized path, palette stays open |
@@ -220,11 +242,22 @@ empty completed query says what the active filter admits ("No files found", "No 
 screen with no recents says "Type to search files and folders", and query creation or execution failure
 says "File search is unavailable" inline.
 
+### Dragging out
+
+A row drags its file or folder straight into another app — a Finder window, a browser's upload field,
+a mail being written — through the same `onRowClick(drag:)` the clipboard uses, so the press, the
+**copy-only** operation and the fly-back are the ones [clipboard.md](clipboard.md#dragging-out)
+explains. Copy matters more here than there: every result is the user's own file, and on the boot
+volume a plain file-URL drag would default to moving it. The image is the row's fitted tile, already
+warm by the time a pointer can reach it; a landed drop hides the palette through
+`PaletteCoordinator.dragLanded()`. There is no stat first: a result is seconds old, and its session is
+cleared whenever the palette hides.
+
 ## Invocation
 
 Settings ▸ File Search owns the `fileSearchEnabled` switch, which is off when its preference is absent,
 along with the scope list, the ignore patterns and the Search Files command row. All of them are
-ordinary settings carried by Tinycast settings backups; importing them grants no permission or
+ordinary settings carried by Blitz settings backups; importing them grants no permission or
 background access.
 
 `AppCore` observes the switch and asks `FileSearchCoordinator` to project `CommandID.searchFiles` into

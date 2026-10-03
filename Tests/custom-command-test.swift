@@ -7,7 +7,7 @@ struct CustomCommandTests {
     static func main() async {
         // The app has no controlling terminal; an inherited one gets `zsh -i` stopped by SIGTTOU.
         setsid()
-        let suiteName = "com.tinycast.custom-command-tests"
+        let suiteName = "de.fa-krug.blitz.custom-command-tests"
         let defaults = isolatedDefaults(suiteName)
 
         var failures = 0
@@ -218,7 +218,7 @@ struct CustomCommandTests {
                 == #"/bin/zsh '/tmp/it'\''s here.sh' "$@""#)
 
         let scriptDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tinycast-scripts-\(UUID().uuidString)")
+            .appendingPathComponent("blitz-scripts-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(
             at: scriptDirectory.appendingPathComponent("nested"), withIntermediateDirectories: true)
         for (name, source) in [
@@ -238,12 +238,12 @@ struct CustomCommandTests {
             to: scriptDirectory.appendingPathComponent("echo.sh"))
         let imported = RaycastScriptImport.scan(directory: scriptDirectory).first { $0.name == "Echo" }
         let forwarded = await ShellCommandRunner.run(
-            imported?.command ?? "", arguments: ["; touch /tmp/tinycast-import-should-not-exist"],
+            imported?.command ?? "", arguments: ["; touch /tmp/blitz-import-should-not-exist"],
             workingDirectory: imported?.workingDirectory)
         check(
             "an imported script receives its argument as one inert word",
-            forwarded.standardOutput == "; touch /tmp/tinycast-import-should-not-exist"
-                && !FileManager.default.fileExists(atPath: "/tmp/tinycast-import-should-not-exist"))
+            forwarded.standardOutput == "; touch /tmp/blitz-import-should-not-exist"
+                && !FileManager.default.fileExists(atPath: "/tmp/blitz-import-should-not-exist"))
         try? FileManager.default.removeItem(at: scriptDirectory)
 
         // MARK: Runner
@@ -254,8 +254,8 @@ struct CustomCommandTests {
         let inHome = await ShellCommandRunner.run("test \"$PWD\" = \"$HOME\"")
         check("commands start in the user's home directory", inHome.succeeded)
 
-        let marker = await ShellCommandRunner.run("test \"$TINYCAST\" = 1")
-        check("the TINYCAST marker is exported so a shell config can detect us", marker.succeeded)
+        let marker = await ShellCommandRunner.run("test \"$BLITZ\" = 1")
+        check("the BLITZ marker is exported so a shell config can detect us", marker.succeeded)
 
         let failed = await ShellCommandRunner.run("printf 'expected failure' >&2; exit 7")
         check(
@@ -404,65 +404,62 @@ struct CustomCommandTests {
         // The whole reason values are passed positionally: shell syntax in one is inert.
         let injected = await collect(
             ShellCommandRunner.stream(
-                "printf '%s\\n' \"$1\"", arguments: ["; touch /tmp/tinycast-should-not-exist"]))
+                "printf '%s\\n' \"$1\"", arguments: ["; touch /tmp/blitz-should-not-exist"]))
         check(
             "a value carrying shell syntax is data, not code",
-            injected.log.contains("; touch /tmp/tinycast-should-not-exist")
-                && !FileManager.default.fileExists(atPath: "/tmp/tinycast-should-not-exist"))
+            injected.log.contains("; touch /tmp/blitz-should-not-exist")
+                && !FileManager.default.fileExists(atPath: "/tmp/blitz-should-not-exist"))
 
-        // MARK: Argument session
+        // MARK: Inline argument values
 
-        let session = CustomCommandArgumentSession()
-        session.begin(
-            command: CustomCommand(
-                name: "Search", command: "open \"$1$2\"",
-                arguments: [
-                    CustomCommandArgument(name: "Engine"),
-                    CustomCommandArgument(name: "Query", isOptional: true)
-                ]))
-        check("the form opens on the first argument", session.current?.name == "Engine")
-        check("the prompt names the pending argument", session.prompt == "Engine…")
-        check("more than one argument left means ↵ advances", !session.isLastArgument)
-        check("submitting an incomplete form yields nothing", session.submit("google") == nil)
-        check("the form advances to the next argument", session.current?.name == "Query")
-        check("one argument left means ↵ runs", session.isLastArgument)
+        let search = CustomCommand(
+            name: "Search", command: "open \"$1$2\"",
+            arguments: [
+                CustomCommandArgument(name: "Query"),
+                CustomCommandArgument(name: "Query", isOptional: true)
+            ])
         check(
-            "an answered argument shows its value",
-            session.progress.map(\.value) == ["google", nil])
+            "fields are keyed by position, so a shared name cannot collide",
+            (0..<2).map(CustomCommandArgument.fieldID) == ["$1", "$2"])
+        check(
+            "a required value still empty holds the run",
+            search.positionalValues(from: ["$2": "swift"]) == nil)
+        check(
+            "an optional value left empty still occupies its slot",
+            search.positionalValues(from: ["$1": "google"]) == ["google", ""])
+        check(
+            "values arrive in $n order",
+            search.positionalValues(from: ["$2": "swift", "$1": "google"]) == ["google", "swift"])
+        check(
+            "a command without arguments is always complete",
+            CustomCommand(name: "Plain", command: "true").positionalValues(from: [:]) == [])
 
-        check("backspace hands the previous answer back", session.retreat() == "google")
-        check("retreating reopens that argument", session.current?.name == "Engine")
-        check("retreating past the first is refused", session.retreat() == nil)
-
-        _ = session.submit("google")
-        let completed = session.submit("swift")
-        check("the last answer completes the form", completed?.values == ["google", "swift"])
-        check("a full form has nothing left pending", session.current == nil)
-        check("submitting past the last argument is refused", session.submit("extra") == nil)
-
-        session.cancel()
-        check("cancelling ends the session", !session.isActive && session.prompt == nil)
+        let capped = CustomCommandArgument.sanitized(
+            ["a", " ", "b", "c", "d"].map { CustomCommandArgument(name: $0) })
+        check(
+            "arguments are capped at three, counted after blanks drop",
+            capped.map(\.name) == ["a", "b", "c"])
 
         // MARK: Shell environment
 
         // A throwaway ZDOTDIR proves interactive mode sources an rc file.
         let zdotdir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tinycast-zdotdir-\(UUID().uuidString)")
+            .appendingPathComponent("blitz-zdotdir-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: zdotdir, withIntermediateDirectories: true)
-        try? Data("alias tinycast_probe=true\n".utf8).write(
+        try? Data("alias blitz_probe=true\n".utf8).write(
             to: zdotdir.appendingPathComponent(".zshrc"))
         setenv("ZDOTDIR", zdotdir.path, 1)
         // `/etc/zshrc` sources `zshrc_$TERM_PROGRAM`, which writes to the real home.
         unsetenv("TERM_PROGRAM")
 
         let withEnvironment = await ShellCommandRunner.run(
-            "tinycast_probe", loadingShellEnvironment: true)
+            "blitz_probe", loadingShellEnvironment: true)
         check(
             "loading the shell environment resolves an rc-file alias",
             withEnvironment.succeeded)
 
         // The reported symptom: an alias only in `.zshrc` is command-not-found.
-        let withoutEnvironment = await ShellCommandRunner.run("tinycast_probe")
+        let withoutEnvironment = await ShellCommandRunner.run("blitz_probe")
         check(
             "the default shell exits 127 on an rc-file alias",
             withoutEnvironment.termination == .exited(status: 127))

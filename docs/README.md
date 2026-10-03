@@ -1,4 +1,4 @@
-# Tinycast documentation
+# Blitz documentation
 
 Start with [`AGENTS.md`](../AGENTS.md) at the repo root — it is the short version, and it links here for
 anything that needs more than a line.
@@ -12,14 +12,14 @@ contradicts the code is a defect, so fix it in the commit that made it wrong.
 | [standards.md](standards.md) | How code here is written: posture, naming, style, concurrency, performance budgets, comments | a convention changes, or a check is added |
 | [testing.md](testing.md) | How to verify a change: the definition of done, the harnesses, purity checks, budgets, the manual sweep | a harness moves, or a budget changes |
 | [development.md](development.md) | The local loop: setup, build, dev channel, editor, format/lint, generated data | the local toolchain changes |
-| [release.md](release.md) | How a build reaches a user: packaging, PR review, releases, the Homebrew tap, the website | the pipeline changes |
-| [signing.md](signing.md) | The self-signed identity and the two CI secrets | the signing setup changes |
+| [release.md](release.md) | How a build reaches a user: the push-to-`main` release, its two secrets, PR review | the pipeline changes |
+| [signing.md](signing.md) | The self-signed identities for local builds and releases, the hardened runtime, quarantine | the signing setup changes |
 | [ui.md](ui.md) | The design system: tokens, panel chrome, row grammar, glass, dialogs and HUDs | a token or a presentation rule changes |
 
 ## Features
 
 One document per feature, covering its invariants and internals. A few span more than one source
-folder — `palette.md` covers `Tinycast/Palette/`, `backup.md` covers two. Every one of them **must**
+folder — `palette.md` covers `Blitz/Palette/`, `backup.md` covers two. Every one of them **must**
 open with an `## Invariants` section; read it before changing anything in that area.
 
 [palette](features/palette.md) ·
@@ -31,6 +31,7 @@ open with an `## Invariants` section; read it before changing anything in that a
 [calendar](features/calendar.md) ·
 [camera](features/camera.md) ·
 [emoji](features/emoji.md) ·
+[dictionary](features/dictionary.md) ·
 [file search](features/file-search.md) ·
 [menu search](features/menu-search.md) ·
 [notes](features/notes.md) ·
@@ -41,9 +42,11 @@ open with an `## Invariants` section; read it before changing anything in that a
 [navigation](features/navigation.md) ·
 [window management](features/window-management.md) ·
 [window layouts](features/window-layouts.md) ·
+[rooms](features/window-rooms.md) ·
 [custom commands](features/custom-commands.md) ·
 [uninstall](features/uninstall.md) ·
 [backup](features/backup.md) ·
+[settings file](features/settings-file.md) ·
 [Raycast import](features/raycast-import.md) ·
 [Raycast extensions](features/extensions.md) ·
 [updates](features/updates.md) ·

@@ -9,8 +9,8 @@ action.
 A **custom Quick Action** is a name, a glyph and a prompt, run through the same provider. It takes a
 shortcut and a launcher row like any other.
 
-Quick Actions is the provider layer's second consumer. It shares nothing with AI Chat but the
-provider protocol and the connections behind it.
+Quick Actions is the provider layer's second consumer. It shares the provider connections and
+selectable Markdown renderer with AI Chat.
 
 ## Invariants
 
@@ -23,17 +23,18 @@ provider protocol and the connections behind it.
   grants keystroke delivery into other apps, so like `snippetsEnabled` it is excluded from settings
   backups — an import must never arm it.
 - **One funnel, whichever way an action started.** A shortcut and a launcher row both land on
-  `QuickActionCoordinator.run(_:)`, which reads `paletteCoordinator.targetApp` **before** hiding the
-  palette — once the palette is gone, the frontmost app is Tinycast, and the action would read its
-  own window. Hiding there rather than at each caller is what keeps the two paths identical.
+  `QuickActionCoordinator.run(_:)`, which captures the target **before** hiding the palette. An
+  external app remains the usual target; a selected passage in the Notes editor is captured directly
+  from its text view. Hiding there rather than at each caller keeps the two paths identical.
 - **Enabling is consent, and it is the only place Accessibility is requested.** The toggle confirms
   through `DialogController` first and then calls `Permissions.ensureAccessibility()`, the pattern
   `SnippetCoordinator.setSnippetsEnabled` established. Everything else — a shortcut press, a
   delivery — uses `isAccessibilityTrusted()` and degrades to a HUD.
-- **Tinycast is never an event target.** `QuickActionRunner.selection(in:using:)` refuses our own
+- **Blitz is never an event target.** `QuickActionRunner.selection(in:using:)` refuses our own
   bundle identifier, and `TextInjector.targetAcceptsInjection` refuses it again before every event post,
-  along with anything raised while Secure Event Input is up. A shortcut pressed with Settings
-  frontmost, or in a password field, does nothing and says so.
+  along with anything raised while Secure Event Input is up. Notes is the narrow in-process exception:
+  its own editor supplies and replaces a selected passage without Accessibility, clipboard or events.
+  A shortcut pressed with Settings frontmost, or in a password field, does nothing and says so.
 - **One run at a time.** Two overlapping runs would race for one selection, and the second would
   replace text the first had already changed. `QuickActionCoordinator` holds a single task and
   refuses a second while it lives; a generation token stops a task that finishes after being
@@ -51,8 +52,8 @@ provider protocol and the connections behind it.
   route: a vanished catalog model moves to its command's first model, like the shared route, but a
   removed connection or an unavailable command deletes the entry instead of borrowing chat's model.
   The action then follows the route its pane names, not one the reader never chose for it.
-- **Installed providers are ordinary routes.** The model picker reads the same live Codex, Claude and
-  OpenCode catalogs as AI Settings. Execution still goes through `AIProviderFactory`, so Quick Actions
+- **Installed providers are ordinary routes.** The model picker reads the same live Codex, Claude, Grok,
+  OpenCode and Cursor catalogs as AI Settings. Execution still goes through `AIProviderFactory`, so Quick Actions
   inherit the same installed login, tool restrictions and process cleanup without owning CLI logic.
 - **The model picker is the AI picker.** Both panes render `AIModelOption.groupedCatalog`, with the
   same provider sections, model labels and provider-supported reasoning levels. An installed-model
@@ -98,7 +99,7 @@ started.
 | Summarize | provider | panel, always | no |
 | a custom action | provider | panel | no |
 
-A custom action previews by default, switchable to Replace per row: Tinycast cannot know whether an
+A custom action previews by default, switchable to Replace per row: Blitz cannot know whether an
 arbitrary prompt transforms the text or answers a question about it, and only the second destroys what
 it replaces. No diff, for the same reason.
 
@@ -120,7 +121,7 @@ takes the choice with it.
 `VisibilityStore.allowsHotKey` because `quickActionsEnabled` is the master switch. The four keep their
 `CommandID`s, so no shortcut or preference key moved. A custom action binds
 `HotKeyAction.quickAction(id:)` under `hotkey.quickAction.<uuid>`, indexed in `boundQuickActionIDs` so
-`HotKeyManager.start` can prune a binding whose action was deleted while Tinycast was off.
+`HotKeyManager.start` can prune a binding whose action was deleted while Blitz was off.
 
 **The pane draws its own `AliasField`.** The four are named in `SettingsTab.ownedCommands`, so
 Settings → Commands no longer draws theirs. Without it, `deleteCustomQuickAction` would be clearing an
@@ -169,12 +170,12 @@ the panel. System Settings has no anchor for the sheet itself, so the last click
 
 ## The panel
 
-`QuickActionPanel` is Tinycast's **fourth borderless surface**, beside the dialog, the notes panel
-and the join preview. It takes the same recipe — `panelScrim`, then `VisualEffectView`, then the
+`QuickActionPanel` is Blitz's **fourth borderless surface**, beside the dialog, the notes panel
+and the join preview. It takes the same recipe — `panelScrim`, then `GlassEffectView`, then the
 clip — and sits at `.floating` like the join preview, so a failure report still lands on top of it.
-Its buttons are the system's own — `Button` with `.borderedProminent` on Replace — not a copy of
-`DialogButton`. A dialog asks a question and styles its answers; this panel presents a result, and
-standard controls are what a reader expects to act on one with.
+Its footer speaks the same button language as a dialog's — `ModalActionButtonStyle`, with Replace
+as the `.primary` role — so every borderless surface answers in one voice rather than dropping Aqua
+controls onto vibrancy.
 
 It could not have been built on `HUDPresenter`: `HUDPanel` sets `ignoresMouseEvents` and returns
 `false` from `canBecomeKey`, so it is click-through and hosts no buttons. Nor on `DialogAccessory`,
@@ -183,8 +184,9 @@ which is a closed two-case enum measured once at present time — a growing stre
 Non-activating, so the target app keeps its selection while the panel holds key. Keys go through
 `sendEvent`: `↵` replaces, `⌘C` copies, `esc` dismisses; click-away dismisses like every other
 borderless surface. The panel is anchored by its **top-left** and re-measured as the reply arrives —
-centring on every measure would walk it up the screen. `MarkdownView` and `MarkdownBlock.parse` are
-reused from chat; neither takes palette state.
+centring on every measure would walk it up the screen. Summarize uses chat's `ChatMarkdownText` and
+`MarkdownBlock.parse`, keeping its whole result selectable across paragraphs and headings, with the
+same math as chat; `midStream` is on while it runs, so an equation still arriving is held back.
 
 The body is a `ScrollView` with its height **set** rather than capped: a scroll view has no ideal
 height, so `NSHostingView.fittingSize` measures it as nothing and the body collapses to a slot. The
@@ -199,17 +201,20 @@ result already fits, since dimming text that needs no scrolling reads as a defec
 
 Three things here were settled by rendering them, not by reasoning:
 `scrollEdgeEffectStyle` draws nothing in this panel — it renders a material where a scroll view meets
-a safe area, and over `panelScrim` + `VisualEffectView` that composites to nothing. `safeAreaBar`
+a safe area, and over `panelScrim` + `GlassEffectView` that composites to nothing. `safeAreaBar`
 makes it visible but lays its bars *over* the content instead of insetting it, so text runs through
 the buttons and escapes the corner clip. And a ramp starting at the panel edge rather than below the
 bar leaves text about 60% visible behind the title.
 
-`TextDiffEngine` shows what changed when the output is the input, edited. Its LCS matrix is
+`TextDiffEngine` shows what changed when the output is the input, edited. Its traceback is
 quadratic, so past `maxTokens` a side it degrades to whole-text rather than asking for gigabytes.
-At the cap the matrix is the feature's largest allocation, so its cells are `UInt16` rather than
-`Int` — no LCS length can exceed `maxTokens`, and the six bytes an `Int` adds are 96 MB of zeroes.
+It keeps one rolling `UInt16` score row and one insert-or-delete bit per token pair — equality is
+re-checked during traceback — so the cap costs about 2 MB where a full score matrix cost 32 MB.
 
 ## Reading the selection
+
+When the target is the Notes editor, the coordinator captures its selected source text before any
+window changes focus. Empty and oversized selections use the same limits as external text.
 
 Two tiers, in order. `AccessibilityText.read` asks for `kAXSelectedTextAttribute`, then the
 text-marker range browsers use instead. `AXManualAccessibility` is set on the application element
@@ -232,7 +237,12 @@ selected"; otherwise the app told us nothing either way and says so.
 
 ## Delivery
 
-`TextInjector` — shared with Snippets and Quicklinks, and owned by `AppCore` — does the replacement.
+Notes replaces the captured range through its own TextKit edit path, with undo and autosave. If the
+note, source or selection changed while the result was generated, delivery declines and copies the
+result instead of replacing another passage.
+
+For external apps, `TextInjector` — shared with Snippets and Quicklinks, and owned by `AppCore` — does
+the replacement.
 `replaceSelection(with:in:)` takes the interactive path: no keyword to match, no generation to
 cancel, because a shortcut is an explicit gesture rather than an expansion the app decided to
 attempt. Its serial delivery queue is what stops two features fighting over the pasteboard lease.
@@ -241,7 +251,7 @@ The Accessibility tier replaces the live selection atomically, under the five-ru
 in [snippets.md](snippets.md#text-delivery-and-pasteboard-safety) — Quick Actions simply enter it with
 no keyword, so rule 2 never applies. The event tiers behind it type or paste over the selection, which
 every app treats as replacing it — but that is the target app's behaviour rather than something
-Tinycast asserts, so it is the part worth checking by hand.
+Blitz asserts, so it is the part worth checking by hand.
 
 **A replacement that never lands says so, and keeps the reply.** Every tier can decline, and a shortcut
 that quietly did nothing is indistinguishable from a shortcut that is not bound. `DeliveryCompletion`
@@ -253,12 +263,14 @@ failure handler, so automatic expansion stays silent as before.
 
 - Select text in Safari, Chrome, Brave, Slack, Mail, Notes, VS Code and Terminal, press Fix Grammar,
   and confirm the selection is **replaced** rather than appended to.
+- Select text in a Blitz floating note and run Fix Grammar by shortcut and launcher row. Confirm
+  replacement, Undo, and that changing the note before pressing Replace copies instead.
 - In a Chromium target, run one on a **short** selection whose result stays under 100 characters on
   one line: the whole result lands, not its first four characters.
 - Replace mode, with a slow route selected: the message pill says `Fixing Grammar…` with a blue
   spinner while the model works, and the result message takes its place.
 - Run one from the launcher (⌘Space → "Fix Grammar") with text selected behind it: the palette
-  closes and the selection in the displaced app is what gets acted on, not Tinycast's own field.
+  closes and the selection in the displaced app is what gets acted on, not Blitz's own field.
 - Uncheck an action's launcher checkbox: the row leaves ⌘Space, and its shortcut still works.
 - Add a custom action, bind a shortcut, run it from the shortcut and from ⌘Space, then rename it and
   confirm the shortcut, the Replace choice and the checkbox all survived.
@@ -266,7 +278,7 @@ failure handler, so automatic expansion stays silent as before.
   and ⌘Space, and the chord is free for something else to take.
 - Type "quick actions" in ⌘Space: the section lists the shipped four beside the custom ones.
 - Give Fix Grammar and a custom action an alias in the pane, then type each alias in ⌘Space.
-- Press a shortcut with Tinycast's own Settings window frontmost: refused, with a HUD.
+- Press a shortcut with Blitz's own Settings window frontmost: refused, with a HUD.
 - Press one in a password field: refused.
 - Summarize a long selection: the panel streams, grows without the title drifting, and scrolls past
   `quickActionPanelBody`.

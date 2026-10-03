@@ -1,6 +1,6 @@
-name: Tinycast
+name: Blitz
 options:
-  bundleIdPrefix: com.tinycast
+  bundleIdPrefix: de.fa-krug.blitz
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
@@ -8,14 +8,14 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Manual
     # Stable self-signed identity so macOS keeps the Accessibility grant across rebuilds.
     # Create it once — see docs/signing.md.
-    CODE_SIGN_IDENTITY: "Tinycast Self-Signed"
+    CODE_SIGN_IDENTITY: "Blitz Self-Signed"
     SWIFT_STRICT_CONCURRENCY: complete
   configs:
     Release:
@@ -28,16 +28,20 @@ settings:
       DEAD_CODE_STRIPPING: YES
 
 targets:
-  Tinycast:
+  Blitz:
     type: application
     platform: macOS
     sources:
-      - path: Tinycast
+      - path: Blitz
         # The helper's own sources: compiling them in would link Vision and PDFKit into the app,
         # which is the whole thing running recognition out of process avoids.
         excludes:
           - Features/Clipboard/Service/ClipboardTextExtractor.swift
           - Features/Clipboard/Service/ClipboardTextHelper.swift
+          - Resources/EmojiKeywords
+      # A folder reference keeps the packs in their own directory, which `EmojiIndex` lists.
+      - path: Blitz/Resources/EmojiKeywords
+        type: folder
       # The MIT mark's licence asks the notice to travel with the binary, not just the repo.
       - path: NOTICE.md
         buildPhase: resources
@@ -51,33 +55,31 @@ targets:
           subpath: Contents/Helpers
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tinycast.app
-        INFOPLIST_FILE: Tinycast/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Tinycast/Tinycast.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: tinycast
+        PRODUCT_BUNDLE_IDENTIFIER: de.fa-krug.blitz
+        INFOPLIST_FILE: Blitz/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Blitz/Blitz.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: blitz
         COMBINE_HIDPI_IMAGES: YES
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
       configs:
-        # Debug is its own channel, like beta/stable in release.yml: a distinct bundle id means a
-        # locally-run build gets its own prefs, caches, TCC grants and login item instead of
-        # inheriting — and corrupting — the installed app's state.
+        # Debug is its own channel: a distinct bundle id means a locally-run build gets its own
+        # prefs, caches, TCC grants and login item instead of inheriting the installed app's state.
         Debug:
-          PRODUCT_NAME: Tinycast Dev
-          PRODUCT_BUNDLE_IDENTIFIER: com.tinycast.app.dev
+          PRODUCT_NAME: Blitz Dev
+          PRODUCT_BUNDLE_IDENTIFIER: de.fa-krug.blitz.dev
 
   ClipboardTextHelper:
     type: tool
     platform: macOS
     sources:
-      - Tinycast/Features/Clipboard/Service/ClipboardTextExtractor.swift
-      - Tinycast/Features/Clipboard/Service/ClipboardTextHelper.swift
+      - Blitz/Features/Clipboard/Service/ClipboardTextExtractor.swift
+      - Blitz/Features/Clipboard/Service/ClipboardTextHelper.swift
     settings:
       base:
-        # release.yml passes PRODUCT_NAME on the xcodebuild line, which hits every target: without
-        # these two pinned, a channel build renames the executable `ClipboardTextWorker` looks for
-        # and gives the module a name with a space in it.
+        # Pinned so a PRODUCT_NAME override on the xcodebuild line, which hits every target, can't
+        # rename the executable `ClipboardTextWorker` looks for or put a space in the module name.
         EXECUTABLE_NAME: ClipboardTextHelper
         PRODUCT_MODULE_NAME: ClipboardTextHelper
         SKIP_INSTALL: YES

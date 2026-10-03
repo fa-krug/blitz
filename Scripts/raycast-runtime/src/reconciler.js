@@ -148,7 +148,7 @@ export class Surface {
       null,
       false,
       null,
-      "tinycast",
+      "blitz",
       (error) => this.onError(error),
       (error) => this.onError(error),
       (error) => this.onError(error),
@@ -175,10 +175,10 @@ export class Surface {
     this.onTree({ children });
   }
 
-  dispatch(handlerId, args) {
+  dispatch(handlerId, args, onComplete) {
     const handler = this.handlers.get(handlerId);
     if (!handler) return false;
-    handler(...args);
+    Promise.resolve(handler(...args)).then(() => onComplete?.(), (error) => this.onError(error));
     return true;
   }
 

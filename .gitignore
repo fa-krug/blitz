@@ -57,11 +57,6 @@ node_modules/
 *.swp
 *.tmp
 *.orig
-# Website (Next.js). `out/` is the static export, `.source/` is generated from
-# content/docs by fumadocs-mdx on install and build.
-website/.next/
-website/out/
-website/.source/
 
 # Real Raycast exports carry the author's clipboard history; the harness builds its own fixtures.
 *.rayconfig

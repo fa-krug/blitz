@@ -7,6 +7,7 @@ import {
   createElement as h,
   useCallback,
   useContext,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -124,8 +125,22 @@ export function setFieldCommandHandler(handler) {
 
 // ─── List ───────────────────────────────────────────────────────────
 
+/// `throttle` waits for typing to pause, so a slow reply for an older query can't land last.
+function useThrottledSearch(props) {
+  const latest = useRef();
+  const timer = useRef();
+  latest.current = props.onSearchTextChange;
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const delayed = useCallback((text) => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => latest.current?.(text), 300);
+  }, []);
+  return props.throttle && props.onSearchTextChange ? delayed : props.onSearchTextChange;
+}
+
 function List(props) {
   const rest = omit(props, ["children", "actions", "searchBarAccessory"]);
+  rest.onSearchTextChange = useThrottledSearch(props);
   // Raycast filters client-side unless the extension takes over the search text.
   if (rest.filtering === undefined) rest.filtering = props.onSearchTextChange === undefined;
   return h(
@@ -185,6 +200,7 @@ List.Dropdown = makeSearchDropdown("List.Dropdown");
 
 function Grid(props) {
   const rest = omit(props, ["children", "actions", "searchBarAccessory"]);
+  rest.onSearchTextChange = useThrottledSearch(props);
   if (rest.filtering === undefined) rest.filtering = props.onSearchTextChange === undefined;
   return h(
     "Grid",
@@ -263,13 +279,13 @@ function makeField(type, fallback) {
       {
         ...rest,
         value,
-        onTinycastChange: (next) => {
+        onBlitzChange: (next) => {
           const decoded = type === "Form.DatePicker" ? decodeDate(next) : next;
           setValue(decoded);
           props.onChange?.(decoded);
         },
-        onTinycastBlur: props.onBlur ? () => props.onBlur({ target: { value } }) : undefined,
-        onTinycastFocus: props.onFocus ? () => props.onFocus({ target: { value } }) : undefined,
+        onBlitzBlur: props.onBlur ? () => props.onBlur({ target: { value } }) : undefined,
+        onBlitzFocus: props.onFocus ? () => props.onFocus({ target: { value } }) : undefined,
       },
       props.children,
     );
@@ -471,7 +487,7 @@ Action.PickDate = function ActionPickDate(props) {
     style: props.style,
     // Rendered as a submenu-less action; Swift opens its own date picker and answers through onChange.
     pickDate: { type: props.type, min: props.min, max: props.max },
-    onTinycastChange: (value) => props.onChange?.(decodeDate(value)),
+    onBlitzChange: (value) => props.onChange?.(decodeDate(value)),
   });
 };
 Action.PickDate.Type = undefined; // filled in from the generated enums by index.js
@@ -483,12 +499,13 @@ Action.InstallMCPServer = convenience("Action.InstallMCPServer", (props) => ({
   onAction: () => effects.unsupported("Action.InstallMCPServer"),
 }));
 
-// ─── Menu bar (not rendered — commands of mode "menu-bar" are reported unsupported) ──
+// ─── Menu bar ───────────────────────────────────────────────────────
 
 function MenuBarExtra(props) {
   return h("MenuBarExtra", omit(props, ["children"]), props.children);
 }
-MenuBarExtra.Item = Section("MenuBarExtra.Item");
+MenuBarExtra.Item = (props) =>
+  h("MenuBarExtra.Item", omit(props, ["children", "alternate"]), slot("alternate", props.alternate));
 MenuBarExtra.Submenu = Section("MenuBarExtra.Submenu");
 MenuBarExtra.Section = Section("MenuBarExtra.Section");
 MenuBarExtra.Separator = Section("MenuBarExtra.Separator");

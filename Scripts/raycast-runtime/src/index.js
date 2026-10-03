@@ -1,4 +1,4 @@
-// Entry point. Installs the polyfills and the module registry, then exposes `__tinycast` — the only
+// Entry point. Installs the polyfills and the module registry, then exposes `__blitz` — the only
 // thing Swift calls into.
 
 import "./polyfills.js";
@@ -15,6 +15,7 @@ import { NavigationRoot, setFieldCommandHandler } from "./api/components.js";
 import { Surface } from "./reconciler.js";
 import { raycastApi } from "./api/index.js";
 import { configureSystem, runToastAction } from "./api/system.js";
+import { WebSocket } from "./websocket.js";
 
 const reactModule = {
   ...React,
@@ -35,12 +36,13 @@ defineModule("@raycast/api", raycastApi);
 // react-dom only appears in bundles defensively; make the import resolve and the calls explain.
 defineModule("react-dom", {
   render: () => {
-    throw new Error("react-dom is not available — Tinycast renders extensions natively.");
+    throw new Error("react-dom is not available — Blitz renders extensions natively.");
   },
   createPortal: (children) => children,
   flushSync: (fn) => fn?.(),
   version: React.version,
 });
+globalThis.WebSocket = WebSocket;
 
 const sessions = new Map();
 
@@ -84,11 +86,11 @@ class Session {
 
 
 const hostCalls = {
-  render: (sessionId, json) => globalThis.__tinycastHost.render(sessionId, json),
-  failed: (sessionId, message) => globalThis.__tinycastHost.failed(sessionId, message),
+  render: (sessionId, json) => globalThis.__blitzHost.render(sessionId, json),
+  failed: (sessionId, message) => globalThis.__blitzHost.failed(sessionId, message),
   navigationDepthChanged: (sessionId, depth) =>
-    globalThis.__tinycastHost.navigationDepthChanged(sessionId, String(depth)),
-  finished: (sessionId) => globalThis.__tinycastHost.finished(sessionId),
+    globalThis.__blitzHost.navigationDepthChanged(sessionId, String(depth)),
+  finished: (sessionId) => globalThis.__blitzHost.finished(sessionId),
 };
 
 setUncaughtHandler((error) => {
@@ -103,10 +105,10 @@ setUncaughtHandler((error) => {
 });
 
 setFieldCommandHandler((command, fieldId) => {
-  globalThis.__tinycastHost.fieldCommand(String(command), String(fieldId ?? ""));
+  globalThis.__blitzHost.fieldCommand(String(command), String(fieldId ?? ""));
 });
 
-globalThis.__tinycast = {
+globalThis.__blitz = {
   /// Called once, before any command runs.
   boot(configJson) {
     const config = JSON.parse(configJson);
@@ -115,8 +117,7 @@ globalThis.__tinycast = {
     return "ok";
   },
 
-  /// Load and start one command. `mode` is "view" or "no-view"; a view command's default export is a
-  /// component, a no-view command's is an async function.
+  // Menu-bar and view commands mount components; no-view commands await their default export.
   start(sessionId, code, filename, dirname, mode, contextJson) {
     const context = JSON.parse(contextJson || "{}");
     configureSystem(context);
@@ -131,7 +132,7 @@ globalThis.__tinycast = {
     try {
       const exports = evaluateCommonJS(code, filename, dirname);
       const entry = exports?.default ?? exports;
-      if (mode === "view") {
+      if (mode !== "no-view") {
         if (typeof entry !== "function") {
           throw new Error("A view command must default-export a React component.");
         }
@@ -152,12 +153,16 @@ globalThis.__tinycast = {
   },
 
   /// Route a UI event back to the callback it came from.
-  dispatch(sessionId, handlerId, argsJson) {
+  dispatch(sessionId, handlerId, argsJson, completesSession = false) {
     const session = sessions.get(sessionId);
     if (!session?.surface) return "0";
     try {
       const args = JSON.parse(argsJson || "[]").map(reviveArg);
-      return session.surface.dispatch(handlerId, args) ? "1" : "0";
+      const dispatched = session.surface.dispatch(
+        handlerId, args, completesSession ? () => hostCalls.finished(sessionId) : undefined,
+      );
+      if (!dispatched && completesSession) hostCalls.finished(sessionId);
+      return dispatched ? "1" : "0";
     } catch (error) {
       session.fail(error);
       return "0";

@@ -12,8 +12,8 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const ANCHORS = "Tinycast/Features/Settings/SettingsAnchor.swift";
-const CATALOG = "Tinycast/Features/Settings/SettingsSearchCatalog.swift";
+const ANCHORS = "Blitz/Features/Settings/SettingsAnchor.swift";
+const CATALOG = "Blitz/Features/Settings/SettingsSearchCatalog.swift";
 
 function swiftSources(dir, found = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -26,7 +26,7 @@ function swiftSources(dir, found = []) {
 
 const anchorSource = fs.readFileSync(path.join(ROOT, ANCHORS), "utf8");
 const catalog = fs.readFileSync(path.join(ROOT, CATALOG), "utf8");
-const source = swiftSources(path.join(ROOT, "Tinycast"))
+const source = swiftSources(path.join(ROOT, "Blitz"))
   .map((f) => fs.readFileSync(f, "utf8"))
   .join("\n");
 
@@ -55,6 +55,7 @@ for (const m of catalog.matchAll(/\.init\(\s*\.(\w+),\s*"((?:[^"\\]|\\.)*)"/g)) 
   const quoted = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const marked =
     source.includes(`SettingsRowTitle(.${anchor}, "${title}")`) ||
+    new RegExp(`SettingsFeatureToggleLabel\\(\\s*anchor: \\.${anchor}, title: "${quoted}"`).test(source) ||
     // A `SettingsRow` renders the pill from its own title.
     new RegExp(`SettingsRow\\(\\s*title: "${quoted}",[\\s\\S]*?anchor: \\.${anchor}`).test(source) ||
     // A feature pane's master switch, rendered by `FeatureSwitchSection`.

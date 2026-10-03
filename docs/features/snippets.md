@@ -7,8 +7,8 @@ another app.
 ## Invariants
 
 - **Snippets are channel-isolated and path-identified.** They persist under
-  `~/Library/Application Support/<bundle-id>/Snippets/`; `StoredSnippet.ID` is the standardized source
-  path, and an external rename is a delete plus a create.
+  `~/Library/Application Support/<bundle-id>/Snippets/` unless the user chooses a folder;
+  `StoredSnippet.ID` is the standardized source path, and an external rename is a delete plus a create.
 - **The feature ships off, and its enable switch doubles as keyword-expansion consent.**
   `snippetsEnabled` is excluded from settings backups, and Accessibility — the only permission it needs,
   since the listen-only tap needs nothing more — may be requested **only** from that explicit Settings
@@ -33,12 +33,18 @@ Each app channel owns a separate library:
 ~/Library/Application Support/<bundle-id>/Snippets/
 ```
 
-Debug (`com.tinycast.app.dev`), beta, and stable therefore never share snippet files. The storage
+**Snippets Folder** in the Snippets pane, or `snippets.folder` in the [settings file](settings-file.md),
+points the library at another folder, absolute or under `~/`, as it is: nothing moves out of the old one.
+`AppPaths.contentFolder` resolves it once, so a folder that is a symlink lists like any other, and
+`SnippetsStore.relocate` stops, swaps and reloads. The folder is excluded from backups, since it names
+a place on this Mac.
+
+Debug (`de.fa-krug.blitz.dev`), beta, and stable therefore never share snippet files. The storage
 root and bundle identifier are injectable in the standalone harness so tests cannot touch a real
 library.
 
 A stored snippet's identity is the standardized path of its Markdown file. Changing `name` or other
-frontmatter keeps the same identity. Renaming a file outside Tinycast appears as deletion of the old
+frontmatter keeps the same identity. Renaming a file outside Blitz appears as deletion of the old
 record plus creation of a new one. Saving always updates the existing path; creating snippets with
 the same name uses distinct filename suffixes.
 
@@ -64,10 +70,10 @@ sinks re-project on every change.
 ## Importing from Raycast
 
 The encrypted `.rayconfig` flow in **Settings → Backup** can import Raycast's built-in snippets as
-an independently selectable category. Tinycast reads `title`, `text` and the optional `keyword` from
+an independently selectable category. Blitz reads `title`, `text` and the optional `keyword` from
 the export's `snippets.snippets` collection. Invalid entries are skipped; valid entries are added in
 source order without overwriting the existing library. Duplicate names receive the same filename
-suffixes as snippets created in Tinycast, and duplicate keywords are preserved.
+suffixes as snippets created in Blitz, and duplicate keywords are preserved.
 
 Imported snippets are enabled and launcher-visible, with their confirmation off. Importing
 never enables automatic keyword expansion. A failure writing the snippet files is reported in the
@@ -97,7 +103,7 @@ defaults to `true`; `show_confirmation` defaults to `false`.
 String values must use double quotes. The codec escapes and decodes `\\`, `\"`, `\n`, `\r`, and
 `\t`; unsupported escapes, unquoted strings, duplicate or unknown keys, non-exact delimiters, and
 booleans other than lowercase `true` or `false` are rejected. Keys are matched case-insensitively;
-there are no aliases, so a key Tinycast does not know names itself in the error.
+there are no aliases, so a key Blitz does not know names itself in the error.
 
 Everything after the closing delimiter's line terminator is the body. Leading and trailing blank
 lines, CR/LF choices, Unicode, and later lines containing `---` are preserved exactly when parsing.
@@ -144,7 +150,7 @@ automatic formatting the _result_ asks for. A snippet asks for none, so `raw` is
 quicklink expanding into a URL percent-encodes every value, and `raw` is how a template opts one out.
 `{cursor}` and snippet references are structural, so they take no modifiers.
 
-A token Tinycast cannot parse — an unknown name, an unknown modifier, a duplicated or unsupported
+A token Blitz cannot parse — an unknown name, an unknown modifier, a duplicated or unsupported
 parameter, an unterminated quote — is left in the text exactly as written rather than silently
 dropped. `{browser-tab}` and `{calculator}` are not supported: the first needs a browser extension,
 and the second has no defined input inside a snippet.
@@ -195,7 +201,7 @@ installs or repairs the tap when they become available, and tears it down after 
 disabling the setting. `stop()` is authoritative and clears the buffer. The buffer also resets on app
 or session changes, Secure Event Input, navigation and modifier shortcuts, and 15 seconds of
 inactivity. It is capped at 256 characters. Keywords are matched case-insensitively by longest suffix;
-duplicates resolve by file identity. Tinycast-tagged synthetic events are ignored.
+duplicates resolve by file identity. Blitz-tagged synthetic events are ignored.
 
 A match is delivered on a later main-actor turn, never inside the tap callback, so the triggering
 keystroke reaches the target before the argument dialog can take focus. The target is still
@@ -220,7 +226,7 @@ a library being browsed rather than a query racing apps and commands for a rank.
 The preview shows the **raw template**, never an expansion. Expanding per selection would capture the
 clipboard, read the target's selected text and burn a `{uuid}` on every arrow key, and a snippet
 carrying `{argument}` would raise its prompt just to draw a pane. Beside it sits the name, keyword,
-file name and character count.
+shortcut, file name and character count.
 
 ↵ and the ⌘K menu's **Paste Snippet** both go through `SnippetCoordinator.expandSnippetFromPalette`,
 which reads `previousApp` before hiding the panel and then calls the same `expandSnippet` funnel a
@@ -231,6 +237,19 @@ through `AppCore.pendingSnippetEdit`, and **Show in Finder**.
 
 `Create Snippet` is a launcher command as well as a menu row because the palette swallows ⌘K when a
 screen has no rows: an empty library would otherwise open a browser with nothing to do.
+
+## Shortcuts
+
+Each snippet can hold a global shortcut, recorded on its row in **Settings → Snippets**, and shown
+as keycaps on its launcher and browser rows. `SnippetCoordinator.expandSnippetFromHotKey` refuses
+while the feature or the snippet is off, then calls the same `expandSnippet` funnel a launcher row
+does. Its target is `InjectionTarget.current()`, or what the palette covered while the palette is
+open.
+
+**The shortcut's own modifiers are still held when delivery starts.** A keyboard event built from
+`.combinedSessionState` inherits them, so a Unicode keystroke clears its flags like every other
+synthetic event, or ⌥⇧V would type each character as an ⌥⇧ chord. Persistence and the sweep of
+deleted files are in [hotkeys.md](hotkeys.md#persistence).
 
 ## Confirmation HUD
 
@@ -245,10 +264,10 @@ success/info feedback uses it too (see [launcher.md](launcher.md#system-actions)
 trailing glyph, after the message, carries the tint. Its capsule uses `Theme.frosted(in:)`, the same
 whitish-tinted glass as the rest of the app's floating controls (see [ui.md](../ui.md#liquid-glass)).
 
-After either launcher or keyword delivery is confirmed, Tinycast may show a brief non-activating,
+After either launcher or keyword delivery is confirmed, Blitz may show a brief non-activating,
 click-through overlay with the snippet name. The AppCore-owned controller replaces and restarts a
 visible HUD on repeated deliveries, follows the existing cursor-screen preference, and never prompts
-for permissions or activates Tinycast. Failed, cancelled, rejected, or prompt-cancelled expansions do
+for permissions or activates Blitz. Failed, cancelled, rejected, or prompt-cancelled expansions do
 not report completion and therefore cannot show it.
 
 ## Text delivery and pasteboard safety
@@ -309,15 +328,15 @@ splits the text into four-unit keystrokes on scalar boundaries, because a lone s
 text and a scalar never exceeds four units on its own. The chunks post through the same spaced,
 re-gated loop the deletions use, so a target that goes away mid-word stops the rest.
 
-Longer or multiline fallback text uses a temporary paste. Tinycast snapshots every item, type and data
+Longer or multiline fallback text uses a temporary paste. Blitz snapshots every item, type and data
 payload, then **lends a board holding nothing but the expansion** — one item carrying the plain text
-and Tinycast's own marker type — and restores by rewriting the snapshot whole.
+and Blitz's own marker type — and restores by rewriting the snapshot whole.
 
 **The loan carries no other flavour of the old clipboard.** Keeping the original item's shape and
 swapping only its `.string` would leave `public.html`, `public.rtf` and the rest describing the
 *previous* copy, and a rich-text editor prefers those: ChatGPT's ProseMirror composer takes Chromium's
 `text/html` over its `text/plain`, so a snippet pasted over an HTML-bearing clipboard inserted the
-previous copy instead. A representation Tinycast cannot rewrite to mean the expansion is one it must
+previous copy instead. A representation Blitz cannot rewrite to mean the expansion is one it must
 not lend, and the whitelist of text-bearing UTIs it *could* rewrite would never be complete. Rewriting
 the snapshot therefore clears before a fallible write — the risk a same-shape loan bought off — which
 is the trade a correct paste is worth, and the items are built from the in-memory snapshot before the
@@ -326,7 +345,7 @@ clear so the write has nothing left to fail on.
 An empty or image-only clipboard lends the same single item; declining the loan there would have sent
 a long multiline expansion down the keystroke path a character at a time. The pasteboard change count
 is checked before restoration, so a newer copy is never overwritten, and the clipboard poller
-synchronizes to Tinycast's ownership changes so temporary or restored text is not added as new history.
+synchronizes to Blitz's ownership changes so temporary or restored text is not added as new history.
 Because the marker type lives only on the lent item, a restored clipboard carries none of it, and the
 poller keeps seeing the user's own copy.
 
@@ -337,11 +356,11 @@ that confirmation or delay and after pasteboard restoration. Delivery completion
 once only after the Accessibility replacement or event fallback (including requested cursor movement)
 finishes successfully. Disabling automatic expansion or
 terminating the app cancels pending delivery and deferred cursor movement; termination also completes
-any pasteboard restoration still owned by Tinycast.
+any pasteboard restoration still owned by Blitz.
 
 **Rule 5, and the keystroke that outruns it.** An automatic expansion is speculative, so the reader's
 next real keystroke or click cancels whatever is still in flight — the listener reports every
-non-ignored input to `cancelAutomaticExpansion`, and Tinycast's own tagged synthetic events classify
+non-ignored input to `cancelAutomaticExpansion`, and Blitz's own tagged synthetic events classify
 as `.ignored`, so a fallback never cancels itself. The argument prompt is the one exception: while
 `isPromptingForArguments` is set, the listener neither matches nor reports activity, because typing
 into the prompt and clicking **Expand** is the reader finishing the expansion, not abandoning it.
@@ -362,7 +381,7 @@ for one channel share a serialized owner, and each mutation uses `NSFileCoordina
 revalidating the path and source revision immediately beside the atomic write or removal. Cooperative
 writers therefore produce a conflict instead of being overwritten. macOS path-based APIs cannot
 provide a true compare-and-swap against an uncooperative process that writes in the final interval
-between revalidation and mutation, so Tinycast does not claim that impossible guarantee.
+between revalidation and mutation, so Blitz does not claim that impossible guarantee.
 
 An editor open over a file that changed underneath it does not reconcile silently: the save is
 rejected with the conflict above, and reopening the snippet shows what is now on disk.

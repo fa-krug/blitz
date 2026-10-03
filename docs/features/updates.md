@@ -1,36 +1,31 @@
 # Updates
 
-Tinycast checks GitHub Releases once a day, offers the newest release for its own channel in a native
-window with its release notes, installs it and relaunches. There is no Sparkle and no appcast: the
-release feed the website already reads is the feed the app reads.
+Blitz checks this repo's GitHub Releases once a day, offers the newest release in a native window
+with its release notes, installs it and relaunches. There is no Sparkle and no appcast: the public
+release list is the feed.
 
 ## Invariants
 
-- **Tinycast installs its own updates, and Homebrew stays out of the way.** Both casks declare
-  `auto_updates true`, which is Homebrew's own flag for an app that manages its own version. `brew
-  update && brew upgrade` therefore skips Tinycast entirely — it is never reported outdated, never
-  re-downloaded, and a self-updated copy is never trashed or rolled back. `brew install`, `brew
-  uninstall` and `brew list` keep working unchanged.
 - **The archive is a zip, never the DMG.** A zip expands with `ditto`; a DMG would have to be mounted,
   which means a volume, a Spotlight handle and a detach that can fail. A release published without a
   zip is not installable and is not offered.
-- **The zip is chosen by architecture.** A stable release carries a thin arm64 zip and a
-  `-Universal-` one. Intel takes the universal zip and is offered *nothing* if it is missing, since a
-  thin build would install and then refuse to launch; Apple silicon prefers the thin zip and falls
-  back to universal.
-- **Nobody ever runs `xattr`.** An archive Tinycast fetched itself is not quarantined — macOS sets
+- **The zip is chosen by architecture.** A release carries one `-Universal-` zip, which every Mac
+  takes. Intel is offered *nothing* without one, since a thin build would install and then refuse to
+  launch; Apple silicon would prefer a thin zip if a release ever carried one.
+- **Nobody runs `xattr` after the first install.** An archive Blitz fetched itself is not quarantined — macOS sets
   that flag for sandboxed downloaders and for apps that opt in with `LSFileQuarantineEnabled`, and
-  Tinycast is neither. `Quarantine` checks anyway through `getxattr`/`removexattr` rather than the
+  Blitz is neither. `Quarantine` checks anyway through `getxattr`/`removexattr` rather than the
   `xattr` tool, and an app that still carries the flag is refused rather than installed.
 - **The signature is the only integrity guarantee.** A downloaded bundle is trusted when its seal
   validates, nested helper included, *and* it either satisfies the Developer ID requirement pinned in
   `BundleSignature` or carries the byte-identical leaf certificate the running app does. The
-  requirement names the team, so a certificate renewal strands nobody; the leaf match is the path a
-  copy installed before the Developer ID switch has, and it goes away once none is left. `notarized`
+  requirement names team `HS26J3YA63`, so a certificate renewal strands nobody. Releases are
+  self-signed for now, so today every update passes through the leaf match; the requirement is
+  already in place so that a later switch to Developer ID reaches every installed copy. `notarized`
   is deliberately not in the requirement — it resolves the ticket through `syspolicyd` or the
   network, so an offline Mac would refuse a bundle the chain already proves is ours.
 - **A build only ever updates within its own channel.** The channels are separate bundle ids installed
-  side by side; crossing would mean installing a different app. `com.tinycast.app.dev` never updates
+  side by side; crossing would mean installing a different app. `de.fa-krug.blitz.dev` never updates
   at all, and does not advertise the command.
 - **Nothing is installed unless every check passes.** Bundle id, version and signature are all checked
   on the expanded copy before `replaceItemAt` runs, and the running app survives any failure untouched.
@@ -48,11 +43,10 @@ release feed the website already reads is the feed the app reads.
   Readiness is asked again at the click.
 - **Nothing about updates is persisted in `AppSettings`.** The feature owns one cache file, so no
   `AppSettingsKey` and no `SettingsBackupCoverage` entry exist for it.
-- **The window shows the changelog and nothing else.** CI writes install instructions below
-  `<!-- tinycast:install -->`, and `ReleaseNotes.summary` — the single reader of that marker, called
-  where the feed is parsed so the cache holds the cut text too — drops them. An app that installs its
-  own updates has no use for a Homebrew command, and a body published before the marker existed has
-  none, so it comes back whole.
+- **The window shows the changelog and nothing else.** A body may carry install instructions below
+  `<!-- blitz:install -->`, and `ReleaseNotes.summary` — the single reader of that marker, called
+  where the feed is parsed so the cache holds the cut text too — drops them. CI publishes GitHub's
+  generated changelog without the marker, so it comes back whole.
 - **The notes are laid out by `ReleaseNotesView`, which is this feature's own.** `AttributedString`
   parses inline styling only; headings and bullets are placed by hand or they arrive as literal `##`
   and `*`. `ExtensionMarkdownView` does the same job and is deliberately not reused — an extension's
@@ -68,19 +62,21 @@ release feed the website already reads is the feed the app reads.
 
 | Bundle id | Channel | Takes |
 | --- | --- | --- |
-| `com.tinycast.app` | `.stable` | releases |
-| `com.tinycast.app.beta` | `.beta` | prereleases |
+| `de.fa-krug.blitz` | `.stable` | releases |
+| `de.fa-krug.blitz.beta` | `.beta` | prereleases |
 | anything else | `.development` | nothing |
+
+`release.yml` publishes stable releases only, so no beta build exists today; the row is the
+updater's, inherited from Tinycast, and costs nothing until one does.
 
 `AppVersion` parses `MAJOR.MINOR.PATCH` and `MAJOR.MINOR.PATCH-beta.N` with semver precedence: a
 prerelease sorts below the release it leads to, and `beta.10` above `beta.9`. Everything else parses
-to nil, which is deliberate — the repo also publishes `v0.9.7-sequoia` for the macOS 15 cask, and
-rejecting the tag is what keeps a beta install from drifting onto the Sequoia build. A release whose
-tag disagrees with its `prerelease` flag is treated as mis-published and skipped.
+to nil, so an off-shape tag can never be offered as an update. A release whose tag disagrees with
+its `prerelease` flag is treated as mis-published and skipped.
 
-The Intel build is *not* a channel. It shares the stable tag, version, bundle id and signature, so it
-resolves to `.stable` like any other; `ReleaseArchitecture` picks its asset, and nothing about
-identity changes. That is why it needed none of the machinery the Sequoia channel did.
+Intel is *not* a channel. Every release is one universal build under the stable tag, version, bundle
+id and signature, so an Intel Mac resolves to `.stable` like any other; `ReleaseArchitecture` picks
+the asset, and nothing about identity changes.
 
 ## Checking
 
@@ -106,7 +102,7 @@ One route, whatever the install came from:
 1. Stream the zip into `~/Library/Caches/<bundle-id>/Updates/`, with real byte progress and a Cancel
    that actually aborts the transfer.
 2. `ditto -x -k` it into a staging folder, and take whatever `.app` lands there — the bundle is named
-   for its channel, so it is `Tinycast Beta.app` on beta.
+   for its channel, so it is `Blitz Beta.app` on beta.
 3. Check quarantine natively; clear it if somehow present, and refuse the update if it survives.
 4. Verify the bundle id, the version, and that the code signature is valid and proves the bundle is
    ours — by the pinned Developer ID requirement, or by the running app's own leaf certificate.
@@ -117,27 +113,19 @@ One route, whatever the install came from:
    `open` on a bundle id that is still running would only re-activate the instance on its way out.
 
 Nothing here touches `~/Library/Preferences`, `~/Library/Caches` or `Application Support`, so no
-setting, clipboard entry, note or snippet is affected by an update, by `brew upgrade`, or by both.
+setting, clipboard entry, note or snippet is affected by an update.
 
 ## Releasing into it
 
-`.github/workflows/release.yml` publishes two assets from one build: the DMG people download by hand
-and the cask installs, and `Tinycast-<version>.zip` for the updater. A stable run adds a
-`Tinycast-Universal-<version>` pair from its `universal` job, uploaded second so the thin zip stays
-first in the asset list — builds predating architecture-aware selection take whichever comes first.
-The zip is made with
+`.github/workflows/release.yml` runs on every push to `main` and publishes one asset,
+`Blitz-Universal-<version>.zip`, under the tag `v<version>`. The version is `MAJOR.MINOR` from
+`project.yml` with the workflow's run number as the patch, so every release is strictly newer than
+the last and is never a prerelease. The zip is made with
 
 ```sh
 ditto -c -k --keepParent --sequesterRsrc "$APP" "dist/$ZIP_FILE"
 ```
 
 which is the only zip that leaves the code signature verifiable — plain `zip` drops symlinks and
-breaks the seal, and the signature check above would then reject every update.
-
-The body it publishes is composed by `Scripts/release-notes.sh`: GitHub's generated changelog first,
-then `<!-- tinycast:install -->`, then the install text. Anything a release wants the update window to
-show has to go above that marker — see [release.md](../release.md#release-notes).
-
-**The casks must declare `auto_updates true`** in `abue-ammar/homebrew-tinycast`. Without it Homebrew
-compares its Caskroom receipt against the cask version, sees a self-updated app as outdated forever,
-and re-installs over it on the next `brew upgrade`.
+breaks the seal, and the signature check above would then reject every update. The release body is
+GitHub's generated changelog. See [release.md](../release.md).

@@ -26,6 +26,7 @@ struct ExtensionTests {
         var huds: [String] = []
         var oauthTokens: [String: String] = [:]
         private let fetcher = ExtensionFetcher()
+        private let sockets = ExtensionWebSocketBridge()
 
         func perform(api: String, method: String, arguments: [RenderValue]) async throws -> String {
             calls.append("\(api).\(method)")
@@ -33,8 +34,18 @@ struct ExtensionTests {
                 return ExtensionRuntime.jsonString(
                     from: try await ExtensionAsyncProcess.wait(arguments.first))
             }
+            if api == "proc", method == "read" {
+                return ExtensionRuntime.jsonString(from: try await ExtensionAsyncProcess.read(arguments))
+            }
             if api == "fetch" {
                 return ExtensionRuntime.jsonString(from: try await fetcher.request(arguments.first))
+            }
+            if api == "websocket" {
+                return ExtensionRuntime.jsonString(
+                    from: try await sockets.perform(method: method, arguments: arguments))
+            }
+            if api == "dns" {
+                return ExtensionRuntime.jsonString(from: await ExtensionNameResolver.resolve(arguments.first))
             }
             switch "\(api).\(method)" {
             case "feedback.showToast":
@@ -71,6 +82,10 @@ struct ExtensionTests {
                 return ""
             }
         }
+
+        func sessionEnded() {
+            sockets.closeAll()
+        }
     }
 
     @MainActor
@@ -97,10 +112,10 @@ struct ExtensionTests {
     static func runtimeURL() -> URL {
         let candidates = [
             URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                .appendingPathComponent("Tinycast/Resources/RaycastRuntime.generated.js"),
+                .appendingPathComponent("Blitz/Resources/RaycastRuntime.generated.js"),
             URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent()
-                .appendingPathComponent("Tinycast/Resources/RaycastRuntime.generated.js")
+                .appendingPathComponent("Blitz/Resources/RaycastRuntime.generated.js")
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) } ?? candidates[0]
     }
@@ -184,7 +199,11 @@ struct ExtensionTests {
         await runtimeChecks()
         await searchAccessoryRuntimeChecks()
         await nodeContractChecks()
+        await webAssemblyChecks()
         await asyncComponentChecks()
+        await menuBarRuntimeChecks()
+        await menuBarHostChecks()
+        await ExtensionFetchTests.runChecks()
 
         print("\n\(passes) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
@@ -240,6 +259,59 @@ struct ExtensionTests {
                 && loadAverages?.allSatisfy { $0.doubleValue.isFinite && $0.doubleValue >= 0 } == true)
     }
 
+    @MainActor
+    static func menuBarRuntimeChecks() async {
+        for (value, expected) in [("10m", 600.0), ("1h", 3600), ("1d", 86400), ("30s", 30), ("1s", 10)] {
+            check("interval \(value)", ExtensionRefreshPolicy.parse(value, floor: 10) == expected)
+        }
+        for value in ["", "0m", "-1m", "NaNm", "Infinityh", "1e308d", "5x"] {
+            check("reject interval \(value)", ExtensionRefreshPolicy.parse(value, floor: 10) == nil)
+        }
+        let (runtime, _, recorder) = makeRuntime()
+        defer { runtime.shutdown() }
+        try? await runtime.boot(config: .current(supportDirectory: FileManager.default.temporaryDirectory))
+        var context = launchContext(mode: .menuBar)
+        context.launchType = .background
+        context.launchContext = ["source": .string("fixture")]
+        let code = #"""
+            const React = require("react");
+            const { MenuBarExtra, environment } = require("@raycast/api");
+            module.exports.default = function(props) {
+              const [title, setTitle] = React.useState(props.launchType + "|" + environment.launchType);
+              return React.createElement(MenuBarExtra, { title, tooltip: props.launchContext.source },
+                React.createElement(MenuBarExtra.Item, { title: "Refresh", onAction: async (event) => {
+                  await new Promise(resolve => setTimeout(resolve, 40));
+                  setTitle(event.type);
+                }, alternate: React.createElement(MenuBarExtra.Item, { title: "Alternate", onAction() {} }) }));
+            };
+            """#
+        await runtime.start(
+            session: "bar", code: code, file: URL(fileURLWithPath: "/tmp/menu.js"),
+            mode: .menuBar, context: context)
+        await settle()
+        let root = recorder.trees.last?.activeRoot
+        check("menu-bar renders in JavaScriptCore", root?.type == "MenuBarExtra", recorder.failures.joined())
+        check(
+            "background launch reaches props and environment",
+            root?.string("title") == "background|background")
+        check("launch context reaches props", root?.string("tooltip") == "fixture")
+        check(
+            "alternate survives serialization",
+            root?.children.first?.node("alternate")?.handler("onAction") != nil)
+        if let handler = root?.children.first?.handler("onAction") {
+            await runtime.dispatch(
+                session: "bar", handler: handler, payload: #"[{"type":"right-click"}]"#,
+                completesSession: true)
+            check("menu action does not finish before its promise", !recorder.finished)
+            await settle()
+            check("menu action finishes after its promise", recorder.finished)
+            check(
+                "menu action forwards event",
+                recorder.trees.last?.activeRoot?.string("title") == "right-click")
+        }
+        await runtime.stop(session: "bar")
+    }
+
     static func manifestChecks() {
         let json: [String: Any] = [
             "name": "demo", "title": "Demo", "description": "d", "author": "a",
@@ -255,7 +327,12 @@ struct ExtensionTests {
                 [
                     "name": "mode", "type": "dropdown", "default": "b",
                     "data": [["title": "A", "value": "a"], ["title": "B", "value": "b"]]
-                ]
+                ],
+                [
+                    "name": "editor", "type": "appPicker",
+                    "default": "/System/Applications/Utilities/Terminal.app"
+                ],
+                ["name": "browser", "type": "appPicker"]
             ],
             "commands": [
                 ["name": "search", "title": "Search", "mode": "view", "keywords": ["find"]],
@@ -277,8 +354,7 @@ struct ExtensionTests {
         check("commands", manifest.commands.count == 4, "\(manifest.commands.count)")
         check("view mode", manifest.commands[0].mode == .view)
         check("no-view mode", manifest.commands[1].mode == .noView)
-        check("menu-bar is unsupported", manifest.commands[2].mode.isSupported == false)
-        check("menu-bar explains itself", manifest.commands[2].mode.unsupportedReason != nil)
+        check("menu-bar mode", manifest.commands[2].mode == .menuBar)
         // Extensions branch on `environment.appearance`, so the host must not report a fixed one.
         check(
             "a dark host reports dark",
@@ -312,7 +388,17 @@ struct ExtensionTests {
         check("dropdown options", prefs["mode"]?.options.count == 2)
         check("dropdown default", prefs["mode"]?.effectiveDefault == .string("b"))
 
-        // A manifest with no commands isn't an extension Tinycast can run.
+        // Raycast dereferences `preference.name` unconditionally, so a bare path crashes the command.
+        let picked = prefs["editor"]?.runtimeValue(nil)?.jsonValue as? [String: Any]
+        check(
+            "an app picker resolves to an Application", picked?["name"] as? String == "Terminal",
+            String(describing: picked))
+        check(
+            "an app picker carries its bundle id",
+            picked?["bundleId"] as? String == "com.apple.Terminal", String(describing: picked))
+        check("an unset app picker is absent", prefs["browser"]?.runtimeValue(nil) == nil)
+
+        // A manifest with no commands isn't an extension Blitz can run.
         check("rejects a manifest with no commands", ExtensionManifest(json: ["name": "x"]) == nil)
         check(
             "rejects a Windows-only manifest",
@@ -321,6 +407,15 @@ struct ExtensionTests {
                     "name": "w", "platforms": ["Windows"],
                     "commands": [["name": "c", "title": "C"]]
                 ])?.supportsMacOS == false)
+        let commands = [["name": "c", "title": "C"]]
+        check(
+            "the store lists an organisation's extension under its owner",
+            ExtensionManifest(json: ["name": "o", "author": "me", "owner": "org", "commands": commands])?
+                .storeHandle == "org")
+        check(
+            "and anyone else's under its author",
+            ExtensionManifest(json: ["name": "a", "author": "me", "commands": commands])?.storeHandle
+                == "me")
 
         // Launcher round-trip: an entry id must decode back to the same command.
         let reference = ExtensionCommandRef(extensionName: "@scope/demo", commandName: "search")
@@ -402,6 +497,7 @@ struct ExtensionTests {
         check("a section after loose actions starts one", actions.last?.startsSection == true)
         check("destructive style", actions.last?.isDestructive == true)
         sectionBoundaryChecks()
+        submenuPrimaryActionChecks()
     }
 
     /// Boundaries follow section nodes: Raycast authors mostly leave sections untitled.
@@ -431,6 +527,83 @@ struct ExtensionTests {
         check(
             "separators follow section nodes, not titles",
             starts == [false, false, false, true, true, true, true], "\(starts)")
+    }
+
+    /// A submenu reached first must not become ⏎'s target as though it were its own child. #783.
+    static func submenuPrimaryActionChecks() {
+        func action(_ id: Int) -> String {
+            #"{"id":\#(id),"type":"Action","props":{"title":"A\#(id)"},"children":[]}"#
+        }
+        let json = """
+            {"id":1,"type":"ActionPanel","props":{},"children":[
+              {"id":2,"type":"ActionPanel.Submenu","props":{"title":"Open…"},"children":[
+                \(action(3)),
+                \(action(4))]},
+              {"id":5,"type":"ActionPanel.Section","props":{"title":"Other"},"children":[\(action(6))]}]}
+            """
+        guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+            let panel = RenderNode(json: object)
+        else {
+            check("submenu fixture decodes", false)
+            return
+        }
+        let actions = ExtensionScreen.actions(in: panel)
+        check(
+            "an action reached through a submenu carries its title",
+            actions.first?.enclosingSubmenuTitle == "Open…",
+            String(describing: actions.first?.enclosingSubmenuTitle))
+        check(
+            "the submenu's own leaves still flatten into the palette",
+            actions.map(\.title) == ["A3", "A4", "A6"], "\(actions.map(\.title))")
+        check(
+            "an action outside any submenu carries no submenu title",
+            actions.last?.enclosingSubmenuTitle == nil,
+            String(describing: actions.last?.enclosingSubmenuTitle))
+
+        // A loose action reached without ever entering a submenu is unaffected: primary fires it.
+        let looseFirstJSON = """
+            {"id":1,"type":"ActionPanel","props":{},"children":[
+              \(action(2)),
+              {"id":3,"type":"ActionPanel.Submenu","props":{"title":"Share"},"children":[\(action(4))]}]}
+            """
+        guard
+            let looseObject = try? JSONSerialization.jsonObject(with: Data(looseFirstJSON.utf8))
+                as? [String: Any],
+            let loosePanel = RenderNode(json: looseObject)
+        else {
+            check("loose-first fixture decodes", false)
+            return
+        }
+        let looseActions = ExtensionScreen.actions(in: loosePanel)
+        check(
+            "a loose action ahead of any submenu keeps the primary a direct action",
+            looseActions.first?.enclosingSubmenuTitle == nil,
+            String(describing: looseActions.first?.enclosingSubmenuTitle))
+
+        // Mirrors ExtensionCommandScreen.primaryActionTitle/activate(at:), unreachable from here.
+        func primaryActionOutcome(_ actions: [ExtensionAction]) -> (title: String, opensPanel: Bool) {
+            guard let primary = actions.first else { return ("Run", false) }
+            return (
+                primary.enclosingSubmenuTitle ?? primary.title,
+                primary.enclosingSubmenuTitle != nil
+            )
+        }
+
+        let submenuOutcome = primaryActionOutcome(actions)
+        check(
+            "a submenu-backed primary's title is the submenu's, not the leaf's",
+            submenuOutcome.title == "Open…", submenuOutcome.title)
+        check(
+            "⏎ on a submenu-backed primary opens the actions panel instead of dispatching",
+            submenuOutcome.opensPanel, "\(submenuOutcome)")
+
+        let looseOutcome = primaryActionOutcome(looseActions)
+        check(
+            "a loose primary's title is its own leaf's",
+            looseOutcome.title == "A2", looseOutcome.title)
+        check(
+            "⏎ on a loose primary dispatches directly, since it never opens the panel",
+            !looseOutcome.opensPanel, "\(looseOutcome)")
     }
 
     static func screenChecks() {
@@ -569,10 +742,22 @@ struct ExtensionTests {
             "a text area keeps the vertical keys",
             ExtensionFormField(type: "Form.TextArea").ownsVerticalKeys)
         let detail = ExtensionScreen(
-            // Doubled delimiters: the heading contains `"#`, which closes a single-# string.
-            tree: tree(##"{"id":2,"type":"Detail","props":{"markdown":"# Hi"},"children":[]}"##),
+            tree: tree(
+                """
+                {"id":2,"type":"Detail","props":{"markdown":"# Hi","actions":
+                  {"id":7,"type":"ActionPanel","props":{},"children":[
+                    {"id":8,"type":"Action","props":{"title":"Open",
+                      "onAction":{"$fn":"8:onAction"}},"children":[]}]}},"children":[]}
+                """),
             query: "")
         check("kind is detail", detail.kind == .detail)
+        check("rowless detail has no rows", detail.rows.isEmpty)
+        check(
+            "rowless detail falls back to screen actions",
+            detail.actionPanel(forItemAt: 0)?.id == 7)
+        let detailActions = ExtensionScreen.actions(in: detail.actionPanel(forItemAt: 0))
+        check("rowless detail keeps action title", detailActions.first?.title == "Open")
+        check("rowless detail keeps action handler", detailActions.first?.handler == "8:onAction")
 
         let unsupported = ExtensionScreen(
             tree: tree(#"{"id":2,"type":"MenuBarExtra","props":{},"children":[]}"#), query: "")
@@ -619,6 +804,10 @@ struct ExtensionTests {
             "a themed tint picks the dark side",
             icon(#"{"source":"circle-16","tintColor":{"light":"raycast-red","dark":"raycast-blue"}}"#)
                 .tint == .blue)
+        // A colour picker states its swatch in Oklch, which read as no tint at all before.
+        check(
+            "an oklch tint too",
+            icon(#"{"source":"circle-16","tintColor":"oklch(62.8% 0.2577 29.23)"}"#).tint != nil)
 
         let bare = icon(#""checkmark-circle-16""#)
         check("a bare icon still resolves", bare.source == .symbol("checkmark.circle"))
@@ -715,7 +904,7 @@ struct ExtensionTests {
             ExtensionOAuthSession.handleCallbackURL(nonOAuthURL) == .ignored)
 
         // A callback with nothing waiting for it is reported, not silently dropped.
-        let strayURL = URL(string: "tinycast://oauth?code=abc&state=xyz")!
+        let strayURL = URL(string: "blitz://oauth?code=abc&state=xyz")!
         check(
             "handleCallbackURL reports an expired callback",
             ExtensionOAuthSession.handleCallbackURL(strayURL) == .expired)
@@ -735,8 +924,8 @@ struct ExtensionTests {
             String(describing: canonical?.extensionCandidates))
 
         let tiny = ExtensionDeepLink.parse(
-            url: URL(string: "tinycast://extensions/linear/linear/create-issue")!)
-        check("deeplink mirrors raycast:// as tinycast://", tiny == canonical)
+            url: URL(string: "blitz://extensions/linear/linear/create-issue")!)
+        check("deeplink mirrors raycast:// as blitz://", tiny == canonical)
 
         let bare = ExtensionDeepLink.parse(url: URL(string: "raycast://extensions/demo/search")!)
         check(
@@ -853,7 +1042,7 @@ struct ExtensionTests {
                 try { callback(); return "none"; } catch (error) { return error.code; }
               };
               const filePaths = [
-                fileURLToPath("file:///Applications/Tinycast%20Beta.app"),
+                fileURLToPath("file:///Applications/Blitz%20Beta.app"),
                 fileURLToPath(pathToFileURL("/tmp/a#b.png")),
                 pathToFileURL("/tmp/My Image.png").href,
                 errorCode(() => fileURLToPath("file:///tmp/a%2Fb")),
@@ -871,7 +1060,7 @@ struct ExtensionTests {
               ].join(",");
               // Bitwarden derives its session hash and caches the vault through exactly these calls.
               const encrypter = crypto.createCipheriv("aes-256-cbc", "k".repeat(32), "i".repeat(16));
-              const encrypted = Buffer.concat([encrypter.update("hello tinycast"), encrypter.final()]);
+              const encrypted = Buffer.concat([encrypter.update("hello blitz"), encrypter.final()]);
               const decrypter = crypto.createDecipheriv("aes-256-cbc", "k".repeat(32), Buffer.from("i".repeat(16)));
               const ecb = crypto.createCipheriv("aes-128-ecb", Buffer.alloc(16, 1), null).setAutoPadding(false);
               const cipherShim = [
@@ -947,7 +1136,7 @@ struct ExtensionTests {
             "fileURLToPath decodes a path and rejects an unusable URL",
             ExtensionAccessoriesView_labelForTest(
                 screen.items.first?.node.array("accessories").dropFirst(2).first)
-                == "/Applications/Tinycast Beta.app\n/tmp/a#b.png\n"
+                == "/Applications/Blitz Beta.app\n/tmp/a#b.png\n"
                 + "file:///tmp/My%20Image.png\n"
                 + "ERR_INVALID_FILE_URL_PATH\nERR_INVALID_FILE_URL_HOST\n"
                 + "ERR_INVALID_URL_SCHEME",
@@ -958,7 +1147,7 @@ struct ExtensionTests {
                 screen.items.first?.node.array("accessories").dropFirst(4).first)
                 == "afe6c5530785b6cc6b1c6453384731bd,f7ce0b653d2d72a4,5d11c49af18b4b3e482508362bd2c857,"
                 + "eb7b227687302ff167fef6a04d9f99f3,"
-                + "hello tinycast,17d614f379a9359077e95577fd31c20a,ERR_OSSL_BAD_DECRYPT,"
+                + "hello blitz,17d614f379a9359077e95577fd31c20a,ERR_OSSL_BAD_DECRYPT,"
                 + "ERR_CRYPTO_INVALID_KEYLEN,ERR_CRYPTO_INVALID_DIGEST,6cba6dd1d44f53a3",
             String(describing: screen.items.first?.node.array("accessories").dropFirst(4).first))
         check(
@@ -1231,7 +1420,7 @@ struct ExtensionTests {
     @MainActor
     static func nodeContractChecks() async {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tinycast-archive-\(UUID().uuidString)")
+            .appendingPathComponent("blitz-archive-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let (runtime, host, recorder) = makeRuntime()
@@ -1330,6 +1519,36 @@ struct ExtensionTests {
         runtime.shutdown()
     }
 
+    /// sql.js loads through `WebAssembly.instantiate`, whose promise never settled on the JS queue.
+    @MainActor
+    static func webAssemblyChecks() async {
+        let (runtime, host, recorder) = makeRuntime()
+        try? await runtime.boot(
+            config: .current(supportDirectory: FileManager.default.temporaryDirectory))
+        let command = """
+            module.exports.default = async () => {
+              const add = "AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags=";
+              const bytes = Buffer.from(add, "base64");
+              const { module, instance } = await WebAssembly.instantiate(bytes);
+              const compiled = await WebAssembly.instantiate(await WebAssembly.compile(bytes));
+              const invalid = await WebAssembly.instantiate(new Uint8Array([0, 1, 2])).then(
+                () => "resolved", (error) => error instanceof WebAssembly.CompileError);
+              const sum = instance.exports.add(2, 3) + compiled.exports.add(4, 5);
+              const isModule = module instanceof WebAssembly.Module;
+              await require("@raycast/api").showHUD(`${isModule} ${sum} ${invalid}`);
+            };
+            """
+        await runtime.start(
+            session: "wasm", code: command, file: URL(fileURLWithPath: "/tmp/wasm.js"),
+            mode: .noView, context: launchContext(mode: .noView))
+        await settle()
+        check(
+            "WebAssembly promise APIs settle", host.huds == ["true 14 true"],
+            "\(host.huds) \(recorder.failures.joined(separator: "|"))")
+        await runtime.stop(session: "wasm")
+        runtime.shutdown()
+    }
+
     /// `withAccessToken` hands React an async component, which only renders while the promise it
     /// suspended on comes back rather than being remade every attempt (#519).
     @MainActor
@@ -1399,7 +1618,7 @@ struct ExtensionTests {
     @MainActor
     static func swiftHelperChecks() async {
         let helper = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tinycast-helper-\(UUID().uuidString)")
+            .appendingPathComponent("blitz-helper-\(UUID().uuidString)")
         try? Data("#!/bin/sh\necho '{\"hex\":\"#FF0000\"}'\n".utf8).write(to: helper)
         defer { try? FileManager.default.removeItem(at: helper) }
 
@@ -1445,7 +1664,7 @@ struct ExtensionTests {
     @MainActor
     static func processKillChecks() async {
         let marker = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tinycast-rang-\(UUID().uuidString)")
+            .appendingPathComponent("blitz-rang-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
 
         let (runtime, _, recorder) = makeRuntime()
@@ -1480,7 +1699,7 @@ struct ExtensionTests {
             "a killed exec child never runs the rest of its script",
             !FileManager.default.fileExists(atPath: marker.path))
         check(
-            "exec returns a live pid and process.kill guards Tinycast itself",
+            "exec returns a live pid and process.kill guards Blitz itself",
             recorder.trees.last?.activeRoot?.string("markdown")
                 == "true,failed,false,EPERM,ESRCH,ERR_UNKNOWN_SIGNAL",
             recorder.trees.last?.activeRoot?.string("markdown") ?? "no tree")
@@ -1489,7 +1708,7 @@ struct ExtensionTests {
 
     /// `zlib` is the one node shim with no JS-side implementation to lean on.
     static func zlibChecks() {
-        let payload = Data(String(repeating: "tinycast extensions ", count: 64).utf8)
+        let payload = Data(String(repeating: "blitz extensions ", count: 64).utf8)
         do {
             check("gzip round-trips", try Zlib.gunzip(Zlib.gzip(payload)) == payload)
             check("zlib round-trips", try Zlib.inflate(Zlib.deflate(payload)) == payload)
@@ -1511,13 +1730,18 @@ struct ExtensionTests {
             print("Not an extension: \(directory.path)")
             exit(1)
         }
-        let runnable = manifest.commands.filter { $0.mode.isSupported }
+        let runnable = manifest.commands
         guard
             let target = commandName.flatMap({ name in runnable.first { $0.name == name } })
                 ?? runnable.first
         else {
             print("No runnable command in \(manifest.title)")
             exit(1)
+        }
+        if target.mode == .menuBar, ProcessInfo.processInfo.environment["EXT_TEST_MENU_BAR"] != nil {
+            await runInstalledMenuBar(
+                InstalledExtension(manifest: manifest, directory: directory), command: target)
+            exit(failures == 0 ? 0 : 1)
         }
         let bundle = directory.appendingPathComponent("\(target.name).js")
         guard let code = try? String(contentsOf: bundle, encoding: .utf8) else {
