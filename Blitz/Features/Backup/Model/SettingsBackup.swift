@@ -73,6 +73,8 @@ struct SettingsBackup: Codable {
         var quicklinkConfirmsBeforeDelete: Bool?
         // Carried like quicklinks: running a shortcut the user built grants no permission class.
         var appleShortcutsEnabled: Bool?
+        // Carried: it moves where a typed shell line runs, and arms nothing that was not armed.
+        var shellCommandRunsInTerminal: Bool?
         // `calendarEnabled` is absent: an import must not grant calendar access.
         var calendarShowInLauncher: Bool?
         var calendarLauncherLimit: Int?
@@ -178,6 +180,7 @@ extension SettingsBackup {
             quicklinkSelectionFallback: s.quicklinkSelectionFallback.rawValue,
             quicklinkConfirmsBeforeDelete: s.quicklinkConfirmsBeforeDelete,
             appleShortcutsEnabled: s.appleShortcutsEnabled,
+            shellCommandRunsInTerminal: s.shellCommandRunsInTerminal,
             calendarShowInLauncher: s.calendarShowInLauncher,
             calendarLauncherLimit: s.calendarLauncherLimit.rawValue,
             calendarSpan: s.calendarSpan.rawValue,
@@ -476,6 +479,10 @@ extension SettingsBackup {
         }
         if let flag = s.appleShortcutsEnabled {
             settings.appleShortcutsEnabled = flag
+            count += 1
+        }
+        if let flag = s.shellCommandRunsInTerminal {
+            settings.shellCommandRunsInTerminal = flag
             count += 1
         }
         if let flag = s.quicklinkOpensNewWindow {

@@ -55,6 +55,7 @@ enum SettingsFileSchema {
         case .quicklinkSelectionFallback: return bind(settings, \.quicklinkSelectionFallback)
         case .quicklinkConfirmsBeforeDelete: return bind(settings, \.quicklinkConfirmsBeforeDelete)
         case .appleShortcutsEnabled: return bind(settings, \.appleShortcutsEnabled)
+        case .shellCommandRunsInTerminal: return bind(settings, \.shellCommandRunsInTerminal)
         case .aiEnabled: return bind(settings, \.aiEnabled)
         case .aiWebSearch: return bind(ai, \.webSearchEnabled)
         case .aiSystemPrompt: return bind(ai, \.systemPrompt)

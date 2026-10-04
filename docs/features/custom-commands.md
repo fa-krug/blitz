@@ -67,7 +67,7 @@ The command text is deliberately not searchable. Only the user-facing name enter
 
 No Terminal window or pseudo-terminal is created. The exit wait blocks for the whole life of the
 command, so it runs on a private concurrent `DispatchQueue` rather than a cooperative-pool thread a
-long `brew upgrade` would hold for minutes. The streaming path blocks the same queue on `read`.
+long `brew upgrade` would hold for minutes. A session's drain blocks the same queue on `read`.
 
 ### Load shell environment
 
@@ -84,11 +84,13 @@ all. `BLITZ=1` exists so an rc file can skip those sections: `[[ -n $BLITZ ]] &&
 Measured cost: ~10 ms for `-lc`, ~65 ms for `-ilc` against a real-world `~/.zshrc` (~11 ms against a
 minimal one — the interactive shell itself is ~2 ms, the rest is the user's own config).
 
-Interactive prompts still cannot block. Standard input is `/dev/null` — or, under **Show output**, a
-pty already sent EOF — so a `read` gets EOF and
-returns non-zero, and a launchd-launched app has no controlling terminal, so `/dev/tty` fails with
-`device not configured`. A dev build launched _from a terminal_ inherits that terminal's tty, so an rc
-file reading `/dev/tty` can hang there but not for real users. There is **no timeout** — Blitz never kills a
+Without **Show output**, interactive prompts cannot block. Standard input is `/dev/null`, so a
+`read` gets EOF and returns non-zero. Under **Show output** standard input is the window's terminal
+and stays open, so a prompt waits for the [input line](#the-input-line) instead. Either way a
+launchd-launched app has no controlling terminal, so `/dev/tty` fails with `device not configured` —
+which is why `sudo` cannot ask for a password in the window, and **Open in Terminal** is the way to
+run it. A dev build launched _from a terminal_ inherits that terminal's tty, so an rc file reading
+`/dev/tty` can hang there but not for real users. There is **no timeout** — Blitz never kills a
 running command except through the output window's Stop button, and a command outlives Blitz
 quitting.
 
@@ -131,9 +133,10 @@ command. An optional argument submitted empty still occupies its slot, so `$2` n
 
 ### Show output
 
-Off by default. With it on the run goes through `ShellCommandRunner.stream` and a
-`PseudoTerminal` instead of `run` and a pipe, the window opens **before the first byte**, and the log
-fills in as the command prints it.
+Off by default. With it on the command runs in a **session** — `ShellCommandRunner.openSession` on a
+`PseudoTerminal` instead of `run` and a pipe. The window opens **before the first byte**, the log
+fills in as the command prints it, and the shell stays open afterwards so the next line can be typed
+into the same window, in the folder and environment the last one left.
 
 #### Why a pty and not a pipe
 
@@ -148,19 +151,82 @@ assumed:
   merged pipe*. Merging is not enough; only a terminal restores line buffering, and with it the
   order. Under a pty the same command printed 1, 2, 3.
 
-`PseudoTerminal` also spawns with `POSIX_SPAWN_SETSID`, which is what makes Stop honest: the command
+`PseudoTerminal` also spawns with `POSIX_SPAWN_SETSID`, which is what makes Stop honest: the shell
 leads its own session, so one `kill(-pid)` reaches the whole `a && b && c` chain. `Process.terminate`
-signals only zsh — a `sleep` started behind it survives, verified.
+signals only zsh — a `sleep` started behind it survives, verified. It spawns with
+`POSIX_SPAWN_CLOEXEC_DEFAULT` too, and marks its own ends close-on-exec, so no other child of Blitz
+holds a session's descriptors open.
 
-The pty's stdin gets an EOT byte at spawn, which keeps the invariant a `/dev/null` stdin gave the
-pipe path: a command that prompts reads EOF and moves on rather than waiting on a terminal that will
-never answer.
+Two spawn details that look optional and are not, both found by the harness:
+
+- **An empty signal mask and default dispositions** (`SETSIGMASK`, `SETSIGDEF`). A dispatch worker
+  thread blocks nearly every signal, and zsh hands the mask it was born with to every command it
+  forks — so a shell spawned from one runs commands that never see SIGINT, and Stop always fell
+  through to the kill.
+- **`VEOF` set to ⌃D.** `cfmakeraw` leaves the control characters alone, and a zeroed `termios`
+  makes NUL the end-of-file character, so a typed ⌃D arrived as text and `cat` waited forever.
+
+#### A session, not a run
+
+One zsh lives for as long as the window shows it. It does not read commands from the terminal —
+that would bring a prompt, a line editor and the user's prompt theme into the log — but from a pipe
+on **descriptor 3**, which `sessionScript` loops over:
+
+- each line arrives NUL-terminated, is `eval`'d with descriptor 3 closed so the command never sees
+  the pipe, and is followed by a private OSC marker, `ESC ] 6973 ; <nonce> ; <status> ; <PWD> BEL`;
+- `LineEndScanner` cuts the marker out of the output it arrives inside, wherever a read splits it,
+  and the session reports `finished` with the status and the folder the shell is now in;
+- the per-session nonce keeps a command that prints a marker-like sequence from faking one;
+- the shell's `$1`, `$2` are the command's arguments for the session's whole life, so the opening
+  command reads them as before and a later line may too.
+
+Because the line runs inside a function, `typeset` and `local` in a typed line stay local to it and
+`$0` reads `__blitz_run`; `cd`, `export`, plain assignments, aliases and functions all persist.
+
+**Stop is ⌃C, not a kill.** It sends SIGINT to the session; the script's `TRAPINT` returns non-zero,
+so zsh abandons the rest of the line — `sleep 30; echo next` never reaches `echo` — and an `always`
+block with `TRY_BLOCK_INTERRUPT=0` clears the interrupt so the loop, and the shell, carry on. A line
+still running `stopGrace` (2 s) later gets SIGKILL, which ends the session with it. A stop with
+nothing running sends nothing, so it can never reach the shell idling in `read`.
+
+The script starts with `unsetopt monitor`: interactive zsh — **Load shell environment** — turns job
+control on even without a controlling terminal, giving every command its own process group that
+`kill(-pid)` misses. That is measured, not assumed, and the harness covers it.
+
+The terminal echoes what is typed (`ECHO` on), so an answer appears in the log where a terminal
+would show it — and a command reading a password turns echo off itself, so it never does.
+`ANSIInterpreter` drops the control bytes an echoed ⌃D can leave and treats a backspace as erasing.
+
+A prompt never ends its line, so the drain cannot wait for a newline to show one: once output pauses
+for `flushInterval` (`awaitOutput`, a `select` — `poll` refuses character devices on macOS), the
+held text is shown as it is.
 
 #### What the window shows
 
-One flat surface, no rules. The command's name, the shell text under it (`brew` alone says nothing
-about what ran), the log, and a footer with a status dot, the outcome and the elapsed time. Copy is
-always there; the second control is **Stop** while it runs and **Run Again** once it has.
+One flat surface, no rules. The command's name, the folder the shell is in under it, the log, the
+input line, and a footer with a status dot, the outcome and the elapsed time of the latest line.
+Every line, the opening command included, is written into the log as a dimmed `❯` and the line in
+bold, so the log reads as a transcript. Copy and **Open in Terminal** are always there; the third
+control is **Stop** while a line runs and **Run Again** once the shell has exited.
+
+#### The input line
+
+Return sends what is typed: **the next line to run** while the shell is idle, or **input for the
+running command** — a `y`, a name, an empty Return — while one runs. ⌃C stops the running line, ⌃D
+sends end-of-input, and ↑/↓ walk back through the lines typed into this window. History holds only
+what was typed into the field: neither the opening command, which may have needed a confirmation,
+nor anything typed as input, which may have been a secret. Typing a line pulls a reader who had
+scrolled up back to the tail.
+
+#### Open in Terminal
+
+The log draws colour and carriage returns, not a screen, so `vim`, `htop`, `less` or `ssh` belong in
+a real terminal. ⌘↵, or the button, writes a self-deleting `.command` script to the temporary folder
+— `cd` to the session's folder, the typed line if there is one, then `exec $SHELL -l` — and hands it
+to whichever app opens `.command` files, which is Terminal unless the user chose another. That needs
+no Automation permission and no setting. `TerminalHandoff` builds the script — the same one
+[Run in Terminal](#run-in-terminal) uses — and single-quotes every word it adds. The session's
+exports and functions do not travel; only its folder does.
 
 Because a terminal makes tools colour their output, `ANSIInterpreter` renders SGR colour rather than
 printing the escapes — that is what replaces the old red-stderr tint, which was a mistake: stderr is
@@ -171,9 +237,9 @@ stacking a line per frame.
 The log is an `NSTextView` and only the undrawn tail is appended; a quarter-megabyte of output
 re-laid-out per line is seconds of work. The run publishes each append as an explicit `delta` and
 `revision`, so the view adds just that when it is exactly one step behind and redraws from the whole
-log otherwise — a new run, a trim, or a window reopened onto a finished one. Past 256 KiB the head is dropped. Following the tail stops
-when the reader scrolls up and resumes when they reach the bottom, the same band the chat transcript
-uses.
+log otherwise — a new session, a trim, or a window reopened onto a finished one. Past 256 KiB the
+head is dropped. Following the tail stops when the reader scrolls up and resumes when they reach the
+bottom, the same band the chat transcript uses.
 
 **The window replaces the failure dialog rather than joining it**, so a run is never reported twice;
 the success pill is skipped for the same reason.
@@ -182,9 +248,13 @@ the success pill is skipped for the same reason.
 
 - **rc-file noise is now visible.** With **Load shell environment** on, anything `~/.zshrc` writes
   reaches the log. The guard is the documented `[[ -n $BLITZ ]] && return`.
-- **Stop is the one exception** to "Blitz never kills a running command". Only the button does it;
-  a second command superseding the window never touches the first.
-- Escape closes the window without stopping its command.
+- **Stop is the one exception** to "Blitz never kills a running command". Only the button or ⌃C does
+  it; a second command superseding the window never touches the first.
+- **Closing the window, or a second command superseding it, ends the session gently.** The control
+  pipe closes, so the shell reads EOF and exits once its current line is done — never cutting it
+  short. Escape closes the window. Quitting Blitz closes the pipe the same way.
+- **A command waiting on input now waits.** Without the window it read EOF and moved on; in a
+  session it waits for the input line, or for ⌃D.
 
 #### The ad-hoc run
 
@@ -193,7 +263,43 @@ The launcher's **Run Shell Command** fallback (see [launcher.md](launcher.md#fal
 button. It is not gated on `customCommandsEnabled`: that switch governs a library of saved commands,
 not a line someone types on purpose, and the fallback's own checkbox is its switch. Because it has no
 library entry, `rerunOutput` checks `lastShellCommand` before falling through to `runCustomCommand`,
-or the window's Rerun would look up an id the store has never held and do nothing.
+or the window's Run Again would look up an id the store has never held and do nothing.
+
+### Run in Terminal
+
+A command can skip Blitz's own surfaces entirely and open in the user's terminal app through its
+own **Run in Terminal** option. The **Run Shell Command** fallback has the equivalent switch where
+the fallback is configured — Settings → Fallbacks → Run Shell Command → **Open in Terminal** — and
+it governs that fallback alone; a saved command only ever follows its own option.
+`CustomCommandCoordinator.execute` is the one place that picks where a run goes — terminal, output
+window, or the background — reading only `runsInTerminal`; the fallback's ad-hoc command takes the
+switch into that field when it is built. It runs after the confirmation gate and after the arguments
+are collected, so neither can be skipped this way.
+
+The run goes through `TerminalHandoff`, the same self-deleting `.command` script as the output
+window's **Open in Terminal**, and keeps the [execution contract](#execution-contract) word for word:
+
+```
+cd -- '<Run In folder>' || exit
+BLITZ=1 /bin/zsh -lc '<command>' blitz '<value1>' '<value2>' …
+exec "${SHELL:-/bin/zsh}" -l
+```
+
+`-ilc` replaces `-lc` under **Load shell environment**. Each value is its own single-quoted word, so a
+value carrying `'`, `;` or `$(…)` still reaches the script as `$1` and never as syntax — the
+[never-spliced invariant](#invariants) holds across the hop, and the harness runs a value built to
+break it. A line typed into the output window and handed off always loads the shell environment: it
+is the user's own typing, and their own terminal would.
+
+What Blitz gives up is knowing how the run ended. **Show output** and **Show confirmation** have
+nothing to act on, so the editor dims them while the option is on; the terminal shows both itself.
+A folder that has gone is reported by the terminal's `cd`, which stops the script before the
+command, rather than by a Blitz dialog.
+
+The fallback's switch, `shellCommandRunsInTerminal`, is an `AppSettings` preference with its
+`SettingsFileKey` (`fallbacks.runShellCommandInTerminal`), and rides settings backups: it moves
+where a typed line runs and arms nothing that was not already armed — unlike the fallback's own
+checkbox, which stays out of backups. Its section dims while the fallback is unchecked.
 
 ### Run In
 
@@ -250,23 +356,37 @@ Foundation-only harness. Verify by hand:
 2. ↵ at the dialog runs the command; Escape or clicking **Cancel** cancels.
 3. Pressing the command's hotkey while its dialog is up does not stack a second dialog.
 4. A gated command triggered by hotkey with no palette open still confirms.
-5. An rc-file-only alias with the flag off shows the 127 hint, and **Open Settings…** opens the pane.
+5. An rc-file-only alias with the flag off shows the 127 hint, and **Open Settings…** opens the
+   pane.
 6. A command with arguments triggered by hotkey opens root search on that row alone, first required
    field focused — including a command hidden from the launcher.
 7. A gated command with arguments asks for every value first, and confirms only once.
 8. Running a second output-showing command reuses the one window and does **not** kill the first.
 9. A long command's output appears while it runs, not at the end; scrolling up stops the follow.
-10. Stop during `brew update` leaves nothing behind — check with `pgrep -f brew`.
+10. Stop during `brew update` leaves nothing behind — check with `pgrep -f brew` — and the input
+    line then runs a follow-up in the same shell.
 11. Clicking the Dock icon while a command runs raises the output window, not the launcher.
-12. **Run Again clears the log before the new run prints.** The view draws deltas, so it keys what
-    it has drawn on the run's id as well as the trim counter — a fresh run starts back at revision
-    zero, and keying on the counter alone left the previous run's output on screen.
+12. **Run Again clears the log before the new session prints.** The view draws deltas, so it keys
+    what it has drawn on the transcript's id as well as the trim counter — a fresh session starts
+    back at revision zero, and keying on the counter alone left the previous output on screen.
 13. **Import Raycast Scripts** opens a folder chooser, then a warning dialog; Cancel there imports
     nothing. A folder holding no script commands says so instead of reporting zero.
 14. Re-importing the same folder says nothing was left to import, rather than reporting zero.
 15. An imported command with arguments asks for them and the script receives them — the `"$@"`
     forwarding has no harness coverage of the inline fields that fill it.
 16. Two arguments sharing a name are separate fields; ↵ with a required one empty focuses it.
+17. `cd /tmp` in the input line moves the header's folder, and `pwd` on the next line agrees.
+18. A command asking `[y/N]` shows the question before an answer is typed, and the typed answer
+    appears once in the log; ⌃C in the field stops a running line, ⌃D answers `cat` with EOF.
+19. ↑ in the idle field recalls typed lines but never the opening command.
+20. ⌘↵ with `htop` typed opens Terminal in the session's folder running it, and quitting `htop`
+    leaves a shell there; with the field empty it opens just the shell.
+21. Closing the window while `sleep 5; say done` runs still says "done", and no zsh is left after.
+22. A command with **Run in Terminal** opens Terminal in its Run In folder, asks for its arguments
+    and its confirmation first, and leaves a shell there once it finishes. Show output and Show
+    confirmation are dimmed in its editor.
+23. Settings → Fallbacks → Run Shell Command → **Open in Terminal** sends a typed launcher line to
+    Terminal, and leaves every saved custom command where its own option puts it.
 
 ## Importing Raycast scripts
 

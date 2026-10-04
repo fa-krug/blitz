@@ -264,7 +264,10 @@ enum SettingsSearchCatalog {
     private static let fallbacks: [SettingsSearchEntry] = [
         .init(
             pane: .fallbacks,
-            keywords: ["no results", "empty", "search web", "order"])
+            keywords: ["no results", "empty", "search web", "order"]),
+        .init(
+            .fallbacksShellCommand, "Open in Terminal",
+            keywords: ["terminal", "iterm", "shell", "zsh", "output window", "interactive"])
     ]
 
     private static let ai: [SettingsSearchEntry] = [

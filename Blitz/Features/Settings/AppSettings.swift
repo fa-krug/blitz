@@ -343,6 +343,14 @@ final class AppSettings {
         }
     }
 
+    /// The Run Shell Command fallback opens in the user's terminal app, not the output window.
+    var shellCommandRunsInTerminal: Bool {
+        didSet {
+            defaults.set(
+                shellCommandRunsInTerminal, forKey: Key.shellCommandRunsInTerminal.rawValue)
+        }
+    }
+
     /// Also keyword-expansion consent, so it confirms first and never rides a backup.
     var snippetsEnabled: Bool {
         didSet { defaults.set(snippetsEnabled, forKey: Key.snippetsEnabled.rawValue) }
@@ -675,6 +683,7 @@ final class AppSettings {
         customCommandsShowInLauncher =
             defaults.object(forKey: Key.customCommandsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.customCommandsShowInLauncher.rawValue)
+        shellCommandRunsInTerminal = defaults.bool(forKey: Key.shellCommandRunsInTerminal.rawValue)
         snippetsEnabled = defaults.bool(forKey: Key.snippetsEnabled.rawValue)
         quickActionsEnabled = defaults.bool(forKey: Key.quickActionsEnabled.rawValue)
         snippetsShowInLauncher =
