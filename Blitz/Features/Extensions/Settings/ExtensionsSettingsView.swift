@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Settings › Extensions: the master switch, then a row per extension that expands in place.
+/// Settings › Extensions: the master switch, then a row per extension that opens its own page.
 struct ExtensionsSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(SettingsNavigationState.self) private var navigation
-    @State private var expanded: String?
+    /// The extension whose page is open, by manifest name; nil shows the library.
+    @State private var detail: String?
+    /// The row the library scrolls back to once a page closes, so a long list keeps its place.
+    @State private var returning: String?
     @State private var filter = ""
     @State private var importCandidates: ImportCandidates?
     @State private var browsingStore = false
@@ -20,30 +23,21 @@ struct ExtensionsSettingsView: View {
     @State private var reclaimable = ExtensionCleanup.Report()
 
     var body: some View {
-        @Bindable var settings = core.settings
-        return Form {
-            FeatureSwitchSection(
-                anchor: .extensionsExtensions,
-                enableTitle: "Enable extensions",
-                enableSubtitle: "Run Raycast extensions natively.",
-                // Enabling is consent to run third-party code, so the setter confirms.
-                isEnabled: Binding(
-                    get: { settings.extensionsEnabled },
-                    set: { core.extensionCoordinator.setExtensionsEnabled($0) }),
-                showsInLauncher: $settings.extensionsShowInLauncher,
-                showsIcon: true)
-
-            Group {
-                install
-                library
-                compatibility
+        Group {
+            if let shown {
+                ExtensionDetailForm(
+                    installed: shown,
+                    isUpdating: core.extensions.updating.contains(shown.manifest.name),
+                    onBack: closeDetail,
+                    onUpdate: core.extensions.updates[shown.manifest.name] == nil
+                        ? nil : { update([shown.manifest.name]) },
+                    onUninstall: { core.extensionCoordinator.confirmUninstall(shown) })
+                    // Rows load preferences on appear, so each extension needs a fresh page.
+                    .id(shown.manifest.name)
+            } else {
+                libraryForm
             }
-            .settingsEnabled(settings.extensionsEnabled)
-
-            // Outside the enabled group: leftovers are on disk whether or not extensions are on.
-            storage
         }
-        .formStyle(.grouped)
         .settingsScrollTarget(.extensions)
         .releasesFocusOnOutsideClick()
         // Escape and Return are the keyboard way out of the same field.
@@ -66,16 +60,71 @@ struct ExtensionsSettingsView: View {
             ExtensionGitHubPanel(onClose: { installingFromGitHub = false })
         }
         .onChange(of: navigation.scrollRequest, initial: true) {
-            if case .row(.extensionsInstalled, let name)? = navigation.scrollRequest?.target {
-                (expanded, filter) = (name, "")
+            guard let target = navigation.scrollRequest?.target, target.tab == .extensions else {
+                return
+            }
+            // A jump to one extension opens its page; anything else lands on the library.
+            if case .row(.extensionsInstalled, let name) = target {
+                (detail, filter) = (name, "")
+            } else {
+                detail = nil
             }
         }
-        .onChange(of: core.extensions.installed.count) { Task { await measureReclaimable() } }
+        .onChange(of: core.extensions.installed.count) { previous, _ in
+            // Not on the first scan: a jump can name an extension before the library has loaded.
+            if previous > 0, shown == nil { detail = nil }
+            Task { await measureReclaimable() }
+        }
         .task {
             await core.extensions.refresh()
             await measureReclaimable()
             await findPending()
             await core.extensions.checkForUpdates()
+        }
+    }
+
+    private var shown: InstalledExtension? {
+        guard let detail else { return nil }
+        return core.extensions.installed.first { $0.manifest.name == detail }
+    }
+
+    private func closeDetail() {
+        (returning, detail) = (detail, nil)
+    }
+
+    private var libraryForm: some View {
+        @Bindable var settings = core.settings
+        return ScrollViewReader { proxy in
+            Form {
+                FeatureSwitchSection(
+                    anchor: .extensionsExtensions,
+                    enableTitle: "Enable extensions",
+                    enableSubtitle: "Run Raycast extensions natively.",
+                    // Enabling is consent to run third-party code, so the setter confirms.
+                    isEnabled: Binding(
+                        get: { settings.extensionsEnabled },
+                        set: { core.extensionCoordinator.setExtensionsEnabled($0) }),
+                    showsInLauncher: $settings.extensionsShowInLauncher,
+                    showsIcon: true)
+
+                Group {
+                    install
+                    library
+                    compatibility
+                }
+                .settingsEnabled(settings.extensionsEnabled)
+
+                // Outside the enabled group: leftovers are on disk whether or not extensions are on.
+                storage
+            }
+            .formStyle(.grouped)
+            .task {
+                guard let returning else { return }
+                // The Form has just mounted, so let it lay the row out before scrolling to it.
+                await Task.yield()
+                proxy.scrollTo(SettingsTarget.row(.extensionsInstalled, returning), anchor: .center)
+                self.returning = nil
+            }
         }
     }
 
@@ -128,15 +177,11 @@ struct ExtensionsSettingsView: View {
                 } else {
                     ForEach(matching) { installed in
                         let name = installed.manifest.name
-                        ExtensionDisclosure(
+                        ExtensionLibraryRow(
                             installed: installed,
-                            isExpanded: expanded == name,
+                            hasUpdate: core.extensions.updates[name] != nil,
                             isUpdating: core.extensions.updating.contains(name),
-                            onToggle: { expanded = expanded == name ? nil : name },
-                            onUpdate: core.extensions.updates[name] == nil ? nil : { update([name]) },
-                            onUninstall: {
-                                core.extensionCoordinator.confirmUninstall(installed)
-                            })
+                            onOpen: { detail = name })
                     }
                 }
             }
@@ -155,7 +200,7 @@ struct ExtensionsSettingsView: View {
         }
     }
 
-    /// Above the list as well as on each row, so a batch is one press.
+    /// Above the list as well as on each extension's page, so a batch is one press.
     private var updatesRow: some View {
         SettingsRow(
             title: "Updates available",
@@ -378,28 +423,103 @@ private struct ExtensionSettingsIcon: View {
     }
 }
 
-/// A summary row, and while open its settings on an inset card — separators and fill, never glass.
-private struct ExtensionDisclosure: View {
+/// No AppKit control on the row, so a library of hundreds stays cheap for the `Form` to realize.
+private struct ExtensionLibraryRow: View {
     let installed: InstalledExtension
-    let isExpanded: Bool
+    let hasUpdate: Bool
     let isUpdating: Bool
-    let onToggle: () -> Void
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            SettingsRow(title: installed.title, subtitle: installed.librarySubtitle) {
+                ExtensionIconView(
+                    resolved: installed.iconPath.map { ExtensionImage.Resolved(source: .file($0)) },
+                    size: Theme.Size.rowIcon)
+            } trailing: {
+                if isUpdating {
+                    ProgressView().controlSize(.small)
+                } else if hasUpdate {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(.tint)
+                        .help("Update available")
+                        .accessibilityLabel("Update available")
+                }
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Configure \(installed.title)")
+        .id(SettingsTarget.row(.extensionsInstalled, installed.manifest.name))
+    }
+}
+
+/// One extension's own page: its summary, then a card per run of settings.
+private struct ExtensionDetailForm: View {
+    let installed: InstalledExtension
+    let isUpdating: Bool
+    let onBack: () -> Void
     /// Nil unless the store has a newer version.
     let onUpdate: (() -> Void)?
     let onUninstall: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            summary
-            if isExpanded {
-                settings
-                    .padding(.top, Theme.Spacing.lg)
+        Form {
+            Section {
+                summary
+            } header: {
+                Button(action: onBack) {
+                    Label("Installed", systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .accessibilityLabel("Back to installed extensions")
+            }
+
+            // No heading: these two are one idea, and first so 19 commands can't bury them.
+            Section {
+                card {
+                    ExtensionLauncherRow(installed: installed)
+                    ExtensionIconRow(installed: installed)
+                }
+            }
+
+            if !installed.manifest.preferences.isEmpty {
+                Section {
+                    card {
+                        ForEach(
+                            Array(installed.manifest.preferences.enumerated()), id: \.element.name
+                        ) { index, schema in
+                            if index > 0 { rule }
+                            ExtensionPreferenceRow(
+                                extensionName: installed.manifest.name, schema: schema)
+                        }
+                    }
+                } header: {
+                    Text("Preferences")
+                }
+            }
+
+            Section {
+                card {
+                    ForEach(Array(installed.manifest.commands.enumerated()), id: \.element.id) {
+                        index, command in
+                        if index > 0 { rule }
+                        CommandRows(installed: installed, command: command)
+                    }
+                }
+            } header: {
+                Text(installed.manifest.commands.count == 1 ? "Command" : "Commands")
             }
         }
+        .formStyle(.grouped)
     }
 
     private var summary: some View {
-        SettingsRow(title: installed.title, subtitle: subtitle) {
+        SettingsRow(title: installed.title, subtitle: installed.librarySubtitle) {
             ExtensionIconView(
                 resolved: installed.iconPath.map { ExtensionImage.Resolved(source: .file($0)) },
                 size: Theme.Size.rowIcon)
@@ -409,73 +529,21 @@ private struct ExtensionDisclosure: View {
             } else if let onUpdate {
                 Button("Update", action: onUpdate)
             }
-            Button(action: onUninstall) {
-                Image(systemName: "trash")
-                    .foregroundStyle(Theme.Colors.destructive)
-            }
-            .buttonStyle(.plain)
-            .help("Uninstall")
-            .accessibilityLabel("Uninstall \(installed.title)")
-            Image(systemName: "chevron.down")
-                .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            Button("Uninstall…", role: .destructive, action: onUninstall)
         }
-        // The whole row toggles: a `DisclosureGroup` would only respond to its chevron.
-        .contentShape(.rect)
-        .onTapGesture(perform: onToggle)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(
-            isExpanded ? "Hide \(installed.title) settings" : "Configure \(installed.title)"
-        )
+        // Where a jump to this extension lands, so the pane's reveal has something to scroll to.
         .id(SettingsTarget.row(.extensionsInstalled, installed.manifest.name))
     }
 
-    /// One `Grid` for every run: separate grids size columns apart, stranding controls.
-    private var settings: some View {
+    /// One `Grid` per card: separate grids size their columns apart, stranding controls.
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         Grid(
             alignment: .leading, horizontalSpacing: Theme.Spacing.lg,
             verticalSpacing: Theme.Spacing.md
         ) {
-            // No heading: these two are one idea, and first so 19 commands can't bury them.
-            ExtensionLauncherRow(installed: installed)
-            ExtensionIconRow(installed: installed)
-
-            if !installed.manifest.preferences.isEmpty {
-                rule
-                heading("Preferences")
-                ForEach(
-                    Array(installed.manifest.preferences.enumerated()), id: \.element.name
-                ) { index, schema in
-                    if index > 0 { rule }
-                    ExtensionPreferenceRow(
-                        extensionName: installed.manifest.name, schema: schema)
-                }
-            }
-
-            rule
-            heading(installed.manifest.commands.count == 1 ? "Command" : "Commands")
-            ForEach(Array(installed.manifest.commands.enumerated()), id: \.element.id) {
-                index, command in
-                if index > 0 { rule }
-                CommandRows(installed: installed, command: command)
-            }
+            content()
         }
-        // Indented under the row's icon, so the settings read as belonging to the row above them.
-        .padding(.leading, Theme.Size.rowIcon + Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// A step below the pane's section headers; nothing here sets a heading in caps.
-    private func heading(_ title: String) -> some View {
-        GridRow {
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.tertiary)
-                .gridCellColumns(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Theme.Spacing.xs)
-        }
     }
 
     /// The hairline every other multi-row group in the app puts between its rows.
@@ -484,13 +552,6 @@ private struct ExtensionDisclosure: View {
             Divider()
                 .gridCellColumns(2)
         }
-    }
-
-    private var subtitle: String {
-        let count = installed.manifest.commands.count
-        let commands = "\(count) command\(count == 1 ? "" : "s")"
-        let author = installed.manifest.author
-        return author.isEmpty ? commands : "\(commands) · \(author)"
     }
 }
 
@@ -951,6 +1012,12 @@ private struct ExtensionImportPanel: View {
 }
 
 extension InstalledExtension {
+    fileprivate var librarySubtitle: String {
+        let count = manifest.commands.count
+        let commands = "\(count) command\(count == 1 ? "" : "s")"
+        return manifest.author.isEmpty ? commands : "\(commands) · \(manifest.author)"
+    }
+
     /// The entry `VisibilityStore` and `AliasStore` key on: only its id is read, never its row.
     fileprivate func launcherEntry(for command: ExtensionCommand) -> AppEntry {
         AppEntry(
