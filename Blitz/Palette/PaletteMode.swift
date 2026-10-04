@@ -17,6 +17,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
     /// One meeting's read-only page, pushed from that meeting's own actions.
     case meetingDetails
     case reminders
+    case contacts
     case uninstall
     case quicklinks
     case snippets
@@ -42,6 +43,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .schedule: return "calendar"
         case .meetingDetails: return "calendar"
         case .reminders: return "checklist"
+        case .contacts: return "person.crop.circle"
         case .uninstall: return "trash"
         case .quicklinks: return Quicklink.sfSymbol
         case .snippets: return "curlybraces"
@@ -65,6 +67,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .schedule: return "Search your schedule…"
         case .meetingDetails: return "Meeting details"
         case .reminders: return "Search reminders…"
+        case .contacts: return "Search contacts…"
         case .uninstall: return "Filter files and folders by name…"
         case .quicklinks: return "Search quicklinks…"
         case .snippets: return "Search snippets…"

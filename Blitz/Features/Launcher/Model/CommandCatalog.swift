@@ -65,6 +65,7 @@ extension SettingsTab {
         case .calendar:
             [.joinNextMeeting, .mySchedule, .createEvent, .copyMeetingLink, .openInCalendar]
         case .reminders: [.myReminders, .createReminder, .smartReminder]
+        case .contacts: [.searchContacts]
         default: []
         }
     }

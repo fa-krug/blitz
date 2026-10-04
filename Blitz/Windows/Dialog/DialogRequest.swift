@@ -40,6 +40,7 @@ enum DialogAccessory {
     case eventDraft(EventDraftState)
     case reminderDraft(ReminderDraftState)
     case smartReminder(SmartReminderState)
+    case contactDraft(ContactDraftState)
     case snippetArguments(SnippetArgumentsState)
 
     /// Whether ←/→/↑/↓ belong to the control rather than to whatever has focus inside it.
@@ -54,6 +55,7 @@ enum DialogAccessory {
         case .eventDraft(let state): state.draft.isValid
         case .reminderDraft(let state): state.draft.isValid
         case .smartReminder(let state): state.isValid
+        case .contactDraft(let state): state.draft.isValid
         case .volume, .snippetArguments: true
         }
     }

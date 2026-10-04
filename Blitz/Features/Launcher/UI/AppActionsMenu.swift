@@ -117,12 +117,15 @@ enum AppActionsMenu {
         return PopoverMenuContent(header: app.name, items: items)
     }
 
-    /// A meeting row leads with the same actions as the meeting's card.
+    /// A meeting row leads with the same actions as the meeting's card, a contact with its own.
     private static func leadingItems(
         app: AppEntry, searchQuery: String, core: AppCore
     ) -> [PopoverMenuItem] {
         if app.kind == .meeting, let meeting = core.calendarCoordinator.meeting(entryID: app.id) {
             return MeetingActionsMenu.content(meeting: meeting, core: core).items
+        }
+        if app.kind == .contact, let contact = core.contactsCoordinator.contact(entryID: app.id) {
+            return ContactActionsMenu.items(contact: contact, core: core, context: .launcher)
         }
         let primarySymbol =
             switch app.kind {

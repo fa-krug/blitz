@@ -49,6 +49,7 @@ struct DialogView: View {
                 case .eventDraft(let draft): EventDraftFields(state: draft)
                 case .reminderDraft(let draft): ReminderDraftFields(state: draft)
                 case .smartReminder(let note): SmartReminderFields(state: note)
+                case .contactDraft(let draft): ContactDraftFields(state: draft)
                 case .snippetArguments(let arguments): SnippetArgumentFields(state: arguments)
                 case nil: EmptyView()
                 }

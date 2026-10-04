@@ -95,6 +95,8 @@ enum SettingsBackupCoverage {
             "Doubles as consent to read your calendar; an import must not grant calendar access.",
         AppSettingsKey.remindersEnabled.rawValue:
             "Doubles as consent to read and edit your reminders; an import must not grant that.",
+        AppSettingsKey.contactsEnabled.rawValue:
+            "Doubles as consent to read and edit your contacts; an import must not grant that.",
         AppSettingsKey.autoJoinMeetings.rawValue:
             "Arms the app to open meeting links unattended; an import must not switch that on.",
         AppSettingsKey.cameraPreview.rawValue:
