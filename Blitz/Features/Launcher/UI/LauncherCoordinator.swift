@@ -21,6 +21,8 @@ final class LauncherCoordinator {
     private let calendarCoordinator: CalendarCoordinator
     /// The backup commands only, which need the live stores to gather from and apply to.
     private unowned let core: AppCore
+    /// In memory only: a search can hold what the user would never want written to disk.
+    private(set) var queryHistory = LauncherQueryHistory()
 
     init(
         ranking: LauncherRankingStore,
@@ -61,6 +63,10 @@ final class LauncherCoordinator {
     }
 
     // MARK: - Activation
+
+    func recordQuery(_ query: String) {
+        queryHistory.record(query)
+    }
 
     func launch(
         _ app: AppEntry, searchQuery: String? = nil, arguments: [String: String] = [:]

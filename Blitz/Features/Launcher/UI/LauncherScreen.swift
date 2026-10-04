@@ -35,6 +35,8 @@ struct LauncherScreen: PaletteScreen {
     private let suggestionCount: Int
     /// The `Use "…" with` section, below every result; empty unless something is typed.
     private let fallbacks: [(fallback: Fallback, entry: AppEntry)]
+    /// True while a shortcut's row is listed alone, under a query that was never typed.
+    private let listsArgumentRow: Bool
     /// Resolved in `init`: the palette indexes this several times per event, so it can't recompute.
     let rows: [Row]
 
@@ -85,6 +87,7 @@ struct LauncherScreen: PaletteScreen {
         self.results = results
         self.calc = calc
         self.fallbacks = fallbacks
+        self.listsArgumentRow = pinned != nil
         self.color = color
         self.showSections = pinsFavorites || AppEntry.Kind.named(by: vm.query) != nil
         self.pinsFavorites = pinsFavorites
@@ -265,6 +268,7 @@ struct LauncherScreen: PaletteScreen {
     }
 
     func activate(at selection: Int) {
+        if row(at: selection) != nil { recordQuery() }
         switch row(at: selection) {
         // Error cards no-op — copyCalculatorResult only acts on value payloads.
         case .calc(let result): core.calculatorCoordinator.copyCalculatorResult(result)
@@ -278,6 +282,22 @@ struct LauncherScreen: PaletteScreen {
             core.fallbackCoordinator.run(fallback, query: vm.query)
         case nil: break
         }
+    }
+
+    private func recordQuery() {
+        guard !listsArgumentRow else { return }
+        core.launcherCoordinator.recordQuery(vm.query)
+    }
+
+    func recallQuery(at selection: Int) -> Bool {
+        guard selection == landingSelection else { return false }
+        let history = core.launcherCoordinator.queryHistory
+        guard let index = history.older(than: vm.query, recalled: vm.recalledQueryIndex) else {
+            return false
+        }
+        vm.query = history[index]
+        vm.recalledQueryIndex = index
+        return true
     }
 
     /// The card's meeting or a meeting row's; both answer the meeting menu's chords.
@@ -487,6 +507,7 @@ struct LauncherScreen: PaletteScreen {
                 openActions()
             },
             onActivate: {
+                recordQuery()
                 core.launcherCoordinator.launch(
                     $0, searchQuery: vm.query, arguments: argumentValues(for: $0))
             },
