@@ -7,7 +7,6 @@ struct CustomCommandEditorPanel: View {
 
     @Environment(\.settingsEditorDismiss) private var dismiss
     @Environment(AppCore.self) private var core
-    @Environment(AppSettings.self) private var settings
     @State private var name: String
     @State private var shellCommand: String
     @State private var loadsShellEnvironment: Bool
@@ -83,7 +82,9 @@ struct CustomCommandEditorPanel: View {
                 optionToggle(
                     "Needs confirmation", isOn: $requiresConfirmation,
                     detail: "Ask before running this command.")
-                runInTerminalToggle
+                optionToggle(
+                    "Run in Terminal", isOn: $runsInTerminal,
+                    detail: "Open in your terminal app, for commands that ask or draw a screen.")
                 // The terminal shows the output and the outcome itself, so neither applies there.
                 Group {
                     optionToggle(
@@ -94,7 +95,7 @@ struct CustomCommandEditorPanel: View {
                         detail:
                             "Open a window with everything the command printed when it finishes.")
                 }
-                .disabled(runsInTerminal || settings.customCommandsRunInTerminal)
+                .disabled(runsInTerminal)
             }
 
             if let errorMessage {
@@ -238,22 +239,6 @@ struct CustomCommandEditorPanel: View {
     /// The shell variable the row's value lands in; blank names are dropped, but only on save.
     private func position(of id: UUID) -> Int {
         (arguments.firstIndex { $0.id == id } ?? 0) + 1
-    }
-
-    /// Shown on and locked while the Commands pane runs every command in Terminal anyway.
-    @ViewBuilder
-    private var runInTerminalToggle: some View {
-        if settings.customCommandsRunInTerminal {
-            optionToggle(
-                "Run in Terminal", isOn: .constant(true),
-                detail: "On for every command: Settings → Commands → Always run in Terminal."
-            )
-            .disabled(true)
-        } else {
-            optionToggle(
-                "Run in Terminal", isOn: $runsInTerminal,
-                detail: "Open in your terminal app, for commands that ask or draw a screen.")
-        }
     }
 
     private func optionToggle(

@@ -53,7 +53,6 @@ struct SettingsBackup: Codable {
         // `snippetsEnabled` is absent: an import must not enable keystroke listening.
         var customCommandsEnabled: Bool?
         var customCommandsShowInLauncher: Bool?
-        var customCommandsRunInTerminal: Bool?
         var snippetsShowInLauncher: Bool?
         // Safe to carry: it grants no permission class paste doesn't already prompt for.
         var navigationEnabled: Bool?
@@ -74,6 +73,8 @@ struct SettingsBackup: Codable {
         var quicklinkConfirmsBeforeDelete: Bool?
         // Carried like quicklinks: running a shortcut the user built grants no permission class.
         var appleShortcutsEnabled: Bool?
+        // Carried: it moves where a typed shell line runs, and arms nothing that was not armed.
+        var shellCommandRunsInTerminal: Bool?
         // `calendarEnabled` is absent: an import must not grant calendar access.
         var calendarShowInLauncher: Bool?
         var calendarLauncherLimit: Int?
@@ -162,7 +163,6 @@ extension SettingsBackup {
             notesShowsFormattingBar: s.notesShowsFormattingBar,
             customCommandsEnabled: s.customCommandsEnabled,
             customCommandsShowInLauncher: s.customCommandsShowInLauncher,
-            customCommandsRunInTerminal: s.customCommandsRunInTerminal,
             snippetsShowInLauncher: s.snippetsShowInLauncher,
             navigationEnabled: s.navigationEnabled,
             menuSearchDisabledApps: s.menuSearchDisabledApps,
@@ -180,6 +180,7 @@ extension SettingsBackup {
             quicklinkSelectionFallback: s.quicklinkSelectionFallback.rawValue,
             quicklinkConfirmsBeforeDelete: s.quicklinkConfirmsBeforeDelete,
             appleShortcutsEnabled: s.appleShortcutsEnabled,
+            shellCommandRunsInTerminal: s.shellCommandRunsInTerminal,
             calendarShowInLauncher: s.calendarShowInLauncher,
             calendarLauncherLimit: s.calendarLauncherLimit.rawValue,
             calendarSpan: s.calendarSpan.rawValue,
@@ -424,10 +425,6 @@ extension SettingsBackup {
             settings.customCommandsShowInLauncher = flag
             count += 1
         }
-        if let flag = s.customCommandsRunInTerminal {
-            settings.customCommandsRunInTerminal = flag
-            count += 1
-        }
         if let flag = s.snippetsShowInLauncher {
             settings.snippetsShowInLauncher = flag
             count += 1
@@ -482,6 +479,10 @@ extension SettingsBackup {
         }
         if let flag = s.appleShortcutsEnabled {
             settings.appleShortcutsEnabled = flag
+            count += 1
+        }
+        if let flag = s.shellCommandRunsInTerminal {
+            settings.shellCommandRunsInTerminal = flag
             count += 1
         }
         if let flag = s.quicklinkOpensNewWindow {

@@ -25,14 +25,6 @@ struct CommandsSettingsView: View {
                 isEnabled: $settings.customCommandsEnabled,
                 showsInLauncher: $settings.customCommandsShowInLauncher)
 
-            // Not dimmed with the feature: Run Shell Command follows it, and has its own switch.
-            Section {
-                Toggle(isOn: $settings.customCommandsRunInTerminal) {
-                    SettingsRowTitle(.commandsCustomCommands, "Always run in Terminal")
-                    Text("Open every custom command, and Run Shell Command, in your terminal app.")
-                }
-            }
-
             Section {
                 if store.commands.isEmpty {
                     Text("No custom commands yet.")

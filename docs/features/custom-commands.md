@@ -267,11 +267,14 @@ or the window's Run Again would look up an id the store has never held and do no
 
 ### Run in Terminal
 
-A command can skip Blitz's own surfaces entirely and open in the user's terminal app: the per-command
-**Run in Terminal** option, or **Always run in Terminal** in the Commands pane for every custom
-command and the **Run Shell Command** fallback alike. `CustomCommandCoordinator.execute` is the one
-place that picks where a run goes — terminal, output window, or the background — and it runs after
-the confirmation gate and after the arguments are collected, so neither can be skipped this way.
+A command can skip Blitz's own surfaces entirely and open in the user's terminal app through its
+own **Run in Terminal** option. The **Run Shell Command** fallback has the equivalent switch where
+the fallback is configured — Settings → Fallbacks → Run Shell Command → **Open in Terminal** — and
+it governs that fallback alone; a saved command only ever follows its own option.
+`CustomCommandCoordinator.execute` is the one place that picks where a run goes — terminal, output
+window, or the background — reading only `runsInTerminal`; the fallback's ad-hoc command takes the
+switch into that field when it is built. It runs after the confirmation gate and after the arguments
+are collected, so neither can be skipped this way.
 
 The run goes through `TerminalHandoff`, the same self-deleting `.command` script as the output
 window's **Open in Terminal**, and keeps the [execution contract](#execution-contract) word for word:
@@ -293,11 +296,10 @@ nothing to act on, so the editor dims them while the option is on; the terminal 
 A folder that has gone is reported by the terminal's `cd`, which stops the script before the
 command, rather than by a Blitz dialog.
 
-The general switch is an `AppSettings` preference with its `SettingsFileKey`
-(`commands.alwaysRunInTerminal`) and rides settings backups: it moves where commands run but arms
-nothing that was not already armed. It is not dimmed with the feature switch, because Run Shell
-Command follows it and has its own switch. While it is on, the editor shows the per-command option
-on and locked, and pointing at the pane.
+The fallback's switch, `shellCommandRunsInTerminal`, is an `AppSettings` preference with its
+`SettingsFileKey` (`fallbacks.runShellCommandInTerminal`), and rides settings backups: it moves
+where a typed line runs and arms nothing that was not already armed — unlike the fallback's own
+checkbox, which stays out of backups. Its section dims while the fallback is unchecked.
 
 ### Run In
 
@@ -383,8 +385,8 @@ Foundation-only harness. Verify by hand:
 22. A command with **Run in Terminal** opens Terminal in its Run In folder, asks for its arguments
     and its confirmation first, and leaves a shell there once it finishes. Show output and Show
     confirmation are dimmed in its editor.
-23. **Always run in Terminal** sends every custom command and Run Shell Command to Terminal, and
-    locks the editor's per-command option on; turning it off restores each command's own choice.
+23. Settings → Fallbacks → Run Shell Command → **Open in Terminal** sends a typed launcher line to
+    Terminal, and leaves every saved custom command where its own option puts it.
 
 ## Importing Raycast scripts
 

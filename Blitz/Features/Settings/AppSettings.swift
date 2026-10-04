@@ -343,11 +343,11 @@ final class AppSettings {
         }
     }
 
-    /// Every custom command, and Run Shell Command, opens in the user's terminal app.
-    var customCommandsRunInTerminal: Bool {
+    /// The Run Shell Command fallback opens in the user's terminal app, not the output window.
+    var shellCommandRunsInTerminal: Bool {
         didSet {
             defaults.set(
-                customCommandsRunInTerminal, forKey: Key.customCommandsRunInTerminal.rawValue)
+                shellCommandRunsInTerminal, forKey: Key.shellCommandRunsInTerminal.rawValue)
         }
     }
 
@@ -683,8 +683,7 @@ final class AppSettings {
         customCommandsShowInLauncher =
             defaults.object(forKey: Key.customCommandsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.customCommandsShowInLauncher.rawValue)
-        customCommandsRunInTerminal =
-            defaults.bool(forKey: Key.customCommandsRunInTerminal.rawValue)
+        shellCommandRunsInTerminal = defaults.bool(forKey: Key.shellCommandRunsInTerminal.rawValue)
         snippetsEnabled = defaults.bool(forKey: Key.snippetsEnabled.rawValue)
         quickActionsEnabled = defaults.bool(forKey: Key.quickActionsEnabled.rawValue)
         snippetsShowInLauncher =

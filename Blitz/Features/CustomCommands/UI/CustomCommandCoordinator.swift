@@ -180,7 +180,7 @@ final class CustomCommandCoordinator {
         // No working directory, which the runner reads as home — the only sane cwd for a launcher.
         let command = CustomCommand(
             name: CommandID.runShellCommand.name, command: text, loadsShellEnvironment: true,
-            showsOutput: true)
+            showsOutput: true, runsInTerminal: settings.shellCommandRunsInTerminal)
         lastShellCommand = (command.id, text)
         Task { await execute(command, arguments: []) }
     }
@@ -216,7 +216,7 @@ final class CustomCommandCoordinator {
 
     /// Where a run goes: the user's terminal, the output window, or quietly in the background.
     private func execute(_ command: CustomCommand, arguments: [String]) async {
-        if command.runsInTerminal || settings.customCommandsRunInTerminal {
+        if command.runsInTerminal {
             openInTerminal(
                 directory: startingDirectory(of: command), command: command.command,
                 arguments: arguments, loadingShellEnvironment: command.loadsShellEnvironment)

@@ -5,11 +5,13 @@ struct FallbacksSettingsView: View {
     @Environment(AppCore.self) private var core
     /// Observed so a reorder or a checkbox redraws the list under the button that moved it.
     @Environment(FallbackStore.self) private var store
+    @Environment(AppSettings.self) private var settings
 
     private var fallbacks: [Fallback] { core.fallbackCoordinator.available }
 
     var body: some View {
-        Form {
+        @Bindable var settings = settings
+        return Form {
             Section {
                 let fallbacks = fallbacks
                 if fallbacks.isEmpty {
@@ -28,6 +30,16 @@ struct FallbacksSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                Toggle(isOn: $settings.shellCommandRunsInTerminal) {
+                    SettingsRowTitle(.fallbacksShellCommand, "Open in Terminal")
+                    Text("Run the typed line in your terminal app, not Blitz's output window.")
+                }
+            } header: {
+                SettingsSectionHeader(.fallbacksShellCommand)
+            }
+            .settingsEnabled(store.isEnabled(.builtin(.runShellCommand)))
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.fallbacks)
