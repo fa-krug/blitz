@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The quicklink library plus the behaviour that applies to all of them.
@@ -155,6 +156,7 @@ struct QuicklinksSettingsView: View {
 }
 
 private struct QuicklinkSettingsRow: View {
+    @Environment(QuicklinkStore.self) private var store
     let quicklink: Quicklink
     @Binding var isEnabled: Bool
     let onEdit: () -> Void
@@ -162,10 +164,17 @@ private struct QuicklinkSettingsRow: View {
 
     var body: some View {
         SettingsRow(title: quicklink.name, subtitle: quicklink.link, anchor: .quicklinksQuicklinks) {
-            SymbolImage(
-                name: quicklink.symbol,
-                size: Theme.Size.settingsRowIcon - Theme.Spacing.xs
-            )
+            Group {
+                if let path = store.faviconPaths[quicklink.id] {
+                    Image(nsImage: IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent))
+                        .resizable()
+                } else {
+                    SymbolImage(
+                        name: quicklink.symbol,
+                        size: Theme.Size.settingsRowIcon - Theme.Spacing.xs
+                    )
+                }
+            }
             .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
         } trailing: {
             if quicklink.isPinned {

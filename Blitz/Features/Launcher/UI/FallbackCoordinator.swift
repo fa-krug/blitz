@@ -38,7 +38,10 @@ final class FallbackCoordinator {
         case .builtin(.searchWeb):
             return CommandCatalog.makeEntry(.searchWeb, subtitle: settings.webSearchEngine.title)
         case .builtin(let builtin): return CommandCatalog.makeEntry(builtin.command)
-        case .quicklink(let id): return quicklinks.quicklink(id: id).map(AppEntry.init)
+        case .quicklink(let id):
+            return quicklinks.quicklink(id: id).map {
+                AppEntry($0, faviconPath: quicklinks.faviconPaths[id])
+            }
         }
     }
 
