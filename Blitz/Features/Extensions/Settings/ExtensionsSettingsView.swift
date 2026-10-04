@@ -4,8 +4,6 @@ import SwiftUI
 struct ExtensionsSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(SettingsNavigationState.self) private var navigation
-    /// The extension whose page is open, by manifest name; nil shows the library.
-    @State private var detail: String?
     /// The row the library scrolls back to once a page closes, so a long list keeps its place.
     @State private var returning: String?
     @State private var filter = ""
@@ -28,7 +26,6 @@ struct ExtensionsSettingsView: View {
                 ExtensionDetailForm(
                     installed: shown,
                     isUpdating: core.extensions.updating.contains(shown.manifest.name),
-                    onBack: closeDetail,
                     onUpdate: core.extensions.updates[shown.manifest.name] == nil
                         ? nil : { update([shown.manifest.name]) },
                     onUninstall: { core.extensionCoordinator.confirmUninstall(shown) })
@@ -59,22 +56,10 @@ struct ExtensionsSettingsView: View {
         .settingsEditorPanel(isPresented: $installingFromGitHub) {
             ExtensionGitHubPanel(onClose: { installingFromGitHub = false })
         }
-        .onChange(of: navigation.scrollRequest, initial: true) {
-            guard let target = navigation.scrollRequest?.target, target.tab == .extensions else {
-                return
-            }
-            // A jump to one extension opens its page; anything else lands on the library.
-            if case .row(.extensionsInstalled, let name) = target {
-                (detail, filter) = (name, "")
-            } else {
-                detail = nil
-            }
+        .onChange(of: navigation.page) { previous, page in
+            if page == nil { returning = previous }
         }
-        .onChange(of: core.extensions.installed.count) { previous, _ in
-            // Not on the first scan: a jump can name an extension before the library has loaded.
-            if previous > 0, shown == nil { detail = nil }
-            Task { await measureReclaimable() }
-        }
+        .onChange(of: core.extensions.installed.count) { Task { await measureReclaimable() } }
         .task {
             await core.extensions.refresh()
             await measureReclaimable()
@@ -83,13 +68,10 @@ struct ExtensionsSettingsView: View {
         }
     }
 
+    /// Nil on the library, and for a page whose extension is gone: Back may still reach one.
     private var shown: InstalledExtension? {
-        guard let detail else { return nil }
-        return core.extensions.installed.first { $0.manifest.name == detail }
-    }
-
-    private func closeDetail() {
-        (returning, detail) = (detail, nil)
+        guard navigation.tab == .extensions, let page = navigation.page else { return nil }
+        return core.extensions.installed.first { $0.manifest.name == page }
     }
 
     private var libraryForm: some View {
@@ -118,7 +100,8 @@ struct ExtensionsSettingsView: View {
                 storage
             }
             .formStyle(.grouped)
-            .task {
+            // Keyed: Back can close a page before or after the library mounts again.
+            .task(id: returning) {
                 guard let returning else { return }
                 // The Form has just mounted, so let it lay the row out before scrolling to it.
                 await Task.yield()
@@ -181,7 +164,7 @@ struct ExtensionsSettingsView: View {
                             installed: installed,
                             hasUpdate: core.extensions.updates[name] != nil,
                             isUpdating: core.extensions.updating.contains(name),
-                            onOpen: { detail = name })
+                            onOpen: { navigation.select(.extensions, page: name) })
                     }
                 }
             }
@@ -461,22 +444,15 @@ private struct ExtensionLibraryRow: View {
 private struct ExtensionDetailForm: View {
     let installed: InstalledExtension
     let isUpdating: Bool
-    let onBack: () -> Void
     /// Nil unless the store has a newer version.
     let onUpdate: (() -> Void)?
     let onUninstall: () -> Void
 
     var body: some View {
         Form {
+            // The window's Back chevron leaves the page, as in System Settings.
             Section {
                 summary
-            } header: {
-                Button(action: onBack) {
-                    Label("Installed", systemImage: "chevron.left")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tint)
-                .accessibilityLabel("Back to installed extensions")
             }
 
             // No heading: these two are one idea, and first so 19 commands can't bury them.
@@ -531,8 +507,6 @@ private struct ExtensionDetailForm: View {
             }
             Button("Uninstall…", role: .destructive, action: onUninstall)
         }
-        // Where a jump to this extension lands, so the pane's reveal has something to scroll to.
-        .id(SettingsTarget.row(.extensionsInstalled, installed.manifest.name))
     }
 
     /// One `Grid` per card: separate grids size their columns apart, stranding controls.

@@ -730,6 +730,10 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   It is a **second `List`**, keyed by
   `SettingsSearchEntry.ID`, so result identities never share a selection namespace with `SettingsTab`.
   ⌘F focuses the field, Escape clears it.
+- **A pane may have pages of its own.** `SettingsLocation` is a pane plus an optional `page` string
+  only that pane interprets, and `SettingsHistory` records locations, so Back and Forward walk a page
+  as they walk a pane. Choosing a pane in the sidebar lands on its root. Extensions is the one pane
+  with pages: an extension's settings, keyed by its manifest name.
 - **`SettingsSearchCatalog` is hand-written, and that is the only option.** A `Form` cannot be asked
   what rows it holds, so a new row is searchable only once it is listed there — with its anchor, its
   title and the keywords the title doesn't contain ("caps lock" for Hyper Key).

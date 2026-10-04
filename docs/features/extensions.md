@@ -482,11 +482,13 @@ multi-megabyte `.js.map` Raycast writes beside each bundle.
 **The Installed list is one plain row per extension, and its settings open on their own page.** An
 import can bring in hundreds, and a `Form` realizes every row it is handed, so a row holds no AppKit
 control — icon, title, an update badge and a chevron, nothing more. The page carries Update, Uninstall,
-Show in launcher, Launcher icon, preferences and commands. Anything that sends the user to one
-extension's settings — the launcher's Configure Extension action, a command missing a required
-preference, an extension calling `openExtensionPreferences()` — reveals
-`.row(.extensionsInstalled, <name>)`, which the pane answers by opening that page rather than
-scrolling the list. Back returns the list to the row it came from.
+Show in launcher, Launcher icon, preferences and commands. A page is a Settings history location —
+the extension's manifest name as the Extensions pane's `page` — so the window's Back and Forward
+chevrons walk into and out of it, and choosing Extensions in the sidebar returns to the list. Anything
+that sends the user to one extension's settings — the launcher's Configure Extension action, a command
+missing a required preference, an extension calling `openExtensionPreferences()` — calls
+`showSettings(tab: .extensions, page:)`, one step straight onto the page, so Back returns to wherever
+the jump came from. Leaving a page for the list scrolls it back to that extension's row.
 
 ## Installing from GitHub
 
