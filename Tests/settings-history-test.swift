@@ -23,6 +23,8 @@ struct SettingsHistoryTests {
         roundTrips()
         aNewBranchDiscardsTheOldOne()
         clampsAtBothEnds()
+        pagesAreStepsOfTheirOwn()
+        choosingAPaneLeavesItsPage()
         sidebarCoversEveryPane()
         sidebarIdentityNamespacesAreDisjoint()
         catalogCoversEveryPane()
@@ -38,74 +40,114 @@ struct SettingsHistoryTests {
     }
 
     static func startsEmpty() {
-        let history = SettingsHistory(current: .general)
+        let history = SettingsHistory(current: SettingsLocation(.general))
         expect(!history.canGoBack, "and has nowhere to go back to")
         expect(!history.canGoForward, "or forward to")
     }
 
     static func selectingPushes() {
-        var history = SettingsHistory(current: .general)
-        history.select(.clipboard)
-        expect(history.current == .clipboard, "selecting shows the new pane")
+        var history = SettingsHistory(current: SettingsLocation(.general))
+        history.select(SettingsLocation(.clipboard))
+        expect(history.current.tab == .clipboard, "selecting shows the new pane")
         expect(history.canGoBack, "and leaves the old one behind us")
         expect(!history.canGoForward, "with nothing ahead")
     }
 
     /// Reselecting must not stack entries, or Back walks the same pane repeatedly.
     static func reselectingIsNotANavigation() {
-        var history = SettingsHistory(current: .general)
-        history.select(.general)
+        var history = SettingsHistory(current: SettingsLocation(.general))
+        history.select(SettingsLocation(.general))
         expect(!history.canGoBack, "re-selecting the current pane pushes nothing")
 
-        history.select(.backup)
-        history.select(.backup)
+        history.select(SettingsLocation(.backup))
+        history.select(SettingsLocation(.backup))
         history.goBack()
-        expect(history.current == .general, "and one Back still reaches the pane before it")
+        expect(history.current.tab == .general, "and one Back still reaches the pane before it")
     }
 
     static func roundTrips() {
-        var history = SettingsHistory(current: .general)
-        history.select(.snippets)
-        history.select(.emoji)
+        var history = SettingsHistory(current: SettingsLocation(.general))
+        history.select(SettingsLocation(.snippets))
+        history.select(SettingsLocation(.emoji))
 
         history.goBack()
-        expect(history.current == .snippets, "Back walks one entry at a time")
+        expect(history.current.tab == .snippets, "Back walks one entry at a time")
         expect(history.canGoForward, "and what we left becomes reachable again")
 
         history.goBack()
-        expect(history.current == .general, "Back reaches the pane we opened on")
+        expect(history.current.tab == .general, "Back reaches the pane we opened on")
 
         history.goForward()
         history.goForward()
-        expect(history.current == .emoji, "Forward retraces the same path")
+        expect(history.current.tab == .emoji, "Forward retraces the same path")
         expect(!history.canGoForward, "and stops where we had got to")
     }
 
     static func aNewBranchDiscardsTheOldOne() {
-        var history = SettingsHistory(current: .general)
-        history.select(.snippets)
-        history.select(.emoji)
+        var history = SettingsHistory(current: SettingsLocation(.general))
+        history.select(SettingsLocation(.snippets))
+        history.select(SettingsLocation(.emoji))
         history.goBack()
         history.goBack()
 
-        history.select(.about)
-        expect(history.current == .about, "selecting after going back moves there")
+        history.select(SettingsLocation(.about))
+        expect(history.current.tab == .about, "selecting after going back moves there")
         expect(!history.canGoForward, "and drops the branch we had backed out of")
 
         history.goBack()
-        expect(history.current == .general, "while Back still reaches where we branched from")
+        expect(history.current.tab == .general, "while Back still reaches where we branched from")
     }
 
     static func clampsAtBothEnds() {
-        var history = SettingsHistory(current: .general)
+        var history = SettingsHistory(current: SettingsLocation(.general))
         history.goBack()
-        expect(history.current == .general, "Back at the start is a no-op")
+        expect(history.current.tab == .general, "Back at the start is a no-op")
         history.goForward()
-        expect(history.current == .general, "Forward with nothing ahead is a no-op")
+        expect(history.current.tab == .general, "Forward with nothing ahead is a no-op")
 
-        history.select(.about)
+        history.select(SettingsLocation(.about))
         history.goForward()
-        expect(history.current == .about, "Forward at the tip is a no-op too")
+        expect(history.current.tab == .about, "Forward at the tip is a no-op too")
+    }
+
+    /// A pane's own page is a step Back and Forward walk, like a pane is.
+    static func pagesAreStepsOfTheirOwn() {
+        let navigation = SettingsNavigationState(tab: .general)
+        navigation.select(.extensions)
+        navigation.select(.extensions, page: "github")
+        expect(navigation.tab == .extensions, "a page stays on its pane")
+        expect(navigation.page == "github", "and is the current location")
+
+        navigation.select(.extensions, page: "github")
+        navigation.goBack()
+        expect(navigation.page == nil, "re-opening the same page pushes nothing; Back reaches the list")
+        expect(navigation.tab == .extensions, "on the same pane")
+
+        navigation.goForward()
+        expect(navigation.page == "github", "Forward reopens the page")
+
+        navigation.select(.clipboard)
+        navigation.goBack()
+        expect(navigation.page == "github", "and Back from another pane returns to it")
+    }
+
+    /// The sidebar row of the pane a page is open on means the pane itself, as in System Settings.
+    static func choosingAPaneLeavesItsPage() {
+        let navigation = SettingsNavigationState(tab: .extensions)
+        navigation.select(.extensions, page: "github")
+        navigation.select(.extensions)
+        expect(navigation.page == nil, "choosing the pane returns to its root")
+        navigation.goBack()
+        expect(navigation.page == "github", "as a step Back can undo")
+
+        navigation.select(.extensions, revealing: .section(.extensionsInstalled))
+        expect(navigation.page == nil, "and a revealed section lands on the root too")
+
+        // A jump from elsewhere is one step, so Back returns to where it came from.
+        let jumped = SettingsNavigationState(tab: .clipboard)
+        jumped.select(.extensions, page: "github")
+        jumped.goBack()
+        expect(jumped.tab == .clipboard && jumped.page == nil, "a jump to a page is a single step")
     }
 
     // MARK: - Sidebar taxonomy

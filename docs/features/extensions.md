@@ -479,6 +479,17 @@ Settings → Extensions offers four routes, under **Install New**:
 Only `package.json`, the built commands and `assets/` are copied — never `node_modules` or the
 multi-megabyte `.js.map` Raycast writes beside each bundle.
 
+**The Installed list is one plain row per extension, and its settings open on their own page.** An
+import can bring in hundreds, and a `Form` realizes every row it is handed, so a row holds no AppKit
+control — icon, title, an update badge and a chevron, nothing more. The page carries Update, Uninstall,
+Show in launcher, Launcher icon, preferences and commands. A page is a Settings history location —
+the extension's manifest name as the Extensions pane's `page` — so the window's Back and Forward
+chevrons walk into and out of it, and choosing Extensions in the sidebar returns to the list. Anything
+that sends the user to one extension's settings — the launcher's Configure Extension action, a command
+missing a required preference, an extension calling `openExtensionPreferences()` — calls
+`showSettings(tab: .extensions, page:)`, one step straight onto the page, so Back returns to wherever
+the jump came from. Leaving a page for the list scrolls it back to that extension's row.
+
 ## Installing from GitHub
 
 The panel takes `owner/repo`, a clone URL, or the `/tree/<ref>/<path>` link a browser copies from an
@@ -886,7 +897,7 @@ shared with every other project on the machine.
 ## Making one look native
 
 An imported extension draws whatever icon it shipped, which rarely matches the rest of the launcher.
-**Settings › Extensions › Configure › Launcher icon** replaces it with an SF Symbol on a tinted tile —
+**Settings › Extensions › the extension › Launcher icon** replaces it with an SF Symbol on a tinted tile —
 the same tile `IconCache` draws for the built-in commands, so the row reads as part of the app.
 
 ### `ExtensionIconCache`, and why extension artwork draws smaller

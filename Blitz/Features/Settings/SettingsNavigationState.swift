@@ -8,10 +8,12 @@ final class SettingsNavigationState {
     private var requests = 0
 
     init(tab: SettingsTab) {
-        history = SettingsHistory(current: tab)
+        history = SettingsHistory(current: SettingsLocation(tab))
     }
 
-    var tab: SettingsTab { history.current }
+    var tab: SettingsTab { history.current.tab }
+    /// The current pane's own page, if one is open; nil is the pane itself.
+    var page: String? { history.current.page }
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
@@ -20,9 +22,9 @@ final class SettingsNavigationState {
     /// The section lit right now. One source for the whole window, so a pane swap can't lose it.
     private(set) var flashing: SettingsTarget?
 
-    /// A search result navigates and asks the pane to reveal one section; a sidebar row just navigates.
-    func select(_ tab: SettingsTab, revealing target: SettingsTarget? = nil) {
-        history.select(tab)
+    /// A page names one of the pane's own; a search result also asks the pane to reveal a section.
+    func select(_ tab: SettingsTab, page: String? = nil, revealing target: SettingsTarget? = nil) {
+        history.select(SettingsLocation(tab, page: page))
         // Any navigation puts the previous pulse out, so a stale light can't outlive its pane.
         flashing = nil
         guard let target else { return }

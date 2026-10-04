@@ -242,8 +242,7 @@ final class ExtensionCoordinator {
 
     func showExtensionSettings(for owner: InstalledExtension) {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        settingsCoordinator.showSettings(
-            tab: .extensions, revealing: .row(.extensionsInstalled, owner.manifest.name))
+        settingsCoordinator.showSettings(tab: .extensions, page: owner.manifest.name)
     }
 
     // MARK: - Host callbacks, routed here so the manager never touches a window itself
