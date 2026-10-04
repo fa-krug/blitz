@@ -89,6 +89,7 @@ private struct QuicklinkRow: View {
     let quicklink: Quicklink
     let selected: Bool
     @Environment(HotKeyManager.self) private var hotKeys
+    @Environment(QuicklinkStore.self) private var store
     @State private var hovered = false
 
     /// Selection wins over hover when a row is both; otherwise hover shows its fainter layer.
@@ -101,7 +102,7 @@ private struct QuicklinkRow: View {
     var body: some View {
         IconCache.observeStyle()
         return HStack(spacing: metrics.spacing.lg) {
-            Image(nsImage: IconCache.symbolIcon(named: quicklink.symbol))
+            Image(nsImage: icon)
                 .resizable()
                 .frame(width: metrics.size.resultRowIcon, height: metrics.size.resultRowIcon)
             VStack(alignment: .leading, spacing: metrics.spacing.xxs) {
@@ -136,6 +137,14 @@ private struct QuicklinkRow: View {
         )
         .armedHover($hovered)
     }
+
+    /// The same image the launcher row draws, so a quicklink looks alike on both screens.
+    private var icon: NSImage {
+        guard let path = store.faviconPaths[quicklink.id] else {
+            return IconCache.symbolIcon(named: quicklink.symbol)
+        }
+        return IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent)
+    }
 }
 
 /// The detail pane beside the list, the way Search Snippets previews the snippet it highlights.
@@ -147,7 +156,7 @@ struct QuicklinkPreview: View {
         if let quicklink {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer(minLength: 0)
-                SymbolImage(name: quicklink.symbol, size: Self.glyphSize)
+                glyph(for: quicklink)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, metrics.spacing.xl)
                 Spacer(minLength: 0)
@@ -162,6 +171,19 @@ struct QuicklinkPreview: View {
 
     /// Large enough to read as artwork, not as an oversized row icon.
     private static let glyphSize: CGFloat = 64
+
+    /// Decoded from the stored PNG rather than the row's cache, which holds it at row size.
+    @ViewBuilder
+    private func glyph(for quicklink: Quicklink) -> some View {
+        if let favicon = quicklink.favicon, let image = NSImage(data: favicon) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Self.glyphSize, height: Self.glyphSize)
+        } else {
+            SymbolImage(name: quicklink.symbol, size: Self.glyphSize)
+        }
+    }
 }
 
 /// The "Information" block; everything in it is already in memory, so nothing is gathered off-main.

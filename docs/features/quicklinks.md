@@ -27,6 +27,9 @@ every shortcut without re-registering.
   attached — name, link, alias, shortcut, favorite slot, ranking — stays exactly as it was. The
   **Settings → Quicklinks** row is the one place that turns it back on, through the checkbox launcher
   items and custom commands carry: last in the row, dimming the alias field and shortcut recorder.
+- **A favicon is fetched only when asked.** The editor's refetch button is the feature's one network
+  call — nothing fetches in the background, on save or on import — and the PNG it returns lives in
+  the quicklink itself, so it travels with every backup, export and duplicate.
 - **There is one template engine.** Quicklinks expand through `SnippetTemplateEngine` rather than a
   second parser, which is what makes `| raw` mean something — it opts a value out of the automatic
   percent-encoding a URL destination asks for. `{selectedText}` is accepted as an alias for
@@ -155,6 +158,33 @@ second one.
 Every failure — unresolvable link, missing file, missing app, refused open — reports through
 Blitz's own dialog and leaves no partial state.
 
+## Favicons
+
+A website quicklink can wear its site's icon instead of a symbol. The editor's **Icon** field carries a
+refetch button beside the picker, enabled only while the link is a website; pressing it again is how a
+site's new logo is picked up. Choosing any symbol in the picker, Automatic included, drops the favicon.
+
+`QuicklinkFavicon.siteURL` reads the site from the template with its placeholders blanked, so
+`https://github.com/search?q={argument}` asks `https://github.com/`, and a templated host has no site
+to ask. `QuicklinkFaviconFetcher` searches the first 512 KB of that page for the `<link>` icons it
+declares and tries them best first — a vector, then the largest declared size, then a touch icon,
+whose padded tile reads worse than a site's own large icon, then the small ones — and finally
+`/favicon.ico`. The first that decodes is drawn into one 128 px square PNG, so an `.ico` holding many
+sizes or an SVG stores one known bitmap. Requests go through a private `.ephemeral`, `urlCache = nil`
+session.
+
+The PNG is a `favicon` blob on the row and a base64 field in an export, and while it is set it wins
+over `iconSymbol`. The argument strip's glyph and the ⌘K menu still draw the symbol, since both take a
+symbol name.
+
+The launcher draws artwork from a file, so `QuicklinkStore` writes each favicon out to
+`QuicklinkFavicons/` beside the database, **named by a hash of its bytes**: a refetch moves the path,
+and `IconCache`, which keys artwork by path, can never serve the old image. Those files are derived
+rather than authored, so the store prunes unreferenced ones on `load` without touching the database,
+which stays the source. A favicon draws at `QuicklinkFavicon.extent`, the 0.76 extension artwork
+uses, for the same optical reason — see
+[extensions.md](extensions.md#extensioniconcache-and-why-extension-artwork-draws-smaller).
+
 ## Search and pinning
 
 Quicklinks are their own `AppEntry.Kind`, their own `AppIndex` slice and their own launcher section,
@@ -194,6 +224,7 @@ and use the system handler, once, without changing what is saved.
 
 ```text
 ~/Library/Application Support/<bundle-id>/quicklinks.sqlite3
+~/Library/Application Support/<bundle-id>/QuicklinkFavicons/<hash>.png   # derived, see Favicons
 ```
 
 Quicklinks are **authored data**, which decides the one way `QuicklinkStore` differs from

@@ -22,6 +22,8 @@ struct QuicklinkTests {
         persistence()
         readsADatabaseWrittenElsewhere()
         corruptDatabaseIsPreserved()
+        faviconStorage()
+        faviconDiscovery()
         archiveRoundTrip()
         archiveMerge()
         archiveAcceptsAHandWrittenFile()
@@ -272,7 +274,7 @@ struct QuicklinkTests {
         expect(!restored.isEnabled, "the enabled flag survives")
     }
 
-    /// The bound column order must match the read order, and an older table must gain `is_enabled`.
+    /// The bound column order must match the read order, and an older table must gain new columns.
     static func readsADatabaseWrittenElsewhere() {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -301,6 +303,7 @@ struct QuicklinkTests {
         expect(!row.showsInRootSearch, "the root-search flag lines up")
         expect(!row.isPinned, "a null pin stamp reads as unpinned")
         expect(row.isEnabled, "a table written before is_enabled loads its rows as enabled")
+        expect(row.favicon == nil, "a table written before favicon loads its rows without one")
 
         // A second open must find the column already there rather than adding it twice.
         let reopened = QuicklinkStore(directory: dir)
@@ -327,6 +330,118 @@ struct QuicklinkTests {
             "a mutation refuses rather than pretending to save")
     }
 
+    // MARK: - Favicons
+
+    /// The blob is the source; the file is derived from it, so it may be pruned but never stale.
+    static func faviconStorage() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let png = Data("not really a png".utf8)
+
+        var stored: Quicklink?
+        do {
+            let store = QuicklinkStore(directory: dir)
+            var draft = link("GitHub", "https://github.com")
+            draft.favicon = png
+            stored = try? store.add(draft)
+            guard let stored, let path = store.faviconPaths[stored.id] else {
+                return fail("a stored favicon is written out as a file")
+            }
+            expect(
+                FileManager.default.contents(atPath: path) == png, "the file holds the favicon bytes")
+            guard let copy = try? store.duplicate(id: stored.id) else {
+                return fail("duplicating a quicklink with a favicon succeeds")
+            }
+            expect(copy.favicon == png, "a duplicate keeps the favicon")
+            expect(store.faviconPaths[copy.id] == path, "identical favicons share one file")
+
+            var empty = link("Empty", "https://example.com")
+            empty.favicon = Data()
+            let added = try? store.add(empty)
+            expect(added != nil && added?.favicon == nil, "an empty favicon is stored as none")
+        }
+
+        let reopened = QuicklinkStore(directory: dir)
+        reopened.load()
+        guard let id = stored?.id, let restored = reopened.quicklink(id: id) else {
+            return fail("a quicklink with a favicon survives a reopen")
+        }
+        expect(restored.favicon == png, "the favicon survives a close and reopen")
+        let oldPath = reopened.faviconPaths[id]
+        expect(oldPath != nil, "a reopened store writes its favicon paths again")
+
+        var refetched = restored
+        refetched.favicon = Data("a newer icon".utf8)
+        try? reopened.update(refetched)
+        expect(
+            reopened.faviconPaths[id] != oldPath,
+            "a refetched favicon moves to a new path, so no icon cache serves the old one")
+
+        let folder = dir.appendingPathComponent("QuicklinkFavicons")
+        let copyPath = reopened.quicklinks.first { $0.name == "GitHub Copy" }
+            .flatMap { reopened.faviconPaths[$0.id] }
+        expect(copyPath == oldPath, "the copy still draws the original favicon")
+        if let copy = reopened.quicklinks.first(where: { $0.name == "GitHub Copy" }) {
+            try? reopened.remove(id: copy.id)
+        }
+        let pruned = QuicklinkStore(directory: dir)
+        pruned.load()
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        expect(files.count == 1, "a reload prunes the files no quicklink references any more")
+    }
+
+    static func faviconDiscovery() {
+        expect(
+            QuicklinkFavicon.siteURL(for: "https://github.com/search?q={argument}")
+                == url("https://github.com/"),
+            "a templated link resolves to its site's root")
+        expect(
+            QuicklinkFavicon.siteURL(for: "github.com/fa-krug") == url("https://github.com/"),
+            "a bare host reads as https")
+        expect(
+            QuicklinkFavicon.siteURL(for: "http://localhost:8080/x") == url("http://localhost:8080/"),
+            "the scheme and port are kept")
+        expect(QuicklinkFavicon.siteURL(for: "~/Downloads") == nil, "a path has no favicon")
+        expect(QuicklinkFavicon.siteURL(for: "spotify://track/1") == nil, "a deeplink has none")
+        expect(
+            QuicklinkFavicon.siteURL(for: "https://{argument}.atlassian.net") == nil,
+            "a templated host has no site to ask")
+        expect(
+            QuicklinkFavicon.conventionalURL(for: url("https://example.com/"))
+                == url("https://example.com/favicon.ico"),
+            "the conventional location sits at the root")
+
+        let html = """
+            <head>
+            <link rel="stylesheet" href="/s.css">
+            <link rel="icon" href="/favicon-16.png" sizes="16x16">
+            <LINK REL="Shortcut Icon" HREF='/legacy.ico'>
+            <link rel="apple-touch-icon" href="/touch.png">
+            <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.example.com/i.png?v=1&amp;x=2">
+            <link rel="mask-icon" href="/mask.svg">
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+            <link rel="icon" href="/favicon-16.png">
+            </head>
+            """
+        let found = QuicklinkFavicon.candidates(
+            inHTML: html, baseURL: url("https://example.com/home/"))
+        expect(
+            found == [
+                url("https://example.com/favicon.svg"),
+                url("https://cdn.example.com/i.png?v=1&x=2"),
+                url("https://example.com/touch.png"),
+                url("https://example.com/legacy.ico"),
+                url("https://example.com/favicon-16.png")
+            ],
+            "declared icons are ranked vector, then size, deduplicated, and resolved")
+
+        let first = QuicklinkFavicon.fileName(for: Data("one".utf8))
+        expect(first == QuicklinkFavicon.fileName(for: Data("one".utf8)), "a file name is stable")
+        expect(
+            first != QuicklinkFavicon.fileName(for: Data("two".utf8)),
+            "different favicons get different files")
+    }
+
     // MARK: - Archive
 
     static func archiveRoundTrip() {
@@ -334,8 +449,8 @@ struct QuicklinkTests {
         let stamp = Date(timeIntervalSince1970: 500)
         let pinned = Quicklink(
             name: "Pinned", link: "~/Downloads", openWithBundleID: "com.apple.finder",
-            iconSymbol: "folder", isEnabled: false, showsInRootSearch: false, pinnedAt: stamp,
-            createdAt: stamp)
+            iconSymbol: "folder", favicon: Data([0x89, 0x50, 0x4e, 0x47]), isEnabled: false,
+            showsInRootSearch: false, pinnedAt: stamp, createdAt: stamp)
         let plain = Quicklink(name: "GitHub", link: "https://github.com", createdAt: stamp)
         let source = [plain, pinned]
 

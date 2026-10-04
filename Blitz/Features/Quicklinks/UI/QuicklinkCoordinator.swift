@@ -60,7 +60,7 @@ final class QuicklinkCoordinator {
     /// Either switch off means the feature reaches the launcher not at all — rows and commands.
     func applyQuicklinksPresence() {
         let visible = settings.quicklinksEnabled && settings.quicklinksShowInLauncher
-        appIndex.setQuicklinks(visible ? store.quicklinks : [])
+        appIndex.setQuicklinks(visible ? store.quicklinks : [], faviconPaths: store.faviconPaths)
         let commands: Set<CommandID> = [
             .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks
         ]

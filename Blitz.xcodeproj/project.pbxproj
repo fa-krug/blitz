@@ -231,6 +231,7 @@
 		4ABD6E9C77C77CAC51DB222C /* DialogPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C798FFB7F1A305209A3841 /* DialogPanel.swift */; };
 		4BA5A0ABAC11F7ECC409424B /* CurrencyFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FEBFCB26407BE08EFF7523 /* CurrencyFeed.swift */; };
 		4BF1A5F535C1D29B8831440E /* ExtensionGridGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4C18ED37957C170AACF222 /* ExtensionGridGeometry.swift */; };
+		4CF4ABAF1C790883FBEEEBA0 /* QuicklinkFavicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC026589B1F1120C44D4217 /* QuicklinkFavicon.swift */; };
 		4D107D4D2FD17CE2DD883028 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975EE263236783DAD60A7F2A /* AIProvider.swift */; };
 		4D5036C26D85703E50099D6B /* AppleShortcutRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AA725BCBDA38FB342ECEA9 /* AppleShortcutRunner.swift */; };
 		4D5E22EF5CF0D0A5B71B93E3 /* QuickActionPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0AE84F5689B1D4F2E5C276 /* QuickActionPrompt.swift */; };
@@ -539,6 +540,7 @@
 		A78F04816A4C471ABA27E08B /* SettingsFileJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90529E7EAA46AD7310675FF1 /* SettingsFileJSON.swift */; };
 		A7D702D69B58BCDB81CC8F35 /* MCPOAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A3DBD6955F3FBAE23BDB6BD /* MCPOAuthManager.swift */; };
 		A801F7F20DA900A9E752F1F5 /* ContactsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 886CA09938E04904B5AE141C /* ContactsScreen.swift */; };
+		A802A2A70006544A674BCC28 /* QuicklinkFaviconFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98666534B330DA09FD0D795B /* QuicklinkFaviconFetcher.swift */; };
 		A8136E0166260F498D30129C /* AIModelMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F149C35843F9219DF381AB /* AIModelMenu.swift */; };
 		A82395E0449D837A95FBF157 /* DictionaryMarkup.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF4C6518278C25CF1BB3D237 /* DictionaryMarkup.swift */; };
 		A8B00D49D00F090648CE4991 /* WindowLayoutGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 306357A08C5F23AFCB99BADA /* WindowLayoutGeometry.swift */; };
@@ -1020,6 +1022,7 @@
 		3EF401555D81719DDEC3B34C /* UninstallScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallScanner.swift; sourceTree = "<group>"; };
 		3F65304BC761A5B8E5272D9F /* ChatSuggestionChips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSuggestionChips.swift; sourceTree = "<group>"; };
 		3F7A235008D52078E562F84E /* SystemSettingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSettingsSettingsView.swift; sourceTree = "<group>"; };
+		3FC026589B1F1120C44D4217 /* QuicklinkFavicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkFavicon.swift; sourceTree = "<group>"; };
 		3FDFA7CAA7671772AAF1CC26 /* InputSourceSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceSwitcher.swift; sourceTree = "<group>"; };
 		400498941AAA85A4F4DF6B5A /* SystemActionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemActionsSettingsView.swift; sourceTree = "<group>"; };
 		40606FA71C85ED1306BD2791 /* FileSearchIgnoreList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSearchIgnoreList.swift; sourceTree = "<group>"; };
@@ -1311,6 +1314,7 @@
 		9755F560734E6544B40C9399 /* ExtensionPackageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionPackageManager.swift; sourceTree = "<group>"; };
 		975EE263236783DAD60A7F2A /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		97B3CF36A73D29B8D6CE3202 /* SettingsFileIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFileIssue.swift; sourceTree = "<group>"; };
+		98666534B330DA09FD0D795B /* QuicklinkFaviconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkFaviconFetcher.swift; sourceTree = "<group>"; };
 		98BD1146273498CDB2C04EF8 /* AIProviderFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderFactory.swift; sourceTree = "<group>"; };
 		98E0DF271CFF64C521FCF6D0 /* CalcToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalcToken.swift; sourceTree = "<group>"; };
 		98EBBDE07973BEB10F4A3A35 /* ExtensionCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCleanup.swift; sourceTree = "<group>"; };
@@ -1955,6 +1959,7 @@
 				D2EBC88FA126D3FA1BC32DA1 /* Quicklink.swift */,
 				D8E010740B58A0941B638E98 /* QuicklinkArchive.swift */,
 				36419546783C35A5AC970F36 /* QuicklinkDestination.swift */,
+				3FC026589B1F1120C44D4217 /* QuicklinkFavicon.swift */,
 				88F3D3CE82D061CF2879BF88 /* QuicklinkStore.swift */,
 				B3E60F86306D3FB854362D2F /* RaycastQuicklinkImport.swift */,
 			);
@@ -3531,6 +3536,7 @@
 		EC96C97995DD8BDB8A1E25DB /* Service */ = {
 			isa = PBXGroup;
 			children = (
+				98666534B330DA09FD0D795B /* QuicklinkFaviconFetcher.swift */,
 				3B9D0B58BB920C6486423B03 /* QuicklinkLauncher.swift */,
 			);
 			path = Service;
@@ -4301,6 +4307,8 @@
 				3190E43C133C9F0536B0B319 /* QuicklinkCoordinator.swift in Sources */,
 				AAD8E08F043059B64FE67EB8 /* QuicklinkDestination.swift in Sources */,
 				715A7E655C4BB2986D41E347 /* QuicklinkEditorPanel.swift in Sources */,
+				4CF4ABAF1C790883FBEEEBA0 /* QuicklinkFavicon.swift in Sources */,
+				A802A2A70006544A674BCC28 /* QuicklinkFaviconFetcher.swift in Sources */,
 				2B399CCED727E6062D6B8F2F /* QuicklinkLauncher.swift in Sources */,
 				5C0A4BBDF3027DC581DB3B89 /* QuicklinkListScreen.swift in Sources */,
 				AC52B16BBA9807F0B6C41D5E /* QuicklinkListView.swift in Sources */,
