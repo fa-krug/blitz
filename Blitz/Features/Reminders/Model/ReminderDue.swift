@@ -27,6 +27,12 @@ struct ReminderDue: Hashable, Sendable {
         self.init(year: year, month: month, day: day, time: time)
     }
 
+    init(_ date: AIToolDate) {
+        self.init(
+            year: date.year, month: date.month, day: date.day,
+            time: date.time.map { Time(hour: $0.hour, minute: $0.minute) })
+    }
+
     init(date: Date, includesTime: Bool, calendar: Calendar) {
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         let time = Time(hour: parts.hour ?? 0, minute: parts.minute ?? 0)

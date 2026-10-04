@@ -41,6 +41,9 @@ model to turn it into `Give Greg a cake`, due tomorrow, filled into the same pro
 - **Per-list switches live on `RemindersStore`, not `AppSettings`.** List identifiers are
   machine-specific, so they stay out of the backup, as the calendar's do. They store exclusions, so a
   list added later defaults to on.
+- **A chat changes nothing unseen.** A reminder a chat model creates opens the New Reminder prompt
+  filled in, exactly as Smart Reminder's does, and a completion is confirmed first. See
+  [Chat tools](#chat-tools).
 - **`Model/` stays Foundation-only**; `reminders-test` compiles the shipped sources.
 
 ## The pure layer
@@ -52,7 +55,9 @@ model to turn it into `Give Greg a cake`, due tomorrow, filled into the same pro
 - **`ReminderDraft`** — what a prompt collects, before anything touches Reminders.
 - **`ReminderAgenda`** — the order, the five sections (`Overdue`, `Today`, `Tomorrow`, `Upcoming`,
   `No Due Date`) and the query match over title, notes and list name.
-- **`SmartReminderPrompt`** — the instructions and the reading of the reply.
+- **`SmartReminderPrompt`** — the instructions and the reading of the reply. Its dates are read by
+  `AIToolDate`, the one spelling every Blitz tool uses.
+- **`ReminderToolCatalog`** — the chat tools: their schemas, the reading of a call and the answers.
 
 ## Smart Reminder
 
@@ -94,6 +99,25 @@ to-do list long enough to need search would crowd apps out of the root.
 
 New reminders go on the default Reminders list. A miss — the feature off, no access, AI off — reports
 through the HUD, not a dialog.
+
+## Chat tools
+
+With Reminders on and Settings → AI → Personal data → Reminders access set past Off, a chat on an
+API connection is offered `reminders_list`, and with Read & Write `reminders_create` and
+`reminders_complete` — see [AI](ai.md) for who gets offered what.
+`RemindersCoordinator.chatTools` decides the list and `runTool` answers a call.
+
+A listing is the store's own snapshot, so it covers exactly the lists switched on here, open
+reminders only; a call that arrives before the first fetch lands waits for it rather than answering
+empty. It answers JSON in `ReminderAgenda` order, at most `maxReminders`, each with the id a
+completion names, its list, its due date in the `YYYY-MM-DD[THH:MM]` spelling the calls use, and
+`overdue` where it is.
+
+A create call's draft opens the New Reminder prompt; the reader may edit it, and the answer is what
+was saved, so the model never claims a title the reader changed. A due date the model wrote and
+Blitz cannot read is refused back to it, unlike Smart Reminder's, which drops it: here the model can
+simply try again. Completing looks the id up in the snapshot, so a reminder on a list switched off
+cannot be reached, and asks before it ticks it off on every device.
 
 ## The prompt
 

@@ -34,6 +34,7 @@ struct AISettingsView: View {
             Group {
                 defaultModelSection
                 chatSection
+                personalDataSection
                 conversationsSection
                 systemPromptSection
                 MCPSettingsSection()
@@ -134,6 +135,41 @@ struct AISettingsView: View {
             }
         } header: {
             SettingsSectionHeader(.aiChat)
+        }
+    }
+
+    /// Each store also needs its own feature on, which is where macOS was asked for access.
+    private var personalDataSection: some View {
+        @Bindable var settings = settings
+        return Section {
+            Picker(selection: $settings.calendarAccess) {
+                ForEach(AIDataAccess.allCases) { Text($0.title).tag($0) }
+            } label: {
+                SettingsRowTitle(.aiPersonalData, "Calendar access")
+                Text(
+                    appSettings.calendarEnabled
+                        ? "Events on the calendars switched on in Calendar."
+                        : "Turn on Calendar first.")
+            }
+            .settingsEnabled(appSettings.calendarEnabled)
+            Picker(selection: $settings.remindersAccess) {
+                ForEach(AIDataAccess.allCases) { Text($0.title).tag($0) }
+            } label: {
+                SettingsRowTitle(.aiPersonalData, "Reminders access")
+                Text(
+                    appSettings.remindersEnabled
+                        ? "Open reminders on the lists switched on in Reminders."
+                        : "Turn on Reminders first.")
+            }
+            .settingsEnabled(appSettings.remindersEnabled)
+        } header: {
+            SettingsSectionHeader(.aiPersonalData)
+        } footer: {
+            Text(
+                "API connections only. What a model reads goes to its provider, and you "
+                    + "confirm every change before it is saved.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

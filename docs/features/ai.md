@@ -112,6 +112,19 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   one turn inside that. The scope binds both shapes alike: Blitz's loop is offered only the
   allowed servers' tools, and a Codex or Claude turn is handed only the allowed servers. A route that
   cannot call tools shows the menu disabled and says why.
+- **The Mac's own calendar and reminders are tools Blitz runs, and off until asked for.**
+  Settings → AI → Personal data holds `aiCalendarAccess` and `aiRemindersAccess`, each an
+  `AIDataAccess` of Off, Read Only or Read & Write, both Off out of the box. A store is offered only
+  while its own feature is on too — that switch is where macOS was asked — and only to a route
+  whose loop Blitz runs: an API connection. Codex and the Claude command run their own client and
+  are handed servers, not Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
+  that writes, so the model never sees one it may not use; every call re-checks the setting, since
+  it can change mid-reply. A write is always shown first — an event through Blitz's confirm, a new
+  reminder in the same prompt Smart Reminder fills, where the reader can edit it — and the result
+  tells the model what was actually saved. `@server` narrows a turn to that server alone, and the
+  chat's Use Tools switch withholds these with the rest. Both keys are excluded from backups and
+  have no `settings.json` key: each grants a model a capability. The tools themselves live with
+  their features — see [Calendar](calendar.md#chat-tools) and [Reminders](reminders.md#chat-tools).
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
@@ -474,7 +487,7 @@ menu's own chords, and dies with the window.
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
   thinking share and cost; then what the next message sends — model, history of budget, messages
-  sent of total, staged files, and whether the system prompt, web search and tools ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
+  sent of total, staged files, and whether the system prompt, web search, MCP servers and personal data ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
   the refusals a paste does. The unsent text lives on `AIChatState.draft`, so it survives closing
   the window.
 
@@ -866,6 +879,8 @@ answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and
 join them: all three are decisions about conversations that never leave the Mac that had them, and
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
 limits what a tool-driven reply may spend, and an import must not raise that unasked.
+`aiCalendarAccess` and `aiRemindersAccess` let a model read, or change, this Mac's calendar and
+reminders, and a flag that grants a capability travels in neither a backup nor `settings.json`.
 `aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
 another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
 with, and an import must never decide which program a Mac launches. None of the three has a

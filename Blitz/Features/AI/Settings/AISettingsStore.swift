@@ -41,6 +41,18 @@ final class AISettingsStore {
     var toolRounds: AIToolRounds {
         didSet { defaults.set(toolRounds.rawValue, forKey: AppSettingsKey.aiToolRounds.rawValue) }
     }
+    /// Off by default: a model reaches the calendar only once the reader has said so.
+    var calendarAccess: AIDataAccess {
+        didSet {
+            defaults.set(calendarAccess.rawValue, forKey: AppSettingsKey.aiCalendarAccess.rawValue)
+        }
+    }
+    var remindersAccess: AIDataAccess {
+        didSet {
+            defaults.set(
+                remindersAccess.rawValue, forKey: AppSettingsKey.aiRemindersAccess.rawValue)
+        }
+    }
     /// Per route, the models its picker lists; no entry lists all it offers, later ones too.
     private(set) var shownModels: [String: [String]] {
         didSet { defaults.set(shownModels, forKey: AppSettingsKey.aiShownModels.rawValue) }
@@ -106,6 +118,14 @@ final class AISettingsStore {
         toolRounds =
             AIToolRounds(rawValue: defaults.integer(forKey: AppSettingsKey.aiToolRounds.rawValue))
             ?? .twentyFive
+        calendarAccess =
+            AIDataAccess(
+                rawValue: defaults.integer(forKey: AppSettingsKey.aiCalendarAccess.rawValue))
+            ?? .off
+        remindersAccess =
+            AIDataAccess(
+                rawValue: defaults.integer(forKey: AppSettingsKey.aiRemindersAccess.rawValue))
+            ?? .off
         shownModels =
             defaults.dictionary(forKey: AppSettingsKey.aiShownModels.rawValue) as? [String: [String]]
             ?? [:]

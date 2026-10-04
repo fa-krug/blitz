@@ -322,8 +322,14 @@ final class AIChatCoordinator {
         let chatID = chat.session.id
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
-        ) { [mcp = core.mcpCoordinator] call in
-            await mcp.invoke(call, in: chatID)
+        ) {
+            [
+                mcp = core.mcpCoordinator, calendar = core.calendarCoordinator,
+                reminders = core.remindersCoordinator
+            ] call in
+            if CalendarToolCatalog.handles(call.name) { return await calendar.runTool(call) }
+            if ReminderToolCatalog.handles(call.name) { return await reminders.runTool(call) }
+            return await mcp.invoke(call, in: chatID)
         }
     }
 
@@ -331,10 +337,31 @@ final class AIChatCoordinator {
     private func tools(for chat: AIChatState, scopedTo slug: String?) -> [AITool] {
         guard chat.toolScope.isEnabled else { return [] }
         let excluded = chat.toolScope.excluded
-        return core.mcpCoordinator.tools(scopedTo: slug).filter { tool in
+        let servers = core.mcpCoordinator.tools(scopedTo: slug).filter { tool in
             guard let route = MCPToolName.parse(tool.name) else { return true }
             return !excluded.contains(route.slug)
         }
+        // `@server` addresses one server, so the calendar and reminders sit that turn out.
+        return slug == nil ? personalTools() + servers : servers
+    }
+
+    /// The calendar and reminders, as far as Settings → AI lets a model reach them.
+    private func personalTools() -> [AITool] {
+        let now = Date()
+        return core.calendarCoordinator.chatTools(now: now)
+            + core.remindersCoordinator.chatTools(now: now)
+    }
+
+    /// What the context card names: the stores a turn on this route may reach through Blitz.
+    private func personalData(for chat: AIChatState) -> [String] {
+        guard capabilities(for: chat).tools, model(for: chat)?.runsItsOwnTools != true,
+            chat.toolScope.isEnabled
+        else { return [] }
+        var origins: [String] = []
+        for tool in personalTools() where !origins.contains(tool.origin) {
+            origins.append(tool.origin)
+        }
+        return origins
     }
 
     /// The servers a chat's tools menu offers; empty when MCP is off or nothing is set up.
@@ -389,7 +416,7 @@ final class AIChatCoordinator {
             ? AppleIntelligence.contextBudget : ChatSession.defaultTextBudget
     }
 
-    /// The context card's facts; the gauge redraws per flush, so it skips the card's model title.
+    /// The context card's facts; the gauge redraws per flush, so it skips what only the card shows.
     func contextReport(for chat: AIChatState, detailed: Bool = true) -> ChatContextReport {
         let session = chat.session
         let budget = contextBudget(for: chat)
@@ -406,7 +433,8 @@ final class AIChatCoordinator {
             systemPrompt: core.aiSettings.systemPromptEnabled,
             webSearch: core.aiSettings.webSearchEnabled && can.webSearch,
             toolServers: can.tools && scope.isEnabled
-                ? mcpServers.count { scope.allows($0.slug) } : 0)
+                ? mcpServers.count { scope.allows($0.slug) } : 0,
+            personalData: detailed ? personalData(for: chat) : [])
     }
 
     // MARK: - Attachments
@@ -688,6 +716,8 @@ struct ChatContextReport: Equatable {
     let systemPrompt: Bool
     let webSearch: Bool
     let toolServers: Int
+    /// The Mac's own stores in reach, such as the calendar; left empty for the gauge alone.
+    let personalData: [String]
 
     /// The model's own window when the route reported one; otherwise Blitz's history budget.
     var fill: Double {

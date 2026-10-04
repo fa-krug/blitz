@@ -62,7 +62,8 @@ If Blitz earns a place in your daily flow, you can support it through
   the palette and rendered as you write.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.
 - **AI chat** — use your own key or an installed AI account: ask Quick AI from the palette, or keep
-  longer conversations in the AI Chat window, with a searchable, pinnable history. Off out of the box,
+  longer conversations in the AI Chat window, with a searchable, pinnable history. Let it read your
+  calendar and reminders, or change them with your confirmation, if you choose. Off out of the box,
   like every AI feature.
 - **Quick Actions** — fix grammar, rewrite, translate or summarize the selected text in any app.
 - **Raycast extensions** — run the ones you already have natively, rendered as SwiftUI.

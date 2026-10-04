@@ -90,8 +90,8 @@ If a change touches anything in the right column, the harness on the left is man
 | `scopes-test` | `Launcher/Model/SearchScopes.swift` |
 | `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
 | `calc-test` | all of `Calculator/Model/` |
-| `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets |
-| `reminders-test` | all of `Reminders/Model/` — due dates, ordering and sections, reading a Smart Reminder reply |
+| `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
+| `reminders-test` | all of `Reminders/Model/` — due dates, ordering and sections, reading a Smart Reminder reply, the chat tools |
 | `clipboard-search-test` | Ordinary and OCR result ordering, opt-in lifecycle, cancellation, pins and type filters |
 | `clipboard-text-test` | Apple Vision/PDF extraction, scheduling, retry backoff and recovery |
 | `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |

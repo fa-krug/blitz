@@ -499,6 +499,10 @@ private struct ContextCard: View {
                 row(
                     "MCP servers",
                     report.toolServers == 0 ? "None" : "\(report.toolServers) in reach")
+                row(
+                    "Personal data",
+                    report.personalData.isEmpty
+                        ? "None" : report.personalData.joined(separator: ", "))
             }
             .font(.callout)
         }

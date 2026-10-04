@@ -1,4 +1,4 @@
-// Meeting links, the join and menu-bar windows, auto-join, drafts, day groups and span.
+// Meeting links, the join and menu-bar windows, auto-join, drafts, day groups, span and chat tools.
 import Foundation
 
 @main
@@ -38,6 +38,10 @@ struct CalendarTests {
         autoJoinRespectsArming()
         eventDrafts()
         meetingDetails()
+        chatToolOffer()
+        chatToolListing()
+        chatToolCreation()
+        chatToolAnswers()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -639,6 +643,158 @@ struct CalendarTests {
                 && MeetingSpan.nextSevenDays.possessivePhrase == "the next 7 days'"
                 && MeetingSpan.nextSevenDays.orPhrase == "in the next 7 days",
             "the wording follows the span")
+    }
+
+    // MARK: - Chat tools
+
+    static func october(_ day: Int, _ hour: Int = 0, _ minute: Int = 0) -> Date {
+        calendar.date(
+            from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+    }
+
+    static func toolRequest(_ name: String, _ arguments: String) -> CalendarToolCatalog.Request? {
+        try? CalendarToolCatalog.request(name: name, arguments: arguments, calendar: calendar)
+    }
+
+    /// The sentence the model would read, or nil when the call was accepted.
+    static func refusal(_ name: String, _ arguments: String) -> String? {
+        do throws(AIToolArguments.Invalid) {
+            _ = try CalendarToolCatalog.request(name: name, arguments: arguments, calendar: calendar)
+            return nil
+        } catch {
+            return error.message
+        }
+    }
+
+    static func chatToolOffer() {
+        let readOnly = CalendarToolCatalog.tools(canWrite: false, now: october(3, 14), calendar: calendar)
+        expect(
+            readOnly.map(\.name) == [CalendarToolCatalog.listEventsName],
+            "read-only access offers no tool that writes")
+        let both = CalendarToolCatalog.tools(canWrite: true, now: october(3, 14), calendar: calendar)
+        expect(
+            both.map(\.name) == [CalendarToolCatalog.listEventsName, CalendarToolCatalog.createEventName],
+            "read and write adds Create Event")
+        expect(
+            both.allSatisfy { $0.description.contains(
+                    "Saturday 2026-10-03 14:00, time zone \(calendar.timeZone.identifier)") },
+            "every tool tells the model now, weekday and zone included")
+        expect(both.allSatisfy { $0.origin == "Calendar" }, "the transcript row names the calendar")
+        expect(
+            both.allSatisfy { CalendarToolCatalog.handles($0.name) && !$0.name.contains("__") },
+            "the names route home and never look like a server's")
+        expect(!CalendarToolCatalog.handles("github__list"), "an MCP tool is not the calendar's")
+    }
+
+    static func chatToolListing() {
+        let list = CalendarToolCatalog.listEventsName
+        expect(
+            toolRequest(list, #"{"start": "2026-10-04", "end": "2026-10-05"}"#)
+                == .list(DateInterval(start: october(4), end: october(6)), query: nil),
+            "a date-only end includes its whole day")
+        expect(
+            toolRequest(list, #"{"start": "2026-10-04T09:00", "end": "2026-10-04T12:30", "query": "  "}"#)
+                == .list(DateInterval(start: october(4, 9), end: october(4, 12, 30)), query: nil),
+            "an exact end ends there, and a blank query is none")
+        expect(
+            toolRequest(list, #"{"start": "2026-10-04", "query": "standup"}"#)
+                == .list(DateInterval(start: october(4), end: october(5)), query: "standup"),
+            "a missing end reads the start's day")
+        expect(refusal(list, #"{"start": "2026-10-05", "end": "2026-10-04"}"#) != nil, "an end before the start is refused")
+        expect(
+            refusal(list, #"{"start": "2026-10-01", "end": "2027-03-01"}"#)?.contains("92 days") == true,
+            "a window past the cap says how far it may reach")
+        expect(
+            refusal(list, #"{"start": "2026-02-30", "end": "2026-03-01"}"#)?.contains("start") == true,
+            "a day that does not exist names the field")
+        expect(refusal(list, #"{"end": "2026-10-04"}"#) != nil, "the start is required")
+        expect(refusal(list, "[1, 2]") != nil, "arguments must be an object")
+        expect(refusal("calendar_delete_everything", "{}") != nil, "an unknown tool is refused")
+    }
+
+    static func chatToolCreation() {
+        let create = CalendarToolCatalog.createEventName
+        guard case .create(let timed)? = toolRequest(create, #"{"title": " Dentist ", "start": "2026-10-04T09:00"}"#)
+        else { return fail("a timed event with only a start is accepted") }
+        expect(
+            timed == .init(
+                title: "Dentist", start: october(4, 9), end: october(4, 9, 30), isAllDay: false, location: nil,
+                notes: nil),
+            "it runs the default half hour, its title trimmed")
+        guard case .create(let longer)? = toolRequest(
+            create, #"{"title": "Review", "start": "2026-10-04T09:00", "durationMinutes": "45", "location": "Room 2"}"#)
+        else { return fail("a duration given as a string is still read") }
+        expect(longer.end == october(4, 9, 45) && longer.location == "Room 2", "and sets the end")
+        guard
+            case .create(let allDay)? = toolRequest(
+                create, #"{"title": "Offsite", "start": "2026-10-05", "end": "2026-10-07"}"#)
+        else { return fail("an all-day span is accepted") }
+        expect(
+            allDay.isAllDay && allDay.start == october(5) && allDay.end == october(7),
+            "a date-only start is all day, ending on its last day")
+        expect(
+            refusal(create, #"{"title": "Offsite", "start": "2026-10-05", "end": "2026-10-07T10:00"}"#) != nil,
+            "an all-day event takes no clock time for its end")
+        expect(
+            refusal(create, #"{"title": "Call", "start": "2026-10-05T10:00", "end": "2026-10-05T09:00"}"#) != nil,
+            "a timed end before the start is refused")
+        expect(
+            refusal(create, #"{"title": "Call", "start": "2026-10-05T10:00", "durationMinutes": 0}"#) != nil,
+            "a zero duration is refused")
+        expect(
+            refusal(create, #"{"title": "  ", "start": "2026-10-05T10:00"}"#)?.contains("title") == true,
+            "a blank title is a missing one")
+
+        var posix = calendar
+        posix.locale = Locale(identifier: "en_US_POSIX")
+        let summary = CalendarToolCatalog.summary(of: longer, calendarName: "Work", calendar: posix)
+        expect(summary.hasPrefix("Sunday, Oct 4, "), "the confirmation leads with the day")
+        expect(summary.contains("\u{00B7} Work\nRoom 2"), "then the calendar, and the place below")
+    }
+
+    static func chatToolAnswers() {
+        let events = [
+            CalendarToolEvent(
+                title: "Lunch", start: october(4, 12), end: october(4, 13), isAllDay: false, isDeclined: true,
+                calendarName: "Home", location: "  ", notes: "<b>Bring</b> cake", url: nil),
+            CalendarToolEvent(
+                title: "Offsite", start: october(4), end: october(5).addingTimeInterval(-1), isAllDay: true,
+                isDeclined: false, calendarName: "Work", location: "Berlin", notes: nil,
+                url: "https://zoom.us/j/123")
+        ]
+        let window = DateInterval(start: october(4), end: october(5))
+        let all = JSONValue(
+            data: Data(CalendarToolCatalog.render(events, in: window, query: nil, calendar: calendar).utf8))
+        let listed = all?.objectValue?["events"]?.arrayValue?.compactMap(\.objectValue) ?? []
+        expect(listed.map { $0["title"]?.stringValue } == ["Offsite", "Lunch"], "events come in start order")
+        expect(
+            listed.first?["start"]?.stringValue == "2026-10-04"
+                && listed.first?["end"]?.stringValue == "2026-10-04"
+                && listed.first?["allDay"]?.boolValue == true,
+            "an all-day event names its days, not its midnights")
+        expect(
+            listed.last?["start"]?.stringValue == "2026-10-04T12:00"
+                && listed.last?["declined"]?.boolValue == true,
+            "a timed one names its clock, and says when it was declined")
+        expect(listed.last?["notes"]?.stringValue == "Bring cake", "notes reach the model as text")
+        expect(listed.last?["location"] == nil, "a blank location is left out")
+        expect(listed.first?["url"]?.stringValue == "https://zoom.us/j/123", "the link is kept whole")
+        expect(all?.objectValue?["from"]?.stringValue == "2026-10-04T00:00", "the answer names its window")
+
+        let work = CalendarToolCatalog.render(events, in: window, query: "berlin", calendar: calendar)
+        expect(work.contains("Offsite") && !work.contains("Lunch"), "a query matches the location too")
+
+        let many = (0..<(CalendarToolCatalog.maxEvents + 3)).map { index in
+            CalendarToolEvent(
+                title: "E\(index)", start: october(4, 9), end: october(4, 10), isAllDay: false,
+                isDeclined: false, calendarName: "Work", location: nil, notes: nil, url: nil)
+        }
+        let capped = JSONValue(
+            data: Data(CalendarToolCatalog.render(many, in: window, query: nil, calendar: calendar).utf8))
+        expect(
+            capped?.objectValue?["events"]?.arrayValue?.count == CalendarToolCatalog.maxEvents
+                && capped?.objectValue?["omitted"]?.intValue == 3,
+            "a crowded window is capped, and says how many it left out")
     }
 
     // MARK: - Helpers

@@ -300,6 +300,64 @@ final class CalendarCoordinator {
         return window.joinable(from: store.events, now: Date())
     }
 
+    // MARK: - Chat tools
+
+    /// What a chat model may call now: nothing unless this feature and its AI setting allow it.
+    func chatTools(now: Date) -> [AITool] {
+        let access = core.aiSettings.calendarAccess
+        guard settings.calendarEnabled, access.canRead else { return [] }
+        return CalendarToolCatalog.tools(canWrite: access.canWrite, now: now, calendar: .current)
+    }
+
+    /// Re-checked per call, since Settings can change mid-reply; a write is shown before it lands.
+    func runTool(_ call: AIToolCall) async -> AIToolResult {
+        let access = core.aiSettings.calendarAccess
+        guard settings.calendarEnabled, access.canRead else {
+            return .failure(
+                call.id, "Chat access to the calendar is turned off in Blitz's settings.")
+        }
+        let request: CalendarToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try CalendarToolCatalog.request(
+                name: call.name, arguments: call.arguments, calendar: .current)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        switch request {
+        case .list(let interval, let query):
+            guard let events = store.toolEvents(in: interval) else {
+                return .failure(call.id, "macOS has not given Blitz access to the calendar.")
+            }
+            let answer = CalendarToolCatalog.render(
+                events, in: interval, query: query, calendar: .current)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .create(let event):
+            guard access.canWrite else {
+                return .failure(call.id, "Chat may read the calendar but not change it.")
+            }
+            return await create(event, callID: call.id)
+        }
+    }
+
+    private func create(
+        _ event: CalendarToolCatalog.NewEvent, callID: String
+    ) async -> AIToolResult {
+        let summary = CalendarToolCatalog.summary(
+            of: event, calendarName: store.defaultCalendarName, calendar: .current)
+        guard
+            await core.confirm(
+                title: "Add \u{201C}\(event.title)\u{201D} to your calendar?", message: summary,
+                symbol: "calendar.badge.plus", confirmTitle: "Add Event", tone: .neutral,
+                confirmRole: .standard)
+        else { return .failure(callID, "The user declined to add this event.") }
+        guard let calendarName = store.createEvent(event) else {
+            return .failure(callID, "No calendar on this Mac accepts new events.")
+        }
+        return AIToolResult(
+            callID: callID, content: "Added \u{201C}\(event.title)\u{201D} to \(calendarName).",
+            isError: false)
+    }
+
     // MARK: - Row actions
 
     /// ↵ on a meeting row: join it, or hand a linkless one to Calendar.
