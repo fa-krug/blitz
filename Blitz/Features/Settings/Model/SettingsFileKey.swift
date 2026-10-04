@@ -23,6 +23,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case searchScopes = "applications.searchScopes"
     case customCommandsEnabled = "commands.enabled"
     case customCommandsShowInLauncher = "commands.showInLauncher"
+    case customCommandsRunInTerminal = "commands.alwaysRunInTerminal"
     case quicklinksEnabled = "quicklinks.enabled"
     case quicklinksShowInLauncher = "quicklinks.showInLauncher"
     case quicklinkOpensNewWindow = "quicklinks.opensNewWindow"

@@ -34,6 +34,7 @@ enum SettingsBackupCoverage {
         "notesShowsFormattingBar": .notesShowsFormattingBar,
         "customCommandsEnabled": .customCommandsEnabled,
         "customCommandsShowInLauncher": .customCommandsShowInLauncher,
+        "customCommandsRunInTerminal": .customCommandsRunInTerminal,
         "snippetsShowInLauncher": .snippetsShowInLauncher,
         "navigationEnabled": .navigationEnabled,
         "menuSearchDisabledApps": .menuSearchDisabledApps,

@@ -224,8 +224,9 @@ The log draws colour and carriage returns, not a screen, so `vim`, `htop`, `less
 a real terminal. ⌘↵, or the button, writes a self-deleting `.command` script to the temporary folder
 — `cd` to the session's folder, the typed line if there is one, then `exec $SHELL -l` — and hands it
 to whichever app opens `.command` files, which is Terminal unless the user chose another. That needs
-no Automation permission and no setting. `TerminalHandoff` builds the script, and single-quotes the
-folder. The session's exports and functions do not travel; only its folder does.
+no Automation permission and no setting. `TerminalHandoff` builds the script — the same one
+[Run in Terminal](#run-in-terminal) uses — and single-quotes every word it adds. The session's
+exports and functions do not travel; only its folder does.
 
 Because a terminal makes tools colour their output, `ANSIInterpreter` renders SGR colour rather than
 printing the escapes — that is what replaces the old red-stderr tint, which was a mistake: stderr is
@@ -263,6 +264,40 @@ button. It is not gated on `customCommandsEnabled`: that switch governs a librar
 not a line someone types on purpose, and the fallback's own checkbox is its switch. Because it has no
 library entry, `rerunOutput` checks `lastShellCommand` before falling through to `runCustomCommand`,
 or the window's Run Again would look up an id the store has never held and do nothing.
+
+### Run in Terminal
+
+A command can skip Blitz's own surfaces entirely and open in the user's terminal app: the per-command
+**Run in Terminal** option, or **Always run in Terminal** in the Commands pane for every custom
+command and the **Run Shell Command** fallback alike. `CustomCommandCoordinator.execute` is the one
+place that picks where a run goes — terminal, output window, or the background — and it runs after
+the confirmation gate and after the arguments are collected, so neither can be skipped this way.
+
+The run goes through `TerminalHandoff`, the same self-deleting `.command` script as the output
+window's **Open in Terminal**, and keeps the [execution contract](#execution-contract) word for word:
+
+```
+cd -- '<Run In folder>' || exit
+BLITZ=1 /bin/zsh -lc '<command>' blitz '<value1>' '<value2>' …
+exec "${SHELL:-/bin/zsh}" -l
+```
+
+`-ilc` replaces `-lc` under **Load shell environment**. Each value is its own single-quoted word, so a
+value carrying `'`, `;` or `$(…)` still reaches the script as `$1` and never as syntax — the
+[never-spliced invariant](#invariants) holds across the hop, and the harness runs a value built to
+break it. A line typed into the output window and handed off always loads the shell environment: it
+is the user's own typing, and their own terminal would.
+
+What Blitz gives up is knowing how the run ended. **Show output** and **Show confirmation** have
+nothing to act on, so the editor dims them while the option is on; the terminal shows both itself.
+A folder that has gone is reported by the terminal's `cd`, which stops the script before the
+command, rather than by a Blitz dialog.
+
+The general switch is an `AppSettings` preference with its `SettingsFileKey`
+(`commands.alwaysRunInTerminal`) and rides settings backups: it moves where commands run but arms
+nothing that was not already armed. It is not dimmed with the feature switch, because Run Shell
+Command follows it and has its own switch. While it is on, the editor shows the per-command option
+on and locked, and pointing at the pane.
 
 ### Run In
 
@@ -345,6 +380,11 @@ Foundation-only harness. Verify by hand:
 20. ⌘↵ with `htop` typed opens Terminal in the session's folder running it, and quitting `htop`
     leaves a shell there; with the field empty it opens just the shell.
 21. Closing the window while `sleep 5; say done` runs still says "done", and no zsh is left after.
+22. A command with **Run in Terminal** opens Terminal in its Run In folder, asks for its arguments
+    and its confirmation first, and leaves a shell there once it finishes. Show output and Show
+    confirmation are dimmed in its editor.
+23. **Always run in Terminal** sends every custom command and Run Shell Command to Terminal, and
+    locks the editor's per-command option on; turning it off restores each command's own choice.
 
 ## Importing Raycast scripts
 

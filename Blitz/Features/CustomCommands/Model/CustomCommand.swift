@@ -47,6 +47,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     var arguments: [CustomCommandArgument]
     /// Captures what the command prints and opens the output window once it exits.
     var showsOutput: Bool
+    /// Hands the command to the user's terminal app, where neither output option applies.
+    var runsInTerminal: Bool
     /// Kept abbreviated, so a `~` path survives a home directory that moves.
     var workingDirectory: String?
     /// The launcher glyph; nil falls back to the shared terminal symbol.
@@ -56,7 +58,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         id: UUID = UUID(), name: String, command: String, isEnabled: Bool = true,
         loadsShellEnvironment: Bool = false, requiresConfirmation: Bool = false,
         showsConfirmation: Bool = false, arguments: [CustomCommandArgument] = [],
-        showsOutput: Bool = false, workingDirectory: String? = nil, iconSymbol: String? = nil
+        showsOutput: Bool = false, runsInTerminal: Bool = false, workingDirectory: String? = nil,
+        iconSymbol: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -67,6 +70,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         self.showsConfirmation = showsConfirmation
         self.arguments = arguments
         self.showsOutput = showsOutput
+        self.runsInTerminal = runsInTerminal
         self.workingDirectory = workingDirectory
         self.iconSymbol = iconSymbol
     }
@@ -93,7 +97,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     // Hand-written, so an added field keeps stored commands and older backups readable.
     private enum CodingKeys: String, CodingKey {
         case id, name, command, isEnabled, loadsShellEnvironment, requiresConfirmation
-        case showsConfirmation, arguments, showsOutput, workingDirectory, iconSymbol
+        case showsConfirmation, arguments, showsOutput, runsInTerminal, workingDirectory
+        case iconSymbol
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +116,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         arguments =
             try container.decodeIfPresent([CustomCommandArgument].self, forKey: .arguments) ?? []
         showsOutput = try container.decodeIfPresent(Bool.self, forKey: .showsOutput) ?? false
+        runsInTerminal =
+            try container.decodeIfPresent(Bool.self, forKey: .runsInTerminal) ?? false
         workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
     }

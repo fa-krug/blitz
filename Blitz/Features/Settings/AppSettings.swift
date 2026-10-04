@@ -343,6 +343,14 @@ final class AppSettings {
         }
     }
 
+    /// Every custom command, and Run Shell Command, opens in the user's terminal app.
+    var customCommandsRunInTerminal: Bool {
+        didSet {
+            defaults.set(
+                customCommandsRunInTerminal, forKey: Key.customCommandsRunInTerminal.rawValue)
+        }
+    }
+
     /// Also keyword-expansion consent, so it confirms first and never rides a backup.
     var snippetsEnabled: Bool {
         didSet { defaults.set(snippetsEnabled, forKey: Key.snippetsEnabled.rawValue) }
@@ -675,6 +683,8 @@ final class AppSettings {
         customCommandsShowInLauncher =
             defaults.object(forKey: Key.customCommandsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.customCommandsShowInLauncher.rawValue)
+        customCommandsRunInTerminal =
+            defaults.bool(forKey: Key.customCommandsRunInTerminal.rawValue)
         snippetsEnabled = defaults.bool(forKey: Key.snippetsEnabled.rawValue)
         quickActionsEnabled = defaults.bool(forKey: Key.quickActionsEnabled.rawValue)
         snippetsShowInLauncher =

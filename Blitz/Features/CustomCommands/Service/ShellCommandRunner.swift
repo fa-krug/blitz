@@ -499,21 +499,33 @@ extension String {
 /// A shell in the user's own terminal, for what a log cannot draw: `vim`, `htop`, `ssh`.
 enum TerminalHandoff {
     /// Removes itself first, then leaves a login shell open in the folder once the command is done.
-    static func script(directory: String, command: String?) -> String {
+    static func script(
+        directory: String, command: String?, arguments: [String], loadingShellEnvironment: Bool
+    ) -> String {
         var lines = ["#!/bin/zsh", "rm -f -- \"$0\"", "cd -- \(quoted(directory)) || exit"]
-        if let command, !command.isEmpty { lines.append(command) }
+        if let command, !command.isEmpty {
+            // The run contract, word for word: values stay positional, quoted, never spliced in.
+            let flags = loadingShellEnvironment ? "-ilc" : "-lc"
+            let words = [quoted(command), "blitz"] + arguments.map(quoted)
+            lines.append("BLITZ=1 /bin/zsh \(flags) " + words.joined(separator: " "))
+        }
         lines.append("exec \"${SHELL:-/bin/zsh}\" -l")
         return lines.joined(separator: "\n") + "\n"
     }
 
     /// A `.command` file, which opens in Terminal unless the user picked another app for it.
-    static func writeScript(directory: String, command: String?) throws -> URL {
+    static func writeScript(
+        directory: String, command: String?, arguments: [String], loadingShellEnvironment: Bool
+    ) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("Blitz-\(UUID().uuidString).command")
-        let contents = Data(script(directory: directory, command: command).utf8)
+        let contents = script(
+            directory: directory, command: command, arguments: arguments,
+            loadingShellEnvironment: loadingShellEnvironment)
         guard
             FileManager.default.createFile(
-                atPath: url.path, contents: contents, attributes: [.posixPermissions: 0o700])
+                atPath: url.path, contents: Data(contents.utf8),
+                attributes: [.posixPermissions: 0o700])
         else { throw CocoaError(.fileWriteUnknown) }
         return url
     }

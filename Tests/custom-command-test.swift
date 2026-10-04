@@ -80,14 +80,21 @@ struct CustomCommandTests {
                 name: "Imported", command: "/usr/bin/true", loadsShellEnvironment: true,
                 requiresConfirmation: true, showsConfirmation: true,
                 arguments: [CustomCommandArgument(name: "  Query  ", isOptional: true)],
-                showsOutput: true)
+                showsOutput: true, runsInTerminal: true)
         ])
         check(
             "import preserves every flag",
             store.commands.first?.loadsShellEnvironment == true
                 && store.commands.first?.requiresConfirmation == true
                 && store.commands.first?.showsConfirmation == true
-                && store.commands.first?.showsOutput == true)
+                && store.commands.first?.showsOutput == true
+                && store.commands.first?.runsInTerminal == true)
+        let beforeTerminal = Data(
+            #"[{"id":"\#(UUID().uuidString)","name":"Old","command":"/usr/bin/true"}]"#.utf8)
+        check(
+            "a command stored before Run in Terminal existed reads as off",
+            (try? JSONDecoder().decode([CustomCommand].self, from: beforeTerminal))?.first?
+                .runsInTerminal == false)
         check(
             "import trims an argument name and keeps its optionality",
             store.commands.first?.arguments == [
@@ -530,8 +537,12 @@ struct CustomCommandTests {
             .appendingPathComponent("blitz it's \(UUID().uuidString)")
         try? FileManager.default.createDirectory(
             at: handoffFolder, withIntermediateDirectories: true)
+        // A value carrying a quote and shell syntax must still arrive as one inert word.
+        let handedValue = "it's; touch /tmp/blitz-handoff-should-not-exist"
         let handoff = try? TerminalHandoff.writeScript(
-            directory: handoffFolder.path, command: "pwd > landed")
+            directory: handoffFolder.path,
+            command: "pwd > landed; printf '%s\\n' \"$1\" \"$BLITZ\" >> landed",
+            arguments: [handedValue], loadingShellEnvironment: false)
         let mode = handoff.flatMap {
             try? FileManager.default.attributesOfItem(atPath: $0.path)[.posixPermissions] as? Int
         }
@@ -540,12 +551,17 @@ struct CustomCommandTests {
             // The script ends by opening the user's shell; `true` stands in for it here.
             _ = await ShellCommandRunner.run(
                 "SHELL=/usr/bin/true /bin/zsh \(TerminalHandoff.quoted(handoff.path))")
-            let landed = try? String(
-                contentsOf: handoffFolder.appendingPathComponent("landed"), encoding: .utf8)
+            let landed = (try? String(
+                contentsOf: handoffFolder.appendingPathComponent("landed"), encoding: .utf8))?
+                .split(separator: "\n").map(String.init) ?? []
             check(
                 "a handoff runs its command in the session's folder",
-                landed?.trimmingCharacters(in: .newlines).hasSuffix(handoffFolder.lastPathComponent)
-                    == true)
+                landed.first?.hasSuffix(handoffFolder.lastPathComponent) == true)
+            check(
+                "a handed-off value reaches the command as data, with BLITZ set",
+                Array(landed.dropFirst()) == [handedValue, "1"]
+                    && !FileManager.default.fileExists(
+                        atPath: "/tmp/blitz-handoff-should-not-exist"))
             check(
                 "a handoff script deletes itself once it starts",
                 !FileManager.default.fileExists(atPath: handoff.path))

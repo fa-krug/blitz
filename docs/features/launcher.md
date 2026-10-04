@@ -294,7 +294,7 @@ order name a live row across a rename or a reinstall.
 | --- | --- | --- |
 | Quick AI | a fresh Quick AI chat, question already sent (`QuickAICoordinator.ask`) | `aiEnabled` |
 | Search Files | the file-search screen, already narrowed | `fileSearchEnabled` |
-| Run Shell Command | `/bin/zsh`, streamed into the Command Output window | always |
+| Run Shell Command | `/bin/zsh`, streamed into the Command Output window, or the terminal app under **Always run in Terminal** | always |
 | Define Word | the dictionary screen, already showing the entry (see [dictionary.md](dictionary.md)) | the Define Word command is visible in Settings › Commands |
 | a quicklink | its first `{argument}` | `quicklinksEnabled`, and the link has a placeholder |
 
@@ -312,6 +312,9 @@ deliberately. The fallback's checkbox is the switch. The run is an ad-hoc `Custo
 never stored — same streaming window, same Stop button — so `CustomCommandCoordinator` keeps
 `lastShellCommand` for the window's Rerun, which has no library entry to look up. It sources the
 shell config (`ll` should mean the reader's own alias) and takes the runner's default home directory.
+With **Always run in Terminal** on (Settings → Commands) the line goes to the user's terminal app
+instead, through the same handoff a custom command uses — see
+[custom-commands.md](custom-commands.md#run-in-terminal).
 
 **The order and the checkboxes are not in a settings backup.** The fallback list is where an import
 could arm shell execution from the launcher, which is the line `snippetsEnabled` already draws:

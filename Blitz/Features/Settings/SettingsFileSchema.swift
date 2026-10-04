@@ -49,6 +49,7 @@ enum SettingsFileSchema {
         case .searchScopes: return bind(settings, \.searchScopes) { SearchScopes.normalize($0) }
         case .customCommandsEnabled: return bind(settings, \.customCommandsEnabled)
         case .customCommandsShowInLauncher: return bind(settings, \.customCommandsShowInLauncher)
+        case .customCommandsRunInTerminal: return bind(settings, \.customCommandsRunInTerminal)
         case .quicklinksEnabled: return bind(settings, \.quicklinksEnabled)
         case .quicklinksShowInLauncher: return bind(settings, \.quicklinksShowInLauncher)
         case .quicklinkOpensNewWindow: return bind(settings, \.quicklinkOpensNewWindow)

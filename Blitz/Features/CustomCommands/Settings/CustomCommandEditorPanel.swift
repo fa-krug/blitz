@@ -7,12 +7,14 @@ struct CustomCommandEditorPanel: View {
 
     @Environment(\.settingsEditorDismiss) private var dismiss
     @Environment(AppCore.self) private var core
+    @Environment(AppSettings.self) private var settings
     @State private var name: String
     @State private var shellCommand: String
     @State private var loadsShellEnvironment: Bool
     @State private var requiresConfirmation: Bool
     @State private var showsConfirmation: Bool
     @State private var showsOutput: Bool
+    @State private var runsInTerminal: Bool
     @State private var arguments: [ArgumentDraft]
     @State private var workingDirectory: String
     @State private var iconSymbol: String?
@@ -34,6 +36,7 @@ struct CustomCommandEditorPanel: View {
         _requiresConfirmation = State(initialValue: command?.requiresConfirmation ?? false)
         _showsConfirmation = State(initialValue: command?.showsConfirmation ?? false)
         _showsOutput = State(initialValue: command?.showsOutput ?? false)
+        _runsInTerminal = State(initialValue: command?.runsInTerminal ?? false)
         _arguments = State(
             initialValue: (command?.arguments ?? []).map {
                 ArgumentDraft(name: $0.name, isOptional: $0.isOptional)
@@ -80,12 +83,18 @@ struct CustomCommandEditorPanel: View {
                 optionToggle(
                     "Needs confirmation", isOn: $requiresConfirmation,
                     detail: "Ask before running this command.")
-                optionToggle(
-                    "Show confirmation", isOn: $showsConfirmation,
-                    detail: "Confirm on screen after the command succeeds.")
-                optionToggle(
-                    "Show output", isOn: $showsOutput,
-                    detail: "Open a window with everything the command printed when it finishes.")
+                runInTerminalToggle
+                // The terminal shows the output and the outcome itself, so neither applies there.
+                Group {
+                    optionToggle(
+                        "Show confirmation", isOn: $showsConfirmation,
+                        detail: "Confirm on screen after the command succeeds.")
+                    optionToggle(
+                        "Show output", isOn: $showsOutput,
+                        detail:
+                            "Open a window with everything the command printed when it finishes.")
+                }
+                .disabled(runsInTerminal || settings.customCommandsRunInTerminal)
             }
 
             if let errorMessage {
@@ -231,6 +240,22 @@ struct CustomCommandEditorPanel: View {
         (arguments.firstIndex { $0.id == id } ?? 0) + 1
     }
 
+    /// Shown on and locked while the Commands pane runs every command in Terminal anyway.
+    @ViewBuilder
+    private var runInTerminalToggle: some View {
+        if settings.customCommandsRunInTerminal {
+            optionToggle(
+                "Run in Terminal", isOn: .constant(true),
+                detail: "On for every command: Settings → Commands → Always run in Terminal."
+            )
+            .disabled(true)
+        } else {
+            optionToggle(
+                "Run in Terminal", isOn: $runsInTerminal,
+                detail: "Open in your terminal app, for commands that ask or draw a screen.")
+        }
+    }
+
     private func optionToggle(
         _ title: String, isOn: Binding<Bool>, detail: String
     ) -> some View {
@@ -258,7 +283,8 @@ struct CustomCommandEditorPanel: View {
             arguments: arguments.map {
                 CustomCommandArgument(name: $0.name, isOptional: $0.isOptional)
             },
-            showsOutput: showsOutput, workingDirectory: workingDirectory, iconSymbol: iconSymbol)
+            showsOutput: showsOutput, runsInTerminal: runsInTerminal,
+            workingDirectory: workingDirectory, iconSymbol: iconSymbol)
         do {
             if command == nil {
                 try core.customCommandCoordinator.addCustomCommand(draft)

@@ -216,6 +216,9 @@ enum SettingsSearchCatalog {
             .commandsCustomCommands, "Enable custom commands",
             keywords: ["script", "shell"]),
         .init(
+            .commandsCustomCommands, "Always run in Terminal",
+            keywords: ["terminal", "iterm", "window", "shell", "interactive"]),
+        .init(
             .commandsCustomCommands, "Add Custom Command",
             keywords: ["new", "script", "shell", "shortcut"]),
         .init(
