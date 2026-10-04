@@ -95,6 +95,10 @@ extension SettingsAnchor {
     static let remindersCommands = Self(tab: .reminders, title: "Commands")
     static let remindersLists = Self(tab: .reminders, title: "Lists")
 
+    static let contactsContacts = Self(tab: .contacts, title: "Contacts")
+    static let contactsCommands = Self(tab: .contacts, title: "Commands")
+    static let contactsLauncherSearch = Self(tab: .contacts, title: "Launcher Search")
+
     static let extensionsExtensions = Self(tab: .extensions, title: "Extensions")
     static let extensionsCompatibility = Self(tab: .extensions, title: "Compatibility")
     static let extensionsInstalled = Self(tab: .extensions, title: "Installed")
@@ -104,6 +108,7 @@ extension SettingsAnchor {
     static let permissionsAccessibility = Self(tab: .permissions, title: "Accessibility")
     static let permissionsCalendars = Self(tab: .permissions, title: "Calendars")
     static let permissionsReminders = Self(tab: .permissions, title: "Reminders")
+    static let permissionsContacts = Self(tab: .permissions, title: "Contacts")
 
     static let backupExport = Self(tab: .backup, title: "Export")
     static let backupImport = Self(tab: .backup, title: "Import")

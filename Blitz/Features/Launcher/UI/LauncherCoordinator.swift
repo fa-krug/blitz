@@ -132,6 +132,11 @@ final class LauncherCoordinator {
             calendarCoordinator.activateMeeting(id: id)
             return
         }
+        // Before the palette hides: the card opens in Search Contacts, in this same palette.
+        if app.kind == .contact {
+            core.contactsCoordinator.showContact(entryID: app.id)
+            return
+        }
         // Before the palette hides: an unfilled quicklink stays up to ask first.
         if app.kind == .quicklink {
             guard let id = Quicklink.id(fromEntryID: app.id) else { return }
@@ -155,7 +160,7 @@ final class LauncherCoordinator {
             guard let snippetID = StoredSnippet.id(fromEntryID: app.id) else { return }
             snippetCoordinator.expandSnippet(id: snippetID, target: previous)
         case .command, .quickAction, .customCommand, .systemAction, .windowCommand, .windowLayout,
-            .windowRoom, .quicklink, .appleShortcut, .extensionCommand, .meeting:
+            .windowRoom, .quicklink, .appleShortcut, .extensionCommand, .meeting, .contact:
             break  // handled above
         }
     }
@@ -213,6 +218,8 @@ final class LauncherCoordinator {
             core.remindersCoordinator.createReminder()
         case .smartReminder:
             core.remindersCoordinator.createSmartReminder()
+        case .searchContacts:
+            core.contactsCoordinator.show()
         case .showNotes:
             dismissPalette()
             notesCoordinator.toggle()

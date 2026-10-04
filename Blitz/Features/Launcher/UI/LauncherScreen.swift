@@ -290,13 +290,30 @@ struct LauncherScreen: PaletteScreen {
         }
     }
 
-    /// ⌘↵ — a meeting copies its link; otherwise only an entry on disk has somewhere to be revealed.
+    /// A marked card's row, which answers its contact menu's chords.
+    private func contact(at selection: Int) -> ContactItem? {
+        guard let app = entry(at: selection), app.kind == .contact else { return nil }
+        return core.contactsCoordinator.contact(entryID: app.id)
+    }
+
+    /// ⌘↵ — a meeting copies its link, a contact is called, an entry on disk is revealed.
     func secondary(at selection: Int) -> Bool {
         if let meeting = meeting(at: selection) {
             return MeetingActionsMenu.secondary(meeting: meeting, core: core)
         }
+        if let contact = contact(at: selection) {
+            core.contactsCoordinator.call(contact)
+            return true
+        }
         guard let app = entry(at: selection), app.canRevealInFinder else { return false }
         core.launcherCoordinator.showInFinder(app)
+        return true
+    }
+
+    /// ⌃⌘↵ — a contact is written to; nothing else in root search has a third action.
+    func tertiary(at selection: Int) -> Bool {
+        guard let contact = contact(at: selection) else { return false }
+        core.contactsCoordinator.email(contact)
         return true
     }
 
@@ -317,6 +334,10 @@ struct LauncherScreen: PaletteScreen {
         case .favoriteSlot(let index): return launchFavorite(at: index)
         case .copyCalculation: return copyCalculation(at: selection)
         case .openInApp, .showDetails:
+            if shortcut == .openInApp, let contact = contact(at: selection) {
+                core.contactsCoordinator.openInContacts(contact)
+                return true
+            }
             guard let meeting = meeting(at: selection) else { return false }
             return MeetingActionsMenu.perform(shortcut, meeting: meeting, core: core)
         default: return false

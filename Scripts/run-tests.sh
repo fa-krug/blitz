@@ -150,6 +150,7 @@ run calendar-test          Blitz/Features/Calendar/Model/*.swift \
 run reminders-test         Blitz/Features/Reminders/Model/*.swift \
                            $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
                            $A/AIToolArguments.swift $A/AIToolJSON.swift
+run contacts-test          Blitz/Features/Contacts/Model/*.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \

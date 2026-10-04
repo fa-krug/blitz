@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import Contacts
 import EventKit
 // `@preconcurrency` downgrades AX diagnostics: the option key is a constant C global.
 @preconcurrency import ApplicationServices
@@ -53,6 +54,19 @@ enum Permissions {
         (try? await EKEventStore().requestFullAccessToReminders()) ?? false
     }
 
+    /// Anything short of the whole address book reads as no access: Blitz lists every card.
+    static func contactsAccess() -> CalendarAccess {
+        switch CNContactStore.authorizationStatus(for: .contacts) {
+        case .authorized: return .granted
+        case .notDetermined: return .notDetermined
+        default: return .denied
+        }
+    }
+
+    nonisolated static func requestContactsAccess() async -> Bool {
+        (try? await CNContactStore().requestAccess(for: .contacts)) ?? false
+    }
+
     static func cameraAccess() -> CameraAccess {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: return .granted
@@ -71,6 +85,15 @@ enum Permissions {
         guard
             let url = URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @MainActor
+    static func openContactsSettings() {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts")
         else { return }
         NSWorkspace.shared.open(url)
     }

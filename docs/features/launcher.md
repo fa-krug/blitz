@@ -149,8 +149,9 @@ the Zed app: rule 3 only protects an exact title past three characters.
 ### Kind priority and boosts
 
 - **Apps win the ties.** `KindDescriptor.rankPriority` puts applications (4) above command-like kinds
-  (3), quicklinks (2), and System Settings panes and meetings (1), so a first-party app is never
-  shadowed by the Blitz command named after it: Calculator over Calculator History.
+  (3), quicklinks and marked contacts (2), and System Settings panes and meetings (1), so a
+  first-party app is never shadowed by the Blitz command named after it: Calculator over
+  Calculator History.
 - **One boosted command.** Only AI Chat carries boosted terms (`CommandID.boostedTerms`); boosting Show
   Notes would shadow Apple's Notes.
 - **Two entries with the same alias** fall through to the next rule.
@@ -284,9 +285,9 @@ A **fallback** is the other half of the query-driven idea: a command the query i
 offered under a `Use “…” with…` header **below every result**, whatever the query says. A contextual
 row leads because it recognised the query; a fallback trails because nothing did.
 
-`Fallback` (`Launcher/Model/`) is the whole vocabulary — `.builtin(Builtin)` for the four shipped
+`Fallback` (`Launcher/Model/`) is the whole vocabulary — `.builtin(Builtin)` for the five shipped
 destinations and `.quicklink(UUID)` for a user's own. `Builtin` exists rather than a bare `CommandID`
-so `FallbackCoordinator.run` is **exhaustive**: a fifth built-in cannot compile without saying where
+so `FallbackCoordinator.run` is **exhaustive**: a sixth built-in cannot compile without saying where
 its query goes. `Fallback.id` is deliberately the row's own `AppEntry.id`, which is what lets a stored
 order name a live row across a rename or a reinstall.
 
@@ -296,6 +297,7 @@ order name a live row across a rename or a reinstall.
 | Search Files | the file-search screen, already narrowed | `fileSearchEnabled` |
 | Run Shell Command | `/bin/zsh`, streamed into the Command Output window | always |
 | Define Word | the dictionary screen, already showing the entry (see [dictionary.md](dictionary.md)) | the Define Word command is visible in Settings › Commands |
+| Search Contacts | the contacts screen, already narrowed (see [contacts.md](contacts.md)) | `contactsEnabled` |
 | a quicklink | its first `{argument}` | `quicklinksEnabled`, and the link has a placeholder |
 
 **A quicklink earns a fallback row by declaring a placeholder**, nothing else —
@@ -613,8 +615,8 @@ and three places read it: `FeatureCommandsSection` draws the pane's rows from it
 category gate for it in both `isVisible` and `allowsHotKey`. Stamping the entry rather than sniffing its
 id is what keeps "which pane owns this" out of the entry-ID namespace.
 
-Eleven panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
-Window Management, Clipboard, Emoji, Calendar and Quicklinks. What is left in Settings › Commands is
+Thirteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
+Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts and Quicklinks. What is left in Settings › Commands is
 the set no feature switch governs: Calculator History, Open Camera, the three backup commands, Check
 for Updates, Blitz Settings, About, Support and Quit.
 

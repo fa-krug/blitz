@@ -46,6 +46,7 @@ final class AppCore {
     let calendarStore = CalendarStore()
     let meetingClock = MeetingClock()
     let remindersStore = RemindersStore()
+    let contactsStore = ContactsStore()
     let updateChecker = UpdateCheckStore()
     let supportReminders: SupportReminderStore
     let emojiIndex = EmojiIndex()
@@ -188,6 +189,9 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var remindersCoordinator = RemindersCoordinator(
         store: remindersStore, appIndex: appIndex, settings: settings,
         paletteCoordinator: paletteCoordinator, core: self)
+    @ObservationIgnored private(set) lazy var contactsCoordinator = ContactsCoordinator(
+        store: contactsStore, appIndex: appIndex, settings: settings,
+        paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var fileSearchCoordinator = FileSearchCoordinator(
         settings: settings, appIndex: appIndex, session: fileSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, windowController: windowController, core: self)
@@ -322,12 +326,15 @@ final class AppCore {
                 case .switchWindows: self?.windowSwitchCoordinator.load()
                 case .rooms, .roomWindows: self?.roomCoordinator.load()
                 case .reminders: self?.remindersCoordinator.remindersWillShow()
+                case .contacts: self?.contactsCoordinator.contactsWillShow()
                 default: break
                 }
             }
             updateCoordinator.applyEnabled()
             calendarCoordinator.applyEnabled()
             remindersCoordinator.applyEnabled()
+            contactsStore.onChange = { [weak self] in self?.contactsCoordinator.publishEntries() }
+            contactsCoordinator.applyEnabled()
             Task { await appIndex.refresh() }
             Task { await emojiIndex.load(languages: Locale.preferredLanguages) }
             currencyRates.start()
@@ -665,6 +672,7 @@ final class AppCore {
             reproject: { $0.quickActionCoordinator.applyEnabled() })
         track({ _ = $0.calendarEnabled }, reproject: { $0.calendarCoordinator.applyEnabled() })
         track({ _ = $0.remindersEnabled }, reproject: { $0.remindersCoordinator.applyEnabled() })
+        track({ _ = $0.contactsEnabled }, reproject: { $0.contactsCoordinator.applyEnabled() })
         track(
             {
                 _ = $0.calendarShowInLauncher
@@ -895,6 +903,11 @@ final class AppCore {
     /// The reminder prompt, for the same reason.
     func editReminder(_ draft: ReminderDraft, isNew: Bool) async -> ReminderDraft? {
         await dialogs.editReminder(draft, isNew: isNew)
+    }
+
+    /// The contact prompt, for the same reason.
+    func editContact(_ draft: ContactDraft) async -> ContactDraft? {
+        await dialogs.editContact(draft)
     }
 
     /// The Smart Reminder prompt, for the same reason.

@@ -92,6 +92,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `calc-test` | all of `Calculator/Model/` |
 | `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
 | `reminders-test` | all of `Reminders/Model/` — due dates, ordering and sections, reading a Smart Reminder reply, the chat tools |
+| `contacts-test` | all of `Contacts/Model/` — titles and entry ids, order and letter runs, name and number search, drafts, the call and email links |
 | `clipboard-search-test` | Ordinary and OCR result ordering, opt-in lifecycle, cancellation, pins and type filters |
 | `clipboard-text-test` | Apple Vision/PDF extraction, scheduling, retry backoff and recovery |
 | `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |
@@ -660,6 +661,23 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - With AI off, Smart Reminder leaves the launcher and its shortcut does nothing; My Reminders and
   Create Reminder are unaffected
 - Export with Reminders on, import onto a clean profile: it comes back **off**
+
+### Contacts
+
+- Turning Contacts on asks with Blitz's dialog first, then macOS; dismissing either leaves it off
+- Search Contacts lists every card under its letter; a card edited in Contacts.app or on a phone
+  follows without a relaunch
+- Typing a name, a company, part of an address or a number in any formatting narrows the list;
+  `0151…` finds a card stored as `+49 151…`
+- ↵ edits: changing only the name keeps every number's label; clearing a number removes it; a value
+  typed into the blank row is added
+- ⌘↵ hands the first number to the phone handler, ⌃⌘↵ opens a message to the first address, ⌘O
+  opens the card itself in Contacts; a card with no number reports it in the HUD
+- `Use “…” with… Search Contacts` opens the list already narrowed to the query
+- Show in Launcher Search puts the card in root search under Contacts, where ↵ opens it in Search
+  Contacts and ⌘↵ calls; Remove from Launcher Search, or its checkbox in Settings ▸ Contacts, takes
+  it out again
+- Export with Contacts on, import onto a clean profile: it comes back **off**, with nothing marked
 
 ### System actions and window management
 

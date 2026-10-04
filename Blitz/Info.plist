@@ -71,6 +71,8 @@
 	<string>Blitz reads today's and tomorrow's events so you can join a meeting from the palette.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Blitz lists, edits and creates your reminders, and lets extensions you run do the same.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Blitz lists your contacts so you can search, call, email and edit them from the palette.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Blitz uses Bluetooth access only when you run the Toggle Bluetooth action.</string>
 	<key>NSHumanReadableCopyright</key>

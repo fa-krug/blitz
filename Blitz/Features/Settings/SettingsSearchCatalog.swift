@@ -110,7 +110,8 @@ enum SettingsSearchCatalog {
     static let entries: [SettingsSearchEntry] =
         general + applications + systemSettings + systemActions + commands + quicklinks
         + appleShortcuts + fallbacks + clipboard + snippets + fileSearch + windowManagement
-        + navigation + notes + calendar + reminders + emoji + ai + quickActions + extensions
+        + navigation + notes + calendar + reminders + contacts + emoji + ai + quickActions
+        + extensions
         + permissions + backup + about
 
     private static let general: [SettingsSearchEntry] = [
@@ -572,6 +573,21 @@ enum SettingsSearchCatalog {
             keywords: ["accounts", "sources", "choose", "icloud", "exchange"])
     ]
 
+    private static let contacts: [SettingsSearchEntry] = [
+        .init(
+            pane: .contacts,
+            keywords: ["address book", "people", "phone", "call", "email", "dial"]),
+        .init(
+            .contactsContacts, "Use contacts in Blitz",
+            keywords: ["address book", "people", "permission"]),
+        .init(
+            group: .contactsCommands, "Contacts commands",
+            keywords: ["shortcut", "launcher", "search contacts"]),
+        .init(
+            group: .contactsLauncherSearch, "Contacts in launcher search",
+            keywords: ["root search", "mark", "pin", "favorite", "people"])
+    ]
+
     private static let extensions: [SettingsSearchEntry] = [
         .init(
             pane: .extensions,
@@ -616,7 +632,10 @@ enum SettingsSearchCatalog {
             keywords: ["events", "privacy", "grant", "eventkit"]),
         .init(
             .permissionsReminders, "Reminders",
-            keywords: ["todo", "tasks", "privacy", "grant", "eventkit"])
+            keywords: ["todo", "tasks", "privacy", "grant", "eventkit"]),
+        .init(
+            .permissionsContacts, "Contacts",
+            keywords: ["address book", "people", "privacy", "grant"])
     ]
 
     private static let backup: [SettingsSearchEntry] = [

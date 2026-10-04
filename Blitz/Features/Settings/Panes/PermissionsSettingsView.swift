@@ -6,6 +6,7 @@ struct PermissionsSettingsView: View {
     @State private var accessibilityTrusted = Permissions.isAccessibilityTrusted()
     @State private var calendarAccess = Permissions.calendarAccess()
     @State private var remindersAccess = Permissions.remindersAccess()
+    @State private var contactsAccess = Permissions.contactsAccess()
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -112,6 +113,41 @@ struct PermissionsSettingsView: View {
             } header: {
                 SettingsSectionHeader(.permissionsReminders)
             }
+
+            Section {
+                LabeledContent {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: Self.status(of: contactsAccess).symbol)
+                                .accessibilityHidden(true)
+                            Text(Self.status(of: contactsAccess).title)
+                        }
+                        .foregroundStyle(Self.status(of: contactsAccess).tint)
+                        Button(contactsNeedsPrompt ? "Grant Access…" : "Open…") {
+                            if contactsNeedsPrompt {
+                                core.contactsCoordinator.setContactsEnabled(true)
+                            } else {
+                                Permissions.openContactsSettings()
+                            }
+                        }
+                        .help(
+                            contactsNeedsPrompt
+                                ? "Turns Contacts on, then asks macOS for access."
+                                : "Opens Privacy & Security › Contacts.")
+                    }
+                } label: {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        PermissionSettingsIcon(path: "/System/Applications/Contacts.app")
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                            SettingsRowTitle(.permissionsContacts, "Contacts")
+                            Text("Lists, edits, calls and emails your contacts.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                SettingsSectionHeader(.permissionsContacts)
+            }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.permissions)
@@ -121,6 +157,7 @@ struct PermissionsSettingsView: View {
 
     private var calendarNeedsPrompt: Bool { calendarAccess == .notDetermined }
     private var remindersNeedsPrompt: Bool { remindersAccess == .notDetermined }
+    private var contactsNeedsPrompt: Bool { contactsAccess == .notDetermined }
 
     private var accessibilityStatus: (title: String, symbol: String, tint: Color) {
         accessibilityTrusted
@@ -149,6 +186,8 @@ struct PermissionsSettingsView: View {
         if access != calendarAccess { calendarAccess = access }
         let reminders = Permissions.remindersAccess()
         if reminders != remindersAccess { remindersAccess = reminders }
+        let contacts = Permissions.contactsAccess()
+        if contacts != contactsAccess { contactsAccess = contacts }
     }
 }
 

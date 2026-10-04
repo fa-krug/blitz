@@ -16,6 +16,7 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         case appleShortcut
         case extensionCommand
         case meeting
+        case contact
 
         var descriptor: KindDescriptor {
             switch self {
@@ -91,6 +92,12 @@ struct AppEntry: Identifiable, Hashable, Sendable {
                     label: "Meeting", sectionTitle: "Meetings",
                     openVerb: "Join Meeting", canHideFromSearch: false,
                     canRevealInFinder: false, canDragOut: false, isSymbolIcon: true, rankPriority: 1)
+            case .contact:
+                // A card leaves search by being unmarked, never by Hide from Search.
+                return KindDescriptor(
+                    label: "Contact", sectionTitle: "Contacts",
+                    openVerb: "Show Contact", canHideFromSearch: false,
+                    canRevealInFinder: false, canDragOut: false, isSymbolIcon: true, rankPriority: 2)
             }
         }
     }
@@ -198,7 +205,7 @@ struct AppEntry: Identifiable, Hashable, Sendable {
             return AppleShortcut.id(fromEntryID: id).map { .appleShortcut(id: $0) }
         case .snippet:
             return StoredSnippet.id(fromEntryID: id).map { .snippet(id: $0) }
-        case .extensionCommand, .meeting:
+        case .extensionCommand, .meeting, .contact:
             return nil
         }
     }
@@ -234,6 +241,7 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         case .windowLayout: return WindowLayout.sfSymbol
         case .windowRoom: return Room.sfSymbol
         case .meeting: return "video.fill"
+        case .contact: return "person.crop.circle"
         case .application, .systemSettings, .appleShortcut, .extensionCommand: return "questionmark"
         }
     }
@@ -387,6 +395,7 @@ final class AppIndex {
     private var customQuickActionEntries: [AppEntry] = []
     private var extensionEntries: [AppEntry] = []
     private var meetingEntries: [AppEntry] = []
+    private var contactEntries: [AppEntry] = []
     /// The catalog's commands a disabled feature hides; the Commands slice is recomputed from it.
     private var hiddenCommands: Set<CommandID> = []
     /// Kept out of launcher search by a "Show in launcher" switch, yet still runnable by shortcut.
@@ -484,6 +493,13 @@ final class AppIndex {
     func setMeetings(_ entries: [AppEntry]) {
         guard entries != meetingEntries else { return }
         meetingEntries = entries
+        publishEntries()
+    }
+
+    /// The cards marked for root search; the address book changes on its own, like meetings.
+    func setContacts(_ entries: [AppEntry]) {
+        guard entries != contactEntries else { return }
+        contactEntries = entries
         publishEntries()
     }
 
@@ -657,7 +673,8 @@ final class AppIndex {
         let updated =
             Self.named(meetingEntries) + discoveredEntries
             + Self.named(
-                extensionEntries + quicklinkEntries + appleShortcutEntries + snippetEntries
+                extensionEntries + quicklinkEntries + contactEntries + appleShortcutEntries
+                    + snippetEntries
                     + Self.systemActionEntries + windowLayoutEntries + windowRoomEntries
                     + windowCommandEntries
                     + customWindowSizeEntries + customCommandEntries + quickActionEntries

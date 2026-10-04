@@ -40,5 +40,6 @@ extension View {
             .environment(core.calendarStore)
             .environment(core.meetingClock)
             .environment(core.remindersStore)
+            .environment(core.contactsStore)
     }
 }

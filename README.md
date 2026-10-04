@@ -58,6 +58,8 @@ If Blitz earns a place in your daily flow, you can support it through
   join it, or let it join itself.
 - **Reminders** — every open reminder in the palette to edit, complete or delete, and Smart Reminder:
   type `Greg wants tomorrow a cake` and get `Give Greg a cake`, due tomorrow.
+- **Contacts** — search your address book from the palette to call, email, edit or open a card, and
+  mark the people you reach most so they show up in the launcher's own search.
 - **Notes** — an unlimited collection of plain Markdown files in one floating editor, searchable from
   the palette and rendered as you write.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.

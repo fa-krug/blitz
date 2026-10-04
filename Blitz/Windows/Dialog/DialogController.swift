@@ -106,6 +106,20 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.draft
     }
 
+    func editContact(_ draft: ContactDraft) async -> ContactDraft? {
+        let state = ContactDraftState(draft: draft)
+        let request = DialogRequest(
+            title: "Edit Contact", message: "Saved to every device the card syncs to.",
+            symbol: "person.crop.circle", tone: .neutral,
+            actions: [
+                DialogAction(title: "Save"),
+                DialogAction(title: "Cancel", role: .cancel)
+            ],
+            defaultIndex: 0, cancelIndex: 1, accessory: .contactDraft(state))
+        guard await present(request) == 0, state.draft.isValid else { return nil }
+        return state.draft
+    }
+
     func describeReminder() async -> String? {
         let state = SmartReminderState()
         let request = DialogRequest(
@@ -146,7 +160,7 @@ final class DialogController: NSObject, NSWindowDelegate {
             let width =
                 switch request.accessory {
                 case nil, .volume: metrics.size.dialogCompactWidth
-                case .eventDraft, .reminderDraft, .smartReminder, .snippetArguments:
+                case .eventDraft, .reminderDraft, .smartReminder, .contactDraft, .snippetArguments:
                     metrics.size.dialogWidth
                 }
             let content = hostingView(
