@@ -499,6 +499,8 @@ struct RootPaletteView: View {
             .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { press in
                 if let reorder = movePinnedOrFavorite(-1, modifiers: press.modifiers) { return reorder }
                 if vm.isControlListOpen { return .ignored }
+                // Ahead of the compact guard: an empty field is exactly where history starts.
+                if recallQuery(modifiers: press.modifiers) { return .handled }
                 if isCollapsed { return .ignored }
                 if menuOpen {
                     moveMenu(-1)
@@ -1272,6 +1274,14 @@ struct RootPaletteView: View {
         vm.selection = next
         scroll = ScrollIntent(kind: .follow)
         return true
+    }
+
+    private func recallQuery(modifiers: SwiftUI.EventModifiers) -> Bool {
+        guard modifiers.isDisjoint(with: [.command, .option, .control, .shift]), !menuOpen,
+            argumentFocused == nil, !vm.isComposing
+        else { return false }
+        let screen = screen
+        return screen.recallQuery(at: selection(in: screen))
     }
 
     /// Claimed whole on the launcher and emoji grid, so a press at an end cannot reach the caret.

@@ -36,8 +36,9 @@ earliest scope wins).
   `publishEntries` runs on the main actor whenever any unrelated slice changes.
 - **The fields stay separate.** Which field matched is half of what the comparator reads — an exact
   subtitle, an exact alternate title and a keyword hit are three different rules.
-- **`Model/SearchScopes.swift` and `Model/LauncherRankingStore.swift` are pure too** — the ranking store
-  takes its clock via `now` and its path via `fileURL`, for `scopes-test` and `ranking-test`.
+- **`Model/SearchScopes.swift`, `Model/LauncherRankingStore.swift` and
+  `Model/LauncherQueryHistory.swift` are pure too** — the ranking store takes its clock via `now` and
+  its path via `fileURL`, for `scopes-test`, `ranking-test` and `query-history-test`.
 
 ## Search scopes
 
@@ -430,6 +431,25 @@ and the sensitivity, so a launch or a reset invalidates them.
 
 Learned data stays on device in `launcher-ranking.json`; a result that has learned ranking offers a
 per-item reset in its Actions menu, and users can clear all learned ranking in General Settings.
+
+## Search history
+
+↑ at the top of the list puts the last search back in the field, as Raycast's root search does, and
+each further ↑ steps one search older while the field still reads the entry it recalled. Editing the
+query ends the walk, so from then on ↑ moves through the list again. ↑ at the oldest entry, or with
+the highlight below the first row, also moves through the list. The check runs ahead of the compact
+bar's guard, because an empty field is exactly where a recall starts, and a recalled query expands
+the bar like any typed one.
+
+A search is recorded when `LauncherScreen` acts on a row with ↵ or a click: a result, a fallback or
+a card. That is wider than a visit, because a fallback and a copied calculation are exactly the
+searches worth typing again. A row a shortcut opened root search onto records nothing, because its
+name was never typed. `LauncherQueryHistory` is the pure half: newest first, a repeat moved to the
+front, trimmed, at most 20 searches of at most 256 characters. `LauncherCoordinator` holds it **in
+memory only**. A search can hold what the user would never want written to disk, such as a shell
+command typed into the Run Shell Command fallback, so nothing about it is persisted, backed up or
+mirrored into `settings.json`. `PaletteState.recalledQueryIndex` is the walk's position, reset with
+the rest of a freshly opened screen.
 
 ## The empty list
 

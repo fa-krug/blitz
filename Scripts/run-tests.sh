@@ -135,6 +135,7 @@ run index file-search-performance Blitz/Platform/Signposts.swift \
 run ranking-test           $L/SearchRelevance.swift $L/ScriptRomanization.swift \
                            $L/LauncherMatch.swift $L/LauncherRankingStore.swift
 run scopes-test            $L/SearchScopes.swift
+run query-history-test     $L/LauncherQueryHistory.swift
 run app-name-test          Blitz/Platform/AppDisplayName.swift \
                            Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift

@@ -56,6 +56,8 @@ final class PaletteState {
     var pendingArgumentEntryID: String?
     /// The row a shortcut opened root search onto, listed alone while the query is its name.
     var argumentEntryID: String?
+    /// The history entry ↑ last put in the field; it counts only while the query still reads it.
+    var recalledQueryIndex: Int?
     /// True once ⌘ has been *held*, which numbers the favorite rows. The panel is the only writer.
     private(set) var commandHeld = false
     /// A chord is a tap, so the numbering waits out the tap before it claims the trailing labels.
@@ -147,6 +149,7 @@ final class PaletteState {
         commandArguments = [:]
         pendingArgumentEntryID = nil
         argumentEntryID = nil
+        recalledQueryIndex = nil
         clipboardFilter = .all
         fileSearchFilter = .all
         emojiCategoryFilter = .all

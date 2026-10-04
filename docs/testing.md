@@ -88,6 +88,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
 | `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |
 | `scopes-test` | `Launcher/Model/SearchScopes.swift` |
+| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift` — what ↑ recalls, and when it leaves the key to the list |
 | `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
 | `calc-test` | all of `Calculator/Model/` |
 | `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
@@ -426,6 +427,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   even with the scrollbar thumb dragged from end to end in under a second
 - An app removed since the last open drops out after a reopen
 - Learned ranking still surfaces your habitual result for a short query
+- ↑ in an empty field (compact bar included) recalls the last search acted on, a further ↑ steps
+  older, and ↑ after editing the recalled query moves through the list instead
 - An application row drags onto the Dock and into a Finder window as a copy, never a move, and a
   landed drop hides the palette; a click still launches; no other kind of row drags
 

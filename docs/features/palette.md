@@ -129,6 +129,11 @@ that returning looks like never having left — and offers four motions over it:
 `pop()` bumps `followToken` rather than `resetToken`: the reset token exists to land a list afresh,
 which would throw away the very selection being restored.
 
+**↑ at the landing row asks the screen for an earlier search first** through
+`PaletteScreen.recallQuery(at:)`, which only the launcher answers
+([launcher.md](launcher.md#search-history)). The check runs ahead of the compact bar's guard, and
+never while a menu, an argument field or an IME composition has the key.
+
 **Escape clears a non-empty query before it leaves the screen**, so one press clears and the next
 leaves: an extension screen exits itself first (it keeps a stack the palette cannot see), then a
 pushed screen pops, and a root hides the palette. A focused inline argument field is a rung above the
