@@ -3,7 +3,7 @@ import SwiftUI
 
 /// An `NSTextView`, not `Text`: only the text system appends without re-laying out.
 struct TerminalLogView: NSViewRepresentable {
-    let run: CommandRun
+    let transcript: CommandTranscript
 
     private static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     private static let inset = CGSize(width: Theme.Spacing.xxl, height: Theme.Spacing.xs)
@@ -13,10 +13,11 @@ struct TerminalLogView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
-        /// A new run and a trimmed log both make the drawn text wrong, invisibly to the revision.
-        var runID: UUID?
+        /// A new transcript or a trimmed log makes the drawn text wrong, unseen by the revision.
+        var transcriptID: UUID?
         var generation = -1
         var revision = 0
+        var lineCount = 0
         var interpreter = ANSIInterpreter()
     }
 
@@ -39,21 +40,26 @@ struct TerminalLogView: NSViewRepresentable {
             let storage = textView.textStorage
         else { return }
         let coordinator = context.coordinator
-        let following = isAtBottom(scrollView)
+        // A line just typed is one the reader wants to watch, wherever they had scrolled to.
+        let following = isAtBottom(scrollView) || transcript.lineCount != coordinator.lineCount
+        coordinator.lineCount = transcript.lineCount
 
-        let isSameRun = coordinator.runID == run.id && coordinator.generation == run.generation
-        guard !isSameRun || run.revision != coordinator.revision else { return }
+        let isSame =
+            coordinator.transcriptID == transcript.id
+            && coordinator.generation == transcript.generation
+        guard !isSame || transcript.revision != coordinator.revision else { return }
 
         // One step on is streaming and costs only the new text; anything else is drawn whole.
-        let isAppend = isSameRun && run.revision == coordinator.revision + 1
+        let isAppend = isSame && transcript.revision == coordinator.revision + 1
         if !isAppend {
             coordinator.interpreter = ANSIInterpreter()
             storage.setAttributedString(NSAttributedString())
         }
-        coordinator.runID = run.id
-        coordinator.generation = run.generation
-        coordinator.revision = run.revision
-        coordinator.interpreter.render(isAppend ? run.delta : run.log, into: storage, font: Self.font)
+        coordinator.transcriptID = transcript.id
+        coordinator.generation = transcript.generation
+        coordinator.revision = transcript.revision
+        coordinator.interpreter.render(
+            isAppend ? transcript.delta : transcript.log, into: storage, font: Self.font)
         if following { textView.scrollToEndOfDocument(nil) }
     }
 
@@ -100,7 +106,12 @@ struct ANSIInterpreter {
                 // A progress bar redraws its line in place; appending the frames would stack them.
                 flush()
                 rewindLine(in: storage)
+            case "\u{8}":
+                flush()
+                eraseCharacter(in: storage)
             default:
+                // The echo of a typed ⌃D, a bell: control bytes with nothing to draw.
+                if Self.isInvisibleControl(character) { continue }
                 run.append(character)
             }
         }
@@ -165,6 +176,20 @@ struct ANSIInterpreter {
         let start = lineStart.location == NSNotFound ? 0 : lineStart.location + 1
         guard start < text.length else { return }
         storage.deleteCharacters(in: NSRange(location: start, length: text.length - start))
+    }
+
+    /// A backspace moves back over a character a later one would overwrite, which is erasing it.
+    private func eraseCharacter(in storage: NSTextStorage) {
+        let text = storage.string as NSString
+        guard text.length > 0, text.character(at: text.length - 1) != 0x0A else { return }
+        storage.deleteCharacters(in: text.rangeOfComposedCharacterSequence(at: text.length - 1))
+    }
+
+    /// CR LF is one `Character` with two scalars, so it is never mistaken for a lone control.
+    private static func isInvisibleControl(_ character: Character) -> Bool {
+        guard character.unicodeScalars.count == 1, let scalar = character.unicodeScalars.first
+        else { return false }
+        return scalar.value < 0x20 && scalar != "\n" && scalar != "\t"
     }
 
     /// System colours, so the log reads in both appearances; orange stands in for yellow.

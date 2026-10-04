@@ -3,12 +3,23 @@ import Foundation
 
 /// libc block-buffers a pipe, so a pty is what makes output live and correctly ordered.
 final class PseudoTerminal: @unchecked Sendable {
+    /// Where the child finds `controlEnd`'s pipe: beside the terminal, never its standard input.
+    static let controlDescriptor: Int32 = 3
+
     /// Everything the command writes to any of its three descriptors arrives here.
     let parentEnd: Int32
     let processID: pid_t
+    private let controlEnd: Int32
+    /// A write blocks while nothing reads, so neither end may wait behind the other.
+    private let typingQueue = DispatchQueue(label: "de.fa-krug.blitz.pty.typing")
+    private let controlQueue = DispatchQueue(label: "de.fa-krug.blitz.pty.control")
+    /// Each flag is touched only on its own end's queue, which is what makes this class Sendable.
+    private var isTerminalOpen = true
+    private var isControlOpen = true
 
-    private init(parentEnd: Int32, processID: pid_t) {
+    private init(parentEnd: Int32, controlEnd: Int32, processID: pid_t) {
         self.parentEnd = parentEnd
+        self.controlEnd = controlEnd
         self.processID = processID
     }
 
@@ -21,11 +32,33 @@ final class PseudoTerminal: @unchecked Sendable {
         var childEnd: Int32 = 0
         var settings = terminalSettings()
         guard openpty(&parentEnd, &childEnd, nil, &settings, nil) == 0 else { return nil }
+        var control: [Int32] = [0, 0]
+        guard pipe(&control) == 0 else {
+            Darwin.close(parentEnd)
+            Darwin.close(childEnd)
+            return nil
+        }
+        // Blitz spawns other children, and one holding the pipe would keep the shell from its EOF.
+        for descriptor in [parentEnd, control[1]] { _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC) }
+        // A shell that has exited must fail the write, not raise SIGPIPE and take Blitz with it.
+        _ = fcntl(control[1], F_SETNOSIGPIPE, 1)
 
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
-        // The whole point: the child leads its session, so `kill(-pid)` reaches it all.
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
+        // A worker thread blocks SIGINT, and zsh hands the mask it inherits to every command.
+        var noSignals = sigset_t()
+        sigemptyset(&noSignals)
+        posix_spawnattr_setsigmask(&attributes, &noSignals)
+        var catchableSignals = sigset_t()
+        sigfillset(&catchableSignals)
+        sigdelset(&catchableSignals, SIGKILL)
+        sigdelset(&catchableSignals, SIGSTOP)
+        posix_spawnattr_setsigdefault(&attributes, &catchableSignals)
+        // The child leads its session, so `kill(-pid)` reaches it all; only dup2 targets survive.
+        let flags =
+            POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK
+            | POSIX_SPAWN_SETSIGDEF
+        posix_spawnattr_setflags(&attributes, Int16(flags))
 
         var actions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&actions)
@@ -33,8 +66,7 @@ final class PseudoTerminal: @unchecked Sendable {
         for descriptor in Int32(0)...Int32(2) {
             posix_spawn_file_actions_adddup2(&actions, childEnd, descriptor)
         }
-        posix_spawn_file_actions_addclose(&actions, parentEnd)
-        posix_spawn_file_actions_addclose(&actions, childEnd)
+        posix_spawn_file_actions_adddup2(&actions, control[0], controlDescriptor)
 
         defer {
             posix_spawnattr_destroy(&attributes)
@@ -47,14 +79,52 @@ final class PseudoTerminal: @unchecked Sendable {
         let status = posix_spawn(
             &processID, executable, &actions, &attributes, argv.pointers, envp.pointers)
         Darwin.close(childEnd)
+        Darwin.close(control[0])
         guard status == 0, processID > 0 else {
             Darwin.close(parentEnd)
+            Darwin.close(control[1])
             return nil
         }
-        // Stands in for `/dev/null` stdin: a prompting command reads EOF and moves on.
-        var endOfTransmission: UInt8 = 0x04
-        _ = write(parentEnd, &endOfTransmission, 1)
-        return PseudoTerminal(parentEnd: parentEnd, processID: processID)
+        return PseudoTerminal(parentEnd: parentEnd, controlEnd: control[1], processID: processID)
+    }
+
+    /// What a keyboard would deliver to whatever is reading the terminal.
+    func type(_ bytes: [UInt8]) {
+        typingQueue.async { [self] in
+            guard isTerminalOpen else { return }
+            Self.writeAll(bytes, to: parentEnd)
+        }
+    }
+
+    func sendControl(_ bytes: [UInt8]) {
+        controlQueue.async { [self] in
+            guard isControlOpen else { return }
+            Self.writeAll(bytes, to: controlEnd)
+        }
+    }
+
+    /// The child reads EOF on `controlDescriptor` once anything already sent has been read.
+    func closeControl() {
+        controlQueue.async { [self] in
+            guard isControlOpen else { return }
+            isControlOpen = false
+            Darwin.close(controlEnd)
+        }
+    }
+
+    /// Whether output is waiting within `timeout`; an error counts, so the read can report it.
+    func awaitOutput(timeout: Duration) -> Bool {
+        // `select` because `poll` has long refused character devices on macOS.
+        guard parentEnd < FD_SETSIZE else { return true }
+        var descriptors = fd_set()
+        withUnsafeMutableBytes(of: &descriptors.fds_bits) { bits in
+            let words = bits.bindMemory(to: Int32.self)
+            words[Int(parentEnd) / 32] |= Int32(bitPattern: 1 << UInt32(parentEnd % 32))
+        }
+        let microseconds = timeout.components.attoseconds / 1_000_000_000_000
+        var limit = timeval(
+            tv_sec: Int(timeout.components.seconds), tv_usec: Int32(microseconds))
+        return select(parentEnd + 1, &descriptors, nil, nil, &limit) != 0
     }
 
     /// Signals the session rather than the process — the negative pid is what reaches the children.
@@ -71,16 +141,35 @@ final class PseudoTerminal: @unchecked Sendable {
         return (status >> 8) & 0xFF
     }
 
+    /// Queued behind any pending typing, so no write can land on a descriptor number reused since.
     func close() {
-        Darwin.close(parentEnd)
+        closeControl()
+        typingQueue.async { [self] in
+            isTerminalOpen = false
+            Darwin.close(parentEnd)
+        }
     }
 
-    /// Canonical for whole lines, echo off so the EOF byte never comes back as text.
+    private static func writeAll(_ bytes: [UInt8], to descriptor: Int32) {
+        var offset = 0
+        while offset < bytes.count {
+            let written = bytes[offset...].withUnsafeBytes {
+                write(descriptor, $0.baseAddress, $0.count)
+            }
+            if written < 0 && errno == EINTR { continue }
+            guard written > 0 else { return }
+            offset += written
+        }
+    }
+
+    /// Canonical for whole lines; echo on, so what is typed shows up unless a prompt hides it.
     private static func terminalSettings() -> termios {
         var settings = termios()
         cfmakeraw(&settings)
-        settings.c_lflag = tcflag_t(ICANON | ISIG)
+        settings.c_lflag = tcflag_t(ICANON | ISIG | ECHO)
         settings.c_oflag = tcflag_t(OPOST | ONLCR)
+        // A zeroed `termios` makes NUL the end-of-file character, so ⌃D would arrive as text.
+        withUnsafeMutableBytes(of: &settings.c_cc) { $0[Int(VEOF)] = 0x04 }
         return settings
     }
 }

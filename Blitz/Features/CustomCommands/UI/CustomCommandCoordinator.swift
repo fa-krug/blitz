@@ -19,11 +19,9 @@ final class CustomCommandCoordinator {
     private lazy var outputPresenter = CommandOutputPresenter(
         activation: activationPolicy,
         rerun: { [unowned self] in self.rerunOutput(id: $0) },
-        stop: { [unowned self] in self.stopOutputRun(id: $0) },
+        handOff: { [unowned self] in self.openInTerminal(directory: $0, command: $1) },
         openSettings: { [unowned self] in self.settingsCoordinator.showSettings(tab: .commands) })
     private let activationPolicy: ActivationPolicy
-    /// Superseding never touches it — only the button ends a command.
-    private var liveRun: (id: UUID, stop: @Sendable () -> Void)?
     /// The last fallback shell line, which has no library entry for the window's Rerun to find.
     private var lastShellCommand: (id: UUID, text: String)?
 
@@ -220,36 +218,52 @@ final class CustomCommandCoordinator {
         }
     }
 
-    /// Opens the window before the first byte, so a long command is visible while it works.
+    /// Opens the window before the first byte, on a shell that stays for the lines typed after.
     private func streamOutput(of command: CustomCommand, arguments: [String]) async {
-        let session = ShellCommandRunner.stream(
-            command.command, arguments: arguments,
-            loadingShellEnvironment: command.loadsShellEnvironment,
+        let session = ShellCommandRunner.openSession(
+            arguments: arguments, loadingShellEnvironment: command.loadsShellEnvironment,
             workingDirectory: command.workingDirectory)
         let runID = outputPresenter.begin(
             commandID: command.id, name: command.name, commandText: command.command,
-            symbol: command.symbol)
-        liveRun = (runID, session.stop)
-        defer { if liveRun?.id == runID { liveRun = nil } }
+            symbol: command.symbol, directory: startingDirectory(of: command), session: session)
 
         for await event in session.events {
             switch event {
             case .output(let text):
                 outputPresenter.append(text, to: runID)
-            case .finished(let result):
+            case .finished(let result, let directory):
                 outputPresenter.finish(
                     CommandOutcome(
                         summary: summary(of: result),
                         hint: shellEnvironmentHint(command: command, result: result),
                         succeeded: result.succeeded, finishedAt: Date()),
-                    for: runID)
+                    directory: directory, for: runID)
+            case .ended:
+                outputPresenter.end(for: runID)
             }
         }
     }
 
-    private func stopOutputRun(id: UUID) {
-        guard let liveRun, liveRun.id == id else { return }
-        liveRun.stop()
+    /// Shown until the shell reports its own; a folder that has gone fails the launch anyway.
+    private func startingDirectory(of command: CustomCommand) -> String {
+        guard let folder = command.workingDirectory else {
+            return FileManager.default.homeDirectoryForCurrentUser.path
+        }
+        return (folder as NSString).expandingTildeInPath
+    }
+
+    /// The way out for what a log cannot draw, through whichever app opens `.command` files.
+    private func openInTerminal(directory: String, command: String?) {
+        if let script = try? TerminalHandoff.writeScript(directory: directory, command: command) {
+            guard !NSWorkspace.shared.open(script) else { return }
+            try? FileManager.default.removeItem(at: script)
+        }
+        Task {
+            await core.showNotice(
+                title: "Couldn't Open in Terminal",
+                message: "macOS has no app set to open shell scripts (.command files).",
+                symbol: "apple.terminal", tone: .neutral)
+        }
     }
 
     private func removeCustomCommandReferences(ids: Set<UUID>, entryIDs: Set<String>) {

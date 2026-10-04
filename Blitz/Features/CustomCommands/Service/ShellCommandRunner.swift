@@ -1,11 +1,12 @@
 import Darwin
 import Foundation
+import Synchronization
 
 /// How a run ended. `launchFailed` means the shell never started, so nothing was captured.
 enum ShellCommandTermination: Sendable, Equatable {
     case exited(status: Int32)
     case launchFailed(String)
-    /// Apart from the status, which a signalled shell reports as 143 or 15.
+    /// Apart from the status, which an interrupted command reports as 130.
     case stopped
 
     /// A signal death reports the signal as its status, so it fails here like any non-zero exit.
@@ -14,13 +15,23 @@ enum ShellCommandTermination: Sendable, Equatable {
 
 enum ShellCommandEvent: Sendable {
     case output(String)
-    case finished(ShellCommandResult)
+    /// One command line has finished; the folder is where the next one starts.
+    case finished(ShellCommandResult, directory: String?)
+    /// The shell itself has gone, so the session runs nothing more.
+    case ended
 }
 
-/// `stop` is not the stream's cancellation: abandoning events must not kill the command.
+/// A shell kept open between commands, so a `cd`, an export or a prompt's answer carries over.
 struct ShellCommandSession: Sendable {
     let events: AsyncStream<ShellCommandEvent>
+    /// Starts one command line; the caller waits for its `finished` before sending another.
+    let run: @Sendable (String) -> Void
+    /// Text for whatever the running command reads from standard input.
+    let type: @Sendable (String) -> Void
+    /// ⌃C for the running command; one that will not stop takes the session down with it.
     let stop: @Sendable () -> Void
+    /// Not the stream's cancellation: the shell leaves once its current command is done.
+    let end: @Sendable () -> Void
 }
 
 /// Both tails are filled only by the non-streaming path; a streamed run reports events.
@@ -64,6 +75,8 @@ enum ShellCommandRunner {
     private static let unlinedLimit = 4 * 1024
     /// How long a stopped command is given to leave politely before it is killed.
     private static let stopGrace: DispatchTimeInterval = .seconds(2)
+    /// The private OSC number the shell marks a finished line with, nonce first.
+    private static let markerCode = 6973
     /// The exit wait blocks, so it stays off the cooperative pool; concurrent, not serial.
     private static let queue = DispatchQueue(
         label: "de.fa-krug.blitz.shell-command", qos: .userInitiated, attributes: .concurrent)
@@ -125,11 +138,11 @@ enum ShellCommandRunner {
             standardError: errors?.readSuffix(limit: standardErrorLimit))
     }
 
-    // MARK: - Streaming
+    // MARK: - Sessions
 
     /// Runs under a pseudo-terminal; see `PseudoTerminal` for why a pipe cannot do this.
-    nonisolated static func stream(
-        _ command: String, arguments: [String] = [], loadingShellEnvironment: Bool = false,
+    nonisolated static func openSession(
+        arguments: [String] = [], loadingShellEnvironment: Bool = false,
         workingDirectory: String? = nil
     ) -> ShellCommandSession {
         var environment = ProcessInfo.processInfo.environment
@@ -137,12 +150,13 @@ enum ShellCommandRunner {
         // A terminal makes tools colour output, so ask for colour the window can draw.
         environment["TERM"] = "xterm-256color"
 
+        let nonce = UUID().uuidString
         let directory = resolvedWorkingDirectory(workingDirectory)
         let terminal = directory.flatMap {
             PseudoTerminal.spawn(
                 executable: shell,
                 arguments: shellArguments(
-                    command: command, arguments: arguments,
+                    command: sessionScript(nonce: nonce), arguments: arguments,
                     loadingShellEnvironment: loadingShellEnvironment),
                 environment: environment, workingDirectory: $0)
         }
@@ -154,76 +168,216 @@ enum ShellCommandRunner {
             return ShellCommandSession(
                 events: AsyncStream { continuation in
                     continuation.yield(
-                        .finished(ShellCommandResult(termination: .launchFailed(reason))))
+                        .finished(
+                            ShellCommandResult(termination: .launchFailed(reason)), directory: nil))
+                    continuation.yield(.ended)
                     continuation.finish()
                 },
-                stop: {})
+                run: { _ in }, type: { _ in }, stop: {}, end: {})
         }
 
-        let stopped = StopFlag()
+        let state = SessionState()
+        let marker = Array("\u{1B}]\(markerCode);\(nonce);".utf8)
         let events = AsyncStream<ShellCommandEvent> { continuation in
             queue.async {
-                drain(terminal, stopped: stopped, into: continuation)
+                drain(terminal, marker: marker, state: state, into: continuation)
             }
         }
         return ShellCommandSession(
             events: events,
-            stop: { [weak stopFlag = stopped] in
-                stopFlag?.mark()
-                terminal.signalSession(SIGTERM)
+            run: { line in
+                state.begin()
+                // The shell reads up to a NUL, so one inside the line would split it in two.
+                terminal.sendControl(Array(line.utf8).filter { $0 != 0 } + [0])
+            },
+            type: { terminal.type(Array($0.utf8)) },
+            stop: {
+                guard let generation = state.requestStop() else { return }
+                terminal.signalSession(SIGINT)
                 // The backstop, for a command that ignores a polite ask.
                 queue.asyncAfter(deadline: .now() + stopGrace) {
-                    terminal.signalSession(SIGKILL)
+                    if state.isRunning(generation) { terminal.signalSession(SIGKILL) }
                 }
-            })
+            },
+            end: { terminal.closeControl() })
+    }
+
+    /// Reads NUL-ended lines from the control descriptor; ⌃C ends a line but never the loop.
+    nonisolated private static func sessionScript(nonce: String) -> String {
+        let control = PseudoTerminal.controlDescriptor
+        // Job control gives each command its own group, out of reach of the session's signal.
+        return """
+            builtin unsetopt monitor
+            TRAPINT() { __blitz_interrupted=1; return $(( 128 + $1 )) }
+            __blitz_next() {
+              { IFS= builtin read -r -d '' -u \(control) __blitz_line } \\
+                always { TRY_BLOCK_INTERRUPT=0 }
+            }
+            __blitz_run() {
+              { builtin eval "$__blitz_line" \(control)<&- } always { TRY_BLOCK_INTERRUPT=0 }
+            }
+            while :; do
+              __blitz_interrupted= __blitz_line=
+              __blitz_next
+              __blitz_read=$?
+              [[ -n $__blitz_interrupted ]] && continue
+              (( __blitz_read == 0 )) || break
+              __blitz_run "$@"
+              builtin printf '\\e]\(markerCode);\(nonce);%d;%s\\a' $? "$PWD"
+            done
+            """
     }
 
     /// One queue, one reader: the decode buffer is touched from here alone, so it needs no lock.
     nonisolated private static func drain(
-        _ terminal: PseudoTerminal, stopped: StopFlag,
+        _ terminal: PseudoTerminal, marker: [UInt8], state: SessionState,
         into continuation: AsyncStream<ShellCommandEvent>.Continuation
     ) {
+        var scanner = LineEndScanner(marker: marker)
         var decoder = TerminalTextDecoder()
         var buffer = [UInt8](repeating: 0, count: readSize)
         var lastYield = ContinuousClock().now
 
+        func flush(force: Bool) {
+            guard let text = decoder.take(force: force) else { return }
+            continuation.yield(.output(text))
+            lastYield = ContinuousClock().now
+        }
+
         while true {
+            // A prompt never ends its line, so a pause in the output is what shows it.
+            if decoder.isHolding, !terminal.awaitOutput(timeout: flushInterval) {
+                flush(force: true)
+                continue
+            }
             // Zero is EOF; -1 with EIO is what a pty master returns once its child is gone.
             let count = read(terminal.parentEnd, &buffer, readSize)
             guard count > 0 else { break }
-            decoder.append(buffer, count: count)
-            let due = ContinuousClock().now - lastYield >= flushInterval
-            if let text = decoder.take(force: due) {
-                continuation.yield(.output(text))
-                lastYield = ContinuousClock().now
+            for piece in scanner.scan(buffer[0..<count]) {
+                switch piece {
+                case .text(let bytes):
+                    decoder.append(bytes)
+                case .lineEnd(let status, let directory):
+                    flush(force: true)
+                    let termination: ShellCommandTermination =
+                        state.finish() ? .stopped : .exited(status: status)
+                    continuation.yield(
+                        .finished(
+                            ShellCommandResult(termination: termination), directory: directory))
+                }
             }
+            flush(force: ContinuousClock().now - lastYield >= flushInterval)
         }
-        if let text = decoder.take(force: true) { continuation.yield(.output(text)) }
+        decoder.append(scanner.remainder)
+        flush(force: true)
 
         let status = terminal.wait()
         terminal.close()
-        continuation.yield(
-            .finished(
-                ShellCommandResult(
-                    termination: stopped.isSet ? .stopped : .exited(status: status))))
+        // A shell that dies mid-line never marks its end, so the line is reported here instead.
+        if state.isRunning {
+            let termination: ShellCommandTermination =
+                state.finish() ? .stopped : .exited(status: status)
+            continuation.yield(
+                .finished(ShellCommandResult(termination: termination), directory: nil))
+        }
+        continuation.yield(.ended)
         continuation.finish()
     }
 
-    /// Set from the main actor and read on the drain queue, so the flag carries its own lock.
-    private final class StopFlag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value = false
-
-        var isSet: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return value
+    /// Written from the main actor and read on the drain queue, so it carries its own lock.
+    private final class SessionState: Sendable {
+        private struct Phase {
+            /// Which line a delayed kill was meant for, so it can never land on the next one.
+            var generation = 0
+            var isRunning = false
+            var isStopping = false
         }
 
-        func mark() {
-            lock.lock()
-            value = true
-            lock.unlock()
+        private let phase = Mutex(Phase())
+
+        var isRunning: Bool { phase.withLock { $0.isRunning } }
+
+        func begin() {
+            phase.withLock {
+                $0.generation += 1
+                $0.isRunning = true
+                $0.isStopping = false
+            }
+        }
+
+        /// The line to stop, or nil when none is running and a signal would reach the shell.
+        func requestStop() -> Int? {
+            phase.withLock { current -> Int? in
+                guard current.isRunning else { return nil }
+                current.isStopping = true
+                return current.generation
+            }
+        }
+
+        func isRunning(_ generation: Int) -> Bool {
+            phase.withLock { $0.isRunning && $0.generation == generation }
+        }
+
+        /// Whether the line that just ended was stopped.
+        func finish() -> Bool {
+            phase.withLock { current -> Bool in
+                current.isRunning = false
+                return current.isStopping
+            }
+        }
+    }
+
+    /// Splits the shell's end-of-line markers out of the output they arrive inside.
+    private struct LineEndScanner {
+        enum Piece {
+            case text([UInt8])
+            case lineEnd(status: Int32, directory: String)
+        }
+
+        let marker: [UInt8]
+        private var held: [UInt8] = []
+
+        init(marker: [UInt8]) {
+            self.marker = marker
+        }
+
+        /// Bytes kept back as a possible marker that never finished.
+        var remainder: [UInt8] { held }
+
+        mutating func scan(_ bytes: ArraySlice<UInt8>) -> [Piece] {
+            held.append(contentsOf: bytes)
+            var pieces: [Piece] = []
+            while let start = held.firstRange(of: marker)?.lowerBound {
+                if start > 0 { pieces.append(.text(Array(held[..<start]))) }
+                let bodyStart = start + marker.count
+                guard let bell = held[bodyStart...].firstIndex(of: 0x07) else {
+                    held.removeFirst(start)
+                    return pieces
+                }
+                pieces.append(Self.lineEnd(held[bodyStart..<bell]))
+                held.removeFirst(bell + 1)
+            }
+            // A marker split across reads keeps its opening bytes back until the rest arrives.
+            let kept = partialMarkerLength()
+            if held.count > kept { pieces.append(.text(Array(held.dropLast(kept)))) }
+            held = Array(held.suffix(kept))
+            return pieces
+        }
+
+        private func partialMarkerLength() -> Int {
+            var length = min(held.count, marker.count - 1)
+            while length > 0, !held.suffix(length).elementsEqual(marker.prefix(length)) {
+                length -= 1
+            }
+            return length
+        }
+
+        /// The body is `status;folder`, and only the status can never hold a semicolon.
+        private static func lineEnd(_ body: ArraySlice<UInt8>) -> Piece {
+            let separator = body.firstIndex(of: UInt8(ascii: ";")) ?? body.endIndex
+            let status = Int32(String(decoding: body[..<separator], as: UTF8.self)) ?? 1
+            let directory = String(decoding: body[separator...].dropFirst(), as: UTF8.self)
+            return .lineEnd(status: status, directory: directory)
         }
     }
 
@@ -231,8 +385,10 @@ enum ShellCommandRunner {
     private struct TerminalTextDecoder {
         private var pending: [UInt8] = []
 
-        mutating func append(_ bytes: [UInt8], count: Int) {
-            pending.append(contentsOf: bytes[0..<count])
+        var isHolding: Bool { !pending.isEmpty }
+
+        mutating func append(_ bytes: [UInt8]) {
+            pending.append(contentsOf: bytes)
         }
 
         /// `force` flushes at exit and for a prompt that never ends a line, still on a boundary.
@@ -338,4 +494,32 @@ enum ShellCommandRunner {
 
 extension String {
     fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+/// A shell in the user's own terminal, for what a log cannot draw: `vim`, `htop`, `ssh`.
+enum TerminalHandoff {
+    /// Removes itself first, then leaves a login shell open in the folder once the command is done.
+    static func script(directory: String, command: String?) -> String {
+        var lines = ["#!/bin/zsh", "rm -f -- \"$0\"", "cd -- \(quoted(directory)) || exit"]
+        if let command, !command.isEmpty { lines.append(command) }
+        lines.append("exec \"${SHELL:-/bin/zsh}\" -l")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// A `.command` file, which opens in Terminal unless the user picked another app for it.
+    static func writeScript(directory: String, command: String?) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Blitz-\(UUID().uuidString).command")
+        let contents = Data(script(directory: directory, command: command).utf8)
+        guard
+            FileManager.default.createFile(
+                atPath: url.path, contents: contents, attributes: [.posixPermissions: 0o700])
+        else { throw CocoaError(.fileWriteUnknown) }
+        return url
+    }
+
+    /// Single quotes make every other character literal, so only a single quote needs escaping.
+    static func quoted(_ text: String) -> String {
+        "'" + text.replacing("'", with: "'\\''") + "'"
+    }
 }
