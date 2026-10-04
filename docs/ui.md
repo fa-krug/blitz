@@ -451,6 +451,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   through `SymbolImage` (`DesignSystem/SymbolImage.swift`), never raw `Image(systemName:)`, because some
   catalog symbols are bundled template assets rather than SF Symbols — `toggleBluetooth` ships its
   own artwork since the logo is a SIG trademark, and a raw `Image(systemName:)` draws nothing for it.
+  A subject with a picture of its own passes `DialogRequest.artwork`, a file path drawn in place of
+  the symbol on the same tile — a quicklink's favicon. It stays untinted; the tone shows on the tile.
 - **Tone.** `DialogTone` is `.neutral` (secondary gray), `.success` (green) or `.danger` (red), and
   it tints the leading glyph and nothing else. The dialog tile lifts a neutral glyph to
   `textSecondary` for the same legibility as a key-cap symbol; semantic colours stay unchanged.

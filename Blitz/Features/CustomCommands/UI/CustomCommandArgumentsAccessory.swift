@@ -28,7 +28,8 @@ enum CustomCommandArgumentsAccessory {
             // Identity per row, so "which fields were left unanswered" starts clean on the next one.
             view: AnyView(
                 InlineArgumentFields(
-                    arguments: arguments, symbol: command.symbol, value: value, focused: focus,
+                    arguments: arguments, icon: .symbol(command.symbol), value: value,
+                    focused: focus,
                     openOptions: { _ in },
                     // Raycast's rule: ↵ never runs short, it moves to the required field instead.
                     onSubmit: {

@@ -15,11 +15,12 @@ final class DialogController: NSObject, NSWindowDelegate {
     }
 
     func confirm(
-        title: String, message: String?, symbol: String?, tone: DialogTone, confirmTitle: String,
-        confirmRole: DialogAction.Role, dismissTitle: String = "Cancel"
+        title: String, message: String?, symbol: String?, artwork: String? = nil,
+        tone: DialogTone, confirmTitle: String, confirmRole: DialogAction.Role,
+        dismissTitle: String = "Cancel"
     ) async -> Bool {
         let request = DialogRequest(
-            title: title, message: message, symbol: symbol, tone: tone,
+            title: title, message: message, symbol: symbol, artwork: artwork, tone: tone,
             actions: [
                 DialogAction(title: confirmTitle, role: confirmRole),
                 DialogAction(title: dismissTitle, role: .cancel)
@@ -39,16 +40,18 @@ final class DialogController: NSObject, NSWindowDelegate {
         return await present(request)
     }
 
-    func notice(title: String, message: String, symbol: String, tone: DialogTone) async {
+    func notice(
+        title: String, message: String, symbol: String, artwork: String? = nil, tone: DialogTone
+    ) async {
         let request = DialogRequest(
-            title: title, message: message, symbol: symbol, tone: tone,
+            title: title, message: message, symbol: symbol, artwork: artwork, tone: tone,
             actions: [DialogAction(title: "OK", role: .cancel)], defaultIndex: 0, cancelIndex: 0)
         _ = await present(request)
     }
 
     /// Something already went wrong, unlike `confirm`; true if recovery was taken.
     func reportFailure(
-        title: String, message: String, symbol: String, recovery: String?
+        title: String, message: String, symbol: String, artwork: String? = nil, recovery: String?
     ) async
         -> Bool
     {
@@ -57,7 +60,7 @@ final class DialogController: NSObject, NSWindowDelegate {
         // ↵ lands on the recovery action when there is one to take, not on the OK dismissal.
         let recoveryIndex = recovery == nil ? nil : actions.count - 1
         let request = DialogRequest(
-            title: title, message: message, symbol: symbol, tone: .danger,
+            title: title, message: message, symbol: symbol, artwork: artwork, tone: .danger,
             actions: actions, defaultIndex: recoveryIndex ?? 0, cancelIndex: 0)
         return await present(request) == recoveryIndex
     }

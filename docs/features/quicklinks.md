@@ -174,8 +174,9 @@ sizes or an SVG stores one known bitmap. Requests go through a private `.ephemer
 session.
 
 The PNG is a `favicon` blob on the row and a base64 field in an export, and while it is set it wins
-over `iconSymbol`. The argument strip's glyph and the ⌘K menu still draw the symbol, since both take a
-symbol name.
+over `iconSymbol`. Every surface shows it: the argument strip draws the launcher row's own
+`EntryIcon` through `QuicklinkCoordinator.icon(for:)`, the ⌘K menu's Open row a thumbnail, and a
+dialog about one quicklink — a failed open, a delete — passes the file as `DialogRequest.artwork`.
 
 The launcher draws artwork from a file, so `QuicklinkStore` writes each favicon out to
 `QuicklinkFavicons/` beside the database, **named by a hash of its bytes**: a refetch moves the path,
