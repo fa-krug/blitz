@@ -353,8 +353,8 @@ final class AppCore {
 
             hotKeys.onTogglePalette = { [weak self] in self?.paletteCoordinator.togglePalette() }
             hotKeys.onRunCommand = { [weak self] id in self?.launcherCoordinator.runCommand(id) }
-            hotKeys.onRunCustomCommand = { [weak self] id in
-                self?.customCommandCoordinator.runCustomCommand(id: id)
+            hotKeys.onRunCustomCommand = { [weak self] id, arguments in
+                self?.customCommandCoordinator.runCustomCommand(id: id, linkArguments: arguments)
             }
             hotKeys.onRunSystemAction = { [weak self] id in
                 self?.systemActionCoordinator.runSystemAction(id: id)
@@ -369,8 +369,8 @@ final class AppCore {
             hotKeys.onRunCustomWindowSize = { [weak self] id in
                 self?.windowCommandCoordinator.runCustomWindowSize(id: id)
             }
-            hotKeys.onOpenQuicklink = { [weak self] id in
-                self?.quicklinkCoordinator.openQuicklink(id: id)
+            hotKeys.onOpenQuicklink = { [weak self] id, arguments in
+                self?.quicklinkCoordinator.openQuicklink(id: id, values: arguments)
             }
             hotKeys.onRunQuickAction = { [weak self] id in
                 self?.quickActionCoordinator.run(id: id)
@@ -465,7 +465,7 @@ final class AppCore {
         }
         // Through the chord's own funnel, so a link passes every gate its shortcut would.
         if let action = HotKeyAction(deepLink: url) {
-            hotKeys.perform(action)
+            hotKeys.perform(action, arguments: HotKeyAction.deepLinkArguments(in: url))
             return
         }
         guard ExtensionDeepLink.claims(url) else { return }

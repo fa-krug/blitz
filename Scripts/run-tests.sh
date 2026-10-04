@@ -296,7 +296,8 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/WindowManagement/Model/WindowCommand.swift \
                            Blitz/Features/Snippets/Model/Snippet.swift \
                            Blitz/Features/Extensions/Model/ExtensionDeepLink.swift \
-                           Blitz/Features/Extensions/Model/ExtensionLaunchType.swift
+                           Blitz/Features/Extensions/Model/ExtensionLaunchType.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \

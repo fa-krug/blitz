@@ -21,6 +21,15 @@ extension HotKeyAction {
         self = action
     }
 
+    /// Raycast's `arguments` JSON, which fills a quicklink's or a custom command's fields.
+    static func deepLinkArguments(in url: URL) -> [String: String] {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard let raw = items.first(where: { $0.name.lowercased() == "arguments" })?.value else {
+            return [:]
+        }
+        return ExtensionDeepLink.parseArguments(raw)
+    }
+
     private static let defaultsKeyPrefix = "hotkey."
 
     private static let segmentCharacters: CharacterSet = {

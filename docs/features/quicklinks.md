@@ -224,6 +224,11 @@ per-catalog-entry, so both need an index for `start()` to re-register from. The 
 list, and an unloaded store would look like "every quicklink was deleted" and throw the shortcuts
 away.
 
+A `blitz://run/quicklink.<uuid>` deep link reaches the same `openQuicklink(id:values:)`, its
+`arguments` JSON keyed by `{argument}` name: everything supplied opens at once, and anything still
+missing shows the quicklink's screen with the supplied fields already filled (see
+[launcher.md](launcher.md#copy-deeplink)).
+
 ## Import & export
 
 `QuicklinkArchive` is a versioned JSON document (`{"version": 1, "quicklinks": [...]}`), pretty-printed

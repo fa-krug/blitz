@@ -7,13 +7,13 @@ final class HotKeyManager {
     var onTogglePalette: (() -> Void)?
     /// The launcher's own command funnel, so a shortcut and a palette row run the same thing.
     var onRunCommand: ((CommandID) -> Void)?
-    var onRunCustomCommand: ((UUID) -> Void)?
+    var onRunCustomCommand: ((UUID, [String: String]) -> Void)?
     var onRunSystemAction: ((SystemAction.ID) -> Void)?
     var onRunWindowCommand: ((WindowCommand.ID) -> Void)?
     var onRunWindowLayout: ((UUID) -> Void)?
     var onEnterRoom: ((UUID) -> Void)?
     var onRunCustomWindowSize: ((UUID) -> Void)?
-    var onOpenQuicklink: ((UUID) -> Void)?
+    var onOpenQuicklink: ((UUID, [String: String]) -> Void)?
     var onRunQuickAction: ((UUID) -> Void)?
     var onRunAppleShortcut: ((UUID) -> Void)?
     var onExpandSnippet: ((StoredSnippet.ID) -> Void)?
@@ -303,8 +303,8 @@ final class HotKeyManager {
         modifierTapMonitor.update(bound: Set(modifierTaps.keys))
     }
 
-    /// Every chord's funnel, and a `blitz://run/` deep link's.
-    func perform(_ action: HotKeyAction) {
+    /// Every chord's funnel, and a `blitz://run/` deep link's; only a link carries `arguments`.
+    func perform(_ action: HotKeyAction, arguments: [String: String] = [:]) {
         // The category switch, the way each feature switch already guards its own funnel.
         guard allowsAction?(action) ?? true else { return }
         switch action {
@@ -312,13 +312,13 @@ final class HotKeyManager {
         case .command(let id): onRunCommand?(id)
         case .app(let bundleID): AppLauncher.toggle(bundleID: bundleID)
         case .settingsPane(let bundleID): AppLauncher.openSettingsPane(bundleID: bundleID)
-        case .customCommand(let id): onRunCustomCommand?(id)
+        case .customCommand(let id): onRunCustomCommand?(id, arguments)
         case .systemAction(let id): onRunSystemAction?(id)
         case .windowCommand(let id): onRunWindowCommand?(id)
         case .windowLayout(let id): onRunWindowLayout?(id)
         case .windowRoom(let id): onEnterRoom?(id)
         case .customWindowSize(let id): onRunCustomWindowSize?(id)
-        case .quicklink(let id): onOpenQuicklink?(id)
+        case .quicklink(let id): onOpenQuicklink?(id, arguments)
         case .quickAction(let id): onRunQuickAction?(id)
         case .appleShortcut(let id): onRunAppleShortcut?(id)
         case .snippet(let id): onExpandSnippet?(id)

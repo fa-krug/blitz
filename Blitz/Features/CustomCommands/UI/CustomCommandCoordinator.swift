@@ -171,6 +171,12 @@ final class CustomCommandCoordinator {
         perform(command, arguments: arguments)
     }
 
+    /// A deep link's `arguments`, translated to the inline fields `runCustomCommand` reads.
+    func runCustomCommand(id: UUID, linkArguments: [String: String]) {
+        let values = store.command(id: id)?.fieldValues(fromLink: linkArguments) ?? [:]
+        runCustomCommand(id: id, values: values)
+    }
+
     /// The launcher fallback: a one-off shell line, shown in the output window or the terminal.
     func runShellCommand(_ text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)

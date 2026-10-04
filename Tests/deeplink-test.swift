@@ -1,4 +1,4 @@
-// Copy Deeplink's two link forms: `blitz://run/` over every hotkey action, and the extension link.
+// Copy Deeplink's two link forms, `blitz://run/` and the extension link, plus a link's arguments.
 
 import Foundation
 
@@ -22,6 +22,7 @@ struct DeepLinkTests {
         refusals()
         spelling()
         extensionLinks()
+        linkArguments()
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }
@@ -143,5 +144,51 @@ struct DeepLinkTests {
         // The extension form is the one place `run` must not claim, or it would swallow it.
         let link = URL(string: "blitz://extensions/raycast/github/search")!
         check("run leaves extension links alone", HotKeyAction(deepLink: link) == nil)
+    }
+
+    // MARK: - Arguments
+
+    static func linkArguments() {
+        let id = UUID()
+        let json = #"{"query":"swift actors","page":2}"#
+        var components = URLComponents(string: "blitz://run/quicklink.\(id.uuidString.lowercased())")!
+        components.queryItems = [URLQueryItem(name: "arguments", value: json)]
+        let link = components.url!
+        check("arguments leave the action alone", HotKeyAction(deepLink: link) == .quicklink(id: id))
+        let arguments = HotKeyAction.deepLinkArguments(in: link)
+        check(
+            "Raycast's JSON fills the values",
+            arguments == ["query": "swift actors", "page": "2"],
+            "got \(arguments)")
+
+        let bare = HotKeyAction.command(.clipboardHistory).deepLink!
+        check("a bare link carries none", HotKeyAction.deepLinkArguments(in: bare).isEmpty)
+        let junk = URL(string: "blitz://run/togglePalette?arguments=not-json")!
+        check("malformed JSON is no arguments", HotKeyAction.deepLinkArguments(in: junk).isEmpty)
+        let shouting = URL(string: "blitz://run/togglePalette?ARGUMENTS=%7B%22a%22:%22b%22%7D")!
+        check("the key is case-blind", HotKeyAction.deepLinkArguments(in: shouting) == ["a": "b"])
+
+        let command = CustomCommand(
+            name: "Deploy", command: "deploy",
+            arguments: [
+                CustomCommandArgument(name: "branch"), CustomCommandArgument(name: "env"),
+                CustomCommandArgument(name: "branch", isOptional: true)
+            ])
+        check(
+            "a value can name its field by position",
+            command.fieldValues(fromLink: ["$2": "staging"]) == ["$2": "staging"])
+        check(
+            "or by its argument's name, filling every field that shares it",
+            command.fieldValues(fromLink: ["branch": "main"]) == ["$1": "main", "$3": "main"])
+        check(
+            "a position wins over a name for its own field",
+            command.fieldValues(fromLink: ["$1": "dev", "branch": "main"]) == ["$1": "dev", "$3": "main"])
+        check(
+            "a key the command does not declare is dropped",
+            command.fieldValues(fromLink: ["$9": "x", "region": "eu"]).isEmpty)
+        check(
+            "complete values run straight through",
+            command.positionalValues(from: command.fieldValues(fromLink: ["branch": "main", "env": "prod"]))
+                == ["main", "prod", "main"])
     }
 }

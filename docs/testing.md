@@ -107,7 +107,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `palette-placement-test` | `DesignSystem/Theme.swift`, `Palette/PalettePlacement.swift` |
 | `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
 | `fallback-test` | `Launcher/Model/Fallback.swift` and `WebSearchEngine.swift`, plus the `CommandID` and `Quicklink` ids it is built from |
-| `deeplink-test` | `HotKeys/Model/HotKeyActionDeepLink.swift` — every action's `blitz://run/` link round-trips, and what no chord runs no link runs — plus `Extensions/Model/ExtensionDeepLink.swift`'s Copy Deeplink form |
+| `deeplink-test` | `HotKeys/Model/HotKeyActionDeepLink.swift` — every action's `blitz://run/` link round-trips, what no chord runs no link runs, and a link's `arguments` reach a custom command's fields — plus `Extensions/Model/ExtensionDeepLink.swift`'s Copy Deeplink form |
 | `palette-shortcut-test` | `Palette/PaletteShortcut.swift` — which row chord each key resolves to, and where it acts |
 | `dictionary-test` | `Dictionary/Model/DictionaryEntry.swift`, `DictionaryMarkup.swift` — a real XHTML record and the plain-text fallback, read into page blocks |
 | `callout-test` | `DesignSystem/Theme.swift`, `HotKeys/UI/CalloutPlacement.swift` |
