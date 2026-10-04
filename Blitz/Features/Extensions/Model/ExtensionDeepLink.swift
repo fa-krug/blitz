@@ -22,6 +22,16 @@ struct ExtensionDeepLink: Sendable, Equatable {
         return manifestName.split(separator: "/").last?.lowercased() == extensionName.lowercased()
     }
 
+    /// Copy Deeplink's form: `blitz://`, so the link never depends on Raycast owning its scheme.
+    static func url(extensionName: String, commandName: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "blitz"
+        components.host = "extensions"
+        components.path =
+            "/" + (extensionName.split(separator: "/") + [commandName[...]]).joined(separator: "/")
+        return components.url
+    }
+
     static func claims(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         return ["raycast", "blitz", "com.raycast", "raycastinternal"].contains(scheme)

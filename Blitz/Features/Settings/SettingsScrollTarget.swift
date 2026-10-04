@@ -13,6 +13,28 @@ extension View {
     func settingsAnchor(_ anchor: SettingsAnchor) -> some View {
         id(SettingsTarget.section(anchor))
     }
+
+    /// Narrows a filtered list to the row a jump names, when `lists` says the list holds it.
+    func settingsFilterSeed(
+        _ anchor: SettingsAnchor, query: Binding<String>, lists: @escaping (String) -> Bool
+    ) -> some View {
+        modifier(SettingsFilterSeed(anchor: anchor, query: query, lists: lists))
+    }
+}
+
+private struct SettingsFilterSeed: ViewModifier {
+    let anchor: SettingsAnchor
+    @Binding var query: String
+    let lists: (String) -> Bool
+    @Environment(SettingsNavigationState.self) private var navigation
+
+    func body(content: Content) -> some View {
+        // Initial: Configure Command can open the window onto this pane with the request set.
+        content.onChange(of: navigation.scrollRequest, initial: true) { _, request in
+            guard case .row(anchor, let title)? = request?.target, lists(title) else { return }
+            query = title
+        }
+    }
 }
 
 /// The pulse a search result leaves on arrival: a pill behind the name it matched, and nothing else.
@@ -86,6 +108,10 @@ private struct SettingsScrollTarget: ViewModifier {
         // This pane may have just mounted, so let its `Form` lay the anchor out before scrolling.
         await Task.yield()
         withAnimation(.easeOut(duration: Theme.Duration.settingsReveal)) {
+            // A hosted table's rows carry no id, so its section is as close as the jump can get.
+            if case .row(let anchor, _) = request.target {
+                proxy.scrollTo(SettingsTarget.section(anchor), anchor: .center)
+            }
             proxy.scrollTo(request.target, anchor: .center)
         }
         navigation.beginFlash(request.target)

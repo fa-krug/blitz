@@ -45,7 +45,7 @@ private struct RoomSettingsRow: View {
     }
 
     var body: some View {
-        SettingsRow(title: room.name, subtitle: subtitle) {
+        SettingsRow(title: room.name, subtitle: subtitle, anchor: .windowManagementRooms) {
             SymbolImage(name: Room.sfSymbol, size: 13)
         } trailing: {
             ShortcutRecorder(action: .windowRoom(id: room.id))

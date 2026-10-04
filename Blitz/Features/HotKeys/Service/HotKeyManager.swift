@@ -303,7 +303,8 @@ final class HotKeyManager {
         modifierTapMonitor.update(bound: Set(modifierTaps.keys))
     }
 
-    private func perform(_ action: HotKeyAction) {
+    /// Every chord's funnel, and a `blitz://run/` deep link's.
+    func perform(_ action: HotKeyAction) {
         // The category switch, the way each feature switch already guards its own funnel.
         guard allowsAction?(action) ?? true else { return }
         switch action {

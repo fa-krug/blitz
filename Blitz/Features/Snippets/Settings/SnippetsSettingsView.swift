@@ -185,7 +185,7 @@ private struct SnippetSettingsRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        SettingsRow(title: record.snippet.name, subtitle: metadata) {
+        SettingsRow(title: record.snippet.name, subtitle: metadata, anchor: .snippetsLibrary) {
             Image(systemName: "doc.text")
                 .font(.system(size: Theme.Size.settingsRowIcon - Theme.Spacing.xs))
                 .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)

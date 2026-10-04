@@ -210,6 +210,44 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         }
     }
 
+    /// What Copy Deeplink hands out: exactly what the entry's shortcut runs, or its extension link.
+    var deepLink: URL? {
+        guard kind == .extensionCommand else { return hotKeyAction?.deepLink }
+        return ExtensionCommandRef(entryID: id).flatMap {
+            ExtensionDeepLink.url(extensionName: $0.extensionName, commandName: $0.commandName)
+        }
+    }
+
+    /// The Settings row holding this entry's alias, shortcut and switches: Configure Command's goal.
+    var settingsTarget: SettingsTarget? {
+        // Built per query and never indexed, so no pane lists one.
+        guard !CommandCatalog.isQueryDriven(self) else { return nil }
+        if let settingsOwner {
+            // The one owned command its pane seats beside the settings only it reads.
+            if id == CommandID.searchMenuItems.rawValue { return .row(.navigationMenuSearch, name) }
+            return SettingsAnchor.commands(ownedBy: settingsOwner).map { .row($0, name) }
+        }
+        switch kind {
+        case .application: return .row(.applicationsApplications, name)
+        case .systemSettings: return .row(.systemSettingsSystemSettings, name)
+        case .command: return .row(.commandsCommands, name)
+        case .quickAction: return .row(.quickActionsActions, name)
+        case .customCommand: return .row(.commandsCustomCommands, name)
+        case .snippet: return .row(.snippetsLibrary, name)
+        case .systemAction: return .row(.systemActionsSystemActions, name)
+        case .windowCommand:
+            guard let command = WindowCommandCatalog.command(forEntryID: id) else {
+                return .row(.windowManagementCustomSizes, name)
+            }
+            return .row(.windowCommands(in: command.group), name)
+        case .windowLayout: return .row(.windowManagementLayouts, name)
+        case .windowRoom: return .row(.windowManagementRooms, name)
+        case .quicklink: return .row(.quicklinksQuicklinks, name)
+        case .appleShortcut: return .row(.appleShortcutsShortcuts, name)
+        case .extensionCommand, .meeting, .contact: return nil
+        }
+    }
+
     /// Synthetic entries have no file to reveal; a destination is its record's own action.
     var canRevealInFinder: Bool { kind.descriptor.canRevealInFinder }
 

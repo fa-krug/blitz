@@ -56,6 +56,7 @@ enum AppActionsMenu {
                     title: "Hide from Search", systemImage: "eye.slash", shortcut: "⇧⌘H",
                     action: onHideFromSearch))
         }
+        items += configurationItems(app: app, core: core)
         if running, app.kind == .application {
             items.append(
                 PopoverMenuItem(
@@ -105,16 +106,37 @@ enum AppActionsMenu {
             }
             items.append(
                 PopoverMenuItem(
-                    title: "Configure Extension", systemImage: "slider.horizontal.3", startsSection: true
+                    title: "Uninstall Extension", systemImage: "trash", startsSection: true,
+                    isDestructive: true
                 ) {
-                    core.extensionCoordinator.showExtensionSettings(for: app)
-                })
-            items.append(
-                PopoverMenuItem(title: "Uninstall Extension", systemImage: "trash", isDestructive: true) {
                     core.extensionCoordinator.confirmUninstall(app)
                 })
         }
         return PopoverMenuContent(header: app.name, items: items)
+    }
+
+    /// Copy Deeplink and Configure, each offered exactly where its chord would act.
+    private static func configurationItems(app: AppEntry, core: AppCore) -> [PopoverMenuItem] {
+        var items: [PopoverMenuItem] = []
+        if let link = app.deepLink {
+            items.append(
+                PopoverMenuItem(
+                    title: "Copy Deeplink", systemImage: "link", startsSection: true, shortcut: "⇧⌘C"
+                ) {
+                    core.launcherCoordinator.copyDeepLink(link)
+                })
+        }
+        if core.launcherCoordinator.canConfigure(app) {
+            let title = app.kind == .extensionCommand ? "Configure Extension" : "Configure Command"
+            items.append(
+                PopoverMenuItem(
+                    title: title, systemImage: "slider.horizontal.3", startsSection: items.isEmpty,
+                    shortcut: "⇧⌘,"
+                ) {
+                    core.launcherCoordinator.configure(app)
+                })
+        }
+        return items
     }
 
     /// A meeting row leads with the same actions as the meeting's card, a contact with its own.

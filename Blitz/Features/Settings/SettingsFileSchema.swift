@@ -56,6 +56,7 @@ enum SettingsFileSchema {
         case .quicklinkConfirmsBeforeDelete: return bind(settings, \.quicklinkConfirmsBeforeDelete)
         case .appleShortcutsEnabled: return bind(settings, \.appleShortcutsEnabled)
         case .shellCommandRunsInTerminal: return bind(settings, \.shellCommandRunsInTerminal)
+        case .webSearchEngine: return bind(settings, \.webSearchEngine)
         case .aiEnabled: return bind(settings, \.aiEnabled)
         case .aiWebSearch: return bind(ai, \.webSearchEnabled)
         case .aiSystemPrompt: return bind(ai, \.systemPrompt)
@@ -128,6 +129,7 @@ extension HyperKeyQuickPress: SettingsFileRawValue {}
 extension CalcNumberStyle: SettingsFileRawValue {}
 extension SearchSensitivity: SettingsFileRawValue {}
 extension QuicklinkSelectionFallback: SettingsFileRawValue {}
+extension WebSearchEngine: SettingsFileRawValue {}
 extension WindowCycle: SettingsFileRawValue {}
 extension ClipboardDefaultAction: SettingsFileRawValue {}
 extension EmojiSkinTone: SettingsFileRawValue {}

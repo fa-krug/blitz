@@ -286,7 +286,7 @@ A **fallback** is the other half of the query-driven idea: a command the query i
 offered under a `Use “…” with…` header **below every result**, whatever the query says. A contextual
 row leads because it recognised the query; a fallback trails because nothing did.
 
-`Fallback` (`Launcher/Model/`) is the whole vocabulary — `.builtin(Builtin)` for the five shipped
+`Fallback` (`Launcher/Model/`) is the whole vocabulary — `.builtin(Builtin)` for the seven shipped
 destinations and `.quicklink(UUID)` for a user's own. `Builtin` exists rather than a bare `CommandID`
 so `FallbackCoordinator.run` is **exhaustive**: a sixth built-in cannot compile without saying where
 its query goes. `Fallback.id` is deliberately the row's own `AppEntry.id`, which is what lets a stored
@@ -295,10 +295,12 @@ order name a live row across a rename or a reinstall.
 | Fallback | Where the query goes | Offered when |
 | --- | --- | --- |
 | Quick AI | a fresh Quick AI chat, question already sent (`QuickAICoordinator.ask`) | `aiEnabled` |
+| Search the Web | the default browser, on the engine chosen in Settings › Fallbacks | always |
 | Search Files | the file-search screen, already narrowed | `fileSearchEnabled` |
 | Run Shell Command | `/bin/zsh`, streamed into the Command Output window, or the terminal app under **Open in Terminal** | always |
 | Define Word | the dictionary screen, already showing the entry (see [dictionary.md](dictionary.md)) | the Define Word command is visible in Settings › Commands |
 | Search Contacts | the contacts screen, already narrowed (see [contacts.md](contacts.md)) | `contactsEnabled` |
+| Search Extension Store | the Store screen, already searching (see [extensions.md](extensions.md#the-store-screen)) | `extensionsEnabled` |
 | a quicklink | its first `{argument}` | `quicklinksEnabled`, and the link has a placeholder |
 
 **A quicklink earns a fallback row by declaring a placeholder**, nothing else —
@@ -319,6 +321,14 @@ Settings › Fallbacks has a **Run Shell Command** section under the list whose 
 sends the line to the user's terminal app instead, through the same handoff a custom command's Run
 in Terminal uses — see [custom-commands.md](custom-commands.md#run-in-terminal). It is the
 fallback's alone: saved custom commands never read it.
+
+**Search the Web is offered on every install**, so a query no entry matched has somewhere to go
+the way Raycast's Search Google gives it. It is query-driven like Run
+Shell Command — `CommandID.searchWeb` is never indexed and binds no chord — and `WebSearchEngine`
+(pure, covered by `fallback-test`) owns each engine's endpoint. The query fills that engine's one
+parameter and nothing else, with `+` encoded, because `URLComponents` leaves it bare and every engine
+reads a bare `+` back as a space. The row prints the engine as its subtitle. The choice
+(`webSearchEngine`) rides a backup and the settings file: it picks a destination and grants nothing.
 
 **The order and the checkboxes are not in a settings backup.** The fallback list is where an import
 could arm shell execution from the launcher, which is the line `snippetsEnabled` already draws:
@@ -639,10 +649,10 @@ and three places read it: `FeatureCommandsSection` draws the pane's rows from it
 category gate for it in both `isVisible` and `allowsHotKey`. Stamping the entry rather than sniffing its
 id is what keeps "which pane owns this" out of the entry-ID namespace.
 
-Thirteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
-Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts and Quicklinks. What is left in Settings › Commands is
-the set no feature switch governs: Calculator History, Open Camera, the three backup commands, Check
-for Updates, Blitz Settings, About, Support and Quit.
+Fourteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
+Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts, Quicklinks and Extensions. What
+is left in Settings › Commands is the set no feature switch governs: Calculator History, Open Camera,
+the three backup commands, Check for Updates, Blitz Settings, About, Support and Quit.
 
 A pane's list is also its display order, so `CommandID`'s declaration order is grouped by owner.
 Nothing keys on that order — `CommandCatalog.all` sorts by name and every preference keys on the raw
@@ -765,6 +775,45 @@ Application and System Settings results expose **Show in Finder** in their ⌘K 
 **⌘↵**. Synthetic command results have no filesystem location, so neither the menu row nor the
 shortcut is available for them. `AppEntry.canRevealInFinder` is the one rule both the menu row and
 the key handler read, so the advertised chord can't drift from the behavior.
+
+## Copy Deeplink
+
+**Copy Deeplink** on a result's ⌘K menu and **⇧⌘C** put a link on the clipboard that runs the row from
+anywhere a URL opens — a browser, a Shortcut, a script, a Stream Deck. Every link but an extension
+command's is `blitz://run/<token>`, and the token is the entry's `HotKeyAction.defaultsKey` without
+its `hotkey.` prefix: `blitz://run/command:clipboard-history`, `blitz://run/app.com.apple.Safari`,
+`blitz://run/quicklink.<uuid>`. Reusing that spelling means a link and a binding can never name an
+action two ways, and `HotKeyActionDeepLink.swift` (pure, covered by `deeplink-test`) is only the
+inverse. The token is one path segment, percent-encoded with `/` included, since a snippet's id is
+a file path. Extension commands keep Raycast's own form; see
+[extensions.md](extensions.md#deeplinks).
+
+**A link runs exactly what the row's global shortcut runs.** `AppCore.handleOpenURL` hands the parsed
+action to `HotKeyManager.perform`, the same funnel a chord fires, so `VisibilityStore.allowsHotKey`
+and every feature's own switch and confirmation gate it identically. That is also why no link can
+reach Quit or a query-driven command: `CommandID.hotKeyAction` withholds them from chords, so the
+inverse never produces them. An app link toggles the app, as its shortcut does. The row is offered —
+and the chord answers — only where `AppEntry.deepLink` is non-nil: never on a meeting, a contact,
+Open in Browser or a fallback. The link is copied unmarked, so it enters clipboard history; it is
+copied in order to be pasted somewhere else.
+
+## Configure Command
+
+**Configure Command** (⇧⌘,) closes the palette and opens Settings on the row that holds the entry's
+alias, shortcut and launcher checkbox, scrolled into view and pulsed the way a Settings search
+result is. `AppEntry.settingsTarget` is the whole mapping: a pane-owned command lands in that pane's
+command section (`SettingsAnchor.commands(ownedBy:)`, exhaustive over `SettingsTab`), every other
+kind in its category's list, and window commands in their catalog group's section. An extension
+command answers with **Configure Extension** instead, onto its own page. Meetings and contacts have no
+row, so neither the menu item nor the chord is offered.
+
+Every list built on `LauncherItemsSection`, and Apple Shortcuts, also types the entry's name into
+its filter field through `settingsFilterSeed`, so a long list shows the row rather than burying it.
+For Applications and Apple Shortcuts that is the only way in: they draw their rows in a hosted table
+whose cells sit outside the `Form`, with no id to scroll to and no window session for the pulse to
+read, so the reveal lands on the section — it always tries the section first, and a row it can find
+still wins. The seed checks that the list really holds the name, so a search result for the
+category switch, which shares the section's anchor, never filters it.
 
 ## Dragging an application out
 

@@ -19,6 +19,7 @@ enum CommandID: String, CaseIterable, Sendable {
     case openCamera = "command:open-camera"
     case openInBrowser = "command:open-in-browser"
     case runShellCommand = "command:run-shell-command"
+    case searchWeb = "command:search-web"
     case define = "command:define"
     case joinNextMeeting = "command:join-next-meeting"
     case mySchedule = "command:my-schedule"
@@ -45,6 +46,7 @@ enum CommandID: String, CaseIterable, Sendable {
     case exportSettings = "command:export-settings"
     case importSettings = "command:import-settings"
     case importFromRaycast = "command:import-from-raycast"
+    case extensionStore = "command:extension-store"
     case checkForUpdates = "command:check-for-updates"
     case settings = "command:settings"
     case about = "command:about"
@@ -69,6 +71,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .openCamera: return "Open Camera"
         case .openInBrowser: return "Open in Browser"
         case .runShellCommand: return "Run Shell Command"
+        case .searchWeb: return "Search the Web"
         case .define: return "Define Word"
         case .joinNextMeeting: return "Join Next Meeting"
         case .mySchedule: return "My Schedule"
@@ -95,6 +98,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .exportSettings: return "Export Backup"
         case .importSettings: return "Import Backup"
         case .importFromRaycast: return "Import from Raycast"
+        case .extensionStore: return "Extension Store"
         case .checkForUpdates: return "Check for Updates"
         case .settings: return "Blitz Settings"
         case .about: return "About Blitz"
@@ -121,6 +125,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .openCamera: return "camera"
         case .openInBrowser: return "globe"
         case .runShellCommand: return "terminal"
+        case .searchWeb: return "magnifyingglass.circle"
         case .define: return "book.closed"
         case .joinNextMeeting: return "video.fill"
         case .mySchedule: return "calendar"
@@ -147,6 +152,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .exportSettings: return "square.and.arrow.up"
         case .importSettings: return "square.and.arrow.down"
         case .importFromRaycast: return "arrow.down.doc"
+        case .extensionStore: return "storefront"
         case .checkForUpdates: return "arrow.down.circle"
         case .settings: return "gearshape"
         case .about: return "info.circle"
@@ -198,7 +204,7 @@ enum CommandID: String, CaseIterable, Sendable {
 
     /// Query-driven: the typed text is their input, so they are built where offered, never listed.
     var isQueryDriven: Bool {
-        self == .openInBrowser || self == .runShellCommand
+        self == .openInBrowser || self == .runShellCommand || self == .searchWeb
     }
 
     /// A chord carries no query, and none should be able to terminate the app outright.

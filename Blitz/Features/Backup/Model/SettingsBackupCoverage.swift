@@ -49,6 +49,7 @@ enum SettingsBackupCoverage {
         "quicklinkOpensNewWindow": .quicklinkOpensNewWindow,
         "quicklinkSelectionFallback": .quicklinkSelectionFallback,
         "shellCommandRunsInTerminal": .shellCommandRunsInTerminal,
+        "webSearchEngine": .webSearchEngine,
         "quicklinkConfirmsBeforeDelete": .quicklinkConfirmsBeforeDelete,
         "appleShortcutsEnabled": .appleShortcutsEnabled,
         "extensionsShowInLauncher": .extensionsShowInLauncher,

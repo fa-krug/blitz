@@ -32,6 +32,19 @@ struct FallbacksSettingsView: View {
             }
 
             Section {
+                Picker(selection: $settings.webSearchEngine) {
+                    ForEach(WebSearchEngine.allCases) { engine in
+                        Text(engine.title).tag(engine)
+                    }
+                } label: {
+                    SettingsRowTitle(.fallbacksWebSearch, "Search engine")
+                }
+            } header: {
+                SettingsSectionHeader(.fallbacksWebSearch)
+            }
+            .settingsEnabled(store.isEnabled(.builtin(.searchWeb)))
+
+            Section {
                 Toggle(isOn: $settings.shellCommandRunsInTerminal) {
                     SettingsRowTitle(.fallbacksShellCommand, "Open in Terminal")
                     Text("Run the typed line in your terminal app, not Blitz's output window.")

@@ -7,7 +7,7 @@ final class FallbackCoordinator {
     private let quicklinks: QuicklinkStore
     private let settings: AppSettings
     private let visibility: VisibilityStore
-    /// The six destinations a fallback hands its query to; nothing here is this type's own state.
+    /// The destinations a fallback hands its query to; nothing here is this type's own state.
     private unowned let core: AppCore
 
     init(
@@ -35,6 +35,8 @@ final class FallbackCoordinator {
     /// Nil for a quicklink deleted since the order was stored.
     func entry(for fallback: Fallback) -> AppEntry? {
         switch fallback {
+        case .builtin(.searchWeb):
+            return CommandCatalog.makeEntry(.searchWeb, subtitle: settings.webSearchEngine.title)
         case .builtin(let builtin): return CommandCatalog.makeEntry(builtin.command)
         case .quicklink(let id): return quicklinks.quicklink(id: id).map(AppEntry.init)
         }
@@ -44,12 +46,20 @@ final class FallbackCoordinator {
     func run(_ fallback: Fallback, query: String) {
         switch fallback {
         case .builtin(.quickAI): core.quickAICoordinator.ask(query)
+        case .builtin(.searchWeb): searchWeb(query)
         case .builtin(.searchFiles): core.fileSearchCoordinator.show(query: query)
         case .builtin(.runShellCommand): core.customCommandCoordinator.runShellCommand(query)
         case .builtin(.define): core.dictionaryCoordinator.show(term: query)
         case .builtin(.searchContacts): core.contactsCoordinator.show(query: query)
+        case .builtin(.extensionStore): core.extensionCoordinator.showStore(query: query)
         case .quicklink(let id): core.quicklinkCoordinator.openQuicklink(id: id, filling: query)
         }
+    }
+
+    private func searchWeb(_ query: String) {
+        guard let url = settings.webSearchEngine.url(searching: query) else { return }
+        core.paletteCoordinator.hidePalette(restoreFocus: false)
+        AppLauncher.open(url)
     }
 
     /// The section's gear and the row's own action; the palette closes behind the pane.
@@ -72,12 +82,14 @@ final class FallbackCoordinator {
     private func isAvailable(_ builtin: Fallback.Builtin) -> Bool {
         switch builtin {
         case .quickAI: return settings.aiEnabled
+        case .searchWeb: return true
         case .searchFiles: return settings.fileSearchEnabled
         // Its own capability: this shell is not the custom-command library's switch to hold.
         case .runShellCommand: return true
         // Settings › Commands is Define's only switch, so hiding the command there hides this too.
         case .define: return visibility.isVisible(CommandCatalog.makeEntry(.define))
         case .searchContacts: return settings.contactsEnabled
+        case .extensionStore: return settings.extensionsEnabled
         }
     }
 }

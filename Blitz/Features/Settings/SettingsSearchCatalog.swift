@@ -267,6 +267,9 @@ enum SettingsSearchCatalog {
             pane: .fallbacks,
             keywords: ["no results", "empty", "search web", "order"]),
         .init(
+            .fallbacksWebSearch, "Search engine",
+            keywords: ["google", "duckduckgo", "bing", "brave", "ecosia", "kagi", "startpage"]),
+        .init(
             .fallbacksShellCommand, "Open in Terminal",
             keywords: ["terminal", "iterm", "shell", "zsh", "output window", "interactive"])
     ]
@@ -598,6 +601,9 @@ enum SettingsSearchCatalog {
         .init(
             .extensionsExtensions, "Enable extensions",
             keywords: ["raycast", "third party", "javascript"]),
+        .init(
+            group: .extensionsCommands, "Extension commands",
+            keywords: ["store", "alias", "shortcut", "hotkey"]),
         .init(
             .extensionsInstall, "Search extensions",
             keywords: ["store", "browse", "install"]),

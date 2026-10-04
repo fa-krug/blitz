@@ -90,6 +90,10 @@ struct PaletteShortcutTests {
         expect(resolve("n", command: true, shift: true), nil, "⇧⌘N is not the new-item chord")
         expect(resolve(",", command: true, option: true), .settings, "⌥⌘, opens the screen's settings")
         expect(resolve(",", command: true), nil, "⌘, stays the app's own Settings")
+        expect(resolve(",", command: true, shift: true), .configure, "⇧⌘, configures the row")
+        expect(
+            resolve(",", command: true, shift: true, option: true), .settings,
+            "Option is read first, so ⇧⌥⌘, stays the screen's settings")
 
         expect(resolve("k", command: true), nil, "⌘K belongs to the Actions menu")
         expect(resolve("p", command: true), nil, "⌘P belongs to the header filter")
@@ -97,7 +101,7 @@ struct PaletteShortcutTests {
 
         let expanded: [PaletteShortcut] = [
             .copyFile, .copyName, .copyPath, .copyText, .pasteFile, .quickLook, .openInApp,
-            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart
+            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure
         ]
         let anywhere: [PaletteShortcut] = [
             .commandDelete, .delete, .deleteAll, .pin, .favoriteSlot(0), .continueInChat, .newItem,
@@ -112,7 +116,8 @@ struct PaletteShortcutTests {
 
         let closing: [PaletteShortcut] = [
             .delete, .deleteAll, .copyFile, .copyName, .copyPath, .copyText, .copyCalculation,
-            .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings
+            .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings,
+            .configure
         ]
         let leaving: [PaletteShortcut] = [
             .commandDelete, .pasteFile, .quit, .forceQuit, .restart, .pin, .favoriteSlot(0),
