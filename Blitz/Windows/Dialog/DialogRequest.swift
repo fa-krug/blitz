@@ -24,6 +24,8 @@ struct DialogRequest {
     var message: String?
     /// Nil where the title already names the subject and a glyph would repeat it.
     let symbol: String?
+    /// The subject's own picture, drawn in place of `symbol`: a quicklink's favicon file.
+    var artwork: String?
     var tone: DialogTone = .neutral
     var actions: [DialogAction]
     /// The button ↵ fires, normally the primary action.

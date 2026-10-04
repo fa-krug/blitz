@@ -17,6 +17,9 @@ struct QuicklinkEditorPanel: View {
     @State private var name: String
     @State private var link: String
     @State private var iconSymbol: String?
+    @State private var favicon: Data?
+    @State private var faviconImage: NSImage?
+    @State private var isFetchingFavicon = false
     @State private var openWithBundleID: String?
     @State private var showsInRootSearch: Bool
     @State private var isPinned: Bool
@@ -29,6 +32,8 @@ struct QuicklinkEditorPanel: View {
         _name = State(initialValue: quicklink?.name ?? "")
         _link = State(initialValue: quicklink?.link ?? "")
         _iconSymbol = State(initialValue: quicklink?.iconSymbol)
+        _favicon = State(initialValue: quicklink?.favicon)
+        _faviconImage = State(initialValue: quicklink?.favicon.flatMap(NSImage.init(data:)))
         _openWithBundleID = State(initialValue: quicklink?.openWithBundleID)
         _showsInRootSearch = State(initialValue: quicklink?.showsInRootSearch ?? true)
         _isPinned = State(initialValue: quicklink?.isPinned ?? false)
@@ -150,25 +155,67 @@ struct QuicklinkEditorPanel: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Icon")
                 .font(.callout.weight(.medium))
-            Button {
-                showingIconPicker = true
-            } label: {
-                HStack(spacing: Theme.Spacing.sm) {
-                    SymbolImage(name: resolvedSymbol, size: 14)
-                    Text(iconSymbol == nil ? "Automatic" : "Custom")
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+            HStack(spacing: Theme.Spacing.xs) {
+                Button {
+                    showingIconPicker = true
+                } label: {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        iconPreview
+                        Text(iconTitle)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 150)
                 }
-                .frame(width: 150)
-            }
-            .popover(isPresented: $showingIconPicker, arrowEdge: .bottom) {
-                SymbolPicker(
-                    selection: $iconSymbol, fallback: automaticSymbol, symbols: Self.iconSymbols
-                ) {
-                    showingIconPicker = false
+                .popover(isPresented: $showingIconPicker, arrowEdge: .bottom) {
+                    SymbolPicker(
+                        selection: $iconSymbol, fallback: automaticSymbol,
+                        symbols: Self.iconSymbols
+                    ) {
+                        // Picking a symbol is choosing it over the favicon, so the favicon goes.
+                        favicon = nil
+                        faviconImage = nil
+                        showingIconPicker = false
+                    }
                 }
+                faviconButton
             }
         }
+    }
+
+    @ViewBuilder
+    private var iconPreview: some View {
+        if let faviconImage {
+            Image(nsImage: faviconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 14, height: 14)
+        } else {
+            SymbolImage(name: resolvedSymbol, size: 14)
+        }
+    }
+
+    private var iconTitle: String {
+        if faviconImage != nil { return "Favicon" }
+        return iconSymbol == nil ? "Automatic" : "Custom"
+    }
+
+    /// Disabled unless the link is a website: nothing else has a favicon to fetch.
+    private var faviconButton: some View {
+        Button(action: fetchFavicon) {
+            Group {
+                if isFetchingFavicon {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .frame(width: 16, height: 16)
+        }
+        .disabled(isFetchingFavicon || QuicklinkFavicon.siteURL(for: trimmed(link)) == nil)
+        .help(faviconImage == nil ? "Fetch the site's favicon" : "Refetch the site's favicon")
+        .accessibilityLabel(faviconImage == nil ? "Fetch Favicon" : "Refetch Favicon")
     }
 
     private var openWithField: some View {
@@ -220,6 +267,24 @@ struct QuicklinkEditorPanel: View {
 
     private var resolvedSymbol: String { iconSymbol ?? automaticSymbol }
 
+    /// The link is read once up front, so editing it mid-fetch can't mix two sites.
+    private func fetchFavicon() {
+        let site = trimmed(link)
+        isFetchingFavicon = true
+        errorMessage = nil
+        Task {
+            let fetched = await QuicklinkFaviconFetcher.fetch(for: site)
+            isFetchingFavicon = false
+            guard let fetched, let image = NSImage(data: fetched) else {
+                let host = QuicklinkFavicon.siteURL(for: site)?.host() ?? "this link"
+                errorMessage = "Couldn't find a favicon for \(host)."
+                return
+            }
+            favicon = fetched
+            faviconImage = image
+        }
+    }
+
     private func insert(_ token: String) {
         link += token
     }
@@ -233,7 +298,7 @@ struct QuicklinkEditorPanel: View {
         let existing = quicklink
         let draft = Quicklink(
             id: existing?.id ?? UUID(), name: name, link: link,
-            openWithBundleID: openWithBundleID, iconSymbol: iconSymbol,
+            openWithBundleID: openWithBundleID, iconSymbol: iconSymbol, favicon: favicon,
             // The pane's row owns the checkbox; an edit carries the flag rather than resetting it.
             isEnabled: existing?.isEnabled ?? true,
             showsInRootSearch: showsInRootSearch,

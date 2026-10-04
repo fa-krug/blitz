@@ -60,12 +60,17 @@ final class QuicklinkCoordinator {
     /// Either switch off means the feature reaches the launcher not at all — rows and commands.
     func applyQuicklinksPresence() {
         let visible = settings.quicklinksEnabled && settings.quicklinksShowInLauncher
-        appIndex.setQuicklinks(visible ? store.quicklinks : [])
+        appIndex.setQuicklinks(visible ? store.quicklinks : [], faviconPaths: store.faviconPaths)
         let commands: Set<CommandID> = [
             .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks
         ]
         appIndex.setCommandsVisible(commands, settings.quicklinksEnabled)
         appIndex.setCommandsListed(commands, settings.quicklinksShowInLauncher)
+    }
+
+    /// The launcher row's own icon, so a surface beside that row can't draw a different one.
+    func icon(for quicklink: Quicklink) -> EntryIcon {
+        AppEntry(quicklink, faviconPath: store.faviconPaths[quicklink.id]).iconSource
     }
 
     // MARK: - Opening
@@ -170,11 +175,13 @@ final class QuicklinkCoordinator {
     private func presentQuicklinkFailure(
         _ quicklink: Quicklink, link: String, failure: QuicklinkLauncher.Failure
     ) async {
-        let symbol = quicklink.iconSymbol ?? Quicklink.sfSymbol
+        let symbol = quicklink.symbol
+        let artwork = store.faviconPaths[quicklink.id]
         guard let bundleID = failure.missingApplicationBundleID else {
             await core.showNotice(
                 title: "Couldn’t Open \(quicklink.name)",
-                message: failure.localizedDescription, symbol: symbol, tone: .danger)
+                message: failure.localizedDescription, symbol: symbol, artwork: artwork,
+                tone: .danger)
             return
         }
         // The only failure with a usable second option, so it offers it rather than dead-ending.
@@ -183,7 +190,7 @@ final class QuicklinkCoordinator {
             await core.reportFailure(
                 title: "Couldn’t Open \(quicklink.name)",
                 message: "\(name) isn’t installed any more.", symbol: symbol,
-                recovery: "Open with Default")
+                artwork: artwork, recovery: "Open with Default")
         else { return }
         performQuicklinkOpen(quicklink, link: link, forcingDefaultApp: true)
     }
@@ -212,7 +219,8 @@ final class QuicklinkCoordinator {
                 await core.confirm(
                     title: "Delete “\(quicklink.name)”?",
                     message: "Its shortcut, favorite slot and learned ranking go with it.",
-                    symbol: quicklink.iconSymbol ?? Quicklink.sfSymbol, confirmTitle: "Delete")
+                    symbol: quicklink.symbol, artwork: store.faviconPaths[id],
+                    confirmTitle: "Delete")
             else { return }
         }
         // Unwound only once the row is gone: a failed delete must not strand its references.
@@ -221,7 +229,7 @@ final class QuicklinkCoordinator {
         } catch {
             await core.showNotice(
                 title: "Couldn’t Delete “\(quicklink.name)”", message: error.localizedDescription,
-                symbol: quicklink.iconSymbol ?? Quicklink.sfSymbol, tone: .danger)
+                symbol: quicklink.symbol, artwork: store.faviconPaths[id], tone: .danger)
             return
         }
         removeQuicklinkReferences(ids: [id], entryIDs: [quicklink.entryID])

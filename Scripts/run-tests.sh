@@ -410,6 +410,7 @@ run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift 
                            Blitz/Features/Uninstall/Model/UninstallPlan.swift
 run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
                            Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift

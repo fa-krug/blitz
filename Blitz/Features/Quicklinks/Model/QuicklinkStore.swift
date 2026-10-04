@@ -13,6 +13,8 @@ final class QuicklinkStore {
     /// False when the database wouldn't open; every mutation then refuses rather than pretends.
     private(set) var isAvailable = false
     var onChange: (([Quicklink]) -> Void)?
+    /// Each favicon written out as a file, which is what the launcher's icon cache draws from.
+    private(set) var faviconPaths: [UUID: String] = [:]
 
     private static let schema = """
         CREATE TABLE IF NOT EXISTS quicklinks(
@@ -24,11 +26,14 @@ final class QuicklinkStore {
           in_root_search INTEGER NOT NULL DEFAULT 1,
           pinned_at REAL,
           created_at REAL NOT NULL,
-          is_enabled INTEGER NOT NULL DEFAULT 1
+          is_enabled INTEGER NOT NULL DEFAULT 1,
+          favicon BLOB
         );
         """
 
     private let dbURL: URL
+    /// Derived from the database and rebuilt from it, so pruning here never loses authored data.
+    private let faviconDirectory: URL
     @ObservationIgnored private var db: OpaquePointer?
     @ObservationIgnored private var upsertStmt: OpaquePointer?
     @ObservationIgnored private var loadStmt: OpaquePointer?
@@ -38,6 +43,7 @@ final class QuicklinkStore {
     init(directory: URL? = nil) {
         let base = directory ?? Self.defaultDirectory
         dbURL = base.appendingPathComponent("quicklinks.sqlite3")
+        faviconDirectory = base.appendingPathComponent("QuicklinkFavicons", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         isAvailable = openDatabase()
         // A failed open leaves the file alone: this is authored data, so report, never delete.
@@ -65,6 +71,7 @@ final class QuicklinkStore {
         }
         sqlite3_reset(stmt)
         quicklinks = loaded.sorted(by: Quicklink.precedes)
+        writeFaviconFiles(pruning: true)
     }
 
     /// A disabled quicklink is offered nowhere, so every surface lists this rather than `quicklinks`.
@@ -127,7 +134,7 @@ final class QuicklinkStore {
             Quicklink(
                 name: Self.uniqueName(basedOn: source.name, taken: quicklinks.map(\.name)),
                 link: source.link, openWithBundleID: source.openWithBundleID,
-                iconSymbol: source.iconSymbol, isEnabled: source.isEnabled,
+                iconSymbol: source.iconSymbol, favicon: source.favicon, isEnabled: source.isEnabled,
                 showsInRootSearch: source.showsInRootSearch))
     }
 
@@ -157,14 +164,21 @@ final class QuicklinkStore {
         sqlite3_bind_text(stmt, 3, value.link, -1, SQLITE_TRANSIENT)
         bind(stmt, 4, value.openWithBundleID)
         bind(stmt, 5, value.iconSymbol)
-        sqlite3_bind_int(stmt, 6, value.isEnabled ? 1 : 0)
-        sqlite3_bind_int(stmt, 7, value.showsInRootSearch ? 1 : 0)
-        if let pinnedAt = value.pinnedAt {
-            sqlite3_bind_double(stmt, 8, pinnedAt.timeIntervalSince1970)
+        if let favicon = value.favicon {
+            _ = favicon.withUnsafeBytes { bytes in
+                sqlite3_bind_blob(stmt, 6, bytes.baseAddress, Int32(bytes.count), SQLITE_TRANSIENT)
+            }
         } else {
-            sqlite3_bind_null(stmt, 8)
+            sqlite3_bind_null(stmt, 6)
         }
-        sqlite3_bind_double(stmt, 9, value.createdAt.timeIntervalSince1970)
+        sqlite3_bind_int(stmt, 7, value.isEnabled ? 1 : 0)
+        sqlite3_bind_int(stmt, 8, value.showsInRootSearch ? 1 : 0)
+        if let pinnedAt = value.pinnedAt {
+            sqlite3_bind_double(stmt, 9, pinnedAt.timeIntervalSince1970)
+        } else {
+            sqlite3_bind_null(stmt, 9)
+        }
+        sqlite3_bind_double(stmt, 10, value.createdAt.timeIntervalSince1970)
         let status = sqlite3_step(stmt)
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
@@ -186,7 +200,35 @@ final class QuicklinkStore {
     private func commit(_ updated: [Quicklink]) {
         guard updated != quicklinks else { return }
         quicklinks = updated
+        writeFaviconFiles(pruning: false)
         onChange?(updated)
+    }
+
+    /// Named by content, so a file is written once and a quicklink that drops one leaves an orphan.
+    private func writeFaviconFiles(pruning: Bool) {
+        let fileManager = FileManager.default
+        var paths: [UUID: String] = [:]
+        for quicklink in quicklinks {
+            guard let favicon = quicklink.favicon else { continue }
+            let name = QuicklinkFavicon.fileName(for: favicon)
+            let url = faviconDirectory.appendingPathComponent(name)
+            if !fileManager.fileExists(atPath: url.path) {
+                try? fileManager.createDirectory(
+                    at: faviconDirectory, withIntermediateDirectories: true)
+                guard (try? favicon.write(to: url, options: .atomic)) != nil else { continue }
+            }
+            paths[quicklink.id] = url.path
+        }
+        if pruning,
+            let files = try? fileManager.contentsOfDirectory(
+                at: faviconDirectory, includingPropertiesForKeys: nil)
+        {
+            let kept = Set(paths.values.map { URL(fileURLWithPath: $0).lastPathComponent })
+            for file in files where !kept.contains(file.lastPathComponent) {
+                try? fileManager.removeItem(at: file)
+            }
+        }
+        if paths != faviconPaths { faviconPaths = paths }
     }
 
     private func validated(_ draft: Quicklink) throws(QuicklinkError) -> Quicklink {
@@ -200,6 +242,7 @@ final class QuicklinkStore {
         value.openWithBundleID =
             draft.openWithBundleID?
             .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        value.favicon = draft.favicon?.isEmpty == false ? draft.favicon : nil
         guard !value.name.isEmpty else { throw .emptyName }
         guard !value.link.isEmpty else { throw .emptyLink }
         guard !value.name.contains("\0"), !value.link.contains("\0") else {
@@ -250,6 +293,7 @@ final class QuicklinkStore {
         sqlite3_exec(
             db, "ALTER TABLE quicklinks ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1", nil, nil,
             nil)
+        sqlite3_exec(db, "ALTER TABLE quicklinks ADD COLUMN favicon BLOB", nil, nil, nil)
         // After the schema, so a column added later can be indexed the same way.
         sqlite3_exec(
             db,
@@ -257,18 +301,21 @@ final class QuicklinkStore {
             nil, nil, nil)
         upsertStmt = prepare(
             """
-            INSERT INTO quicklinks(id, name, link, open_with, icon, is_enabled, in_root_search, pinned_at, created_at)
-            VALUES(?,?,?,?,?,?,?,?,?)
+            INSERT INTO quicklinks(
+              id, name, link, open_with, icon, favicon, is_enabled, in_root_search, pinned_at,
+              created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
               name = excluded.name, link = excluded.link, open_with = excluded.open_with,
-              icon = excluded.icon, is_enabled = excluded.is_enabled,
+              icon = excluded.icon, favicon = excluded.favicon, is_enabled = excluded.is_enabled,
               in_root_search = excluded.in_root_search, pinned_at = excluded.pinned_at
             """
         )
-        // Both statements name columns in the struct's order, which `is_enabled` was appended after.
+        // Both statements name columns in the struct's order, not the order the table grew in.
         loadStmt = prepare(
             """
-            SELECT id, name, link, open_with, icon, is_enabled, in_root_search, pinned_at, created_at
+            SELECT id, name, link, open_with, icon, favicon, is_enabled, in_root_search, pinned_at,
+              created_at
             FROM quicklinks
             """
         )
@@ -297,11 +344,17 @@ final class QuicklinkStore {
         else { return nil }
         return Quicklink(
             id: id, name: name, link: link, openWithBundleID: columnString(stmt, 3),
-            iconSymbol: columnString(stmt, 4),
-            isEnabled: sqlite3_column_int(stmt, 5) != 0,
-            showsInRootSearch: sqlite3_column_int(stmt, 6) != 0,
-            pinnedAt: columnDate(stmt, 7),
-            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 8)))
+            iconSymbol: columnString(stmt, 4), favicon: columnData(stmt, 5),
+            isEnabled: sqlite3_column_int(stmt, 6) != 0,
+            showsInRootSearch: sqlite3_column_int(stmt, 7) != 0,
+            pinnedAt: columnDate(stmt, 8),
+            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9)))
+    }
+
+    /// A zero-length blob reads back as a null pointer, which is the same "no favicon".
+    private static func columnData(_ stmt: OpaquePointer?, _ index: Int32) -> Data? {
+        guard let bytes = sqlite3_column_blob(stmt, index) else { return nil }
+        return Data(bytes: bytes, count: Int(sqlite3_column_bytes(stmt, index)))
     }
 
     private static func columnDate(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {

@@ -23,8 +23,8 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │ CustomWindowSize{,Store} · Room/* ·                                        │
 │ PaletteRowIndex ·                                                          │
 │ Uninstall{Target,SearchRoot,Rules,Protection,Plan} ·                       │
-│ Quicklink{,Destination,Store,Archive} · AppleShortcut · Notes/Model/* ·    │
-│ Snippets/Model/* ·                                                         │
+│ Quicklink{,Destination,Favicon,Store,Archive} · AppleShortcut ·            │
+│ Notes/Model/* · Snippets/Model/* ·                                         │
 │ ShellCommandRunner · DoubleTap{Modifier,Detector} · ClipboardStore ·       │
 │ RaycastDecoder · Scrypt · AppSettingsKey · SettingsBackupCoverage          │
 │ SettingsFile{JSON,Key,Value,Format,Binding,Issue,Identity} ·               │

@@ -841,19 +841,22 @@ final class AppCore {
 
     // MARK: - Dialogs, routed here so `dialogs` stays the single owner
 
-    func showNotice(title: String, message: String, symbol: String, tone: DialogTone) async {
-        await dialogs.notice(title: title, message: message, symbol: symbol, tone: tone)
+    func showNotice(
+        title: String, message: String, symbol: String, artwork: String? = nil, tone: DialogTone
+    ) async {
+        await dialogs.notice(
+            title: title, message: message, symbol: symbol, artwork: artwork, tone: tone)
     }
 
     /// `tone` styles the glyph, `confirmRole` the button; separate on purpose.
     func confirm(
-        title: String, message: String?, symbol: String?, confirmTitle: String,
-        tone: DialogTone = .danger, confirmRole: DialogAction.Role = .destructive,
-        dismissTitle: String = "Cancel"
+        title: String, message: String?, symbol: String?, artwork: String? = nil,
+        confirmTitle: String, tone: DialogTone = .danger,
+        confirmRole: DialogAction.Role = .destructive, dismissTitle: String = "Cancel"
     ) async -> Bool {
         await dialogs.confirm(
-            title: title, message: message, symbol: symbol, tone: tone, confirmTitle: confirmTitle,
-            confirmRole: confirmRole, dismissTitle: dismissTitle)
+            title: title, message: message, symbol: symbol, artwork: artwork, tone: tone,
+            confirmTitle: confirmTitle, confirmRole: confirmRole, dismissTitle: dismissTitle)
     }
 
     /// A question with more than two answers; the returned index is into `options`.
@@ -868,12 +871,12 @@ final class AppCore {
 
     /// A failure with one usable second option; `true` when the user takes it.
     func reportFailure(
-        title: String, message: String, symbol: String, recovery: String?
+        title: String, message: String, symbol: String, artwork: String? = nil, recovery: String?
     ) async
         -> Bool
     {
         await dialogs.reportFailure(
-            title: title, message: message, symbol: symbol, recovery: recovery)
+            title: title, message: message, symbol: symbol, artwork: artwork, recovery: recovery)
     }
 
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.

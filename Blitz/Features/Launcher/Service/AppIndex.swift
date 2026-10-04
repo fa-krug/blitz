@@ -296,14 +296,17 @@ extension AppEntry {
             bundleID: nil, kind: .customCommand, symbolName: command.iconSymbol)
     }
 
-    /// The one row a quicklink draws, wherever it is offered from.
-    init(_ quicklink: Quicklink) {
+    /// The one row a quicklink draws, wherever it is offered from; its favicon is the store's file.
+    init(_ quicklink: Quicklink, faviconPath: String?) {
         self.init(
             id: quicklink.entryID, name: quicklink.name,
             url: URL(string: "blitz://quicklink/" + quicklink.id.uuidString)!,
             bundleID: nil, kind: .quicklink,
             symbolName: quicklink.iconSymbol
-                ?? QuicklinkDestination.detect(quicklink.link)?.defaultSymbol)
+                ?? QuicklinkDestination.detect(quicklink.link)?.defaultSymbol,
+            iconOverride: faviconPath.map {
+                EntryIcon.artwork(path: $0, extent: QuicklinkFavicon.extent)
+            })
     }
 
     /// No bundle id: that would key every shortcut's alias and ranking to the Shortcuts app.
@@ -471,12 +474,12 @@ final class AppIndex {
     }
 
     /// Replaces the quicklink slice; a toggle can't split its entries from their section.
-    func setQuicklinks(_ quicklinks: [Quicklink]) {
+    func setQuicklinks(_ quicklinks: [Quicklink], faviconPaths: [UUID: String]) {
         let entries =
             quicklinks
             .filter { $0.isEnabled && $0.showsInRootSearch }
             .sorted(by: Quicklink.precedes)
-            .map(AppEntry.init)
+            .map { AppEntry($0, faviconPath: faviconPaths[$0.id]) }
         guard entries != quicklinkEntries else { return }
         quicklinkEntries = entries
         publishEntries()

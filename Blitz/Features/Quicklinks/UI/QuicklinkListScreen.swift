@@ -119,8 +119,10 @@ enum QuicklinkActionsMenu {
     static func content(
         quicklink: Quicklink, core: AppCore, values: [String: String]
     ) -> PopoverMenuContent {
+        var openIcon = PopoverMenuIcon.symbol(quicklink.symbol)
+        if let favicon = quicklink.favicon { openIcon = .thumbnail(id: quicklink.id, data: favicon) }
         var items: [PopoverMenuItem] = [
-            PopoverMenuItem(title: "Open Quicklink", systemImage: quicklink.symbol, shortcut: "↵") {
+            PopoverMenuItem(title: "Open Quicklink", icon: openIcon, shortcut: "↵") {
                 core.quicklinkCoordinator.openQuicklink(id: quicklink.id, values: values)
             }
         ]

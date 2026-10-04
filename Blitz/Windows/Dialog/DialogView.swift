@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 extension DialogTone {
@@ -29,7 +30,9 @@ struct DialogView: View {
         let shape = RoundedRectangle(cornerRadius: metrics.radius.panel, style: .continuous)
         VStack(alignment: .leading, spacing: metrics.spacing.xxl) {
             VStack(alignment: .leading, spacing: metrics.spacing.xxl) {
-                if let symbol = request.symbol {
+                if let artwork = request.artwork {
+                    DialogArtwork(path: artwork, tone: request.tone)
+                } else if let symbol = request.symbol {
                     DialogSymbol(name: symbol, tone: request.tone)
                 }
 
@@ -133,6 +136,36 @@ private struct DialogSymbol: View {
     /// Neutral glyphs need the same legibility as a key-cap symbol; semantic colours stay intact.
     private var symbolTint: Color {
         tone == .neutral ? Theme.Colors.textSecondary : tone.tint
+    }
+}
+
+/// Drawn untinted, so the tone shows only on the tile; a picture can't take a glyph's tint.
+private struct DialogArtwork: View {
+    @Environment(\.metrics) private var metrics
+    let tone: DialogTone
+    @State private var image: NSImage?
+
+    init(path: String, tone: DialogTone) {
+        self.tone = tone
+        _image = State(initialValue: NSImage(contentsOfFile: path))
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: metrics.size.dialogIcon, height: metrics.size.dialogIcon)
+            }
+        }
+        .frame(
+            width: metrics.size.dialogSymbolContainer,
+            height: metrics.size.dialogSymbolContainer
+        )
+        .background(
+            RoundedRectangle(cornerRadius: metrics.radius.dialogSymbol, style: .continuous)
+                .fill(tone.tileFill))
     }
 }
 
