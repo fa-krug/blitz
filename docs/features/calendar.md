@@ -51,6 +51,10 @@ camera preview, and individual events as searchable launcher entries.
 - **`MeetingEvent` carries only what a row needs.** Location, notes and attendees are read for one
   occurrence when its details page opens, never for the whole span, so a busy calendar's invites
   never sit in the snapshot every surface diffs.
+- **A chat reads any window it asks for, never more than the pane allows.** `CalendarStore.toolEvents`
+  queries the window a model names, up to `CalendarToolCatalog.maxSpanDays`, on the calendars switched
+  on here; it never widens `span` or touches the snapshot every surface reads. An event a chat adds is
+  confirmed in Blitz's own dialog first. See [Chat tools](#chat-tools).
 - **`Model/` stays Foundation-only**; `calendar-test` compiles the shipped sources. EventKit lives in
   `Service/CalendarStore.swift` and nothing EventKit-shaped leaves it.
 
@@ -70,6 +74,8 @@ camera preview, and individual events as searchable launcher entries.
 - **`AutoJoinPolicy`** — whether a meeting should open itself, and which one.
 - **`EventDraft`** — what the New Event prompt collects, before anything touches the calendar.
 - **`MeetingDetails`** — one occurrence's location, notes as plain text, and attendees.
+- **`CalendarToolEvent`** / **`CalendarToolCatalog`** — what a chat model reads of an occurrence, and
+  the tools it is offered: their schemas, the reading of a call, the answer and the confirmation line.
 
 ### Finding the link
 
@@ -285,6 +291,28 @@ join(meeting)
 twice. `CameraPanel` sits at `.floating`, below a dialog's `.dialog`, so a failure report
 still lands on top of it. The session, the panel and the stage are the `Camera` feature's — see
 [camera.md](camera.md); only the join-specific controller and footer live here.
+
+## Chat tools
+
+With Calendar on and Settings → AI → Personal data → Calendar access set past Off, a chat on an API
+connection is offered `calendar_list_events`, and with Read & Write `calendar_create_event` too —
+see [AI](ai.md) for who gets offered what. `CalendarCoordinator.chatTools` decides the list and
+`runTool` answers a call; the reading and the answer are `CalendarToolCatalog`'s, harness-pinned.
+
+Every date goes both ways as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM` in the Mac's own zone
+(`AIToolDate`), and each tool's description carries now — weekday, date, clock, zone — because a
+model cannot know it. A listing names a start and an inclusive last day, or an exact end, up to 92
+days; it answers JSON in start order, at most `maxEvents` with the rest counted, each event with its
+calendar, an all-day event by its days rather than its midnights, notes as plain text and clipped,
+and the join link when there is one. Declined events are included and say so; cancelled ones never
+are. The query runs on the main actor like `reload`: a quarter of events is still a fast query, and
+`EKEventStore` is not `Sendable`.
+
+A create call names a title and a start — a date-only start is all day — and an end or a duration,
+half an hour unless given. It is checked before anyone is asked: a refusal is a sentence the model
+can correct, never a dialog. The event goes on the default calendar, named in the confirmation, and
+the answer says where it landed. The New Event prompt is not reused: it offers starts from now, and
+a chat asks for any day.
 
 ## Settings
 

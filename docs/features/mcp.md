@@ -205,7 +205,8 @@ unchanged and why an unwrapped route behaves exactly as it did. Per round it str
 passing text, thinking and usage straight through while collecting `.toolCallRequested`; if nothing
 was requested it yields `.finished` and stops. Otherwise it appends the assistant turn with its
 calls, and for each one yields `.toolCall`, awaits the invoker, yields `.toolResult` and appends a
-tool turn — then goes round again with the same tools armed.
+tool turn — then goes round again with the same tools armed. The invoker `AIChatCoordinator` passes
+in sends Blitz's own calendar and reminders tools to their features, and every other call here.
 
 The two tool events are deliberately separate. `.toolCallRequested` is what a transport emits and
 carries only the wire name; the loop consumes it and never forwards it. `.toolCall` is what the loop

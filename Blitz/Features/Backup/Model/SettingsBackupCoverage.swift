@@ -128,6 +128,12 @@ enum SettingsBackupCoverage {
         AppSettingsKey.aiToolRounds.rawValue:
             "Decides how much a tool-driven reply may spend on this Mac's own connections; no other "
             + "AI setting travels, and an import must not raise a spending limit unasked.",
+        AppSettingsKey.aiCalendarAccess.rawValue:
+            "Lets a chat model read, and with Read & Write change, this Mac's calendar; a flag that "
+            + "grants a capability is never carried by a backup.",
+        AppSettingsKey.aiRemindersAccess.rawValue:
+            "Lets a chat model read, and with Read & Write change, this Mac's reminders; a flag "
+            + "that grants a capability is never carried by a backup.",
         AppSettingsKey.aiShownModels.rawValue:
             "Names the models of this Mac's own installed tools and connections, which another Mac "
             + "may not have.",

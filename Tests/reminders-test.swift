@@ -1,4 +1,4 @@
-// Reminder due dates, ordering and sections, and reading a Smart Reminder reply.
+// Reminder due dates, ordering and sections, a Smart Reminder reply, and the chat tools.
 import Foundation
 
 @main
@@ -31,6 +31,10 @@ struct RemindersTests {
         replies()
         replyDates()
         instructions()
+        toolDates()
+        chatToolOffer()
+        chatToolRequests()
+        chatToolAnswers()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -233,6 +237,102 @@ struct RemindersTests {
         expect(
             text.contains(#""due": "2026-10-04""#),
             "the worked example's tomorrow is the real tomorrow")
+    }
+
+    // MARK: - Chat tools
+
+    static func toolRequest(_ name: String, _ arguments: String) -> ReminderToolCatalog.Request? {
+        try? ReminderToolCatalog.request(name: name, arguments: arguments, calendar: calendar)
+    }
+
+    static func toolDates() {
+        let date = AIToolDate.init(parsing:calendar:)
+        expect(date("2026-10-04", calendar)?.text == "2026-10-04", "a day reads back as written")
+        expect(
+            date(" 2026-10-04 07:05:59Z ", calendar)?.text == "2026-10-04T07:05",
+            "a space, seconds and a zone suffix are tolerated")
+        expect(date("2026-10-04T24:00", calendar) == nil, "an hour past the day is no time")
+        expect(date("04.10.2026", calendar) == nil, "only the one spelling is read")
+        expect(
+            AIToolDate.describeNow(now, calendar: calendar)
+                == "Saturday 2026-10-03 14:00, time zone \(calendar.timeZone.identifier)",
+            "now is spelled weekday first, in the reply's own format")
+    }
+
+    static func chatToolOffer() {
+        let readOnly = ReminderToolCatalog.tools(canWrite: false, now: now, calendar: calendar)
+        expect(
+            readOnly.map(\.name) == [ReminderToolCatalog.listName],
+            "read-only access offers no tool that writes")
+        let both = ReminderToolCatalog.tools(canWrite: true, now: now, calendar: calendar)
+        expect(
+            both.map(\.name) == [
+                ReminderToolCatalog.listName, ReminderToolCatalog.createName,
+                ReminderToolCatalog.completeName
+            ],
+            "read and write adds create and complete")
+        expect(
+            both.allSatisfy { ReminderToolCatalog.handles($0.name) && !$0.name.contains("__") },
+            "the names route home and never look like a server's")
+        expect(both.allSatisfy { $0.origin == "Reminders" }, "the transcript row names Reminders")
+    }
+
+    static func chatToolRequests() {
+        expect(
+            toolRequest(ReminderToolCatalog.listName, "") == .list(query: nil),
+            "no arguments at all is a plain listing")
+        expect(
+            toolRequest(ReminderToolCatalog.listName, #"{"query": "milk"}"#) == .list(query: "milk"),
+            "a query narrows it")
+        expect(
+            toolRequest(
+                ReminderToolCatalog.createName,
+                #"{"title": "Call Greg", "due": "2026-10-04T09:00", "notes": "about the cake"}"#)
+                == .create(
+                    ReminderDraft(
+                        title: "Call Greg", notes: "about the cake",
+                        due: ReminderDue(year: 2026, month: 10, day: 4, time: .init(hour: 9, minute: 0)))),
+            "a create call becomes the prompt's draft")
+        expect(
+            toolRequest(ReminderToolCatalog.createName, #"{"title": "Call Greg", "due": "tomorrow"}"#)
+                == nil,
+            "a due date it cannot read is refused, not guessed or dropped")
+        expect(
+            toolRequest(ReminderToolCatalog.createName, #"{"due": "2026-10-04"}"#) == nil,
+            "a reminder needs a title")
+        expect(
+            toolRequest(ReminderToolCatalog.completeName, #"{"id": "x-1"}"#) == .complete(id: "x-1"),
+            "completing names the reminder by id")
+        expect(toolRequest(ReminderToolCatalog.completeName, "{}") == nil, "and cannot without one")
+    }
+
+    static func chatToolAnswers() {
+        let reminders = [
+            item("later", due: ReminderDue(year: 2026, month: 10, day: 9)),
+            item("late", notes: "  ", due: ReminderDue(year: 2026, month: 10, day: 2), list: "Home"),
+            item("whenever", notes: "buy milk")
+        ]
+        let answer = JSONValue(
+            data: Data(
+                ReminderToolCatalog.render(reminders, query: nil, now: now, calendar: calendar).utf8))
+        let listed = answer?.objectValue?["reminders"]?.arrayValue?.compactMap(\.objectValue) ?? []
+        expect(
+            listed.map { $0["id"]?.stringValue } == ["late", "later", "whenever"],
+            "reminders come in due order, undated last")
+        expect(
+            listed.first?["overdue"]?.boolValue == true && listed.first?["due"]?.stringValue == "2026-10-02",
+            "an overdue one says so, its day as written")
+        expect(listed.first?["list"]?.stringValue == "Home", "each names its list")
+        expect(listed.first?["notes"] == nil, "blank notes are left out")
+        expect(listed[1]["overdue"] == nil, "a future one carries no overdue flag")
+        let milk = ReminderToolCatalog.render(reminders, query: "milk", now: now, calendar: calendar)
+        expect(milk.contains("whenever") && !milk.contains("later"), "a query matches notes too")
+
+        let saved = ReminderToolCatalog.saved(
+            ReminderDraft(title: " Cake ", notes: "", due: ReminderDue(year: 2026, month: 10, day: 4)))
+        expect(
+            saved == #"{"saved":{"due":"2026-10-04","title":"Cake"}}"#,
+            "the model learns what was actually saved")
     }
 
     // MARK: - Helpers

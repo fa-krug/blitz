@@ -42,23 +42,9 @@ enum SmartReminderPrompt {
         return draft.isValid ? draft : nil
     }
 
-    /// `YYYY-MM-DD`, optionally followed by `THH:MM`; seconds and a zone suffix are ignored.
+    /// `YYYY-MM-DD`, optionally followed by `THH:MM`; the same spelling every Blitz tool reads.
     static func due(from text: String, calendar: Calendar) -> ReminderDue? {
-        let parts = text.trimmingCharacters(in: .whitespaces)
-            .split(whereSeparator: { $0 == "T" || $0 == " " })
-        guard (1...2).contains(parts.count) else { return nil }
-        let date = parts[0].split(separator: "-").map { Int($0) }
-        guard date.count == 3, let year = date[0], let month = date[1], let day = date[2] else {
-            return nil
-        }
-        var time: ReminderDue.Time?
-        if parts.count == 2 {
-            let clock = parts[1].prefix(5).split(separator: ":").map { Int($0) }
-            guard clock.count == 2, let hour = clock[0], let minute = clock[1] else { return nil }
-            time = ReminderDue.Time(hour: hour, minute: minute)
-        }
-        let due = ReminderDue(year: year, month: month, day: day, time: time)
-        return due.isValid(in: calendar) ? due : nil
+        AIToolDate(parsing: text, calendar: calendar).map(ReminderDue.init)
     }
 
     /// Lenient field by field: a model that writes a number where a string goes loses that field.

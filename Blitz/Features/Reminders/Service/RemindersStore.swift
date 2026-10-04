@@ -178,6 +178,17 @@ final class RemindersStore {
         reminders.first { $0.id == id }
     }
 
+    /// The snapshot once a fetch has landed; a chat can ask before the first one has.
+    func loadedReminders() async -> [ReminderItem] {
+        if !hasLoaded, reloadTask == nil { reload() }
+        // A newer reload cancels the one awaited here, so wait on whichever is current.
+        while !hasLoaded, let task = reloadTask {
+            await task.value
+            if task == reloadTask { break }
+        }
+        return reminders
+    }
+
     // MARK: - Writing
 
     /// False means no list accepts new reminders, which is a report, not a silent no-op.

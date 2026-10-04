@@ -125,8 +125,7 @@ final class CalendarStore {
             publish([])
             return
         }
-        let store = eventStore ?? EKEventStore()
-        eventStore = store
+        let store = currentStore()
         observeStoreChanges()
         lastReloadAt = Date()
 
@@ -264,19 +263,77 @@ final class CalendarStore {
 
     /// False means there is no such calendar, which is a report, not a silent no-op.
     func createEvent(_ draft: EventDraft, now: Date) -> Bool {
-        let store = eventStore ?? EKEventStore()
-        eventStore = store
+        saveNewEvent { event in
+            event.title = draft.trimmedTitle
+            event.startDate = draft.start(from: now)
+            event.endDate = draft.end(from: now)
+        } != nil
+    }
+
+    /// The calendar it landed on, or nil when none accepts new events.
+    func createEvent(_ request: CalendarToolCatalog.NewEvent) -> String? {
+        saveNewEvent { event in
+            event.title = request.title
+            event.isAllDay = request.isAllDay
+            event.startDate = request.start
+            event.endDate = request.end
+            event.location = request.location
+            event.notes = request.notes
+        }
+    }
+
+    /// Where a new event goes, named before it is written so the confirmation can say so.
+    var defaultCalendarName: String? {
+        guard access == .granted else { return nil }
+        return currentStore().defaultCalendarForNewEvents?.title
+    }
+
+    private func saveNewEvent(_ fill: (EKEvent) -> Void) -> String? {
+        let store = currentStore()
         guard access == .granted, let calendar = store.defaultCalendarForNewEvents else {
-            return false
+            return nil
         }
         let event = EKEvent(eventStore: store)
         event.calendar = calendar
-        event.title = draft.trimmedTitle
-        event.startDate = draft.start(from: now)
-        event.endDate = draft.end(from: now)
-        guard (try? store.save(event, span: .thisEvent, commit: true)) != nil else { return false }
+        fill(event)
+        guard (try? store.save(event, span: .thisEvent, commit: true)) != nil else { return nil }
         reload()
-        return true
+        return calendar.title
+    }
+
+    private func currentStore() -> EKEventStore {
+        let store = eventStore ?? EKEventStore()
+        eventStore = store
+        return store
+    }
+
+    // MARK: - Chat tools
+
+    /// Any window a chat asks about, not just `span`, on the calendars switched on in the pane.
+    func toolEvents(in interval: DateInterval) -> [CalendarToolEvent]? {
+        refreshAccess()
+        guard access == .granted else { return nil }
+        let store = currentStore()
+        let selected = store.calendars(for: .event)
+            .filter { !hiddenCalendarIDs.contains($0.calendarIdentifier) }
+        guard !selected.isEmpty else { return [] }
+        let predicate = store.predicateForEvents(
+            withStart: interval.start, end: interval.end, calendars: selected)
+        return store.events(matching: predicate).compactMap(Self.toolEvent(from:))
+    }
+
+    private static func toolEvent(from event: EKEvent) -> CalendarToolEvent? {
+        guard event.status != .canceled, let start = event.startDate, let end = event.endDate,
+            let calendar = event.calendar
+        else { return nil }
+        let me = event.attendees?.first { $0.isCurrentUser }
+        let link = MeetingLink.detect(
+            fields: [event.url?.absoluteString, event.location, event.notes])
+        return CalendarToolEvent(
+            title: event.title ?? "(No Title)", start: start, end: end, isAllDay: event.isAllDay,
+            isDeclined: me?.participantStatus == .declined, calendarName: calendar.title,
+            location: event.location, notes: event.notes,
+            url: link?.url.absoluteString ?? event.url?.absoluteString)
     }
 
     // MARK: - Per-calendar switches
