@@ -49,8 +49,8 @@ These are the things that quietly break the look if changed. Preserve them unles
 - **Resolve every glyph through `SymbolImage`, not `Image(systemName:)`.** Some catalog symbols are bundled assets in `Assets.xcassets` (`toggleBluetooth`), and `Image(systemName:)` silently renders nothing for those.
 - **↵ runs the primary action, Escape cancels, and Cancel always renders leading** (the left button), matching macOS convention. A button never prints its key cap; a deliberate hover reveals its outlined `KeyCapChip` in a `Tooltip`.
 - **In the palette, a hover label is Blitz's `tooltip`, never `.help()`**: an AppKit tooltip never appears while the app sits inactive behind the non-activating panel. A Settings window activates the app, so `.help()` shows there and stays the label to use. The tooltip hangs above its control by default; a control in the palette header passes `edge: .bottom`, since above it is off the window, and a label may run to several lines — the chat's attachment pill lists every staged name.
-- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
-- **Glass is for floating controls, with dialogs as the deliberate modal exception.** The action capsule, menu circle and `PopoverMenu` use it inside the palette; dialogs apply one system `.glassEffect(.regular)` to their root surface. Dialog buttons stay matte so their roles remain legible. Both HUDs keep the lighter `panelScrim` → `GlassEffectView()` → `clipShape` recipe.
+- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`, unless it previews something just made with a way back to it — that is `BannerHUDController`'s banner. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
+- **Glass is for floating controls, with dialogs as the deliberate modal exception.** The action capsule, menu circle and `PopoverMenu` use it inside the palette; dialogs apply one system `.glassEffect(.regular)` to their root surface. Dialog buttons stay matte so their roles remain legible. Every HUD keeps the lighter `panelScrim` → `GlassEffectView()` → `clipShape` recipe.
 
 ---
 
@@ -155,8 +155,8 @@ panel, the shortcut-recorder callout and the Notes switcher, and `menuRow` is de
 `emojiCategoryMenuWidth 220` · `menuIcon 20` ·
 `emojiGridInset 16` ·
 `settingsSidebar 215` · `settingsRowIcon 20` · `dialogCompactWidth 290` ·
-`dialogWidth 420` · `dialogButtonHeight 34` · `dialogSymbol 28` · `dialogSymbolContainer 52` ·
-`dialogIcon 32` · `hudWidth 200` ·
+`dialogWidth 360` · `dialogButtonHeight 34` · `dialogSymbol 28` · `dialogSymbolContainer 52` ·
+`dialogHeaderSymbol 15` · `dialogIcon 32` · `bannerWidth 360` · `hudWidth 200` ·
 `hudHeight 100` · `volumeTrackHeight 6` · `volumeReadout 38`
 
 Notes adds `noteWindow 520×420` (opening size on a first run only), `noteWindowMinimum 320×220`,
@@ -473,7 +473,7 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `.neutral` + `.standard` rather than a red alarm.
 - **Surface.** A dialog applies one system `.glassEffect(.regular)` to a
   `RoundedRectangle(panel 26)`. Confirmations and notices use `dialogCompactWidth 290`, including the
-  volume slider; form dialogs use `dialogWidth 420`. `panelScrim` sits beneath the glass so the dialog
+  volume slider; form dialogs use `dialogWidth 360`. `panelScrim` sits beneath the glass so the dialog
   keeps the launcher's darker density without losing the system material. `DialogPanel` clips its
   `NSHostingView` layer to the same continuous radius, then lets AppKit draw the native window shadow;
   this avoids both the rectangular outline of an unshaped panel and the hard bounds of a SwiftUI blur.
@@ -483,7 +483,10 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `selection`, while a destructive action uses the destructive tint. The **volume HUD** and **message
   pill** keep the non-glass panel recipe.
 - **Layout.** Subject glyph in a low-opacity rounded tile, then title (`panelTitle`) + wrapped
-  secondary message, optional accessory and full-width actions. Content uses a 22-point inset while
+  secondary message, optional accessory and full-width actions. **A form is a quick add**, so
+  `DialogAccessory.isForm` swaps the tile for a `dialogHeaderSymbol 15` glyph on the title's own line
+  and tightens the gaps; its fields carry the dialog, and none of the quick-add forms passes a
+  message. Content uses a 22-point inset while
   the actions keep the tighter `dialogInset 18`. One action spans the row; two sit side by side with
   **Cancel rendered leading** only while both labels fit on one line, then `ViewThatFits` stacks them.
   Three or more always stack in the caller's semantic order. `DialogView.visualOrder` reorders only
@@ -564,15 +567,21 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   dwell, so it is shown with `dwells: false` and stays up until something replaces it or
   `HUDPresenter.dismiss()` runs — the caller owns that, and `QuickActionCoordinator.produce` pairs the
   two with a `defer` so a throw or a cancellation cannot strand it.
-- **`HUDPresenter`** is what keeps those two controllers from duplicating each other: one panel at a
+- **`BannerHUDController`'s banner** previews something just made and offers one way back to it
+  before it fades: Smart Reminder writes the reminder straight away, then shows its title and due
+  day with **Open**. A fixed `bannerWidth 360` capsule in the pill's place — the two replace each
+  other through `AppCore` — with the subject glyph tinted `.success`, two truncating lines and a
+  `.modalAction(.standard)` button. It dwells `Duration.bannerHUD` (5s) so the button is reachable,
+  and a pointer over it holds the dwell through `HUDPresenter.hold()`; leaving re-arms it.
+- **`HUDPresenter`** is what keeps those controllers from duplicating each other: one panel at a
   time, replace rather than stack, fade in, sit out its dwell, fade away, centred horizontally on
-  a screen. The two HUDs differ only in their content, their anchor (`edgeInset(hudEdgeOffset 48)` for
-  the pill, `heightFraction(0.12)` for the box) and how long they dwell — so those are the presenter's
+  a screen. The HUDs differ only in their content, their anchor (`edgeInset(hudEdgeOffset 48)` for
+  the pill and banner, `heightFraction(0.12)` for the box) and how long they dwell — so those are the presenter's
   three arguments. **It sizes its window from a local, never from `host.frame` after attaching the
   content view**: assigning a content view resizes it to the window's current content rect, which is
   zero on a fresh panel, and a zero-width window "centers" with its leading edge on the screen's
   midline — visible only on the session's first HUD, which is what makes it easy to miss. Add a
-  third HUD by constructing another presenter, not by teaching an existing controller a second shape.
+  new HUD by constructing another presenter, not by teaching an existing controller a second shape.
 
 ## Scrollbars
 

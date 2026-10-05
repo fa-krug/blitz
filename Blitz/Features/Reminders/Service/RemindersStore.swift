@@ -191,16 +191,17 @@ final class RemindersStore {
 
     // MARK: - Writing
 
-    /// False means no list accepts new reminders, which is a report, not a silent no-op.
-    func create(_ draft: ReminderDraft) -> Bool {
+    /// The id Reminders.app opens it by; nil means no list accepts it, a report, not a no-op.
+    func create(_ draft: ReminderDraft) -> ReminderItem.ID? {
         let store = currentStore()
         guard access == .granted, let list = store.defaultCalendarForNewReminders() else {
-            return false
+            return nil
         }
         let reminder = EKReminder(eventStore: store)
         reminder.calendar = list
         apply(draft, to: reminder, dueChanged: true)
-        return save(reminder, in: store)
+        guard save(reminder, in: store) else { return nil }
+        return reminder.calendarItemIdentifier
     }
 
     /// False when the reminder is gone or will not save; its list and alarms are left as they were.

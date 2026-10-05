@@ -3,7 +3,8 @@
 Three surfaces over the Mac's own Reminders: **My Reminders**, a palette screen listing every open
 reminder to edit, complete or delete; **Create Reminder**, a prompt for a title, notes and a due date;
 and **Smart Reminder**, which takes one sentence — `Greg wants tomorrow a cake` — and asks the AI
-model to turn it into `Give Greg a cake`, due tomorrow, filled into the same prompt for a ↵ to save.
+model to turn it into `Give Greg a cake`, due tomorrow, written at once and previewed in a banner
+whose **Open** shows it in Reminders.
 
 ## Invariants
 
@@ -33,16 +34,18 @@ model to turn it into `Give Greg a cake`, due tomorrow, filled into the same pro
   `AppCore.smartReminderProvider`, and `RemindersCoordinator.applyCommands` takes it out of the
   launcher — its shortcut with it — when either switch is off. Turning AI off cancels a run in flight.
   The model is sent the typed sentence and today's date, never a reminder already on the Mac.
-- **A model's reply is read, never trusted, and never written unseen.** `SmartReminderPrompt.draft(from:)`
-  takes the first `{` to the last `}` and decodes it field by field. No title is no reminder; a due
-  date that is not a real day is dropped rather than guessed. Even a clean reply only fills the New
-  Reminder prompt — ↵ saves it, Esc drops it — so a misread sentence never reaches Reminders. Whatever
-  fails, the sentence is not lost: `Write It Myself` opens the same prompt with it as the title.
+- **A model's reply is read, never trusted.** `SmartReminderPrompt.draft(from:)` takes the first `{`
+  to the last `}` and decodes it field by field. No title is no reminder; a due date that is not a
+  real day is dropped rather than guessed. A clean reply is written straight away — the reader typed
+  the sentence and asked for it — and the banner shows what landed, its **Open** the way to fix a
+  misread. Whatever fails, the sentence is not lost: `Write It Myself` opens the New Reminder prompt
+  with it as the title.
 - **Per-list switches live on `RemindersStore`, not `AppSettings`.** List identifiers are
   machine-specific, so they stay out of the backup, as the calendar's do. They store exclusions, so a
   list added later defaults to on.
 - **A chat changes nothing unseen.** A reminder a chat model creates opens the New Reminder prompt
-  filled in, exactly as Smart Reminder's does, and a completion is confirmed first. See
+  filled in, unlike Smart Reminder's — the reader never asked for it — and a completion is confirmed
+  first. See
   [Chat tools](#chat-tools).
 - **`Model/` stays Foundation-only**; `reminders-test` compiles the shipped sources.
 
@@ -95,7 +98,7 @@ to-do list long enough to need search would crowd apps out of the root.
 | --- | --- | --- |
 | My Reminders | Opens the `.reminders` palette mode. | yes |
 | Create Reminder | Prompts for a title, notes and a due date, and writes the reminder. | yes |
-| Smart Reminder | Prompts for one sentence, then shows the AI model's reminder in the prompt to save. | yes |
+| Smart Reminder | Prompts for one sentence, writes the AI model's reminder, and previews it in a banner. | yes |
 
 New reminders go on the default Reminders list. A miss — the feature off, no access, AI off — reports
 through the HUD, not a dialog.
@@ -121,7 +124,7 @@ cannot be reached, and asks before it ticks it off on every device.
 
 ## The prompt
 
-`ReminderDraftFields` is a dialog accessory: title, notes, a `No Date` · `Date` · `Date & Time` choice
-and a date field. The field is laid out even under `No Date`, disabled, because a dialog is measured
+`ReminderDraftFields` is a dialog accessory: title, notes, an unlabelled `No Date` · `Date` ·
+`Date & Time` choice and a date field. The field is laid out even under `No Date`, disabled, because a dialog is measured
 once as it is presented and a field that came and went would be clipped. The choice row is
 `DialogChoiceRow`, shared with New Event.

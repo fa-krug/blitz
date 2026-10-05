@@ -259,14 +259,18 @@ enum Theme {
         /// The confirmation HUD's width ceiling, and its distance above the screen bottom.
         static let hudMaxWidth: CGFloat = 420
         static let hudEdgeOffset: CGFloat = 48
+        /// Fixed rather than intrinsic, so a long title truncates instead of widening the banner.
+        static let bannerWidth: CGFloat = 360
         /// Questions and notices stay compact; controls keep the room their native widgets need.
         static let dialogCompactWidth: CGFloat = 290
         /// Blitz's own control dialog: fixed width, height measured from its SwiftUI content.
-        static let dialogWidth: CGFloat = 420
+        static let dialogWidth: CGFloat = 360
         static let dialogButtonHeight: CGFloat = menuButton - 2
         /// Subject glyph and its fixed tile at the top of a dialog.
         static let dialogSymbol: CGFloat = 28
         static let dialogSymbolContainer: CGFloat = 52
+        /// A form's glyph sits on the title's line, so it is sized to the title, not to a tile.
+        static let dialogHeaderSymbol: CGFloat = 15
         /// Shared measurement for dialog accessories and the volume-HUD glyph.
         static let dialogIcon: CGFloat = 32
         /// 16:9 at the dialog's own width, so the two surfaces read as siblings.
@@ -306,6 +310,8 @@ enum Theme {
         /// How long each HUD stays up; a sentence needs longer than a level does.
         static let messageHUD: TimeInterval = 2.4
         static let volumeHUD: TimeInterval = 1.6
+        /// Long enough to reach its button; hovering holds it longer still.
+        static let bannerHUD: TimeInterval = 5
         /// How a borderless surface arrives and leaves; the exit is shorter, so it feels quick.
         static let enter: TimeInterval = 0.18
         static let exit: TimeInterval = 0.12

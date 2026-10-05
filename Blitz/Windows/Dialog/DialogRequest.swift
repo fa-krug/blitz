@@ -45,6 +45,12 @@ enum DialogAccessory {
     case contactDraft(ContactDraftState)
     case snippetArguments(SnippetArgumentsState)
 
+    /// A form is filled in rather than answered, so it takes the wider, one-line-header layout.
+    var isForm: Bool {
+        if case .volume = self { return false }
+        return true
+    }
+
     /// Whether ←/→/↑/↓ belong to the control rather than to whatever has focus inside it.
     var claimsArrowKeys: Bool {
         if case .volume = self { return true }
