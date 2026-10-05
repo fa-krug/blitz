@@ -797,8 +797,11 @@ final class AppIndex {
         while start < entries.endIndex {
             let kind = entries[start].kind
             let end = entries[start...].firstIndex { $0.kind != kind } ?? entries.endIndex
-            ordered += LauncherOrder.byUsage(
-                Array(entries[start..<end]), signals: { self.signals(for: $0, usage: usage) })
+            let slice = Array(entries[start..<end])
+            // Meetings arrive soonest-first, and the next one must lead whatever was opened most.
+            ordered +=
+                kind == .meeting
+                ? slice : LauncherOrder.byUsage(slice, signals: { self.signals(for: $0, usage: usage) })
             start = end
         }
         return ordered
