@@ -466,7 +466,8 @@ the rest of a freshly opened screen.
 Favorites, then Meetings, then Suggestions, then one section per kind. Meetings sit above
 Suggestions because a meeting is worth opening only until it ends. Each kind section is sorted by
 the tiebreak, so what the user opens comes first and never-used entries still read alphabetically
-below it. The sort runs within each contiguous kind run of the publication order,
+below it. Meetings are the exception: they keep the agenda's soonest-first order, so the next one
+always leads. The sort runs within each contiguous kind run of the publication order,
 so the sectioned view stays 1:1 with the flat selection.
 
 ### Suggestions
