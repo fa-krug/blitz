@@ -17,11 +17,9 @@ release list is the feed.
   Blitz is neither. `Quarantine` checks anyway through `getxattr`/`removexattr` rather than the
   `xattr` tool, and an app that still carries the flag is refused rather than installed.
 - **The signature is the only integrity guarantee.** A downloaded bundle is trusted when its seal
-  validates, nested helper included, *and* it either satisfies the Developer ID requirement pinned in
-  `BundleSignature` or carries the byte-identical leaf certificate the running app does. The
-  requirement names team `HS26J3YA63`, so a certificate renewal strands nobody. Releases are
-  self-signed for now, so today every update passes through the leaf match; the requirement is
-  already in place so that a later switch to Developer ID reaches every installed copy. `notarized`
+  validates, nested helper included, *and* it satisfies the Developer ID requirement pinned in
+  `BundleSignature`. The requirement names team `HS26J3YA63`, so a certificate renewal strands
+  nobody, and the release workflow checks every build against it before publishing. `notarized`
   is deliberately not in the requirement — it resolves the ticket through `syspolicyd` or the
   network, so an offline Mac would refuse a bundle the chain already proves is ours.
 - **A build only ever updates within its own channel.** The channels are separate bundle ids installed
@@ -105,7 +103,7 @@ One route, whatever the install came from:
    for its channel, so it is `Blitz Beta.app` on beta.
 3. Check quarantine natively; clear it if somehow present, and refuse the update if it survives.
 4. Verify the bundle id, the version, and that the code signature is valid and proves the bundle is
-   ours — by the pinned Developer ID requirement, or by the running app's own leaf certificate.
+   ours by the pinned Developer ID requirement.
 5. `FileManager.replaceItemAt`. The staging folder is on the same volume as `/Applications`, which is
    what lets this be atomic. A non-writable `/Applications` is reported, not worked around; there is
    no privileged helper.

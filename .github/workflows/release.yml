@@ -1,7 +1,7 @@
 name: Release
 
-# Every push to main ships: a self-signed universal build, published as the GitHub Release the
-# in-app updater reads. Not notarized — see docs/release.md.
+# Every push to main ships: a Developer ID signed, notarized universal build, published as the
+# GitHub Release the in-app updater reads. See docs/release.md.
 on:
   push:
     branches: [main]
@@ -43,15 +43,15 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "zip_file=Blitz-Universal-${VERSION}.zip" >> "$GITHUB_OUTPUT"
 
-      # The same self-signed identity on every release is what keeps users' Accessibility grant
-      # alive across updates, and what the updater checks before it installs. See docs/signing.md.
+      # Users' Accessibility grant and the updater pin the team, not this certificate, so a renewed
+      # Developer ID certificate drops in here with nothing else changing. See docs/signing.md.
       - name: Import signing certificate
         env:
-          P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
         run: |
           if [ -z "${P12_BASE64}" ]; then
-            echo "::error::SIGNING_P12_BASE64 is not set — see docs/signing.md."
+            echo "::error::DEVELOPER_ID_P12_BASE64 is not set — see docs/signing.md."
             exit 1
           fi
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -73,8 +73,8 @@ jobs:
           xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Blitz Self-Signed" \
-            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM=HS26J3YA63 OTHER_CODE_SIGN_FLAGS="--timestamp" \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             build
 
@@ -94,6 +94,51 @@ jobs:
 
       - name: Assert the signature is sound
         run: ./Scripts/verify-signature.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
+
+      # Read from the shipped source, so the release is checked against exactly what the updater pins.
+      - name: Assert the updater will trust it
+        run: |
+          REQ="$(awk '/developerID = """/ { on = 1; next } on && /"""/ { exit } on' \
+            Blitz/Features/Updates/Service/BundleSignature.swift |
+            sed -e 's/\\$//' -e 's/^ *//' | tr '\n' ' ')"
+          if [ -z "${REQ// }" ]; then
+            echo "::error::Could not read BundleSignature.developerID"
+            exit 1
+          fi
+          codesign --verify --deep --strict --test-requirement="=$REQ" \
+            "$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
+
+      # Stapling puts the ticket in the bundle, so Gatekeeper's first launch needs no network.
+      - name: Notarize and staple
+        env:
+          KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+          KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          if [ -z "${KEY_BASE64}" ] || [ -z "${KEY_ID}" ] || [ -z "${ISSUER_ID}" ]; then
+            echo "::error::A NOTARY_API_* secret is not set — see docs/signing.md."
+            exit 1
+          fi
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          echo "${KEY_BASE64}" | base64 --decode > "$KEY"
+          trap 'rm -f "$KEY"' EXIT
+          AUTH=(--key "$KEY" --key-id "${KEY_ID}" --issuer "${ISSUER_ID}")
+          ditto -c -k --keepParent --sequesterRsrc "$APP" "$RUNNER_TEMP/notarize.zip"
+          RESULT="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${AUTH[@]}" \
+            --wait --timeout 1h --output-format json)"
+          echo "$RESULT"
+          STATUS="$(plutil -extract status raw -o - - <<< "$RESULT")"
+          if [ "$STATUS" != "Accepted" ]; then
+            xcrun notarytool log "$(plutil -extract id raw -o - - <<< "$RESULT")" "${AUTH[@]}" || true
+            echo "::error::Notarization finished as '$STATUS'"
+            exit 1
+          fi
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+      - name: Assert Gatekeeper accepts it
+        run: spctl --assess --type execute -vv "$RUNNER_TEMP/DerivedData/Build/Products/Release/Blitz.app"
 
       # `ditto -c -k --keepParent --sequesterRsrc` is the only zip that leaves the code signature
       # verifiable; plain `zip` drops symlinks and the updater would refuse every update.

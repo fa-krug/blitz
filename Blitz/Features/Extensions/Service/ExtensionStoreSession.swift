@@ -73,8 +73,8 @@ final class ExtensionStoreSession {
         progress[listing.id] = .downloading
         defer { progress[listing.id] = nil }
         do {
-            try await manager.install(listing) { step in
-                Task { @MainActor [weak self] in
+            try await manager.install(listing) { [weak self] step in
+                Task { @MainActor in
                     // A step can land after the install ended; it must not bring the spinner back.
                     guard self?.progress[listing.id] != nil else { return }
                     self?.progress[listing.id] = step
