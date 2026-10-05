@@ -50,16 +50,14 @@ struct ReminderDraftFields: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.spacing.xl) {
-            VStack(spacing: metrics.spacing.md) {
-                TextField("", text: $state.title, prompt: Text("Title"))
-                    .focused($focused)
-                    .dialogTextField()
-                TextField("", text: $state.notes, prompt: Text("Notes"))
-                    .dialogTextField()
-            }
+        VStack(alignment: .leading, spacing: metrics.spacing.md) {
+            TextField("", text: $state.title, prompt: Text("Title"))
+                .focused($focused)
+                .dialogTextField()
+            TextField("", text: $state.notes, prompt: Text("Notes"))
+                .dialogTextField()
             DialogChoiceRow(
-                label: "Due", values: ReminderDraftState.DueKind.allCases, title: \.title,
+                label: nil, values: ReminderDraftState.DueKind.allCases, title: \.title,
                 selection: $state.dueKind)
             // Laid out even when off: the dialog is measured once, as it is presented.
             DatePicker(

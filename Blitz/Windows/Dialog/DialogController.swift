@@ -82,8 +82,7 @@ final class DialogController: NSObject, NSWindowDelegate {
     func createEvent() async -> EventDraft? {
         let state = EventDraftState()
         let request = DialogRequest(
-            title: "New Event", message: "It goes on the calendar new events go to.",
-            symbol: "calendar.badge.plus", tone: .neutral,
+            title: "New Event", symbol: "calendar.badge.plus", tone: .neutral,
             actions: [
                 DialogAction(title: "Create"),
                 DialogAction(title: "Cancel", role: .cancel)
@@ -97,9 +96,7 @@ final class DialogController: NSObject, NSWindowDelegate {
     func editReminder(_ draft: ReminderDraft, isNew: Bool) async -> ReminderDraft? {
         let state = ReminderDraftState(draft: draft, now: Date())
         let request = DialogRequest(
-            title: isNew ? "New Reminder" : "Edit Reminder",
-            message: isNew ? "It goes on your default Reminders list." : nil,
-            symbol: "checklist", tone: .neutral,
+            title: isNew ? "New Reminder" : "Edit Reminder", symbol: "checklist", tone: .neutral,
             actions: [
                 DialogAction(title: isNew ? "Create" : "Save"),
                 DialogAction(title: "Cancel", role: .cancel)
@@ -126,9 +123,7 @@ final class DialogController: NSObject, NSWindowDelegate {
     func describeReminder() async -> String? {
         let state = SmartReminderState()
         let request = DialogRequest(
-            title: "Smart Reminder",
-            message: "Say it the way you'd say it. AI writes the title and picks the due date.",
-            symbol: "wand.and.stars", tone: .neutral,
+            title: "Smart Reminder", symbol: "wand.and.stars", tone: .neutral,
             actions: [
                 DialogAction(title: "Create"),
                 DialogAction(title: "Cancel", role: .cancel)
@@ -143,8 +138,7 @@ final class DialogController: NSObject, NSWindowDelegate {
     ) async -> [String: String]? {
         let state = SnippetArgumentsState(arguments: arguments)
         let request = DialogRequest(
-            title: snippetName, message: "Fill in the template fields.", symbol: "curlybraces",
-            tone: .neutral,
+            title: snippetName, symbol: "curlybraces", tone: .neutral,
             actions: [
                 DialogAction(title: "Expand"),
                 DialogAction(title: "Cancel", role: .cancel)
@@ -161,11 +155,8 @@ final class DialogController: NSObject, NSWindowDelegate {
             self.continuation = continuation
             onPresentationChanged(true)
             let width =
-                switch request.accessory {
-                case nil, .volume: metrics.size.dialogCompactWidth
-                case .eventDraft, .reminderDraft, .smartReminder, .contactDraft, .snippetArguments:
-                    metrics.size.dialogWidth
-                }
+                request.accessory?.isForm == true
+                ? metrics.size.dialogWidth : metrics.size.dialogCompactWidth
             let content = hostingView(
                 DialogView(
                     request: request, width: width,

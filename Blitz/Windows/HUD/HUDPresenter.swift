@@ -55,6 +55,13 @@ final class HUDPresenter {
         scheduleDismissal()
     }
 
+    /// Keeps the panel up until `extend()` or `dismiss()`, as a pointer over it should.
+    func hold() {
+        dismissal?.cancel()
+        guard let panel, panel.isVisible else { return }
+        panel.cancelFade()
+    }
+
     var isShowing: Bool { panel?.isVisible ?? false }
 
     private func scheduleDismissal() {

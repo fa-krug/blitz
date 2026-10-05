@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// A dialog's segmented choice: one row of values under a label, exactly one selected.
+/// A dialog's segmented choice: one row of values, exactly one selected; nil drops the label.
 struct DialogChoiceRow<Value: Hashable>: View {
     @Environment(\.metrics) private var metrics
-    let label: String
+    let label: String?
     let values: [Value]
     let title: (Value) -> String
     @Binding var selection: Value
@@ -11,10 +11,12 @@ struct DialogChoiceRow<Value: Hashable>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.spacing.sm) {
-            Text(label)
-                .font(metrics.typography.rowTrailing)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize()
+            if let label {
+                Text(label)
+                    .font(metrics.typography.rowTrailing)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize()
+            }
 
             HStack(spacing: 0) {
                 ForEach(values, id: \.self) { value in

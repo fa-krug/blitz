@@ -135,8 +135,16 @@ final class RemindersCoordinator {
         core.hideProgress()
         switch result {
         case .success(let draft):
-            // A model can misread a sentence, so its guess is shown for ↵ rather than written.
-            await create(startingFrom: draft)
+            // Written straight away; the banner's Open is the way to fix a misread sentence.
+            guard let id = store.create(draft) else {
+                await reportNoList()
+                return
+            }
+            let due = draft.due?.title(now: Date(), calendar: .current) ?? "No due date"
+            core.showBanner(
+                title: draft.trimmedTitle, detail: "Reminder created · \(due)",
+                symbol: "checklist", actionTitle: "Open",
+                action: { [weak self] in self?.open(id) })
         case .failure(let error):
             // What was typed is never lost: it seeds the manual prompt.
             guard
@@ -157,7 +165,7 @@ final class RemindersCoordinator {
 
     private func create(startingFrom draft: ReminderDraft) async {
         guard let draft = await core.editReminder(draft, isNew: true) else { return }
-        guard store.create(draft) else {
+        guard store.create(draft) != nil else {
             await reportNoList()
             return
         }
@@ -206,7 +214,11 @@ final class RemindersCoordinator {
 
     func openInReminders(_ reminder: ReminderItem) {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        if !ReminderLauncher.show(reminder) { report("Reminders isn't available on this Mac") }
+        open(reminder.id)
+    }
+
+    private func open(_ id: ReminderItem.ID) {
+        if !ReminderLauncher.show(id) { report("Reminders isn't available on this Mac") }
     }
 
     // MARK: - Chat tools
@@ -249,12 +261,12 @@ final class RemindersCoordinator {
         }
     }
 
-    /// The model's draft fills the same prompt Smart Reminder does, so the reader can fix it first.
+    /// The model's draft fills the New Reminder prompt, so the reader can fix it before it lands.
     private func createForChat(_ draft: ReminderDraft, callID: String) async -> AIToolResult {
         guard let draft = await core.editReminder(draft, isNew: true) else {
             return .failure(callID, "The user declined to add this reminder.")
         }
-        guard store.create(draft) else {
+        guard store.create(draft) != nil else {
             return .failure(callID, "No Reminders list on this Mac accepts new reminders.")
         }
         return AIToolResult(

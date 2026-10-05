@@ -7,9 +7,9 @@ enum ReminderLauncher {
 
     /// Reminders' own item scheme opens the reminder itself; with no handler, the app opens bare.
     @discardableResult
-    static func show(_ reminder: ReminderItem) -> Bool {
+    static func show(_ id: ReminderItem.ID) -> Bool {
         let workspace = NSWorkspace.shared
-        if let url = URL(string: "x-apple-reminderkit://REMCDReminder/\(reminder.id)"),
+        if let url = URL(string: "x-apple-reminderkit://REMCDReminder/\(id)"),
             workspace.urlForApplication(toOpen: url) != nil
         {
             return workspace.open(url)

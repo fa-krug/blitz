@@ -124,7 +124,9 @@ struct InterfaceMetrics: Equatable, Sendable {
         var dialogSymbolContainer: CGFloat {
             scaledPoints(Theme.Size.dialogSymbolContainer, scale)
         }
+        var dialogHeaderSymbol: CGFloat { scaledPoints(Theme.Size.dialogHeaderSymbol, scale) }
         var dialogIcon: CGFloat { scaledPoints(Theme.Size.dialogIcon, scale) }
+        var bannerWidth: CGFloat { scaledPoints(Theme.Size.bannerWidth, scale) }
         var hudMaxWidth: CGFloat { scaledPoints(Theme.Size.hudMaxWidth, scale) }
         var hudWidth: CGFloat { scaledPoints(Theme.Size.hudWidth, scale) }
         var hudHeight: CGFloat { scaledPoints(Theme.Size.hudHeight, scale) }

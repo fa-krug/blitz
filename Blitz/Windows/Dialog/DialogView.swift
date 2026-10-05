@@ -11,6 +11,11 @@ extension DialogTone {
         }
     }
 
+    /// Neutral glyphs need the same legibility as a key-cap symbol; semantic colours stay intact.
+    var glyphTint: Color {
+        self == .neutral ? Theme.Colors.textSecondary : tint
+    }
+
     var tileFill: Color {
         switch self {
         case .neutral: return tint.opacity(0.12)
@@ -28,22 +33,21 @@ struct DialogView: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: metrics.radius.panel, style: .continuous)
-        VStack(alignment: .leading, spacing: metrics.spacing.xxl) {
-            VStack(alignment: .leading, spacing: metrics.spacing.xxl) {
-                if let artwork = request.artwork {
-                    DialogArtwork(path: artwork, tone: request.tone)
-                } else if let symbol = request.symbol {
-                    DialogSymbol(name: symbol, tone: request.tone)
-                }
-
-                VStack(alignment: .leading, spacing: metrics.spacing.sm) {
-                    Text(request.title)
-                        .font(metrics.typography.panelTitle)
-                    if let message = request.message {
-                        Text(message)
-                            .font(metrics.typography.rowTitle)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+        let isForm = request.accessory?.isForm ?? false
+        VStack(alignment: .leading, spacing: isForm ? metrics.spacing.xl : metrics.spacing.xxl) {
+            VStack(alignment: .leading, spacing: isForm ? metrics.spacing.lg : metrics.spacing.xxl) {
+                if isForm {
+                    formHeader
+                } else {
+                    if let artwork = request.artwork {
+                        DialogArtwork(path: artwork, tone: request.tone)
+                    } else if let symbol = request.symbol {
+                        DialogSymbol(name: symbol, tone: request.tone)
+                    }
+                    VStack(alignment: .leading, spacing: metrics.spacing.sm) {
+                        Text(request.title)
+                            .font(metrics.typography.panelTitle)
+                        message(font: metrics.typography.rowTitle)
                     }
                 }
 
@@ -67,6 +71,30 @@ struct DialogView: View {
         .frame(width: width, alignment: .leading)
         .background(Theme.Colors.panelScrim, in: shape)
         .glassEffect(.regular, in: shape)
+    }
+
+    /// A quick-add form leads with its fields, so the subject shrinks to one line above them.
+    private var formHeader: some View {
+        VStack(alignment: .leading, spacing: metrics.spacing.xxs) {
+            HStack(spacing: metrics.spacing.md) {
+                if let symbol = request.symbol {
+                    SymbolImage(name: symbol, size: metrics.size.dialogHeaderSymbol, monochrome: true)
+                        .foregroundStyle(request.tone.glyphTint)
+                }
+                Text(request.title)
+                    .font(metrics.typography.panelTitle)
+            }
+            message(font: metrics.typography.rowTrailing)
+        }
+    }
+
+    @ViewBuilder private func message(font: Font) -> some View {
+        if let message = request.message {
+            Text(message)
+                .font(font)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     @ViewBuilder private var actions: some View {
@@ -123,7 +151,7 @@ private struct DialogSymbol: View {
 
     var body: some View {
         SymbolImage(name: name, size: metrics.size.dialogSymbol, monochrome: true)
-            .foregroundStyle(symbolTint)
+            .foregroundStyle(tone.glyphTint)
             .frame(
                 width: metrics.size.dialogSymbolContainer,
                 height: metrics.size.dialogSymbolContainer
@@ -131,11 +159,6 @@ private struct DialogSymbol: View {
             .background(
                 RoundedRectangle(cornerRadius: metrics.radius.dialogSymbol, style: .continuous)
                     .fill(tone.tileFill))
-    }
-
-    /// Neutral glyphs need the same legibility as a key-cap symbol; semantic colours stay intact.
-    private var symbolTint: Color {
-        tone == .neutral ? Theme.Colors.textSecondary : tone.tint
     }
 }
 

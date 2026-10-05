@@ -228,6 +228,7 @@ final class AppCore {
 
     @ObservationIgnored private lazy var windowController = PaletteWindowController(core: self)
     @ObservationIgnored private lazy var messageHUD = MessageHUDController(settings: settings)
+    @ObservationIgnored private lazy var bannerHUD = BannerHUDController(settings: settings)
     private(set) var isShowingDialog = false
     var isDimmingPaletteForDialog: Bool { isShowingDialog && windowController.isVisible }
     /// Every confirmation, report and prompt; it also stops a held hotkey stacking them.
@@ -888,16 +889,28 @@ final class AppCore {
 
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.
     func showMessage(_ message: String, tone: DialogTone = .success) {
+        bannerHUD.dismiss()
         messageHUD.show(message: message, tone: tone)
     }
 
     /// The same pill with a spinner, for work the reader started and cannot otherwise see running.
     func showProgress(_ message: String, onCancel: (() -> Void)? = nil) {
+        bannerHUD.dismiss()
         messageHUD.showProgress(message: message, onCancel: onCancel)
     }
 
     func hideProgress() {
         messageHUD.dismiss()
+    }
+
+    /// Something just made, previewed with one action; it shares the pill's spot, so it replaces it.
+    func showBanner(
+        title: String, detail: String, symbol: String, actionTitle: String,
+        action: @escaping () -> Void
+    ) {
+        messageHUD.dismiss()
+        bannerHUD.show(
+            title: title, detail: detail, symbol: symbol, actionTitle: actionTitle, action: action)
     }
 
     /// The volume slider, so `dialogs` stays the single owner of every prompt in the app.
