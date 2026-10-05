@@ -351,6 +351,8 @@ struct LauncherScreen: PaletteScreen {
         case .hideFromSearch: return hideFromSearch(at: selection)
         case .quit, .forceQuit: return quit(at: selection, force: shortcut == .forceQuit)
         case .restart: return restart(at: selection)
+        case .copyFile: return copyDeepLink(at: selection)
+        case .configure: return configure(at: selection)
         case .favoriteSlot(let index): return launchFavorite(at: index)
         case .copyCalculation: return copyCalculation(at: selection)
         case .openInApp, .showDetails:
@@ -367,6 +369,22 @@ struct LauncherScreen: PaletteScreen {
     private func copyCalculation(at selection: Int) -> Bool {
         guard case .calc(let result) = row(at: selection), result.isActionable else { return false }
         core.calculatorCoordinator.copyCalculationWithExpression(result)
+        return true
+    }
+
+    /// ⇧⌘C — mirrors the Copy Deeplink row, so it is refused wherever that row is absent.
+    private func copyDeepLink(at selection: Int) -> Bool {
+        guard let app = entry(at: selection), let link = app.deepLink else { return false }
+        core.launcherCoordinator.copyDeepLink(link)
+        return true
+    }
+
+    /// ⇧⌘, — mirrors the Configure row.
+    private func configure(at selection: Int) -> Bool {
+        guard let app = entry(at: selection), core.launcherCoordinator.canConfigure(app) else {
+            return false
+        }
+        core.launcherCoordinator.configure(app)
         return true
     }
 

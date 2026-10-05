@@ -27,7 +27,7 @@ struct NavigationSettingsView: View {
             // The menu-search command sits with the two settings that only it reads.
             Section {
                 if let entry = CommandCatalog.entry(for: .searchMenuItems) {
-                    FeatureCommandRow(entry: entry)
+                    FeatureCommandRow(entry: entry, anchor: .navigationMenuSearch)
                 }
 
                 Toggle(isOn: $settings.menuSearchShowsAppleMenu) {

@@ -5,19 +5,23 @@ enum Fallback: Hashable, Sendable {
     /// The shipped destinations, in the order a fresh install offers them.
     enum Builtin: String, CaseIterable, Sendable {
         case quickAI
+        case searchWeb
         case searchFiles
         case runShellCommand
         case define
         case searchContacts
+        case extensionStore
 
         /// Where its name and glyph come from, so a fallback row reads like the command it runs.
         var command: CommandID {
             switch self {
             case .quickAI: return .quickAI
+            case .searchWeb: return .searchWeb
             case .searchFiles: return .searchFiles
             case .runShellCommand: return .runShellCommand
             case .define: return .define
             case .searchContacts: return .searchContacts
+            case .extensionStore: return .extensionStore
             }
         }
     }
@@ -49,10 +53,12 @@ enum Fallback: Hashable, Sendable {
     var openVerb: String {
         switch self {
         case .builtin(.quickAI): return "Ask Quick AI"
+        case .builtin(.searchWeb): return "Search the Web"
         case .builtin(.searchFiles): return "Search Files"
         case .builtin(.runShellCommand): return "Run Shell Command"
         case .builtin(.define): return "Define Word"
         case .builtin(.searchContacts): return "Search Contacts"
+        case .builtin(.extensionStore): return "Search Extension Store"
         case .quicklink: return "Open Quicklink"
         }
     }

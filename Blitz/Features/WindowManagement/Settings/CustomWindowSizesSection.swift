@@ -39,7 +39,7 @@ private struct CustomWindowSizeRow: View {
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
-        SettingsRow(title: size.name, subtitle: size.summary) {
+        SettingsRow(title: size.name, subtitle: size.summary, anchor: .windowManagementCustomSizes) {
             Image(systemName: CustomWindowSize.sfSymbol)
         } trailing: {
             ShortcutRecorder(action: .customWindowSize(id: size.id))

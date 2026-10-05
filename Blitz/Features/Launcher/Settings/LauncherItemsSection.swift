@@ -45,11 +45,15 @@ struct LauncherItemsSection: View {
         Section {
             SettingsFilterField(prompt: searchPrompt, query: $query)
             LauncherItemsList(
-                entries: entries, query: query, isEnabled: visibility.isKindEnabled(kind))
+                entries: entries, query: query, isEnabled: visibility.isKindEnabled(kind),
+                anchor: anchor)
         } header: {
             SettingsSectionHeader(anchor)
         }
         .settingsEnabled(visibility.isKindEnabled(kind))
+        .settingsFilterSeed(anchor, query: $query) { title in
+            appIndex.apps.contains { $0.kind == kind && $0.settingsOwner == nil && $0.name == title }
+        }
     }
 }
 
@@ -58,6 +62,8 @@ struct LauncherItemsList: View {
     let entries: [AppEntry]
     let query: String
     let isEnabled: Bool
+    /// Lets a `Form` row carry the reveal pulse; a hosted table cell has no window session to read.
+    var anchor: SettingsAnchor?
 
     @Environment(VisibilityStore.self) private var visibility
     @Environment(AliasStore.self) private var aliases
@@ -70,7 +76,7 @@ struct LauncherItemsList: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
         } else if entries.first?.kind != .application && entries.first?.kind != .appleShortcut {
-            ForEach(entries) { entry in LauncherItemRow(entry: entry) }
+            ForEach(entries) { entry in LauncherItemRow(entry: entry, anchor: anchor) }
         } else {
             // One row holding the table: a `Form` realizes every row it is handed.
             LauncherItemsTable(
@@ -98,12 +104,14 @@ struct LauncherItemsList: View {
 /// One launcher item's row; a table cell hosts it and hands it new entries as the list scrolls.
 struct LauncherItemRow: View {
     let entry: AppEntry
+    var anchor: SettingsAnchor?
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
         SettingsRow(
             title: entry.name,
-            labelOpacity: visibility.isItemVisible(entry) ? 1 : 0.45
+            labelOpacity: visibility.isItemVisible(entry) ? 1 : 0.45,
+            anchor: anchor
         ) {
             // Keyed so a reused cell seeds the new entry's icon on its first frame.
             AppIconView(app: entry)

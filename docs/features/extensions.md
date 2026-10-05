@@ -485,10 +485,28 @@ control — icon, title, an update badge and a chevron, nothing more. The page c
 Show in launcher, Launcher icon, preferences and commands. A page is a Settings history location —
 the extension's manifest name as the Extensions pane's `page` — so the window's Back and Forward
 chevrons walk into and out of it, and choosing Extensions in the sidebar returns to the list. Anything
-that sends the user to one extension's settings — the launcher's Configure Extension action, a command
-missing a required preference, an extension calling `openExtensionPreferences()` — calls
+that sends the user to one extension's settings — the launcher's Configure Extension action (⇧⌘,), a
+command missing a required preference, an extension calling `openExtensionPreferences()` — calls
 `showSettings(tab: .extensions, page:)`, one step straight onto the page, so Back returns to wherever
 the jump came from. Leaving a page for the list scrolls it back to that extension's row.
+
+## The Store screen
+
+**Extension Store** is the same store search in the palette, so an extension installs without
+leaving it. Typing searches; ↵ on a result installs it, or opens its Settings page once it is here;
+⌘K adds Reinstall. `ExtensionStoreSession` (`Service/`, on `AppCore`) holds one debounced search
+and the progress of every install it started, through the same `ExtensionStoreClient` — a private
+`.ephemeral` session — and `ExtensionManager.install(_:onProgress:)` the Settings panel uses.
+An install outlives the screen: leaving drops the search, never a download, and a HUD says when
+the commands have arrived. A progress step that lands after its install ended is dropped, or it
+would bring the row's spinner back for good.
+
+The screen, its list and its row are written here — `ExtensionStoreScreen`, `ExtensionStoreList` —
+rather than borrowed from a launcher list, under the same rule as every extension surface. The
+command is owned by Settings › Extensions (`SettingsTab.ownedCommands`), so its alias, shortcut and
+launcher checkbox sit in that pane's Commands section, and `ExtensionCoordinator` hides it from the
+index whenever the extensions switch is off — the Store installs what only an enabled runtime can
+run. The **Search Extension Store** fallback hands a root query straight to it.
 
 ## Installing from GitHub
 
@@ -606,6 +624,11 @@ keep working. Anything else on a claimed scheme just reopens the palette, and an
 so rather than failing silently. `ExtensionDeepLink` owns the claimed schemes and the parsing,
 covered by `Tests/ext-test.swift`; an extension's own `open("raycast://…")` resolves through the same
 `ExtensionManager.resolve(_:)` instead of launching Raycast.
+
+A command row's **Copy Deeplink** (⇧⌘C) hands out the `blitz://extensions/<name>/<command>` form,
+built by `ExtensionDeepLink.url(extensionName:commandName:)` from the entry id, so a scoped
+`owner/extension` name reads back as owner and extension. Every other launcher row's link is
+`blitz://run/` (see [launcher.md](launcher.md#copy-deeplink)), which this parser leaves alone.
 
 For view commands, nonempty `fallbackText` also prefills the search field: lists and grids filter
 locally or receive it through `onSearchTextChange` when their handler mounts. It remains available

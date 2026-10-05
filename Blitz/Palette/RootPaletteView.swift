@@ -25,6 +25,7 @@ struct RootPaletteView: View {
     @Environment(QuicklinkStore.self) private var quicklinks
     @Environment(SnippetsStore.self) private var snippets
     @Environment(ExtensionManager.self) private var extensions
+    @Environment(ExtensionStoreSession.self) private var extensionStore
     @Environment(AppSettings.self) private var settings
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
@@ -122,6 +123,10 @@ struct RootPaletteView: View {
         case .extensionCommand:
             return ExtensionCommandScreen(
                 screen: extensionScreen, extensions: extensions, vm: vm, openActions: openActions)
+        case .extensionStore:
+            return ExtensionStoreScreen(
+                session: extensionStore, extensions: extensions, core: core, vm: vm,
+                openActions: openActions)
         }
     }
 
@@ -388,6 +393,7 @@ struct RootPaletteView: View {
                 land()
                 if vm.mode == .fileSearch { fileSearch.search(vm.query, filter: vm.fileSearchFilter) }
                 if vm.mode == .dictionary { dictionary.lookUp(vm.query) }
+                if vm.mode == .extensionStore { extensionStore.search(vm.query) }
                 if vm.mode == .menuSearch { menuSearch.filter(vm.query) }
                 if vm.mode == .switchWindows { windowSwitch.filter(vm.query) }
                 // A command that took over the search text filters its own list.
@@ -429,6 +435,11 @@ struct RootPaletteView: View {
                     dictionary.lookUp(vm.query)
                 } else {
                     dictionary.reset()
+                }
+                if vm.mode == .extensionStore {
+                    extensionStore.search(vm.query)
+                } else {
+                    extensionStore.reset()
                 }
                 if vm.mode != .menuSearch { menuSearch.reset() }
                 if vm.mode != .switchWindows { windowSwitch.reset() }

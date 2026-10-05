@@ -47,5 +47,8 @@ struct AppleShortcutsSettingsView: View {
         } header: {
             SettingsSectionHeader(.appleShortcutsShortcuts)
         }
+        .settingsFilterSeed(.appleShortcutsShortcuts, query: $query) { title in
+            core.appleShortcutCoordinator.entries.contains { $0.name == title }
+        }
     }
 }

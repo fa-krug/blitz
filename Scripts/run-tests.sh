@@ -273,6 +273,7 @@ run palette-tab-test       Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run fallback-test          Blitz/Features/Launcher/Model/Fallback.swift \
+                           Blitz/Features/Launcher/Model/WebSearchEngine.swift \
                            Blitz/Features/Launcher/Model/CommandID.swift \
                            Blitz/Features/HotKeys/Model/HotKeyAction.swift \
                            Blitz/Features/QuickActions/Model/QuickAction.swift \
@@ -283,6 +284,20 @@ run fallback-test          Blitz/Features/Launcher/Model/Fallback.swift \
                            Blitz/Features/SystemActions/Model/SystemAction.swift \
                            Blitz/Features/WindowManagement/Model/WindowCommand.swift \
                            Blitz/Features/Snippets/Model/Snippet.swift
+run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyAction.swift \
+                           Blitz/Features/Launcher/Model/CommandID.swift \
+                           Blitz/Features/QuickActions/Model/QuickAction.swift \
+                           Blitz/Features/QuickActions/Model/BuiltInQuickAction.swift \
+                           Blitz/Features/QuickActions/Model/CustomQuickAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/SystemActions/Model/SystemAction.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift \
+                           Blitz/Features/Extensions/Model/ExtensionDeepLink.swift \
+                           Blitz/Features/Extensions/Model/ExtensionLaunchType.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \

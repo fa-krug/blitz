@@ -1,4 +1,4 @@
-// The fallback list's pure half: identity, stored order, and the section header's elision.
+// The fallback list's pure half: identity, stored order, the header's elision and web search URLs.
 
 import Foundation
 
@@ -22,6 +22,7 @@ struct FallbackTests {
         ordering()
         headers()
         verbs()
+        webSearch()
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }
@@ -124,5 +125,44 @@ struct FallbackTests {
         verbs.append(Fallback.quicklink(UUID()).openVerb)
         check("every fallback names its own action", verbs.allSatisfy { !$0.isEmpty })
         check("the verbs are distinct", Set(verbs).count == verbs.count, "got \(verbs)")
+    }
+
+    // MARK: - Web search
+
+    static func webSearch() {
+        let google = WebSearchEngine.google.url(searching: "swift actors")?.absoluteString
+        check(
+            "a query fills Google's q", google == "https://www.google.com/search?q=swift%20actors",
+            "got \(String(describing: google))")
+
+        // URLComponents leaves `+` alone, and every engine decodes a bare `+` as a space.
+        let plus = WebSearchEngine.duckDuckGo.url(searching: "c++")?.absoluteString
+        check(
+            "a plus survives as a plus", plus == "https://duckduckgo.com/?q=c%2B%2B",
+            "got \(String(describing: plus))")
+
+        // A typed `&` or `=` must stay inside the one parameter rather than start another.
+        let hostile = WebSearchEngine.bing.url(searching: "a&q=b#c")
+        let items = hostile.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems
+        check(
+            "punctuation stays inside the query", items == [URLQueryItem(name: "q", value: "a&q=b#c")],
+            "got \(String(describing: items))")
+
+        let startpage = WebSearchEngine.startpage.url(searching: "x")?.absoluteString
+        check(
+            "Startpage reads its own parameter",
+            startpage == "https://www.startpage.com/sp/search?query=x", "got \(String(describing: startpage))"
+        )
+
+        for engine in WebSearchEngine.allCases {
+            let url = engine.url(searching: "über 100%")
+            check(
+                "\(engine.title) builds an https URL", url?.scheme == "https",
+                "got \(String(describing: url))")
+            check("\(engine.title) has a host", url?.host?.isEmpty == false)
+        }
+        check(
+            "engine titles are distinct",
+            Set(WebSearchEngine.allCases.map(\.title)).count == WebSearchEngine.allCases.count)
     }
 }

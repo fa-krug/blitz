@@ -89,6 +89,14 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         return complete ? positional : nil
     }
 
+    /// Link values keyed by `$n` or by argument name; a shared name fills every field it labels.
+    func fieldValues(fromLink values: [String: String]) -> [String: String] {
+        arguments.indices.reduce(into: [:]) { fields, index in
+            let field = CustomCommandArgument.fieldID(at: index)
+            if let value = values[field] ?? values[arguments[index].name] { fields[field] = value }
+        }
+    }
+
     static func id(fromEntryID entryID: String) -> UUID? {
         guard entryID.hasPrefix(entryIDPrefix) else { return nil }
         return UUID(uuidString: String(entryID.dropFirst(entryIDPrefix.count)))

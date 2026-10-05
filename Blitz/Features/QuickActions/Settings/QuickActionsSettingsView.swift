@@ -92,7 +92,10 @@ struct QuickActionsSettingsView: View {
         Section {
             ForEach(BuiltInQuickAction.allCases, content: builtInRow)
             ForEach(customActions.actions) { action in
-                SettingsRow(title: action.name, subtitle: subtitle(for: .custom(action))) {
+                SettingsRow(
+                    title: action.name, subtitle: subtitle(for: .custom(action)),
+                    anchor: .quickActionsActions
+                ) {
                     SymbolImage(name: action.symbol, size: Theme.Size.quickActionHeaderIcon)
                         .frame(width: Theme.Size.settingsRowIcon)
                 } trailing: {
@@ -121,7 +124,9 @@ struct QuickActionsSettingsView: View {
 
     private func builtInRow(_ action: BuiltInQuickAction) -> some View {
         let entry = CommandCatalog.entry(for: CommandID(action))
-        return SettingsRow(title: action.title, subtitle: subtitle(for: .builtIn(action))) {
+        return SettingsRow(
+            title: action.title, subtitle: subtitle(for: .builtIn(action)), anchor: .quickActionsActions
+        ) {
             Image(systemName: action.symbol)
                 .frame(width: Theme.Size.settingsRowIcon)
         } trailing: {

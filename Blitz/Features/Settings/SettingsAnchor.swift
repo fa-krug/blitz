@@ -34,6 +34,7 @@ extension SettingsAnchor {
     static let appleShortcutsShortcuts = Self(tab: .appleShortcuts, title: "Shortcuts")
 
     static let fallbacksFallbacks = Self(tab: .fallbacks, title: "Fallbacks")
+    static let fallbacksWebSearch = Self(tab: .fallbacks, title: "Search the Web")
     static let fallbacksShellCommand = Self(tab: .fallbacks, title: "Run Shell Command")
 
     static let aiAI = Self(tab: .ai, title: "AI")
@@ -101,6 +102,7 @@ extension SettingsAnchor {
     static let contactsLauncherSearch = Self(tab: .contacts, title: "Launcher Search")
 
     static let extensionsExtensions = Self(tab: .extensions, title: "Extensions")
+    static let extensionsCommands = Self(tab: .extensions, title: "Commands")
     static let extensionsCompatibility = Self(tab: .extensions, title: "Compatibility")
     static let extensionsInstalled = Self(tab: .extensions, title: "Installed")
     static let extensionsInstall = Self(tab: .extensions, title: "Install")
@@ -118,6 +120,36 @@ extension SettingsAnchor {
 
     static let aboutAbout = Self(tab: .about, title: "About")
     static let aboutLinks = Self(tab: .about, title: "Links")
+}
+
+extension SettingsAnchor {
+    /// The section listing a pane's own commands, where Configure Command lands on one of them.
+    static func commands(ownedBy tab: SettingsTab) -> Self? {
+        switch tab {
+        case .quicklinks: return .quicklinksCommands
+        case .ai: return .aiCommands
+        case .quickActions: return .quickActionsActions
+        case .fileSearch: return .fileSearchCommands
+        case .notes: return .notesCommands
+        case .snippets: return .snippetsCommands
+        case .navigation: return .navigationCommands
+        case .windowManagement: return .windowManagementLayoutCommands
+        case .clipboard: return .clipboardCommands
+        case .emoji: return .emojiCommands
+        case .calendar: return .calendarCommands
+        case .reminders: return .remindersCommands
+        case .contacts: return .contactsCommands
+        case .extensions: return .extensionsCommands
+        case .general, .applications, .systemSettings, .systemActions, .commands, .appleShortcuts,
+            .fallbacks, .permissions, .backup, .about:
+            return nil
+        }
+    }
+
+    /// The catalog groups window commands, so it names their sections too.
+    static func windowCommands(in group: WindowCommand.Group) -> Self {
+        Self(tab: .windowManagement, title: group.title)
+    }
 }
 
 /// Where a search result lands: a whole section, or one row inside it.

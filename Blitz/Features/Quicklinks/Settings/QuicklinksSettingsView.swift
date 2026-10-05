@@ -163,7 +163,7 @@ private struct QuicklinkSettingsRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        SettingsRow(title: quicklink.name, subtitle: quicklink.link) {
+        SettingsRow(title: quicklink.name, subtitle: quicklink.link, anchor: .quicklinksQuicklinks) {
             Group {
                 if let path = store.faviconPaths[quicklink.id] {
                     Image(nsImage: IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent))

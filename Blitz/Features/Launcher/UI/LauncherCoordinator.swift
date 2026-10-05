@@ -206,7 +206,9 @@ final class LauncherCoordinator {
             Task { await core.cameraCoordinator.show() }
         case .define:
             core.dictionaryCoordinator.show()
-        case .openInBrowser, .runShellCommand:
+        case .extensionStore:
+            extensionCoordinator.showStore()
+        case .openInBrowser, .runShellCommand, .searchWeb:
             break  // Query-driven: each runs where the typed text is, never through this funnel.
         case .joinNextMeeting:
             calendarCoordinator.joinNextMeeting()
@@ -297,6 +299,27 @@ final class LauncherCoordinator {
 
     func resetRanking(for app: AppEntry) {
         ranking.reset(itemKey: app.preferenceKey)
+    }
+
+    /// Unmarked, so the link lands in clipboard history: it is copied to be pasted somewhere else.
+    func copyDeepLink(_ link: URL) {
+        Paster.copyPlainText(link.absoluteString)
+        core.showMessage("Copied deeplink")
+    }
+
+    func canConfigure(_ app: AppEntry) -> Bool {
+        app.kind == .extensionCommand || app.settingsTarget != nil
+    }
+
+    /// An extension's commands are configured on its own page; everything else on its Settings row.
+    func configure(_ app: AppEntry) {
+        if app.kind == .extensionCommand {
+            extensionCoordinator.showExtensionSettings(for: app)
+            return
+        }
+        guard let target = app.settingsTarget else { return }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        settingsCoordinator.showSettings(tab: target.tab, revealing: target)
     }
 
     func showInFinder(_ app: AppEntry) {

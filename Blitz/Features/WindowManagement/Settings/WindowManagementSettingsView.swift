@@ -120,7 +120,7 @@ struct WindowManagementSettingsView: View {
         ForEach(WindowCommandCatalog.grouped(), id: \.group) { section in
             Section {
                 ForEach(section.commands) { command in
-                    WindowCommandSettingsRow(command: command)
+                    WindowCommandSettingsRow(command: command, anchor: .windowCommands(in: section.group))
                 }
             } header: {
                 Text(section.group.title)
@@ -132,10 +132,11 @@ struct WindowManagementSettingsView: View {
 /// One command's shortcut recorder and visibility checkbox, shaped like the shortcuts row.
 private struct WindowCommandSettingsRow: View {
     let command: WindowCommand
+    let anchor: SettingsAnchor
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
-        SettingsRow(title: command.name) {
+        SettingsRow(title: command.name, anchor: anchor) {
             Image(systemName: command.sfSymbol)
         } trailing: {
             ShortcutRecorder(action: .windowCommand(id: command.id))

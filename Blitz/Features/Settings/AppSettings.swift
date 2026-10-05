@@ -351,6 +351,11 @@ final class AppSettings {
         }
     }
 
+    /// Where the Search the Web fallback sends the typed query.
+    var webSearchEngine: WebSearchEngine {
+        didSet { defaults.set(webSearchEngine.rawValue, forKey: Key.webSearchEngine.rawValue) }
+    }
+
     /// Also keyword-expansion consent, so it confirms first and never rides a backup.
     var snippetsEnabled: Bool {
         didSet { defaults.set(snippetsEnabled, forKey: Key.snippetsEnabled.rawValue) }
@@ -689,6 +694,9 @@ final class AppSettings {
             defaults.object(forKey: Key.customCommandsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.customCommandsShowInLauncher.rawValue)
         shellCommandRunsInTerminal = defaults.bool(forKey: Key.shellCommandRunsInTerminal.rawValue)
+        webSearchEngine =
+            defaults.string(forKey: Key.webSearchEngine.rawValue).flatMap(WebSearchEngine.init)
+            ?? .google
         snippetsEnabled = defaults.bool(forKey: Key.snippetsEnabled.rawValue)
         quickActionsEnabled = defaults.bool(forKey: Key.quickActionsEnabled.rawValue)
         snippetsShowInLauncher =

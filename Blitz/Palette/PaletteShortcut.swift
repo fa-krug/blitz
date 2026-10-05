@@ -8,7 +8,7 @@ enum PaletteShortcut: Equatable {
     case delete
     /// ⌃⇧X.
     case deleteAll
-    /// ⇧⌘C.
+    /// ⇧⌘C, the row itself: a file, a reply, or a launcher row's deeplink.
     case copyFile
     /// ⌥⌘C.
     case copyName
@@ -40,6 +40,8 @@ enum PaletteShortcut: Equatable {
     case newItem
     /// ⌥⌘,, the screen's own settings; ⌘, alone stays the app's.
     case settings
+    /// ⇧⌘,, the selected row's own controls in Settings.
+    case configure
     /// ⌘J, Quick AI handing its conversation to the AI Chat window.
     case continueInChat
     /// ⌘., which AppKit binds to `cancelOperation:`, so it arrives as a token instead of a key.
@@ -70,6 +72,7 @@ enum PaletteShortcut: Equatable {
         if command, matches("r") { return .restart }
         if command, !shift, matches("n") { return .newItem }
         if command, option, matches(",") { return .settings }
+        if command, shift, matches(",") { return .configure }
         if command, matches("j") { return .continueInChat }
         return nil
     }
@@ -78,7 +81,7 @@ enum PaletteShortcut: Equatable {
     var requiresExpanded: Bool {
         switch self {
         case .copyFile, .copyName, .copyPath, .copyText, .pasteFile, .quickLook, .openInApp,
-            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart:
+            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure:
             true
         case .commandDelete, .delete, .deleteAll, .pin, .favoriteSlot, .continueInChat, .newItem,
             .settings, .copyCalculation:
@@ -89,7 +92,8 @@ enum PaletteShortcut: Equatable {
     var closesMenu: Bool {
         switch self {
         case .delete, .deleteAll, .copyFile, .copyName, .copyPath, .copyText, .copyCalculation,
-            .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings:
+            .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings,
+            .configure:
             true
         case .commandDelete, .pasteFile, .quit, .forceQuit, .restart, .pin, .favoriteSlot,
             .continueInChat:

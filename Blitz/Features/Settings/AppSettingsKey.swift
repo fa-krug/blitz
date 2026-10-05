@@ -55,6 +55,7 @@ enum AppSettingsKey: String, CaseIterable {
     case quicklinkOpensNewWindow = "quicklinkOpensNewWindow"
     case quicklinkSelectionFallback = "quicklinkSelectionFallback"
     case shellCommandRunsInTerminal = "shellCommandRunsInTerminal"
+    case webSearchEngine = "webSearchEngine"
     case quicklinkConfirmsBeforeDelete = "quicklinkConfirmsBeforeDelete"
     case appleShortcutsEnabled = "appleShortcutsEnabled"
     case extensionsEnabled = "extensionsEnabled"

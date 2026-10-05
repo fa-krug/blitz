@@ -56,6 +56,7 @@ final class AppCore {
     let palette = PaletteState()
     let fileSearch = FileSearchSession()
     let dictionary = DictionarySession()
+    let extensionStore = ExtensionStoreSession()
     let menuSearch = MenuSearchSession()
     let windowSwitch = WindowSwitchSession()
     let activationPolicy = ActivationPolicy()
@@ -113,8 +114,9 @@ final class AppCore {
         appIndex: appIndex, runningApps: runningApps, hotKeys: hotKeys, favorites: favorites,
         visibility: visibility, ranking: launcherRanking, aliases: aliases, core: self)
     @ObservationIgnored private(set) lazy var extensionCoordinator = ExtensionCoordinator(
-        extensions: extensions, palette: palette, paletteCoordinator: paletteCoordinator,
-        settingsCoordinator: settingsCoordinator, settings: settings, core: self)
+        extensions: extensions, store: extensionStore, appIndex: appIndex, palette: palette,
+        paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
+        settings: settings, core: self)
     @ObservationIgnored private(set) lazy var windowCommandCoordinator = WindowCommandCoordinator(
         settings: settings, paletteCoordinator: paletteCoordinator, windowMover: windowMover,
         spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes)
@@ -351,8 +353,8 @@ final class AppCore {
 
             hotKeys.onTogglePalette = { [weak self] in self?.paletteCoordinator.togglePalette() }
             hotKeys.onRunCommand = { [weak self] id in self?.launcherCoordinator.runCommand(id) }
-            hotKeys.onRunCustomCommand = { [weak self] id in
-                self?.customCommandCoordinator.runCustomCommand(id: id)
+            hotKeys.onRunCustomCommand = { [weak self] id, arguments in
+                self?.customCommandCoordinator.runCustomCommand(id: id, linkArguments: arguments)
             }
             hotKeys.onRunSystemAction = { [weak self] id in
                 self?.systemActionCoordinator.runSystemAction(id: id)
@@ -367,8 +369,8 @@ final class AppCore {
             hotKeys.onRunCustomWindowSize = { [weak self] id in
                 self?.windowCommandCoordinator.runCustomWindowSize(id: id)
             }
-            hotKeys.onOpenQuicklink = { [weak self] id in
-                self?.quicklinkCoordinator.openQuicklink(id: id)
+            hotKeys.onOpenQuicklink = { [weak self] id, arguments in
+                self?.quicklinkCoordinator.openQuicklink(id: id, values: arguments)
             }
             hotKeys.onRunQuickAction = { [weak self] id in
                 self?.quickActionCoordinator.run(id: id)
@@ -460,6 +462,11 @@ final class AppCore {
             return
         case .ignored:
             break
+        }
+        // Through the chord's own funnel, so a link passes every gate its shortcut would.
+        if let action = HotKeyAction(deepLink: url) {
+            hotKeys.perform(action, arguments: HotKeyAction.deepLinkArguments(in: url))
+            return
         }
         guard ExtensionDeepLink.claims(url) else { return }
         guard let link = ExtensionDeepLink.parse(url: url) else {

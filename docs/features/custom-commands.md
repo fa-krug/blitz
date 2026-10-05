@@ -116,7 +116,10 @@ because two arguments may share a name, and keying by name would give them one v
 one is empty.
 
 `runCustomCommand(id:values:)` is still the one funnel for every entry point. A launcher row hands it
-the typed values; a **global hotkey or favorite slot** hands it none. Either way, a required value still
+the typed values; a **global hotkey or favorite slot** hands it none; a **`blitz://run/` deep link**
+hands it its `arguments` JSON, which `CustomCommand.fieldValues(fromLink:)` keys by `$n` or by an
+argument's name — the name a link author reaches for, filling every field that shares it — and
+drops any key the command does not declare. Either way, a required value still
 missing opens root search onto that command alone — the query seeded with its name, its row the only
 one listed, its first empty field focused — through `PaletteCoordinator.showArguments(of:values:)`.
 That is what Raycast does for a hotkey. The row is listed even when the command is hidden from the

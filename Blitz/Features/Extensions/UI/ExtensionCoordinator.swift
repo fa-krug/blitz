@@ -4,6 +4,8 @@ import AppKit
 @MainActor
 final class ExtensionCoordinator {
     private let extensions: ExtensionManager
+    private let store: ExtensionStoreSession
+    private let appIndex: AppIndex
     private let palette: PaletteState
     private let paletteCoordinator: PaletteCoordinator
     private let settingsCoordinator: SettingsCoordinator
@@ -13,6 +15,8 @@ final class ExtensionCoordinator {
 
     init(
         extensions: ExtensionManager,
+        store: ExtensionStoreSession,
+        appIndex: AppIndex,
         palette: PaletteState,
         paletteCoordinator: PaletteCoordinator,
         settingsCoordinator: SettingsCoordinator,
@@ -20,6 +24,8 @@ final class ExtensionCoordinator {
         core: AppCore
     ) {
         self.extensions = extensions
+        self.store = store
+        self.appIndex = appIndex
         self.palette = palette
         self.paletteCoordinator = paletteCoordinator
         self.settingsCoordinator = settingsCoordinator
@@ -32,7 +38,16 @@ final class ExtensionCoordinator {
     /// Applies both switches as they stand — on launch, and after a backup import moves them.
     func applyEnabled() {
         extensions.setShowsInLauncher(settings.extensionsShowInLauncher)
+        applyStorePresence()
         Task { await extensions.setEnabled(settings.extensionsEnabled) }
+    }
+
+    /// The Store installs what only an enabled runtime can run, so it goes with the switch.
+    private func applyStorePresence() {
+        appIndex.setCommandsVisible([.extensionStore], settings.extensionsEnabled)
+        guard !settings.extensionsEnabled else { return }
+        store.reset()
+        if palette.mode == .extensionStore { palette.prepare(mode: .launcher) }
     }
 
     /// Also consent to run third-party JavaScript, so it asks before it starts.
@@ -40,6 +55,7 @@ final class ExtensionCoordinator {
         guard enabled != settings.extensionsEnabled else { return }
         guard enabled else {
             settings.extensionsEnabled = false
+            applyStorePresence()
             Task { await extensions.setEnabled(false) }
             return
         }
@@ -58,6 +74,7 @@ final class ExtensionCoordinator {
             else { return }
 
             settings.extensionsEnabled = true
+            applyStorePresence()
             await extensions.setEnabled(true)
         }
     }
@@ -94,6 +111,25 @@ final class ExtensionCoordinator {
         run(
             owner, command: command, arguments: link.arguments, fallbackText: link.fallbackText,
             launchType: link.launchType)
+    }
+
+    // MARK: - The Store
+
+    /// `query` is the fallback row's, so the screen opens already searching for it.
+    func showStore(query: String = "") {
+        guard settings.extensionsEnabled else {
+            core.showMessage("Extensions are disabled — enable them in Settings", tone: .danger)
+            return
+        }
+        paletteCoordinator.togglePalette(mode: .extensionStore, seeding: query.isEmpty ? nil : query)
+    }
+
+    /// The row reports progress and failure itself; the HUD says when the commands have arrived.
+    func installFromStore(_ listing: ExtensionListing) {
+        Task {
+            guard await store.install(listing, using: extensions) else { return }
+            core.showMessage("Installed \(listing.title)")
+        }
     }
 
     // MARK: - Managing one extension from the launcher
