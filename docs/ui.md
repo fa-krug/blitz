@@ -868,19 +868,18 @@ an IME's marked text. See
 
 Source: `Blitz/blitz.icon` (Icon Composer), `Assets.xcassets/MenuBarIcon.imageset`.
 
-The mark is the palette's **command bar with a bolt striking through it**: a white pill with the bolt
-knocked out of it as negative space, and the bolt's two ends standing solid above and below.
+The mark is a **disc split by a lightning bolt**: the bolt is cut out of the disc as negative space,
+running clean through it, so the disc falls into two halves.
 
 - **One white layer on transparency, `glass: true`.** `Assets/Bolt.svg` has no colour of its own, so
   Icon Composer derives Default, Dark, Tinted and Clear from it. The violet is the `icon.json` fill's
   `automatic-gradient`, the same `#863BFF` as `Theme.Colors.brand`. Retune the colour there, not in
   the SVG. It is the same recipe as Yana's owl.
-- **The bolt's ends stop 20 units short of the bar.** Flush, they touch it at a single corner point,
-  which draws a hairline and leaves the glass with no edge to light.
-- **The menu-bar template is the same geometry without that gap**, cropped to the mark. At 16pt the
-  gap would blur into a smudge, while the corner joins just read as one continuous bolt.
-- The paths are plain straight segments and two half-circle arcs on a 1024 canvas, so edit them by
-  hand. Keep the two files' paths in step.
+- **The cut is the bolt grown by 22 units with mitred corners**, and it runs past the disc at both
+  ends. Each half is therefore one closed path: a single arc of the r=372 disc plus straight edges.
+- **The menu-bar template is the same mark with the cut grown by 30**, cropped to the disc. At 16pt
+  the wider cut is what keeps the bolt from closing up into a plain circle.
+- Keep the two files' paths in step when editing either.
 
 ---
 

@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
 <g fill="#fff">
-<!-- Bar, left of the bolt -->
-<path d="M216 392 A120 120 0 0 0 216 632 L433.1 632 L459 548 L276 548 L354 392 Z"/>
-<!-- Bar, right of the bolt -->
-<path d="M808 632 A120 120 0 0 0 808 392 L590 392 L548 476 L751 476 L610.1 632 Z"/>
-<!-- Bolt, above the bar -->
-<path d="M731 110 L495 110 L364 372 L600 372 Z"/>
-<!-- Bolt, below the bar -->
-<path d="M341 930 L592.1 652 L426.9 652 Z"/>
+<!-- Disc, left of the bolt -->
+<path d="M436.1 602 L240.2 602 L488 140.8 A372 372 0 0 0 351.5 847.6 Z"/>
+<!-- Disc, right of the bolt -->
+<path d="M595.8 406 L792.8 406 L419.7 872.4 A372 372 0 0 0 708.3 196 Z"/>
 </g>
 </svg>
