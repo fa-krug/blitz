@@ -75,11 +75,8 @@ If Blitz earns a place in your daily flow, you can support it through
 
 Download the latest `Blitz-Universal-<version>.zip` from
 [Releases](https://github.com/fa-krug/blitz/releases/latest), unzip it and move `Blitz.app` to
-`/Applications`. Blitz is self-signed rather than notarized, so clear the quarantine flag once:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Blitz.app
-```
+`/Applications`. Releases are signed with Developer ID and notarized, so it opens like any other
+downloaded app.
 
 From then on Blitz updates itself from the same releases, with no further steps.
 

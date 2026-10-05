@@ -22,9 +22,7 @@ Of particular interest:
 - **Network** — Blitz is offline by default and every networked feature is consent-gated. A path
   that reaches the network without consent, or survives consent being withdrawn, is high severity.
 - **Hotkeys** — the in-house hotkey stack and the Input Monitoring grant.
-- **Signing and distribution** — the self-signed release identity and the in-app updater's
-  signature check before it installs a release.
+- **Signing and distribution** — the Developer ID release identity, notarization, and the in-app
+  updater's signature check before it installs a release.
 
-Out of scope: builds being self-signed rather than notarized (known, see
-[`docs/signing.md`](docs/signing.md)), and anything needing existing code execution or admin rights on
-the machine.
+Out of scope: anything needing existing code execution or admin rights on the machine.
