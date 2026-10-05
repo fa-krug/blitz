@@ -18,7 +18,7 @@ struct RemindersSettingsView: View {
 
             if settings.remindersEnabled, store.access == .notDetermined {
                 Section {
-                    SettingsRow(
+                    WarningRow(
                         title: "Reminders access is needed",
                         subtitle: "Needed to read and change your reminders."
                     ) {
@@ -29,7 +29,7 @@ struct RemindersSettingsView: View {
                 }
             } else if store.access == .denied {
                 Section {
-                    SettingsRow(
+                    WarningRow(
                         title: "Reminders access is off",
                         subtitle: "Allow it in Privacy & Security ▸ Reminders."
                     ) {
@@ -43,7 +43,7 @@ struct RemindersSettingsView: View {
 
             if !settings.aiEnabled {
                 Section {
-                    SettingsRow(
+                    WarningRow(
                         title: "Smart Reminder needs AI",
                         subtitle: "Turn AI on to create reminders from a sentence."
                     ) {
@@ -72,6 +72,29 @@ struct RemindersSettingsView: View {
             get: { settings.remindersEnabled },
             set: { core.remindersCoordinator.setRemindersEnabled($0) }
         )
+    }
+}
+
+private struct WarningRow<Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .frame(width: Theme.Size.settingsRowIcon)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                Text(title)
+                    .foregroundStyle(.orange)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: Theme.Spacing.lg)
+            trailing
+        }
     }
 }
 
