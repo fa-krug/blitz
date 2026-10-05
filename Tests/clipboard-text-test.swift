@@ -302,12 +302,14 @@ struct ClipboardTextTests {
         store.close()
     }
 
-    static func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<200 {
+    static func waitUntil(line: Int = #line, _ condition: () -> Bool) async throws {
+        // A deadline, not a poll count, so a loaded machine's late wakeups cannot shorten the wait.
+        let deadline = ContinuousClock.now + .seconds(20)
+        while ContinuousClock.now < deadline {
             if condition() { return }
             try await Task.sleep(for: .milliseconds(10))
         }
-        expect(false, "scheduler completed before timeout")
+        expect(false, "scheduler completed before timeout (line \(line))")
     }
 
     static func makeImage() -> CGImage {
