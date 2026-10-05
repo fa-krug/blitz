@@ -864,6 +864,26 @@ gets free: it must be gated on `PaletteState.isComposing` as well as an empty qu
 an IME's marked text. See
 [features/palette.md](features/palette.md#the-placeholder-is-blitzs-not-the-fields).
 
+## The app icon
+
+Source: `Blitz/blitz.icon` (Icon Composer), `Assets.xcassets/MenuBarIcon.imageset`.
+
+The mark is the palette's **command bar with a bolt striking through it**: a white pill with the bolt
+knocked out of it as negative space, and the bolt's two ends standing solid above and below.
+
+- **One white layer on transparency, `glass: true`.** `Assets/Bolt.svg` has no colour of its own, so
+  Icon Composer derives Default, Dark, Tinted and Clear from it. The violet is the `icon.json` fill's
+  `automatic-gradient`, the same `#863BFF` as `Theme.Colors.brand`. Retune the colour there, not in
+  the SVG. It is the same recipe as Yana's owl.
+- **The bolt's ends stop 20 units short of the bar.** Flush, they touch it at a single corner point,
+  which draws a hairline and leaves the glass with no edge to light.
+- **The menu-bar template is the same geometry without that gap**, cropped to the mark. At 16pt the
+  gap would blur into a smudge, while the corner joins just read as one continuous bolt.
+- The paths are plain straight segments and two half-circle arcs on a 1024 canvas, so edit them by
+  hand. Keep the two files' paths in step.
+
+---
+
 ## Rules for agents working on the UI
 
 - **Restyle from rendered screenshots, not guessed values.** Compare rendered screenshots over a light desktop. There's no screen-recording from the shell here — verify AppKit rendering with a `swiftc` harness that prints layer state, and let the user do visual sign-off.
