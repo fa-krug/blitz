@@ -275,6 +275,9 @@ final class LauncherCoordinator {
         case .checkForUpdates:
             dismissPalette()
             core.updateCoordinator.checkForUpdates()
+        case .welcomeTour:
+            dismissPalette()
+            core.onboardingCoordinator.showOnboarding()
         case .settings:
             dismissPalette()
             settingsCoordinator.showSettings()

@@ -105,7 +105,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `palette-selection-test` | `Features/PaletteRowIndex.swift` |
 | `interface-size-test` | `DesignSystem/InterfaceMetrics.swift`, `Features/Settings/InterfaceSize.swift`, `Extensions/Model/ExtensionFormMetrics.swift` |
 | `palette-placement-test` | `DesignSystem/Theme.swift`, `Palette/PalettePlacement.swift` |
-| `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
+| `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `SpotlightShortcut.swift` (enabled, disabled, missing, remapped and cleared entries), `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
 | `fallback-test` | `Launcher/Model/Fallback.swift` and `WebSearchEngine.swift`, plus the `CommandID` and `Quicklink` ids it is built from |
 | `deeplink-test` | `HotKeys/Model/HotKeyActionDeepLink.swift` — every action's `blitz://run/` link round-trips, what no chord runs no link runs, and a link's `arguments` reach a custom command's fields — plus `Extensions/Model/ExtensionDeepLink.swift`'s Copy Deeplink form |
 | `palette-shortcut-test` | `Palette/PaletteShortcut.swift` — which row chord each key resolves to, and where it acts |
@@ -140,6 +140,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `backup-archive-test` | all of `Backup/Model/`, plus `Backup/Service/BackupStaging.swift` |
 | `updates-test` | `Updates/Model/` — version precedence, channel filtering, install route, readiness |
 | `support-test` | `Support/Model/` — when the support reminder comes due, and a clock moved backwards |
+| `onboarding-test` | `Onboarding/Model/` — the tour's step order, and the Tab card following `PaletteTabAction` |
 | `mcp-test` | `MCP/Model/` and `MCPSettingsStore` — JSON-RPC framing, handles, tool names, output flattening, trust, `@server` addressing, the shape a vendor CLI is handed, and which servers Blitz leaves to that CLI |
 | `mcp-stdio-test` | `MCP/Service/` against a stub server — handshake, listing, calling, and every way one can go away |
 | `mcp-oauth-test` | OAuth parsing, RFC 7636 PKCE, discovery and resource binding, loopback callback validation/cancellation, dynamic registration, supplied client credentials and their token-endpoint authentication, Keychain token rotation, concurrent refresh, the wider margin for a token lent to a CLI, redirects and one-retry 401 handling |
@@ -444,6 +445,20 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands
+- With Spotlight on ⌘Space, onboarding's **Use ⌘Space** opens the guide; turning off "Show Spotlight
+  search" in System Settings and clicking back binds ⌘Space with a checkmark, no recording needed.
+  With Spotlight already off, the button binds at once
+- With the launcher on ⌘Space and Spotlight turned back on, Settings ▸ General shows the orange
+  warning under App Launcher; **Fix…** opens the guide, and freeing the chord clears the row
+
+### Onboarding
+
+- Delete the `onboarded` marker in Application Support and relaunch: the tour opens once, five
+  dots, with the Tips page before Done
+- Tips shows ⌘K, ⇧⌘, and ⇥ as keycaps; with AI on the Tab card says Quick AI, with AI off it says
+  Clipboard and links to Settings ▸ AI
+- Show Welcome Tour from the launcher and Settings ▸ General ▸ Welcome Tour both reopen it, and a
+  second open raises the window rather than stacking one
 
 ### Uninstall
 

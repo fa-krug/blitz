@@ -306,6 +306,7 @@ run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift 
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HotKeySpelling.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
+                           Blitz/Features/HotKeys/Model/SpotlightShortcut.swift \
                            Blitz/Platform/ASCIIKeyboardLayout.swift \
                            Blitz/Features/HotKeys/Service/KeyShortcut.swift \
                            Blitz/Features/HotKeys/Model/HotKeyAction.swift \
@@ -595,6 +596,12 @@ run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
 run updates-test           Blitz/Features/Updates/Model/*.swift \
                            Blitz/Features/Updates/Service/BundleSignature.swift
 run support-test           Blitz/Features/Support/Model/*.swift
+run onboarding-test        Blitz/Features/Onboarding/Model/*.swift \
+                           Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/PaletteTabAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run ai-provider-test       Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/*.swift \
                            Blitz/Features/AI/Settings/AISettingsStore.swift

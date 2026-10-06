@@ -138,7 +138,8 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
 - **Settings and Onboarding** — titled `NSWindow`s, one `Windows/AppWindowController.swift` each, owned
   by `SettingsCoordinator` and `OnboardingCoordinator`. SwiftUI `Settings` and `Window` scenes are
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
-  palette's in both directions.
+  palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
+  Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
 - **Notes** — a persistent, titled, non-activating `NotesPanel` managed by `NotesWindowController`.
   The user owns its size and AppKit autosaves the frame; its TextKit 2 editor renders Markdown over the
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed
@@ -221,7 +222,7 @@ Blitz/
   DesignSystem/     Theme (the token source), KeyCapChip, Tooltip, SymbolImage,
                     GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/, Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
-                    AppDisplayName,
+                    AppDisplayName, SymbolicHotKeys,
                     NotificationToken, AppPaths, Signposts, HealthTicker, Memo, ActivationPolicy,
                     Images/, Compression/
   Resources/        RaycastRuntime.generated.js, the embedded extension runtime
@@ -247,8 +248,9 @@ Tests/              the standalone harnesses, one Swift file each
 Scripts/            run-tests.sh, the two data generators, packaging, formatting, editor setup
 ```
 
-A larger feature splits into all four sub-folders; a small one stays flat, as `Onboarding/` does. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the Settings
-shell rather than the feature.
+A feature splits into the sub-folders it has something for; a small one may stay flat until the flat
+folder stops being scannable. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the
+Settings shell rather than the feature, and `Onboarding/` has none because its tour is its own window.
 
 Every `SettingsTab` maps to one `…SettingsView`, and each is a stock `Form` with
 `.formStyle(.grouped)` — see [ui.md](ui.md#settings). A pane lives with its feature; only a pane no

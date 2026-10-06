@@ -60,6 +60,7 @@ struct DoubleTapDetectorTests {
         hyperChord()
         hyperRetargeting()
         spelling()
+        spotlightShortcut()
         globeTap()
         globeChord()
         firing()
@@ -133,6 +134,114 @@ struct DoubleTapDetectorTests {
         expect(plain.binding(from: "cmd+nope") == nil, "an unknown key is refused")
         expect(plain.binding(from: "cmd+key-999") == nil, "a raw key code must be a real one")
         expect(plain.binding(from: "double-tap fn") == nil, "fn has no double-tap")
+    }
+
+    // MARK: - Spotlight's shortcut
+
+    /// One `AppleSymbolicHotKeys` entry as macOS writes it: character, key code, `NSEvent` flags.
+    private static func symbolicEntry(enabled: Bool, keyCode: Int, flags: Int) -> [String: Any] {
+        [
+            "enabled": enabled,
+            "value": ["parameters": [32, keyCode, flags], "type": "standard"]
+        ]
+    }
+
+    static func spotlightShortcut() {
+        let commandSpace = SpotlightShortcut.commandSpace
+        let optionCommandSpace =
+            KeyShortcut(carbonKeyCode: kVK_Space, carbonModifiers: cmdKey | optionKey)
+        let commandFlag = 0x100000, optionFlag = 0x80000, controlFlag = 0x40000, shiftFlag = 0x20000
+
+        expect(
+            commandSpace == KeyShortcut(carbonKeyCode: kVK_Space, carbonModifiers: cmdKey),
+            "⌘Space is Space with ⌘ alone")
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: nil) == [.spotlight],
+            "a Mac that never wrote the table runs Spotlight on ⌘Space")
+        expect(
+            SpotlightShortcut.holders(of: optionCommandSpace, in: nil) == [.finderSearch],
+            "and Finder's search window on ⌥⌘Space")
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: ["60": ["enabled": false]]) == [.spotlight],
+            "a table without Spotlight's entry leaves it at its default")
+
+        let enabled = ["64": symbolicEntry(enabled: true, keyCode: kVK_Space, flags: commandFlag)]
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: enabled) == [.spotlight],
+            "an enabled ⌘Space is Spotlight's")
+
+        let disabled = ["64": symbolicEntry(enabled: false, keyCode: kVK_Space, flags: commandFlag)]
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: disabled).isEmpty,
+            "a disabled Spotlight frees ⌘Space")
+        let read = SpotlightShortcut.read(.spotlight, from: disabled)
+        expect(!read.isEnabled && read.chord == commandSpace, "a disabled entry keeps its chord")
+
+        let bare = ["64": ["enabled": false] as [String: Any]]
+        expect(
+            SpotlightShortcut.read(.spotlight, from: bare)
+                == SpotlightShortcut(owner: .spotlight, isEnabled: false, chord: commandSpace),
+            "an entry with no value is the default chord, switched as written")
+
+        let remapped: [String: Any] = [
+            "64": symbolicEntry(enabled: true, keyCode: kVK_Space, flags: controlFlag | shiftFlag),
+            "65": symbolicEntry(enabled: true, keyCode: kVK_Space, flags: commandFlag)
+        ]
+        expect(
+            SpotlightShortcut.read(.spotlight, from: remapped).chord
+                == KeyShortcut(carbonKeyCode: kVK_Space, carbonModifiers: controlKey | shiftKey),
+            "a remapped Spotlight reads its new chord")
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: remapped) == [.finderSearch],
+            "⌘Space moved to Finder's search window is still taken")
+        expect(
+            SpotlightShortcut.holders(
+                of: KeyShortcut(carbonKeyCode: kVK_Space, carbonModifiers: controlKey | shiftKey),
+                in: remapped) == [.spotlight],
+            "the remapped chord is Spotlight's")
+
+        let both: [String: Any] = [
+            "64": symbolicEntry(enabled: true, keyCode: kVK_Space, flags: commandFlag),
+            "65": symbolicEntry(enabled: true, keyCode: kVK_Space, flags: commandFlag | optionFlag)
+        ]
+        expect(
+            SpotlightShortcut.holders(of: optionCommandSpace, in: both) == [.finderSearch],
+            "the default pair splits ⌘Space and ⌥⌘Space")
+
+        let cleared = ["64": symbolicEntry(enabled: true, keyCode: 65535, flags: 0)]
+        expect(
+            SpotlightShortcut.read(.spotlight, from: cleared).chord == nil,
+            "a cleared shortcut is bound to nothing")
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: cleared).isEmpty,
+            "and takes no chord")
+
+        let malformed: [String: Any] = ["64": ["enabled": true, "value": ["parameters": [32]]]]
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: malformed).isEmpty,
+            "unreadable parameters take nothing")
+
+        // The real shape: a property list's numbers arrive as NSNumber, booleans as 0 and 1.
+        let plist = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <plist version="1.0"><dict>
+            <key>64</key><dict><key>enabled</key><integer>1</integer>
+            <key>value</key><dict><key>parameters</key>
+            <array><integer>32</integer><integer>49</integer><integer>1048576</integer></array>
+            <key>type</key><string>standard</string></dict></dict>
+            <key>65</key><dict><key>enabled</key><false/></dict>
+            </dict></plist>
+            """
+        let table =
+            (try? PropertyListSerialization.propertyList(from: Data(plist.utf8), format: nil))
+            as? [String: Any]
+        expect(table != nil, "the fixture property list parses")
+        expect(
+            SpotlightShortcut.holders(of: commandSpace, in: table) == [.spotlight],
+            "a property list's enabled ⌘Space is Spotlight's")
+        expect(
+            SpotlightShortcut.holders(of: optionCommandSpace, in: table).isEmpty,
+            "a property list's disabled Finder search takes nothing")
     }
 
     // MARK: - Model

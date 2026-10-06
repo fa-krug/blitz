@@ -27,6 +27,14 @@ enum Permissions {
         NSWorkspace.shared.open(url)
     }
 
+    /// The Keyboard pane, whose Keyboard Shortcuts… sheet holds Spotlight's own shortcut.
+    @MainActor
+    static func openKeyboardSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     static func calendarAccess() -> CalendarAccess {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: return .granted

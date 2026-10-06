@@ -8,6 +8,8 @@
 - `HotKeyCenter` — the Carbon `RegisterEventHotKey` layer, pausable.
 - `DoubleTapModifier` / `DoubleTapDetector` — the double-tap recognizer.
 - `GlobeTapDetector` / `ModifierTapMonitor` — Globe recognition and the shared modifier-only tap.
+- `SpotlightShortcut` / `SpotlightHandoffSession` — whether macOS still takes ⌘Space, and binding it
+  once the user frees it. See [Taking ⌘Space from Spotlight](#taking-space-from-spotlight).
 
 `HotKeyManager` owns them all: persistence, conflict lookup, and dispatch. Every action reads and
 writes one `HotKeyBinding`, so the four cases share persistence, conflict detection, the recorder and
@@ -29,6 +31,8 @@ the keycap rendering — only the _engine_ differs.
   `.combo` is a Carbon registration; `.doubleTap`, `.globe` and `.doubleGlobe` are recognized by
   `ModifierTapMonitor`, because Carbon cannot see a lone modifier at all. Its `Codable` is the
   synthesised one.
+- **macOS's own shortcut table is read, never written.** Blitz guides the user to free ⌘Space in
+  System Settings and binds it afterwards; nothing writes `com.apple.symbolichotkeys`.
 - `KeyShortcut`'s hand-written `init(from:)` is a correctness seam, not a format one: it routes every
   decode through the initializer that masks device modifier bits off.
 - **The modifier-only detectors stay Foundation-only and pure** for `hotkey-test`, with the clock
@@ -251,3 +255,29 @@ Setting `recordingAction` is what starts and stops the capture, so there is exac
 callout above the field render the live state from outside the row that opened it. The field itself
 only ever shows the binding; the prompt, the live preview and the conflict message all live in the
 callout. See [ui.md](../ui.md#the-shortcut-recorder-callout).
+
+### Taking ⌘Space from Spotlight
+
+The recorder cannot capture ⌘Space on a stock Mac: macOS hands the chord to Spotlight before any app
+sees it. So onboarding's first step puts a **Use ⌘Space** button beside the launcher's recorder.
+`SpotlightHandoffSession` (`HotKeys/Service/`) binds `togglePalette` to ⌘Space at once when the chord
+is free; when it is not, it shows `SpotlightShortcutGuide` (`HotKeys/UI/`) — open Keyboard settings,
+click Keyboard Shortcuts…, choose Spotlight, turn off "Show Spotlight search" — and waits. The view
+re-checks whenever Blitz becomes active, which is how the user comes back from System Settings, and
+binds the moment the chord is free, with no recording. A Blitz action already holding ⌘Space is
+reported instead of clobbered.
+
+- **Blitz only reads `com.apple.symbolichotkeys`; it never writes it.** Freeing ⌘Space is the user's
+  change, made in System Settings. `Platform/SymbolicHotKeys.swift` reads the `AppleSymbolicHotKeys`
+  table live through `UserDefaults(suiteName:)`, which sees System Settings' writes without a relaunch.
+- `SpotlightShortcut` (`HotKeys/Model/`) is the pure parser for `hotkey-test`. Entry `64` is "Show
+  Spotlight search" and `65` "Show Finder search window"; either can take ⌘Space once remapped. An
+  entry's `parameters` are (character, virtual key code, device-independent `NSEvent` flags), read into
+  a Carbon `KeyShortcut`. **A missing table or entry means the macOS default, which is enabled** —
+  ⌘Space and ⌥⌘Space — and a key code of 65535 means the shortcut was cleared.
+- Settings ▸ General shows a warning row under the launcher's recorder while the launcher is bound to
+  ⌘Space and macOS still takes it, with a **Fix…** button that opens the same guide inline. A Raycast
+  import reports the same condition in its result line, since Raycast users often ran it on ⌘Space.
+- The deep link is `x-apple.systempreferences:com.apple.Keyboard-Settings.extension`
+  (`Permissions.openKeyboardSettings`). It opens the Keyboard pane, not the Keyboard Shortcuts sheet,
+  which is why the guide names the button to click.
