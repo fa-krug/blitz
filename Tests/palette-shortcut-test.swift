@@ -86,6 +86,11 @@ struct PaletteShortcutTests {
         expect(resolve("r", command: true, shift: true), .restart, "an extra Shift still reads ⌘R")
 
         expect(resolve("j", command: true), .continueInChat, "⌘J continues Quick AI in AI Chat")
+        expect(resolve("e", command: true), .edit, "⌘E edits the row's name")
+        expect(resolve("e", command: true, option: true), .editContent, "⌥⌘E edits its content")
+        expect(resolve("e", command: true, shift: true), nil, "⇧⌘E is not an edit chord")
+        expect(resolve("e", command: true, control: true), nil, "⌃⌘E is not an edit chord")
+        expect(resolve("e"), nil, "a bare E is typing")
         expect(resolve("n", command: true), .newItem, "⌘N starts a new one")
         expect(resolve("n", command: true, shift: true), nil, "⇧⌘N is not the new-item chord")
         expect(resolve(",", command: true, option: true), .settings, "⌥⌘, opens the screen's settings")
@@ -101,7 +106,8 @@ struct PaletteShortcutTests {
 
         let expanded: [PaletteShortcut] = [
             .copyFile, .copyName, .copyPath, .copyText, .pasteFile, .quickLook, .openInApp,
-            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure
+            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure,
+            .edit, .editContent
         ]
         let anywhere: [PaletteShortcut] = [
             .commandDelete, .delete, .deleteAll, .pin, .favoriteSlot(0), .continueInChat, .newItem,
@@ -117,7 +123,7 @@ struct PaletteShortcutTests {
         let closing: [PaletteShortcut] = [
             .delete, .deleteAll, .copyFile, .copyName, .copyPath, .copyText, .copyCalculation,
             .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings,
-            .configure
+            .configure, .edit, .editContent
         ]
         let leaving: [PaletteShortcut] = [
             .commandDelete, .pasteFile, .quit, .forceQuit, .restart, .pin, .favoriteSlot(0),

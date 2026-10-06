@@ -68,7 +68,7 @@ clipboard/items.jsonl      one clip per line
 clipboard/images/<uuid>.png
 snippets/<name>.md         copied verbatim
 notes/<name>.md            copied verbatim
-learning/{ranking,emoji,calculator}.json
+learning/{ranking,emoji,calculator,queries}.json
 ```
 
 A category the user didn't tick has no key in `counts` and no files in the archive, which is how the
@@ -110,8 +110,8 @@ anything a day old on the next run, since a run killed mid-flight leaves its tre
 `settings-backup-test` asserts that every `AppSettingsKey` appears in exactly one table, that no field
 claims a key twice, that every exclusion names a real key and carries a non-empty reason, and that each
 capability-granting key — `snippetsEnabled`, `extensionsEnabled`, `calendarEnabled`,
-`autoJoinMeetings`, `cameraPreview`, `quickActionsEnabled`, `remindersEnabled`, `contactsEnabled`
-and the chat-access levels — is named individually as excluded. The duplication between
+`autoJoinMeetings`, `cameraPreview`, `quickActionsEnabled`, `remindersEnabled`, `contactsEnabled`,
+`quicklinkPrefersExistingTabs` and the chat-access levels — is named individually as excluded. The duplication between
 `AppSettings` and this file is the point: it forces a decision about every new setting rather than
 defaulting it into a backup.
 
@@ -130,11 +130,15 @@ Per category:
   UI. A row is deduped on its text, or on the path its image takes; the blob keeps the name the bundle
   gave it, so importing one file twice lands on the same path and adds nothing. Only a file inside
   `imagesDir` is one retention can ever reclaim, which is why the blob moves there before the row lands.
+  A clip's title travels as `BackupClipboardItem.title` and lands in `item_titles` beside its new row;
+  a rich entry's RTF and HTML flavours do not travel, so it restores as plain text.
 - **Snippets** merge through `importSnippets`, deduped on name and body so importing the same file
   twice doesn't leave a second copy of everything. Importing snippets does not enable snippets.
 - **Notes** land as new files through `NotesRepository.importNotes`, which suffixes a title that is
   already taken rather than overwriting it.
 - **Learning** replaces. Merging two Macs' frecency tables produces a table describing neither.
+  Search history is part of it, written only while **Remember search history** is on, so a backup
+  never saves searches the Mac was keeping in memory alone.
 
 An `id` never travels with a clip: `items.id` is `UNIQUE`, so a re-import minting fresh identities is
 what keeps a second pass from silently failing its inserts. Same reasoning as `QuicklinkArchive.merge`.

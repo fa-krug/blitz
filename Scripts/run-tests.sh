@@ -138,7 +138,7 @@ run index file-search-performance Blitz/Platform/Signposts.swift \
 run ranking-test           $L/SearchRelevance.swift $L/ScriptRomanization.swift \
                            $L/LauncherMatch.swift $L/LauncherRankingStore.swift
 run scopes-test            $L/SearchScopes.swift
-run query-history-test     $L/LauncherQueryHistory.swift
+run query-history-test     $L/LauncherQueryHistory.swift $L/LauncherQueryHistoryStore.swift
 run app-name-test          Blitz/Platform/AppDisplayName.swift \
                            Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift
@@ -155,14 +155,16 @@ run reminders-test         Blitz/Features/Reminders/Model/*.swift \
                            $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
                            $A/AIToolArguments.swift $A/AIToolJSON.swift
 run contacts-test          Blitz/Features/Contacts/Model/*.swift
+# `Q` is the URL detector a drag payload builds its link with, rather than a second one.
+Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
                            Blitz/Features/Clipboard/Model/ColorFormat.swift \
-                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
-# `Q` is the URL detector a drag payload builds its link with, rather than a second one.
-Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Clipboard/Model/ClipDragPayload.swift $Q
 run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q
 run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q
 run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
@@ -172,6 +174,7 @@ run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
                            Blitz/Platform/ProcessExit.swift
 run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
@@ -182,6 +185,7 @@ run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
 run index clipboard-file-performance \
                            Blitz/Platform/PasteboardFiles.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
@@ -231,6 +235,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/FileSearch/Model/FileSearchFilter.swift \
@@ -252,6 +257,7 @@ run palette-navigation-test Blitz/Palette/PaletteState.swift \
                            Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/FileSearch/Model/FileSearchFilter.swift \
@@ -309,6 +315,7 @@ run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift 
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HotKeySpelling.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
+                           Blitz/Features/HotKeys/Model/SpotlightShortcut.swift \
                            Blitz/Platform/ASCIIKeyboardLayout.swift \
                            Blitz/Features/HotKeys/Service/KeyShortcut.swift \
                            Blitz/Features/HotKeys/Model/HotKeyAction.swift \
@@ -426,7 +433,8 @@ run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift 
                            Blitz/Features/Uninstall/Model/UninstallRules.swift \
                            Blitz/Features/Uninstall/Model/UninstallProtection.swift \
                            Blitz/Features/Uninstall/Model/UninstallPlan.swift
-run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
+run quicklink-test         Blitz/Platform/BrowserTab.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
@@ -434,6 +442,7 @@ run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
 run slow snippets-test     Blitz/Platform/NotificationToken.swift \
                            Blitz/Platform/HealthTicker.swift \
+                           Blitz/Platform/BrowserTab.swift \
                            Blitz/Platform/AccessibilityText.swift \
                            Blitz/Features/Snippets/Model/*.swift \
                            Blitz/Features/Snippets/Service/*.swift \
@@ -528,11 +537,15 @@ run ext-metadata-test      $E/Model/ExtensionCommandMetadata.swift \
                            $E/Model/ExtensionMenuBarSnapshot.swift \
                            $E/Service/ExtensionCommandMetadataStore.swift
 run ext-version-test       $E/Model/ExtensionListing.swift \
+                           $E/Model/ExtensionUpdatePolicy.swift \
                            $E/Service/ExtensionVersionStore.swift
 run ext-store-test         $E/Model/ExtensionGitHubSource.swift \
                            $E/Model/ExtensionListing.swift \
                            $E/Model/ExtensionPackageManager.swift \
-                           $E/Model/ExtensionStoreResponse.swift
+                           $E/Model/ExtensionStoreResponse.swift \
+                           $E/Model/ExtensionStoreReadme.swift \
+                           $E/Model/ExtensionPagination.swift \
+                           $E/Model/RenderNode.swift
 run ext-form-test          $E/Model/ExtensionFormMetrics.swift \
                            $E/Model/ExtensionFormField.swift \
                            $E/UI/ExtensionFormKey.swift \
@@ -584,6 +597,7 @@ run slow ext-test          -parse-as-library \
                            $E/UI/ExtensionAnimatedImage.swift \
                            $E/UI/ExtensionImage.swift \
                            $E/UI/ExtensionScreen.swift \
+                           $E/Model/ExtensionPagination.swift \
                            $L/SearchRelevance.swift \
                            Blitz/Platform/Compression/Zlib.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
@@ -598,6 +612,12 @@ run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
 run updates-test           Blitz/Features/Updates/Model/*.swift \
                            Blitz/Features/Updates/Service/BundleSignature.swift
 run support-test           Blitz/Features/Support/Model/*.swift
+run onboarding-test        Blitz/Features/Onboarding/Model/*.swift \
+                           Blitz/Palette/PaletteMode.swift \
+                           Blitz/Palette/PaletteTabAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run ai-provider-test       Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/*.swift \
                            Blitz/Features/AI/Settings/AISettingsStore.swift

@@ -12,6 +12,8 @@ struct ExtensionListView: View {
     let onSelect: (Int) -> Void
     let onActivate: (Int) -> Void
     let onActions: (Int) -> Void
+    /// A row came into view, which is how a `pagination` list asks for its next page.
+    let onReach: (Int) -> Void
 
     private static let detailListWidth: CGFloat = 290
 
@@ -83,6 +85,7 @@ struct ExtensionListView: View {
                             }
                             .onRightClick { onActions(item.index) }
                             .selectionFrame(item.index == selection)
+                            .onAppear { onReach(item.index) }
                         }
                     }
                 }
@@ -136,6 +139,7 @@ struct ExtensionListView: View {
                         }
                         .onRightClick { onActions(item.index) }
                         .selectionFrame(item.index == selection)
+                        .onAppear { onReach(item.index) }
                     }
                 }
                 .padding(.horizontal, metrics.spacing.md)

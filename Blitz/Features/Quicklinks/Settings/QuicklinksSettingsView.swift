@@ -40,7 +40,7 @@ struct QuicklinksSettingsView: View {
         .formStyle(.grouped)
         .settingsScrollTarget(.quicklinks)
         .settingsEditorPanel(item: $editor) { request in
-            QuicklinkEditorPanel(quicklink: request.quicklink)
+            QuicklinkEditorPanel(quicklink: request.quicklink, browserTab: request.browserTab)
         }
         .onChange(of: core.pendingQuicklinkEdit?.id, initial: true) { _, _ in
             guard let request = core.pendingQuicklinkEdit else { return }
@@ -125,6 +125,10 @@ struct QuicklinksSettingsView: View {
             Toggle(isOn: $settings.quicklinkOpensNewWindow) {
                 SettingsRowTitle(.quicklinksBehaviour, "Open in a new window")
                 Text("Where the app supports it.")
+            }
+            Toggle(isOn: $settings.quicklinkPrefersExistingTabs) {
+                SettingsRowTitle(.quicklinksBehaviour, "Focus an open tab")
+                Text("Switch to a tab already showing the link. Safari and Chromium browsers.")
             }
             Picker(selection: $settings.quicklinkSelectionFallback) {
                 ForEach(QuicklinkSelectionFallback.allCases) { option in

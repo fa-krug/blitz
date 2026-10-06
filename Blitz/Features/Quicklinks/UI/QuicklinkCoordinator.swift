@@ -20,8 +20,14 @@ final class QuicklinkCoordinator {
     /// Dialogs, the HUD, and the `pendingQuicklinkEdit` handoff to the Settings pane.
     private unowned let core: AppCore
 
-    /// The quicklink whose ⌘↵ override must survive the trip to the header's argument fields.
-    private var pendingDefaultAppOverride: UUID?
+    /// A one-shot choice of handler, never saved: the system default, or an app from Open With.
+    enum HandlerOverride: Equatable {
+        case systemDefault
+        case application(bundleID: String)
+    }
+
+    /// The override that must survive the trip to the header's argument fields, and whose it is.
+    private var pendingHandlerOverride: (id: UUID, handler: HandlerOverride)?
 
     init(
         store: QuicklinkStore,
@@ -78,7 +84,8 @@ final class QuicklinkCoordinator {
     /// The one funnel for every open, so neither the switch nor the missing values can be bypassed.
     /// `values` are the header's argument fields; anything still missing sends the row back to them.
     func openQuicklink(
-        id: UUID, forcingDefaultApp: Bool = false, values: [String: String] = [:]
+        id: UUID, forcingDefaultApp: Bool = false, openingWith bundleID: String? = nil,
+        values: [String: String] = [:]
     ) {
         guard settings.quicklinksEnabled, let quicklink = store.quicklink(id: id),
             quicklink.isEnabled
@@ -87,10 +94,42 @@ final class QuicklinkCoordinator {
         let target =
             windowController.isVisible
             ? windowController.previousTarget : InjectionTarget.current()
+        let requested =
+            bundleID.map { HandlerOverride.application(bundleID: $0) }
+            ?? (forcingDefaultApp ? .systemDefault : nil)
+        // The override outlives the trip through the fields, so it is honoured on the way back.
+        let handler =
+            requested ?? (pendingHandlerOverride?.id == id ? pendingHandlerOverride?.handler : nil)
+        guard SnippetTemplateEngine.usesBrowserTab(quicklink.link) else {
+            open(quicklink, target: target, browserTab: nil, handler: handler, values: values)
+            return
+        }
+        let browser = BrowserTabs.browser(
+            preferring: [target?.externalApp, windowController.previousApp])
+        Task {
+            var tab: BrowserTab?
+            if let browser {
+                do throws(BrowserTabs.Failure) {
+                    tab = try await BrowserTabs.frontTab(of: browser)
+                } catch {
+                    await core.reportBrowserTabFailure(
+                        error, title: "Couldn’t Open \(quicklink.name)")
+                    return
+                }
+            }
+            open(quicklink, target: target, browserTab: tab, handler: handler, values: values)
+        }
+    }
+
+    private func open(
+        _ quicklink: Quicklink, target: InjectionTarget?, browserTab: BrowserTab?,
+        handler: HandlerOverride?, values: [String: String]
+    ) {
         let encoding: SnippetTemplateEngine.ValueEncoding =
             QuicklinkDestination.usesURLEncoding(quicklink.link) ? .percentEncoding : .none
         var context = injector.captureExpansionContext(
-            target: target, clipboardHistory: clipboardHistory())
+            target: target, clipboardHistory: clipboardHistory(), browserTab: browserTab,
+            calculate: core.calculatorCoordinator.placeholderEvaluator())
 
         // An unreadable selection is missing, not empty: substitute the clipboard, or take the field.
         if context.selection.isEmpty, SnippetTemplateEngine.usesSelection(quicklink.link) {
@@ -103,17 +142,15 @@ final class QuicklinkCoordinator {
             }
         }
 
-        // The override outlives the trip through the fields, so it is honoured on the way back.
-        let forcesDefault = forcingDefaultApp || pendingDefaultAppOverride == id
         let expansion = SnippetTemplateEngine.expand(
             text: quicklink.link, context: context, userArguments: values, encoding: encoding)
         guard expansion.missingArguments.isEmpty else {
-            pendingDefaultAppOverride = forcesDefault ? id : nil
+            pendingHandlerOverride = handler.map { (quicklink.id, $0) }
             promptForArguments(quicklink, values: values)
             return
         }
-        pendingDefaultAppOverride = nil
-        performQuicklinkOpen(quicklink, link: expansion.text, forcingDefaultApp: forcesDefault)
+        pendingHandlerOverride = nil
+        performQuicklinkOpen(quicklink, link: expansion.text, handler: handler)
     }
 
     /// The fallback row's query, which fills the first `{argument}` the link declares.
@@ -157,15 +194,24 @@ final class QuicklinkCoordinator {
     }
 
     private func performQuicklinkOpen(
-        _ quicklink: Quicklink, link: String, forcingDefaultApp: Bool
+        _ quicklink: Quicklink, link: String, handler: HandlerOverride?
     ) {
         if windowController.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
-        let openWith = forcingDefaultApp ? nil : quicklink.openWithBundleID
+        let openWith: String?
+        switch handler {
+        case nil: openWith = quicklink.openWithBundleID
+        case .systemDefault: openWith = nil
+        case .application(let bundleID): openWith = bundleID
+        }
         Task {
             do throws(QuicklinkLauncher.Failure) {
-                try await QuicklinkLauncher.open(
+                let outcome = try await QuicklinkLauncher.open(
                     link, openWithBundleID: openWith,
-                    inNewWindow: settings.quicklinkOpensNewWindow)
+                    inNewWindow: settings.quicklinkOpensNewWindow,
+                    prefersExistingTab: settings.quicklinkPrefersExistingTabs)
+                if case .openedWithoutTabLookup(let refusal) = outcome {
+                    await core.reportBrowserTabFailure(refusal, title: "Couldn’t Check Open Tabs")
+                }
             } catch {
                 await presentQuicklinkFailure(quicklink, link: link, failure: error)
             }
@@ -192,7 +238,7 @@ final class QuicklinkCoordinator {
                 message: "\(name) isn’t installed any more.", symbol: symbol,
                 artwork: artwork, recovery: "Open with Default")
         else { return }
-        performQuicklinkOpen(quicklink, link: link, forcingDefaultApp: true)
+        performQuicklinkOpen(quicklink, link: link, handler: .systemDefault)
     }
 
     private func applicationName(forBundleID bundleID: String) -> String? {
@@ -265,6 +311,18 @@ final class QuicklinkCoordinator {
     func editQuicklink(_ quicklink: Quicklink?) {
         core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink)
         settingsCoordinator.showSettings(tab: .quicklinks)
+    }
+
+    /// Over a supported browser the editor starts from its front tab; a failed read starts blank.
+    func createQuicklink(over app: NSRunningApplication?) {
+        guard let app, BrowserTabs.isSupported(bundleID: app.bundleIdentifier) else {
+            return editQuicklink(nil)
+        }
+        Task {
+            let tab = try? await BrowserTabs.frontTab(of: app)
+            core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: nil, browserTab: tab)
+            settingsCoordinator.showSettings(tab: .quicklinks)
+        }
     }
 
     @discardableResult

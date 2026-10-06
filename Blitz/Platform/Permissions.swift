@@ -27,6 +27,14 @@ enum Permissions {
         NSWorkspace.shared.open(url)
     }
 
+    /// The Keyboard pane, whose Keyboard Shortcuts… sheet holds Spotlight's own shortcut.
+    @MainActor
+    static func openKeyboardSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     static func calendarAccess() -> CalendarAccess {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: return .granted
@@ -78,6 +86,15 @@ enum Permissions {
     /// The one camera prompt, raised from the gesture that asked for it.
     nonisolated static func requestCameraAccess() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .video)
+    }
+
+    @MainActor
+    static func openAutomationSettings() {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @MainActor

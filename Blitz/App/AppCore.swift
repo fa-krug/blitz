@@ -7,6 +7,7 @@ final class AppCore {
     static let shared = AppCore()
 
     let launcherRanking: LauncherRankingStore
+    let launcherQueryHistory: LauncherQueryHistoryStore
     let appIndex: AppIndex
     let customCommands = CustomCommandStore()
     let quicklinks = QuicklinkStore()
@@ -67,6 +68,7 @@ final class AppCore {
     let uninstall = UninstallSession()
     let notesStore: NotesStore
     let extensions: ExtensionManager
+    let extensionUpdates: ExtensionUpdateScheduler
     let chatHistory: ChatHistoryStore
     let aiChats: AIChatSurfacesState
     let aiSettings = AISettingsStore(
@@ -118,9 +120,9 @@ final class AppCore {
         appIndex: appIndex, runningApps: runningApps, hotKeys: hotKeys, favorites: favorites,
         visibility: visibility, ranking: launcherRanking, aliases: aliases, core: self)
     @ObservationIgnored private(set) lazy var extensionCoordinator = ExtensionCoordinator(
-        extensions: extensions, store: extensionStore, appIndex: appIndex, palette: palette,
-        paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
-        settings: settings, core: self)
+        extensions: extensions, store: extensionStore, updates: extensionUpdates,
+        appIndex: appIndex, palette: palette, paletteCoordinator: paletteCoordinator,
+        settingsCoordinator: settingsCoordinator, settings: settings, core: self)
     @ObservationIgnored private(set) lazy var windowCommandCoordinator = WindowCommandCoordinator(
         settings: settings, paletteCoordinator: paletteCoordinator, windowMover: windowMover,
         spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes)
@@ -163,8 +165,8 @@ final class AppCore {
         })
 
     @ObservationIgnored private(set) lazy var launcherCoordinator = LauncherCoordinator(
-        ranking: launcherRanking, windowController: windowController,
-        paletteCoordinator: paletteCoordinator,
+        ranking: launcherRanking, queryHistory: launcherQueryHistory,
+        windowController: windowController, paletteCoordinator: paletteCoordinator,
         settingsCoordinator: settingsCoordinator,
         customCommandCoordinator: customCommandCoordinator,
         systemActionCoordinator: systemActionCoordinator,
@@ -253,6 +255,9 @@ final class AppCore {
         let settings = AppSettings()
         let chatHistory = ChatHistoryStore(directory: AppPaths.applicationSupport())
         self.launcherRanking = launcherRanking
+        launcherQueryHistory = LauncherQueryHistoryStore(
+            fileURL: AppPaths.applicationSupport().appendingPathComponent("launcher-history.json"),
+            persists: settings.launcherSavesSearchHistory)
         self.settings = settings
         self.chatHistory = chatHistory
         let screenshotText = ScreenshotTextStore(
@@ -265,6 +270,7 @@ final class AppCore {
         let clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
         self.clipboardManager = clipboardManager
         extensions = ExtensionManager(clipboardStore: clipboardStore)
+        extensionUpdates = ExtensionUpdateScheduler(extensions: extensions)
         snippetsStore = SnippetsStore(repository: Self.snippetsRepository(for: settings))
         textInjector = TextInjector(
             clipboardManager: clipboardManager,
@@ -771,8 +777,14 @@ final class AppCore {
         track(
             { _ = $0.extensionsShowInLauncher },
             reproject: { $0.extensionCoordinator.applyExtensionsLauncherPresence() })
+        track(
+            { _ = $0.extensionsAutoUpdate },
+            reproject: { $0.extensionCoordinator.applyAutoUpdate() })
         track({ _ = $0.snippetsFolder }, reproject: { $0.applySnippetsFolder() })
         track({ _ = $0.notesFolder }, reproject: { $0.applyNotesFolder() })
+        track(
+            { _ = $0.launcherSavesSearchHistory },
+            reproject: { $0.launcherQueryHistory.persists = $0.settings.launcherSavesSearchHistory })
         trackChatRoute()
     }
 
@@ -939,6 +951,17 @@ final class AppCore {
             title: title, message: message, symbol: symbol, artwork: artwork, recovery: recovery)
     }
 
+    /// Every refused browser read lands here, so each offers the Automation pane the same way.
+    func reportBrowserTabFailure(_ failure: BrowserTabs.Failure, title: String) async {
+        let recovery = failure.needsAutomationPermission ? "Open System Settings…" : nil
+        guard
+            await reportFailure(
+                title: title, message: failure.message, symbol: "safari", recovery: recovery),
+            failure.needsAutomationPermission
+        else { return }
+        Permissions.openAutomationSettings()
+    }
+
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.
     func showMessage(_ message: String, tone: DialogTone = .success) {
         bannerHUD.dismiss()
@@ -988,6 +1011,24 @@ final class AppCore {
     /// The Smart Reminder prompt, for the same reason.
     func describeReminder() async -> String? {
         await dialogs.describeReminder()
+    }
+
+    /// A one-line rename, for the same reason.
+    func editText(
+        title: String, symbol: String, text: String, placeholder: String, label: String,
+        confirmTitle: String
+    ) async -> String? {
+        await dialogs.editText(
+            title: title, symbol: symbol, text: text, placeholder: placeholder, label: label,
+            confirmTitle: confirmTitle)
+    }
+
+    /// A multi-line edit, for the same reason.
+    func editMultilineText(
+        title: String, symbol: String, text: String, label: String, confirmTitle: String
+    ) async -> String? {
+        await dialogs.editMultilineText(
+            title: title, symbol: symbol, text: text, label: label, confirmTitle: confirmTitle)
     }
 
     /// The snippet argument prompt, for the same reason.

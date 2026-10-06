@@ -32,13 +32,18 @@ struct ClipboardList: View {
         selectedID != nil && selectedID == results.first?.id
     }
 
+    /// The header an entry sits under; the screen's section jumps break on the same titles.
+    static func sectionTitle(for item: ClipboardItem) -> String {
+        item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+    }
+
     /// Pins share one header; the rest are newest-first, a header per date bucket.
     private var rows: [Row] {
         var rows: [Row] = []
         var currentTitle: String?
         var pinnedSlot = 0
         for item in results {
-            let title = item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+            let title = Self.sectionTitle(for: item)
             if title != currentTitle {
                 rows.append(.header(title))
                 currentTitle = title
@@ -169,6 +174,7 @@ private struct ClipboardRow: View {
     }
 
     private var previewText: String {
+        if let title = item.title { return title }
         switch item.kind {
         // Cap before trimming: never walk a multi-MB clipboard string per row.
         case .text:
@@ -191,7 +197,10 @@ private struct ClipboardRow: View {
                 ColorSwatch(color: color)
                     .frame(width: artworkSize, height: artworkSize)
             } else {
-                Image(nsImage: IconCache.symbolIcon(named: "doc.text")).resizable()
+                Image(
+                    nsImage: IconCache.symbolIcon(named: item.isRichText ? "doc.richtext" : "doc.text")
+                )
+                .resizable()
             }
         case .image:
             AsyncThumbnail(url: imageURL, maxPixel: 64) { image in
@@ -402,6 +411,9 @@ private struct ClipboardInfoSection: View {
 
     private var rows: [InfoRow] {
         var rows: [InfoRow] = []
+        if let title = item.title {
+            rows.append(InfoRow(label: "Name", value: title))
+        }
         if let source {
             rows.append(InfoRow(label: "Source", value: source.name, icon: source.icon))
         }
@@ -409,7 +421,8 @@ private struct ClipboardInfoSection: View {
         case .text:
             // What the entry *is*, which is what the type filter files it under.
             let isColor = item.colorValue != nil
-            rows.append(InfoRow(label: "Type", value: isColor ? "Color" : "Text"))
+            let type = isColor ? "Color" : item.isRichText ? "Rich Text" : "Text"
+            rows.append(InfoRow(label: "Type", value: type))
             // A colour's own notations are the pane above; its length is not what you came for.
             if !isColor {
                 if let characters = details.characters {

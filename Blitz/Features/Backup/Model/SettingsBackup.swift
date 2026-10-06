@@ -40,6 +40,7 @@ struct SettingsBackup: Codable {
         var showFavoritesInCompactMode: Bool?
         var searchScopes: [String]?
         var launcherShowsSuggestions: Bool?
+        var launcherSavesSearchHistory: Bool?
         var rootSearchSensitivity: String?
         var openOnCursorScreen: Bool?
         // Safe to carry: it grants no permission class, just repositions the window.
@@ -69,6 +70,8 @@ struct SettingsBackup: Codable {
         var quicklinksEnabled: Bool?
         var quicklinksShowInLauncher: Bool?
         var extensionsShowInLauncher: Bool?
+        // Carried: it only refreshes extensions already here, so it grants nothing new.
+        var extensionsAutoUpdate: Bool?
         var quicklinkOpensNewWindow: Bool?
         var quicklinkSelectionFallback: String?
         var quicklinkConfirmsBeforeDelete: Bool?
@@ -154,6 +157,7 @@ extension SettingsBackup {
             showFavoritesInCompactMode: s.showFavoritesInCompactMode,
             searchScopes: s.searchScopes,
             launcherShowsSuggestions: s.launcherShowsSuggestions,
+            launcherSavesSearchHistory: s.launcherSavesSearchHistory,
             rootSearchSensitivity: s.rootSearchSensitivity.rawValue,
             openOnCursorScreen: s.openOnCursorScreen,
             paletteDraggable: s.paletteDraggable,
@@ -179,6 +183,7 @@ extension SettingsBackup {
             quicklinksEnabled: s.quicklinksEnabled,
             quicklinksShowInLauncher: s.quicklinksShowInLauncher,
             extensionsShowInLauncher: s.extensionsShowInLauncher,
+            extensionsAutoUpdate: s.extensionsAutoUpdate,
             quicklinkOpensNewWindow: s.quicklinkOpensNewWindow,
             quicklinkSelectionFallback: s.quicklinkSelectionFallback.rawValue,
             quicklinkConfirmsBeforeDelete: s.quicklinkConfirmsBeforeDelete,
@@ -384,6 +389,10 @@ extension SettingsBackup {
             settings.launcherShowsSuggestions = flag
             count += 1
         }
+        if let flag = s.launcherSavesSearchHistory {
+            settings.launcherSavesSearchHistory = flag
+            count += 1
+        }
         if let raw = s.rootSearchSensitivity, let sensitivity = SearchSensitivity(rawValue: raw) {
             settings.rootSearchSensitivity = sensitivity
             count += 1
@@ -479,6 +488,10 @@ extension SettingsBackup {
         }
         if let flag = s.extensionsShowInLauncher {
             settings.extensionsShowInLauncher = flag
+            count += 1
+        }
+        if let flag = s.extensionsAutoUpdate {
+            settings.extensionsAutoUpdate = flag
             count += 1
         }
         if let flag = s.quicklinksShowInLauncher {

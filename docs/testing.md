@@ -89,7 +89,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
 | `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |
 | `scopes-test` | `Launcher/Model/SearchScopes.swift` |
-| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift` — what ↑ recalls, and when it leaves the key to the list |
+| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift`, `LauncherQueryHistoryStore.swift` — what ↑ and ↓ recall, when they leave the key to the list, that a shell line is never kept, and the file's round trip and deletion |
 | `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
 | `calc-test` | all of `Calculator/Model/` |
 | `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
@@ -98,15 +98,15 @@ If a change touches anything in the right column, the harness on the left is man
 | `clipboard-search-test` | Ordinary and OCR result ordering, opt-in lifecycle, cancellation, pins and type filters |
 | `clipboard-text-test` | Apple Vision/PDF extraction, scheduling, retry backoff and recovery |
 | `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |
-| `clipboard-test` | `Clipboard/Model/ClipboardStore.swift`, `ClipboardFilter.swift`, `ClipboardFileKind.swift`, the colour trio |
-| `pasteboard-test` | `Clipboard/Service/ClipboardManager.swift` capture and `Paster.write` — what a Finder copy reads as, and what a file entry writes back |
+| `clipboard-test` | `Clipboard/Model/ClipboardStore.swift` — side tables, titles, edits, rich-text flavours — `ClipboardFilter.swift`, `ClipboardFileKind.swift`, `ClipDragPayload.swift`'s Open Link URL, the colour trio |
+| `pasteboard-test` | `Clipboard/Service/ClipboardManager.swift` capture and `Paster.write` — what a Finder copy reads as, what a file entry writes back, and a rich entry's RTF/HTML capture, cap and write-back |
 | `emoji-test` | `Emoji/Model/EmojiCatalog.swift`, `EmojiGridGeometry.swift`, the generated data and keyword packs |
 | `emoji-search-test` | `Emoji/Service/EmojiIndex.swift`, `FrequentEmojiStore.swift`, `Scripts/gen-emoji.js`'s keyword format, multilingual search |
 | `palette-navigation-test` | `Palette/PaletteState.swift`'s screen motions — `prepare`, `replace`, `push`, `pop` |
-| `palette-selection-test` | `Features/PaletteRowIndex.swift` |
+| `palette-selection-test` | `Features/PaletteRowIndex.swift` — the flat index, section starts, ⌘↑/↓ jumps and ⌥↑/↓ pages |
 | `interface-size-test` | `DesignSystem/InterfaceMetrics.swift`, `Features/Settings/InterfaceSize.swift`, `Extensions/Model/ExtensionFormMetrics.swift` |
 | `palette-placement-test` | `DesignSystem/Theme.swift`, `Palette/PalettePlacement.swift` |
-| `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
+| `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `SpotlightShortcut.swift` (enabled, disabled, missing, remapped and cleared entries), `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
 | `fallback-test` | `Launcher/Model/Fallback.swift` and `WebSearchEngine.swift`, plus the `CommandID` and `Quicklink` ids it is built from |
 | `deeplink-test` | `HotKeys/Model/HotKeyActionDeepLink.swift` — every action's `blitz://run/` link round-trips, what no chord runs no link runs, and a link's `arguments` reach a custom command's fields — plus `Extensions/Model/ExtensionDeepLink.swift`'s Copy Deeplink form |
 | `palette-shortcut-test` | `Palette/PaletteShortcut.swift` — which row chord each key resolves to, and where it acts |
@@ -119,16 +119,16 @@ If a change touches anything in the right column, the harness on the left is man
 | `window-room-test` | `WindowManagement/Model/Room*.swift` — every room layout and its minimum sizes, the grid, arrangement reading, window matching, parking, the plan, Tab's choices and the three stores |
 | `custom-command-test` | `CustomCommands/Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` — sessions, Stop, typed input and the terminal handoff — plus `Platform/PseudoTerminal.swift` |
 | `uninstall-test` | all five pure files in `Uninstall/Model/` |
-| `quicklink-test` | all of `Quicklinks/Model/` |
+| `quicklink-test` | all of `Quicklinks/Model/` — tags included — plus `Platform/BrowserTab.swift`'s tab URL matching |
 | `apple-shortcut-test` | all of `AppleShortcuts/Model/` — the `shortcuts list` parser and entry ids |
-| `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/`, plus `Platform/HealthTicker.swift` |
+| `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/` — `{browser-tab}` and `{calculator}` against an injected tab and evaluator — plus `Platform/HealthTicker.swift` and `BrowserTab.swift` |
 | `notes-test` | all of `Notes/Model/` and `Notes/Service/`, including the Markdown parser, edit plans and reveal policy, plus the real fuzzy matcher and signposts |
 | `notes-editor-test` | the Notes editor, rendered and literal, with real TextKit 2 and AppKit editing objects: styling, reveal, layout fragments, keys, chords, checkboxes and links |
 | `raycast-test` | `Backup/Service/RaycastDecoder.swift`, `Scrypt.swift`, `Platform/Compression/Zlib.swift` |
 | `symbols-test` | `Extensions/Service/SymbolCatalog.swift`, against this machine's CoreGlyphs |
-| `ext-store-test` | `Extensions/Model/` — GitHub source parsing and URLs, the store and Git tree parsers |
+| `ext-store-test` | `Extensions/Model/` — GitHub source parsing and URLs, the store and Git tree parsers, store paging and detail fields, README URL rewriting, and the `pagination` latch |
 | `ext-refresh-test` | `Extensions/Model/ExtensionRefreshPolicy.swift` — interval parsing, due dates, backoff, subtitle fallback, indicator state |
-| `ext-version-test` | `Extensions/Service/ExtensionVersionStore.swift` — what an update check reports, adopts and forgets |
+| `ext-version-test` | `Extensions/Service/ExtensionVersionStore.swift` — what an update check reports, adopts and forgets; `ExtensionUpdatePolicy`'s cadence, deferral and HUD line |
 | `ext-metadata-test` | `Extensions/Service/ExtensionCommandMetadataStore.swift` — round-trip, failure runs, uninstall |
 | `ext-test` | the extension runtime and native menu-bar lifecycle — boots shipped sources in JavaScriptCore; menu tests cover restoration, refresh serialization, actions and teardown; fetch tests cover HTTP connection cleanup, cancellation and request isolation |
 | `ext-icon-test` | `Extensions/Service/ExtensionIconCache.swift` — artwork sizing and its fallback |
@@ -141,6 +141,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `backup-archive-test` | all of `Backup/Model/`, plus `Backup/Service/BackupStaging.swift` |
 | `updates-test` | `Updates/Model/` — version precedence, channel filtering, install route, readiness |
 | `support-test` | `Support/Model/` — when the support reminder comes due, and a clock moved backwards |
+| `onboarding-test` | `Onboarding/Model/` — the tour's step order, and the Tab card following `PaletteTabAction` |
 | `mcp-test` | `MCP/Model/` and `MCPSettingsStore` — JSON-RPC framing, handles, tool names, output flattening, trust, `@server` addressing, the shape a vendor CLI is handed, and which servers Blitz leaves to that CLI |
 | `mcp-stdio-test` | `MCP/Service/` against a stub server — handshake, listing, calling, and every way one can go away |
 | `mcp-oauth-test` | OAuth parsing, RFC 7636 PKCE, discovery and resource binding, loopback callback validation/cancellation, dynamic registration, supplied client credentials and their token-endpoint authentication, Keychain token rotation, concurrent refresh, the wider margin for a token lent to a CLI, redirects and one-retry 401 handling |
@@ -433,7 +434,12 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - An app removed since the last open drops out after a reopen
 - Learned ranking still surfaces your habitual result for a short query
 - ↑ in an empty field (compact bar included) recalls the last search acted on, a further ↑ steps
-  older, and ↑ after editing the recalled query moves through the list instead
+  older, ↓ steps back newer to an empty field, and ↑ after editing the recalled query moves through
+  the list instead
+- Quit and relaunch: ↑ still recalls; a query run through Run Shell Command never appears; with
+  Remember search history off, `launcher-history.json` is gone and a relaunch recalls nothing
+- ⌘↓/⌘↑ jump section heads and ⌥↓/⌥↑ move a page in the launcher, clipboard, emoji grid and an
+  extension list
 - An application row drags onto the Dock and into a Finder window as a copy, never a move, and a
   landed drop hides the palette; a click still launches; no other kind of row drags
 
@@ -447,6 +453,20 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands
+- With Spotlight on ⌘Space, onboarding's **Use ⌘Space** opens the guide; turning off "Show Spotlight
+  search" in System Settings and clicking back binds ⌘Space with a checkmark, no recording needed.
+  With Spotlight already off, the button binds at once
+- With the launcher on ⌘Space and Spotlight turned back on, Settings ▸ General shows the orange
+  warning under App Launcher; **Fix…** opens the guide, and freeing the chord clears the row
+
+### Onboarding
+
+- Delete the `onboarded` marker in Application Support and relaunch: the tour opens once, five
+  dots, with the Tips page before Done
+- Tips shows ⌘K, ⇧⌘, and ⇥ as keycaps; with AI on the Tab card says Quick AI, with AI off it says
+  Clipboard and links to Settings ▸ AI
+- Show Welcome Tour from the launcher and Settings ▸ General ▸ Welcome Tour both reopen it, and a
+  second open raises the window rather than stacking one
 
 ### Uninstall
 
@@ -463,6 +483,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - `{selection}` falls back per the Settings choice
 - Pin, duplicate, delete and Open with Default all behave; import and export round-trip
 - Display order is pinned first by pin time, then by name
+- With **Focus an open tab** on, a website quicklink switches to a matching tab in Safari and in Chrome
+  (first use raises the Automation prompt); with no matching tab, or the browser quit, it opens
+  normally; denying Automation opens the link and then offers System Settings
+- Create Quicklink over Safari or Chrome opens the editor filled from the front tab; **Use Current
+  Browser Tab** fills it from whichever browser window is frontmost
+- Tags show as chips, match in the search field, and ⌘P filters by one; the ⌘K Open With section
+  opens once in the chosen app without changing the saved one
 
 ### Apple Shortcuts
 
@@ -596,6 +623,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
 - Editing a snippet file externally reloads it
+- `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
+  denied, the expansion is abandoned and the dialog offers System Settings; no browser running
+  expands to nothing
+- `{calculator expression="2 * 21"}` expands to `42`, in the calculator's number format
 
 ### Calculator and currency
 

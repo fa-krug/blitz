@@ -15,4 +15,6 @@ struct BackupClipboardItem: Codable, Sendable, Equatable {
     var createdAt: Date
     var sourceBundleID: String?
     var pinnedAt: Date?
+    /// The reader's rename; a rich entry's styled flavours stay behind, only its text travels.
+    var title: String?
 }

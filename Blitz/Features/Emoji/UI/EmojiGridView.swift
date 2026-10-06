@@ -10,6 +10,13 @@ struct EmojiGridSection: Identifiable {
 }
 
 enum EmojiGrid {
+    /// The palette has a fixed metric width, so cells can be square without a measuring render pass.
+    static func cellSize(columns: EmojiGridColumns, metrics: InterfaceMetrics) -> CGFloat {
+        let count = CGFloat(columns.rawValue)
+        let contentWidth = metrics.size.panelWidth - metrics.size.emojiGridInset * 2
+        return (contentWidth - metrics.spacing.md * (count - 1)) / count
+    }
+
     /// Ranked results while searching, otherwise pinned, frequent and catalog sections in order.
     @MainActor
     static func sections(
@@ -224,12 +231,7 @@ private struct EmojiGridRowView: View {
 
     private var spacing: CGFloat { metrics.spacing.md }
 
-    /// The palette has a fixed metric width, so cells can be square without a measuring render pass.
-    private var cellSize: CGFloat {
-        let count = CGFloat(columns.rawValue)
-        let contentWidth = metrics.size.panelWidth - metrics.size.emojiGridInset * 2
-        return (contentWidth - spacing * (count - 1)) / count
-    }
+    private var cellSize: CGFloat { EmojiGrid.cellSize(columns: columns, metrics: metrics) }
 
     var body: some View {
         HStack(spacing: spacing) {

@@ -14,9 +14,10 @@ enum Paster {
     /// Write the item and paste it into `previousApp`, activating it so ⌘V lands there.
     @MainActor @discardableResult
     static func paste(
-        _ item: ClipboardItem, store: ClipboardStore, previousApp: NSRunningApplication?
+        _ item: ClipboardItem, store: ClipboardStore, previousApp: NSRunningApplication?,
+        formats: Set<ClipboardRichFormat>? = nil
     ) -> Bool {
-        guard write(item, store: store) else { return false }
+        guard write(item, store: store, formats: formats) else { return false }
         store.promote(item)
         previousApp?.activate()
         DispatchQueue.main.asyncAfter(deadline: .now() + activationDelay) {
@@ -112,16 +113,20 @@ enum Paster {
         return true
     }
 
-    /// Whether anything was written; a vanished item leaves the pasteboard untouched.
+    /// False for a vanished item, which leaves the pasteboard alone; nil `formats` writes them all.
     @MainActor @discardableResult
     static func write(
-        _ item: ClipboardItem, store: ClipboardStore, to pb: NSPasteboard = .general
+        _ item: ClipboardItem, store: ClipboardStore, formats: Set<ClipboardRichFormat>? = nil,
+        to pb: NSPasteboard = .general
     ) -> Bool {
         switch item.kind {
         case .text:
             guard let text = item.text else { return false }
+            let styled = richData(of: item, limitedTo: formats)
             pb.clearContents()
-            pb.declareTypes([.string, ClipboardManager.internalType], owner: nil)
+            pb.declareTypes(
+                styled.map(\.type) + [.string, ClipboardManager.internalType], owner: nil)
+            for (type, data) in styled { pb.setData(data, forType: type) }
             pb.setString(text, forType: .string)
         case .image:
             guard let url = store.imageURL(for: item),
@@ -144,6 +149,18 @@ enum Paster {
         }
         pb.setData(Data(), forType: ClipboardManager.internalType)
         return true
+    }
+
+    /// A flavour whose file has gone is skipped, so the plain text still pastes.
+    private static func richData(
+        of item: ClipboardItem, limitedTo formats: Set<ClipboardRichFormat>?
+    ) -> [(type: NSPasteboard.PasteboardType, data: Data)] {
+        ClipboardRichFormat.allCases.compactMap { format in
+            guard formats?.contains(format) ?? true, let path = item.formats[format],
+                let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+            else { return nil }
+            return (NSPasteboard.PasteboardType(format.rawValue), data)
+        }
     }
 
     /// Synthesize ⌘V, to `pid` alone when given, else through the system tap.

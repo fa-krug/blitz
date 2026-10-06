@@ -78,6 +78,21 @@ export default function Command() {
 }
 `;
 
+const paginationSource = `
+import { List } from "@raycast/api";
+import { useState } from "react";
+
+export default function Command() {
+  const [pages, setPages] = useState(1);
+  const items = Array.from({ length: pages * 3 }, (_, index) => "Row " + index);
+  return (
+    <List pagination={{ hasMore: pages < 2, pageSize: 3, onLoadMore: () => setPages((p) => p + 1) }}>
+      {items.map((title) => <List.Item key={title} title={title} />)}
+    </List>
+  );
+}
+`;
+
 const detailSource = `
 import { Detail } from "@raycast/api";
 
@@ -327,6 +342,17 @@ export default async function Command() {
   await send({});
   const request = new Request(url, { method: "POST", body: new URLSearchParams({ a: "1" }) });
   globalThis.__contentType = request.headers.get("content-type");
+}
+`;
+
+// The host answers null when no browser has a tab open, which an extension reads as undefined.
+const browserTabSource = `
+import { getFrontmostBrowserTab } from "@raycast/api";
+
+export default async function Command() {
+  const first = await getFrontmostBrowserTab();
+  const second = await getFrontmostBrowserTab();
+  globalThis.__browserTab = { first, second: second === undefined };
 }
 `;
 
@@ -813,6 +839,24 @@ export async function runFixtures() {
     check("re-renders after the action", describeTree(harness.state.trees.at(-1)).includes("Count is 1"));
   });
 
+  await run("List pagination", paginationSource, "view", async (harness) => {
+    const list = findNode(harness.state.trees.at(-1), "List");
+    const pagination = list?.props?.pagination;
+    check("pagination reaches Swift as an object", pagination && typeof pagination === "object", JSON.stringify(pagination));
+    check("hasMore and pageSize survive", pagination?.hasMore === true && pagination?.pageSize === 3);
+    check(
+      "onLoadMore is a dispatchable handle",
+      pagination?.onLoadMore?.$fn === `${list.id}:pagination.onLoadMore`,
+      JSON.stringify(pagination?.onLoadMore),
+    );
+    harness.dispatch("s1", pagination.onLoadMore.$fn);
+    await wait();
+    const next = findNode(harness.state.trees.at(-1), "List");
+    const rows = next.children.filter((child) => child.type === "List.Item").length;
+    check("loading more appends the next page", rows === 6, `${rows} rows`);
+    check("and the last page clears hasMore", next.props.pagination?.hasMore === false);
+  });
+
   await run("Detail with metadata", detailSource, "view", async (harness) => {
     const dump = describeTree(harness.state.trees.at(-1));
     check("renders Detail", dump.includes("<Detail"));
@@ -981,6 +1025,19 @@ export async function runFixtures() {
         },
       },
     },
+  );
+
+  const browserTabs = [{ url: "https://example.test/a", title: "A" }, null];
+  await run(
+    "getFrontmostBrowserTab asks the host",
+    browserTabSource,
+    "no-view",
+    async (harness) => {
+      const result = harness.call("globalThis.__browserTab");
+      check("passes the host's tab through", result?.first?.url === "https://example.test/a" && result?.first?.title === "A", JSON.stringify(result));
+      check("no tab resolves undefined", result?.second === true, JSON.stringify(result));
+    },
+    { stubs: { "system.frontmostBrowserTab": () => browserTabs.shift() } },
   );
 
   const formPosts = [];

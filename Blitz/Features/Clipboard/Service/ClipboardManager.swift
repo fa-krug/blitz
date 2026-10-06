@@ -118,6 +118,18 @@ final class ClipboardManager {
         return durable.map(\.standardizedFileURL.path).reversed()
     }
 
+    /// The styled flavours beside a text copy; one past `ClipboardRichFormat.maxBytes` is dropped.
+    nonisolated static func richFormats(on pasteboard: NSPasteboard) -> [ClipboardRichFormat: Data] {
+        var formats: [ClipboardRichFormat: Data] = [:]
+        for format in ClipboardRichFormat.allCases {
+            guard let data = pasteboard.data(forType: NSPasteboard.PasteboardType(format.rawValue)),
+                !data.isEmpty, data.count <= ClipboardRichFormat.maxBytes
+            else { continue }
+            formats[format] = data
+        }
+        return formats
+    }
+
     /// An app that stages a temp file beside better inline content must keep the inline content.
     nonisolated private static func isDurable(_ url: URL, roots: [String]) -> Bool {
         guard FileManager.default.fileExists(atPath: url.path) else { return false }
@@ -150,7 +162,18 @@ final class ClipboardManager {
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             guard text.count <= Self.maxTextLength else { return }
-            store.addText(text, sourceBundleID: sourceBundleID)
+            let formats = Self.richFormats(on: pb)
+            guard !formats.isEmpty else {
+                store.addText(text, sourceBundleID: sourceBundleID)
+                return
+            }
+            let store = store
+            let directory = store.formatsDirectory
+            // Like an image's PNG, the flavour files are written off the poll.
+            Task.detached(priority: .utility) {
+                let written = ClipboardStore.writeFormats(formats, into: directory)
+                await store.addText(text, sourceBundleID: sourceBundleID, formats: written)
+            }
             return
         }
 

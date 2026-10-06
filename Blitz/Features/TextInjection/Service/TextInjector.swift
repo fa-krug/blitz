@@ -191,7 +191,9 @@ final class TextInjector {
 
     func captureExpansionContext(
         target: InjectionTarget?,
-        clipboardHistory: [String]
+        clipboardHistory: [String],
+        browserTab: BrowserTab? = nil,
+        calculate: (@Sendable (String) -> String?)? = nil
     ) -> SnippetTemplateEngine.ExpansionContext {
         SnippetTemplateEngine.ExpansionContext(
             clipboardHistory: clipboardHistory,
@@ -199,7 +201,9 @@ final class TextInjector {
             now: Date(),
             calendar: Calendar.current,
             locale: Locale.current,
-            timeZone: .current)
+            timeZone: .current,
+            browserTab: browserTab,
+            calculate: calculate)
     }
 
     /// The caller must know there *is* a selection: a zero-length one inserts at the caret instead.

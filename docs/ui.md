@@ -638,13 +638,17 @@ it would couple two unrelated surfaces.
 
 A dialog carries at most one control beyond its buttons, and `DialogAccessory` makes that structural
 rather than a convention — `.volume` for the Set Volume prompt, `.eventDraft` for New Event,
-`.snippetArguments` for a snippet's `{argument}` values. Text fields take `dialogTextField()`;
+`.snippetArguments` for a snippet's `{argument}` values, and `.text` / `.multilineText` for a
+rename or an edit through `DialogTextInput`. Text fields take `dialogTextField()`;
 New Event groups its fixed start and duration values into two local segmented bars, while a snippet's
 inline enumerated arguments remain `DialogChip`s. Two things follow from the enum:
 
 - **Arrow keys belong to the accessory, not the panel.** `DialogPanel.handlesArrowKeys` is set from
   `DialogAccessory.claimsArrowKeys`, so the slider still steps on ←/→ while the New Event title field
   keeps its caret.
+- **Return belongs to a multi-line box.** `.multilineText` sets `DialogPanel.returnNeedsCommand`
+  from `DialogAccessory.confirmsWithCommandReturn`, so Return types a newline, ⌘↵ saves, and the
+  default button's keycap says ⌘↵.
 - **An accessory can refuse its own primary action.** An invalid draft leaves the dialog up on ↵ and
   on a click alike, which is what a greyed-out button would say if `DialogAction` could carry one.
 
@@ -717,7 +721,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   **`FeatureSwitchSection`** (a feature's master switch plus its launcher-visibility companion),
   **`SettingsFilterField`** (the filter row above a long list), **`launcherVisibilityHelp()`**, and the
   Settings editor header, fields and surface. `ModalActionButtonStyle.swift` keeps every borderless surface's actions on one
-  implementation — dialogs, Settings editors, the camera footers and the Quick Action panel. `Onboarding/OnboardingCard.swift` keeps the older hand-drawn card,
+  implementation — dialogs, Settings editors, the camera footers and the Quick Action panel. `Onboarding/UI/OnboardingCard.swift` keeps the older hand-drawn card,
   which that window still uses.
 - **A Settings editor borrows the dialog language, not its job.** `SettingsEditorPresenter` hosts the
   existing form in an activating, transparent child `NSPanel`, with the same `panel 26` Liquid Glass

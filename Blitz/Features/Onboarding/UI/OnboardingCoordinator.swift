@@ -21,7 +21,7 @@ final class OnboardingCoordinator {
 
     func showOnboarding() {
         window.show {
-            OnboardingView()
+            OnboardingView(spotlight: SpotlightHandoffSession(hotKeys: self.core.hotKeys))
                 .environment(self.core)
                 .environment(self.core.settings)
                 .environment(self.core.hotKeys)

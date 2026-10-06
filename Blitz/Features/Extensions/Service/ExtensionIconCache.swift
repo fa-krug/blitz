@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 
 /// An extension's artwork; docs/features/extensions.md says why it draws smaller.
 enum ExtensionIconCache {
@@ -129,6 +130,32 @@ enum ExtensionIconCache {
         let (icon, cost) = IconCache.fitted(source, to: extent)
         cache.setObject(icon, forKey: key, cost: cost)
         return icon
+    }
+
+    /// Downsampled at decode: a store screenshot is ~2000px wide and a strip draws it far smaller.
+    static func loadThumbnailAsync(_ url: URL, maxPixelSize: CGFloat) async -> NSImage? {
+        let key = "thumb:\(Int(maxPixelSize)):\(url.absoluteString)" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let (data, _) = try? await session.data(from: url) else { return nil }
+        let decoded = await Task.detached(priority: .userInitiated) {
+            Decoded(image: thumbnail(of: data, maxPixelSize: maxPixelSize))
+        }.value
+        guard let image = decoded.image else { return nil }
+        cache.setObject(image, forKey: key, cost: Int(image.size.width * image.size.height * 4))
+        return image
+    }
+
+    private static func thumbnail(of data: Data, maxPixelSize: CGFloat) -> NSImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
     /// Cacheless, never `URLSession.shared`: an extension names these URLs.

@@ -21,11 +21,11 @@ final class LauncherCoordinator {
     private let calendarCoordinator: CalendarCoordinator
     /// The backup commands only, which need the live stores to gather from and apply to.
     private unowned let core: AppCore
-    /// In memory only: a search can hold what the user would never want written to disk.
-    private(set) var queryHistory = LauncherQueryHistory()
+    let queryHistory: LauncherQueryHistoryStore
 
     init(
         ranking: LauncherRankingStore,
+        queryHistory: LauncherQueryHistoryStore,
         windowController: PaletteWindowController,
         paletteCoordinator: PaletteCoordinator,
         settingsCoordinator: SettingsCoordinator,
@@ -44,6 +44,7 @@ final class LauncherCoordinator {
         core: AppCore
     ) {
         self.ranking = ranking
+        self.queryHistory = queryHistory
         self.windowController = windowController
         self.paletteCoordinator = paletteCoordinator
         self.settingsCoordinator = settingsCoordinator
@@ -64,8 +65,8 @@ final class LauncherCoordinator {
 
     // MARK: - Activation
 
-    func recordQuery(_ query: String) {
-        queryHistory.record(query)
+    func recordQuery(_ query: String, from origin: LauncherQueryHistory.Origin) {
+        queryHistory.record(query, from: origin)
     }
 
     func launch(
@@ -210,6 +211,9 @@ final class LauncherCoordinator {
             core.dictionaryCoordinator.show()
         case .extensionStore:
             extensionCoordinator.showStore()
+        case .checkForExtensionUpdates:
+            dismissPalette()
+            extensionCoordinator.checkForUpdatesNow()
         case .openInBrowser, .runShellCommand, .searchWeb:
             break  // Query-driven: each runs where the typed text is, never through this funnel.
         case .joinNextMeeting:
@@ -257,8 +261,12 @@ final class LauncherCoordinator {
         case .createRoom:
             core.roomCoordinator.createRoom()
         case .createQuicklink:
+            // Read before the hide: with the palette closed, a shortcut runs over the frontmost app.
+            let covered =
+                paletteCoordinator.isVisible
+                ? windowController.previousApp : NSWorkspace.shared.frontmostApplication
             dismissPalette()
-            quicklinkCoordinator.editQuicklink(nil)
+            quicklinkCoordinator.createQuicklink(over: covered)
         case .importQuicklinks:
             dismissPalette()
             Task { await quicklinkCoordinator.importQuicklinks() }
@@ -277,6 +285,9 @@ final class LauncherCoordinator {
         case .checkForUpdates:
             dismissPalette()
             core.updateCoordinator.checkForUpdates()
+        case .welcomeTour:
+            dismissPalette()
+            core.onboardingCoordinator.showOnboarding()
         case .settings:
             dismissPalette()
             settingsCoordinator.showSettings()

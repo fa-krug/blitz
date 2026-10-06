@@ -124,6 +124,18 @@ struct EmojiScreen: PaletteScreen {
         }
     }
 
+    var sectionStarts: [Int] { sections.map(\.start) }
+
+    /// A page is as many visual rows as the viewport shows, so the column survives the jump.
+    func page(_ direction: Int, from selection: Int, viewportHeight: CGFloat) -> Int? {
+        let metrics = core.settings.interfaceSize.metrics
+        let pitch = EmojiGrid.cellSize(columns: columns, metrics: metrics) + metrics.spacing.md
+        let geometry = EmojiGridGeometry(
+            counts: sections.map(\.entries.count), columns: columns.rawValue)
+        return geometry.page(
+            from: selection, rows: max(1, Int(viewportHeight / pitch)), forward: direction > 0)
+    }
+
     func body(selection: Int, scroll: ScrollIntent) -> AnyView {
         AnyView(content(selection: selection, scroll: scroll))
     }
