@@ -32,10 +32,18 @@ enum QuicklinkLauncher {
     /// Chromium and Firefox accept this, Safari ignores it, so passing it always is safe.
     private static let newWindowArgument = "--new-window"
 
+    /// What an open did; a refused tab lookup still opened, but the caller should say why.
+    enum Outcome {
+        case opened
+        case focusedExistingTab
+        case openedWithoutTabLookup(BrowserTabs.Failure)
+    }
+
     /// `openWithBundleID` nil means the system default handler.
+    @discardableResult
     static func open(
-        _ link: String, openWithBundleID: String?, inNewWindow: Bool
-    ) async throws(Failure) {
+        _ link: String, openWithBundleID: String?, inNewWindow: Bool, prefersExistingTab: Bool
+    ) async throws(Failure) -> Outcome {
         guard let destination = QuicklinkDestination.detect(link) else {
             throw .unresolvable(link)
         }
@@ -49,9 +57,6 @@ enum QuicklinkLauncher {
             url = URL(fileURLWithPath: path)
         }
 
-        let configuration = NSWorkspace.OpenConfiguration()
-        if inNewWindow { configuration.arguments = [newWindowArgument] }
-
         var application: URL?
         if let openWithBundleID {
             application = NSWorkspace.shared.urlForApplication(
@@ -59,6 +64,22 @@ enum QuicklinkLauncher {
             guard application != nil else { throw .missingApplication(openWithBundleID) }
         }
 
+        var refusal: BrowserTabs.Failure?
+        if prefersExistingTab, case .web = destination,
+            let browser = runningBrowser(handling: url, application: application)
+        {
+            do throws(BrowserTabs.Failure) {
+                if try await BrowserTabs.focusTab(matching: url.absoluteString, in: browser) {
+                    return .focusedExistingTab
+                }
+            } catch {
+                // Anything but a refusal is a browser that couldn't answer, so it just opens.
+                if error.needsAutomationPermission { refusal = error }
+            }
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        if inNewWindow { configuration.arguments = [newWindowArgument] }
         do {
             if let application {
                 _ = try await NSWorkspace.shared.open(
@@ -70,5 +91,18 @@ enum QuicklinkLauncher {
             throw .openFailed(
                 target: destination.displayText, detail: error.localizedDescription)
         }
+        return refusal.map(Outcome.openedWithoutTabLookup) ?? .opened
+    }
+
+    /// The browser the link would open in, if it is one Blitz can script and it is already running.
+    private static func runningBrowser(
+        handling url: URL, application: URL?
+    ) -> NSRunningApplication? {
+        guard let handler = application ?? NSWorkspace.shared.urlForApplication(toOpen: url),
+            let bundleID = Bundle(url: handler)?.bundleIdentifier,
+            BrowserTabs.isSupported(bundleID: bundleID)
+        else { return nil }
+        return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first { !$0.isTerminated }
     }
 }

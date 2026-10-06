@@ -159,7 +159,8 @@ enum WindowLayoutRunner {
             do {
                 // The same open a quicklink makes, so a path, a host and a deeplink all behave.
                 try await QuicklinkLauncher.open(
-                    argument, openWithBundleID: placement.bundleID, inNewWindow: false)
+                    argument, openWithBundleID: placement.bundleID, inNewWindow: false,
+                    prefersExistingTab: false)
                 outcome.opened += 1
             } catch {
                 outcome.openFailures.append(error.localizedDescription)

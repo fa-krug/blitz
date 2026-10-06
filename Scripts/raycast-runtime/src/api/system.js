@@ -225,8 +225,10 @@ export function updateCommandMetadata(metadata) {
   return hostCall("system", "updateCommandMetadata", [metadata]);
 }
 
-export function getFrontmostBrowserTab() {
-  return unsupported("getFrontmostBrowserTab");
+/// Safari and Chromium browsers over AppleScript; resolves undefined when none has a tab open.
+export async function getFrontmostBrowserTab() {
+  const tab = await hostCall("system", "frontmostBrowserTab", []);
+  return tab ?? undefined;
 }
 
 // ─── Feedback ───────────────────────────────────────────────────────

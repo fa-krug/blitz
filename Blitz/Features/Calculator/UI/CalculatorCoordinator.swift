@@ -30,6 +30,22 @@ final class CalculatorCoordinator {
     /// History records the canonical answer; only what reaches the pasteboard is localized.
     private var format: CalcNumberFormat { core.calcNumberFormat }
 
+    /// `{calculator}`'s evaluator: today's rates and format, answering what the card would copy.
+    func placeholderEvaluator() -> @Sendable (String) -> String? {
+        let rates = core.currencyRates.rates
+        let region = RegionCurrency.code
+        let format = format
+        return { expression in
+            guard
+                let result = CalcEngine.evaluate(
+                    expression, now: Date(), calendar: .current, rates: rates, region: region,
+                    format: format),
+                case .value(_, let copyText) = result.payload
+            else { return nil }
+            return format.localized(copyText)
+        }
+    }
+
     /// Enter on the inline calculator card: copy the answer, remember the calculation, dismiss.
     func copyCalculatorResult(_ result: CalcResult) {
         guard case .value(let display, let copyText) = result.payload else { return }

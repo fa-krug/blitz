@@ -681,8 +681,9 @@ interval floor instead of sixty.
 **APIs** — `Clipboard`, `LocalStorage`, `Cache`, `environment`, `getPreferenceValues`, `showToast`,
 `showHUD`, `confirmAlert`, `closeMainWindow`, `popToRoot`, `clearSearchBar`, `open`, `trash`,
 `showInFinder`, `getApplications`, `getDefaultApplication`, `getFrontmostApplication`,
-`getSelectedText`, `getSelectedFinderItems`, `launchCommand`, `updateCommandMetadata`,
-`openExtensionPreferences`,
+`getSelectedText`, `getSelectedFinderItems`, `getFrontmostBrowserTab` (`{ url, title }` of Safari's or a
+Chromium browser's front tab over AppleScript, the palette's paste target first; `undefined` with no
+browser window), `launchCommand`, `updateCommandMetadata`, `openExtensionPreferences`,
 `useNavigation`, `OAuth`, `Icon`, `Color`, `Image.Mask`, `Keyboard.Shortcut.Common`, `LaunchType`.
 
 **OAuth 2.0 PKCE** — `OAuth.PKCEClient`, `OAuth.TokenSet`, `OAuth.RedirectMethod`, with S256 challenges and

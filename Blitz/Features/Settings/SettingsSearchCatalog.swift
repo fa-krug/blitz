@@ -239,6 +239,9 @@ enum SettingsSearchCatalog {
             .quicklinksBehaviour, "Open in a new window",
             keywords: ["browser", "tab"]),
         .init(
+            .quicklinksBehaviour, "Focus an open tab",
+            keywords: ["browser", "tab", "existing", "reuse", "automation", "safari", "chrome"]),
+        .init(
             .quicklinksBehaviour, "When there's no selected text",
             keywords: ["selection", "fallback", "placeholder"]),
         .init(

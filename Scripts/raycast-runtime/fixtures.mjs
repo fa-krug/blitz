@@ -330,6 +330,17 @@ export default async function Command() {
 }
 `;
 
+// The host answers null when no browser has a tab open, which an extension reads as undefined.
+const browserTabSource = `
+import { getFrontmostBrowserTab } from "@raycast/api";
+
+export default async function Command() {
+  const first = await getFrontmostBrowserTab();
+  const second = await getFrontmostBrowserTab();
+  globalThis.__browserTab = { first, second: second === undefined };
+}
+`;
+
 // A child's output arrives in one go once the process has already exited, so both ways of reading a
 // stream have to work after the fact: `execa` async-iterates stdout, others attach a `data` listener.
 const spawnSource = `
@@ -981,6 +992,19 @@ export async function runFixtures() {
         },
       },
     },
+  );
+
+  const browserTabs = [{ url: "https://example.test/a", title: "A" }, null];
+  await run(
+    "getFrontmostBrowserTab asks the host",
+    browserTabSource,
+    "no-view",
+    async (harness) => {
+      const result = harness.call("globalThis.__browserTab");
+      check("passes the host's tab through", result?.first?.url === "https://example.test/a" && result?.first?.title === "A", JSON.stringify(result));
+      check("no tab resolves undefined", result?.second === true, JSON.stringify(result));
+    },
+    { stubs: { "system.frontmostBrowserTab": () => browserTabs.shift() } },
   );
 
   const formPosts = [];

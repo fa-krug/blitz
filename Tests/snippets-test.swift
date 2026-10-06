@@ -23,6 +23,7 @@ struct SnippetsTests {
         testTemplateExpansion()
         testDynamicPlaceholders()
         testTemplateEncodingAndSelectionAlias()
+        testBrowserTabAndCalculator()
         testKeywordPolicy()
         testKeywordLifecycle()
         await testKeywordListenerLifecycle()
@@ -1541,6 +1542,132 @@ struct SnippetsTests {
         check(
             "a parameter named query is still an argument, not the alias",
             expand("{argument name=\"query\"}", arguments: ["query": "kept"]).text == "kept")
+    }
+
+    private static func testBrowserTabAndCalculator() {
+        var calendar = Calendar(identifier: .gregorian)
+        let timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
+        let tab = BrowserTab(url: "https://example.com/a?b=1", title: "Example [Docs]")
+        // A stand-in calculator: integer sums only, so the harness never compiles the real one.
+        let calculate: @Sendable (String) -> String? = { expression in
+            let terms = expression.split(separator: "+").map {
+                Int($0.trimmingCharacters(in: .whitespaces))
+            }
+            guard !terms.isEmpty, terms.allSatisfy({ $0 != nil }) else { return nil }
+            return String(terms.reduce(0) { $0 + $1! })
+        }
+        func context(
+            tab: BrowserTab? = tab, calculate: (@Sendable (String) -> String?)? = calculate
+        ) -> SnippetTemplateEngine.ExpansionContext {
+            SnippetTemplateEngine.ExpansionContext(
+                clipboardHistory: ["clip"], selection: "", now: Date(timeIntervalSince1970: 0),
+                calendar: calendar, locale: Locale(identifier: "en_US_POSIX"), timeZone: timeZone,
+                browserTab: tab, calculate: calculate)
+        }
+        func expand(
+            _ text: String, in context: SnippetTemplateEngine.ExpansionContext = context(),
+            arguments: [String: String] = [:],
+            encoding: SnippetTemplateEngine.ValueEncoding = .none
+        ) -> String {
+            SnippetTemplateEngine.expand(
+                text: text, context: context, userArguments: arguments, encoding: encoding
+            ).text
+        }
+
+        // {browser-tab}
+        check("browser-tab defaults to the URL", expand("{browser-tab}") == tab.url)
+        check(
+            "browser-tab reads the title",
+            expand("{browser-tab format=\"title\"}") == "Example [Docs]")
+        check(
+            "browser-tab markdown is a link with its brackets escaped",
+            expand("{browser-tab format=markdown}")
+                == "[Example \\[Docs\\]](https://example.com/a?b=1)")
+        check(
+            "an untitled tab's markdown link names its URL",
+            BrowserTab(url: "https://x.test", title: "").markdownLink
+                == "[https://x.test](https://x.test)")
+        check(
+            "browser-tab is case-insensitive in its name and takes modifiers",
+            expand("{Browser-Tab format=\"title\" | uppercase}") == "EXAMPLE [DOCS]")
+        check(
+            "no tab expands to nothing, like an unreadable selection",
+            expand("[{browser-tab}]", in: context(tab: nil)) == "[]")
+        check(
+            "a quicklink percent-encodes the tab's URL like any other value",
+            expand("https://a.test/?u={browser-tab}", encoding: .percentEncoding)
+                == "https://a.test/?u=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1")
+        for unsupported in [
+            "{browser-tab selector=\"a.author\"}", "{browser-tab format=\"html\"}",
+            "{browser-tab format=\"text\"}", "{browser-tab format=\"url\" format=\"title\"}"
+        ] {
+            check(
+                "\(unsupported) stays literal rather than expanding to something else",
+                expand(unsupported) == unsupported)
+        }
+
+        // usesBrowserTab
+        check("usesBrowserTab sees the token", SnippetTemplateEngine.usesBrowserTab("a {browser-tab}"))
+        check(
+            "usesBrowserTab ignores a template that reads no tab",
+            !SnippetTemplateEngine.usesBrowserTab("{clipboard} {selection}"))
+        check(
+            "usesBrowserTab parses, so an unsupported form does not count",
+            !SnippetTemplateEngine.usesBrowserTab("{browser-tab selector=\"p\"}"))
+        let inner = record("/tmp/tab-inner.md", Snippet(name: "Inner", text: "{browser-tab}"))
+        let outer = record("/tmp/tab-outer.md", Snippet(name: "Outer", text: "see {snippet:Inner}"))
+        let loop = record("/tmp/tab-loop.md", Snippet(name: "Loop", text: "{snippet:Loop}"))
+        check(
+            "usesBrowserTab follows a snippet reference",
+            SnippetTemplateEngine.usesBrowserTab(outer, snippets: [inner, outer]))
+        check(
+            "a missing reference reads no tab",
+            !SnippetTemplateEngine.usesBrowserTab(outer, snippets: [outer]))
+        check(
+            "a self-reference terminates and reads no tab",
+            !SnippetTemplateEngine.usesBrowserTab(loop, snippets: [loop]))
+        check(
+            "a nested snippet's tab expands from the same context",
+            SnippetTemplateEngine.expand(outer, snippets: [inner, outer], context: context()).text
+                == "see https://example.com/a?b=1")
+
+        // {calculator}
+        check("calculator evaluates its expression", expand("{calculator expression=\"2 + 3\"}") == "5")
+        check(
+            "an unquoted expression runs to the end of the token",
+            expand("= {calculator expression=2 + 40}") == "= 42")
+        check(
+            "an argument named in the expression is substituted first",
+            expand(
+                "{argument name=\"n\"} → {calculator expression=\"n + 1\"}",
+                arguments: ["n": "41"]) == "41 → 42")
+        check(
+            "a default answers for an argument nobody typed",
+            expand("{argument name=\"n\" default=\"9\"}:{calculator expression=\"n + n\"}") == "9:18")
+        check(
+            "a name only replaces whole words",
+            expand("{calculator expression=\"n + nn\"}", arguments: ["n": "1", "nn": "20"]) == "21")
+        check(
+            "calculator takes modifiers",
+            expand("{calculator expression=\"1 + 1\" | percent-encode}") == "2")
+        check(
+            "an expression the calculator rejects stays visible",
+            expand("x {calculator expression=\"two + 2\"}") == "x {calculator expression=\"two + 2\"}")
+        check(
+            "without an injected calculator the token stays visible",
+            expand("{calculator expression=\"1 + 1\"}", in: context(calculate: nil))
+                == "{calculator expression=\"1 + 1\"}")
+        for malformed in [
+            "{calculator}", "{calculator expression=\"\"}", "{calculator value=\"1 + 1\"}"
+        ] {
+            check("\(malformed) is not a calculator token", expand(malformed) == malformed)
+        }
+        let waiting = SnippetTemplateEngine.expand(
+            text: "{argument name=\"n\"}={calculator expression=\"n + 1\"}", context: context())
+        check(
+            "a calculator waiting on an argument leaves the prompt to ask for it",
+            waiting.missingArguments.map(\.name) == ["n"])
     }
 
     private static func testKeywordPolicy() {

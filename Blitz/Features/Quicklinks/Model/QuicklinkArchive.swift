@@ -75,7 +75,8 @@ enum QuicklinkArchive {
                     isEnabled: candidate.isEnabled,
                     showsInRootSearch: candidate.showsInRootSearch,
                     pinnedAt: candidate.pinnedAt,
-                    createdAt: candidate.createdAt))
+                    createdAt: candidate.createdAt,
+                    tags: candidate.tags))
         }
         return MergeResult(additions: additions, skipped: skipped)
     }

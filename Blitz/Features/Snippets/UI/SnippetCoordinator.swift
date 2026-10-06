@@ -206,10 +206,51 @@ final class SnippetCoordinator {
         if automaticGeneration == nil {
             guard injector.prepareInteractiveExpansion(target: target) else { return }
         }
+        guard SnippetTemplateEngine.usesBrowserTab(record, snippets: records) else {
+            expand(
+                record, records: records, browserTab: nil, target: target,
+                expectedKeyword: expectedKeyword, keywordLength: keywordLength,
+                automaticGeneration: automaticGeneration)
+            return
+        }
+        // Real typing during the read bumps the generation, so a stale match can't land later.
+        let browser = BrowserTabs.browser(
+            preferring: [target?.externalApp, windowController.previousApp])
+        Task {
+            var tab: BrowserTab?
+            if let browser {
+                do throws(BrowserTabs.Failure) {
+                    tab = try await BrowserTabs.frontTab(of: browser)
+                } catch {
+                    injector.cancelArgumentPrompt(
+                        automaticGeneration: automaticGeneration, target: target)
+                    await core.reportBrowserTabFailure(
+                        error, title: "Couldn’t Read the Browser Tab")
+                    return
+                }
+            }
+            expand(
+                record, records: records, browserTab: tab, target: target,
+                expectedKeyword: expectedKeyword, keywordLength: keywordLength,
+                automaticGeneration: automaticGeneration)
+        }
+    }
+
+    private func expand(
+        _ record: StoredSnippet,
+        records: [StoredSnippet],
+        browserTab: BrowserTab?,
+        target: InjectionTarget?,
+        expectedKeyword: String?,
+        keywordLength: Int,
+        automaticGeneration: UInt?
+    ) {
         let confirmation = record.snippet.showsConfirmation ? "Inserted \(record.snippet.name)" : nil
         let context = injector.captureExpansionContext(
             target: target,
-            clipboardHistory: clipboardHistoryForExpansion())
+            clipboardHistory: clipboardHistoryForExpansion(),
+            browserTab: browserTab,
+            calculate: core.calculatorCoordinator.placeholderEvaluator())
         let result = SnippetTemplateEngine.expand(
             record,
             snippets: records,

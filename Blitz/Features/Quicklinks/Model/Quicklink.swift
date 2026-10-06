@@ -22,11 +22,14 @@ struct Quicklink: Codable, Hashable, Identifiable, Sendable {
     /// A stamp rather than a flag, so the pinned block is ordered by *when* you pinned.
     var pinnedAt: Date?
     var createdAt: Date
+    /// Free-form labels Search Quicklinks matches and filters by, in `normalizedTags` form.
+    var tags: [String]
 
     init(
         id: UUID = UUID(), name: String, link: String, openWithBundleID: String? = nil,
         iconSymbol: String? = nil, favicon: Data? = nil, isEnabled: Bool = true,
-        showsInRootSearch: Bool = true, pinnedAt: Date? = nil, createdAt: Date = Date()
+        showsInRootSearch: Bool = true, pinnedAt: Date? = nil, createdAt: Date = Date(),
+        tags: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -38,9 +41,42 @@ struct Quicklink: Codable, Hashable, Identifiable, Sendable {
         self.showsInRootSearch = showsInRootSearch
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
+        self.tags = tags
     }
 
     var isPinned: Bool { pinnedAt != nil }
+
+    /// Search Quicklinks' filter: the name or any tag, so a tag finds what it labels.
+    func matches(_ query: String) -> Bool {
+        name.localizedCaseInsensitiveContains(query)
+            || tags.contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    func hasTag(_ tag: String) -> Bool {
+        tags.contains { $0.compare(tag, options: .caseInsensitive) == .orderedSame }
+    }
+
+    /// Trimmed, non-empty, unique ignoring case; line breaks fold, as the store keeps one per line.
+    static func normalizedTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.compactMap { raw in
+            let tag = raw.split(whereSeparator: { $0.isNewline }).joined(separator: " ")
+                .trimmingCharacters(in: .whitespaces)
+            guard !tag.isEmpty, seen.insert(tag.lowercased()).inserted else { return nil }
+            return tag
+        }
+    }
+
+    /// The editor's comma-separated spelling.
+    static func tags(fromList list: String) -> [String] {
+        normalizedTags(list.split(separator: ",").map(String.init))
+    }
+
+    /// Every tag the library uses, once each and alphabetical: the ⌘P filter's rows.
+    static func allTags(in quicklinks: [Quicklink]) -> [String] {
+        normalizedTags(quicklinks.flatMap { $0.tags })
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
 
     /// The one glyph rule: the override, else what the detected destination suggests.
     var symbol: String {
@@ -72,7 +108,7 @@ struct Quicklink: Codable, Hashable, Identifiable, Sendable {
     // Hand-written, so an added field keeps old exports importable and imports stay minimal.
     private enum CodingKeys: String, CodingKey {
         case id, name, link, openWithBundleID, iconSymbol, favicon, isEnabled, showsInRootSearch
-        case pinnedAt, createdAt
+        case pinnedAt, createdAt, tags
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +124,8 @@ struct Quicklink: Codable, Hashable, Identifiable, Sendable {
             try container.decodeIfPresent(Bool.self, forKey: .showsInRootSearch) ?? true
         pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        tags = Self.normalizedTags(
+            try container.decodeIfPresent([String].self, forKey: .tags) ?? [])
     }
 }
 

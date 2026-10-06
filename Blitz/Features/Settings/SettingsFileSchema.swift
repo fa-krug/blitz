@@ -52,6 +52,7 @@ enum SettingsFileSchema {
         case .quicklinksEnabled: return bind(settings, \.quicklinksEnabled)
         case .quicklinksShowInLauncher: return bind(settings, \.quicklinksShowInLauncher)
         case .quicklinkOpensNewWindow: return bind(settings, \.quicklinkOpensNewWindow)
+        case .quicklinkPrefersExistingTabs: return bind(settings, \.quicklinkPrefersExistingTabs)
         case .quicklinkSelectionFallback: return bind(settings, \.quicklinkSelectionFallback)
         case .quicklinkConfirmsBeforeDelete: return bind(settings, \.quicklinkConfirmsBeforeDelete)
         case .appleShortcutsEnabled: return bind(settings, \.appleShortcutsEnabled)

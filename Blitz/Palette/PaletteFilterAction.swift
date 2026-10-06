@@ -8,11 +8,13 @@ enum PaletteFilterAction: Equatable {
     case fileSearchFilter
     case emojiCategory
     case aiModel
+    case quicklinkTag
     /// No filter on the header, so the key stays with the search field.
     case ignored
 
+    /// `hasQuicklinkTags` because an untagged library draws no tag button to open.
     static func resolve(
-        collapsed: Bool, mode: PaletteMode, commandHasAccessory: Bool
+        collapsed: Bool, mode: PaletteMode, commandHasAccessory: Bool, hasQuicklinkTags: Bool
     ) -> Self {
         // The compact bar draws no header controls, so neither filter has a button to hang off.
         guard !collapsed else { return .ignored }
@@ -22,6 +24,7 @@ enum PaletteFilterAction: Equatable {
         case .fileSearch: return .fileSearchFilter
         case .emoji: return .emojiCategory
         case .ai: return .aiModel
+        case .quicklinks: return hasQuicklinkTags ? .quicklinkTag : .ignored
         default: return .ignored
         }
     }

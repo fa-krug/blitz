@@ -570,6 +570,14 @@ final class AppSettings {
         }
     }
 
+    /// Focus a browser tab already showing the link; off by default, since it needs Automation.
+    var quicklinkPrefersExistingTabs: Bool {
+        didSet {
+            defaults.set(
+                quicklinkPrefersExistingTabs, forKey: Key.quicklinkPrefersExistingTabs.rawValue)
+        }
+    }
+
     /// What `{selection}` does when there is no readable selection to pass.
     var quicklinkSelectionFallback: QuicklinkSelectionFallback {
         didSet {
@@ -776,6 +784,8 @@ final class AppSettings {
             || defaults.bool(forKey: Key.quicklinksShowInLauncher.rawValue)
         appleShortcutsEnabled = defaults.bool(forKey: Key.appleShortcutsEnabled.rawValue)
         quicklinkOpensNewWindow = defaults.bool(forKey: Key.quicklinkOpensNewWindow.rawValue)
+        quicklinkPrefersExistingTabs =
+            defaults.bool(forKey: Key.quicklinkPrefersExistingTabs.rawValue)
         quicklinkSelectionFallback =
             defaults.string(forKey: Key.quicklinkSelectionFallback.rawValue)
             .flatMap(QuicklinkSelectionFallback.init) ?? .ask

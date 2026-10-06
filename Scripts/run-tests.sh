@@ -423,7 +423,8 @@ run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift 
                            Blitz/Features/Uninstall/Model/UninstallRules.swift \
                            Blitz/Features/Uninstall/Model/UninstallProtection.swift \
                            Blitz/Features/Uninstall/Model/UninstallPlan.swift
-run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
+run quicklink-test         Blitz/Platform/BrowserTab.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
@@ -431,6 +432,7 @@ run quicklink-test         Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
 run slow snippets-test     Blitz/Platform/NotificationToken.swift \
                            Blitz/Platform/HealthTicker.swift \
+                           Blitz/Platform/BrowserTab.swift \
                            Blitz/Platform/AccessibilityText.swift \
                            Blitz/Features/Snippets/Model/*.swift \
                            Blitz/Features/Snippets/Service/*.swift \

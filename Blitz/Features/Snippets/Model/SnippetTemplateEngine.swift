@@ -11,6 +11,10 @@ enum SnippetTemplateEngine {
         let timeZone: TimeZone
         /// Injected so `{uuid}` is reproducible under test.
         let makeUUID: @Sendable () -> String
+        /// What `{browser-tab}` reads; nil expands to nothing, as an unreadable selection does.
+        let browserTab: BrowserTab?
+        /// Evaluates `{calculator}`, injected so the engine never compiles the calculator.
+        let calculate: (@Sendable (String) -> String?)?
 
         var clipboard: String { clipboardHistory.first ?? "" }
 
@@ -18,7 +22,8 @@ enum SnippetTemplateEngine {
         func replacingSelection(with selection: String) -> Self {
             Self(
                 clipboardHistory: clipboardHistory, selection: selection, now: now,
-                calendar: calendar, locale: locale, timeZone: timeZone, makeUUID: makeUUID)
+                calendar: calendar, locale: locale, timeZone: timeZone, makeUUID: makeUUID,
+                browserTab: browserTab, calculate: calculate)
         }
 
         init(
@@ -28,7 +33,9 @@ enum SnippetTemplateEngine {
             calendar: Calendar,
             locale: Locale,
             timeZone: TimeZone,
-            makeUUID: @escaping @Sendable () -> String = { UUID().uuidString }
+            makeUUID: @escaping @Sendable () -> String = { UUID().uuidString },
+            browserTab: BrowserTab? = nil,
+            calculate: (@Sendable (String) -> String?)? = nil
         ) {
             var calendar = calendar
             calendar.timeZone = timeZone
@@ -39,6 +46,8 @@ enum SnippetTemplateEngine {
             self.locale = locale
             self.timeZone = timeZone
             self.makeUUID = makeUUID
+            self.browserTab = browserTab
+            self.calculate = calculate
         }
 
         /// Convenience for a caller that only knows the current clipboard.
@@ -142,6 +151,41 @@ enum SnippetTemplateEngine {
         }
     }
 
+    /// Whether expanding reads a browser tab, which is asked for over AppleScript only if so.
+    static func usesBrowserTab(_ text: String) -> Bool {
+        readsBrowserTab(text, snippets: [], depth: 0, visitedIDs: [])
+    }
+
+    /// The snippet form follows references, since a nested snippet's tab is read up front too.
+    static func usesBrowserTab(_ record: StoredSnippet, snippets: [StoredSnippet]) -> Bool {
+        readsBrowserTab(
+            record.snippet.text, snippets: snippets.sorted { $0.id < $1.id }, depth: 0,
+            visitedIDs: [record.id])
+    }
+
+    private static func readsBrowserTab(
+        _ text: String, snippets: [StoredSnippet], depth: Int, visitedIDs: Set<StoredSnippet.ID>
+    ) -> Bool {
+        for segment in parseSegments(text) {
+            switch segment {
+            case .browserTab:
+                return true
+            case .snippetReference(let key, _):
+                guard depth < maximumReferenceDepth,
+                    let target = resolveReference(key, snippets: snippets),
+                    !visitedIDs.contains(target.id),
+                    readsBrowserTab(
+                        target.snippet.text, snippets: snippets, depth: depth + 1,
+                        visitedIDs: visitedIDs.union([target.id]))
+                else { continue }
+                return true
+            default:
+                continue
+            }
+        }
+        return false
+    }
+
     private static func result(of expansion: Expansion) -> ExpansionResult {
         ExpansionResult(
             text: expansion.text,
@@ -193,6 +237,8 @@ enum SnippetTemplateEngine {
         case dateTime(DateTimeToken, modifiers: [Modifier])
         case uuid(modifiers: [Modifier])
         case argument(ArgumentToken, source: String, modifiers: [Modifier])
+        case browserTab(BrowserTabFormat, modifiers: [Modifier])
+        case calculator(expression: String, source: String, modifiers: [Modifier])
         case cursor
         case snippetReference(key: String, source: String)
     }
@@ -215,6 +261,13 @@ enum SnippetTemplateEngine {
             let component: Calendar.Component
             let value: Int
         }
+    }
+
+    /// `selector=` is Raycast's and needs its browser extension, so it stays unparsed.
+    private enum BrowserTabFormat: String {
+        case url
+        case title
+        case markdown
     }
 
     private struct ArgumentToken {
@@ -246,7 +299,8 @@ enum SnippetTemplateEngine {
         visitedIDs: Set<StoredSnippet.ID>
     ) -> Expansion {
         var result = Expansion()
-        for segment in parseSegments(text) {
+        let segments = parseSegments(text)
+        for segment in segments {
             switch segment {
             case .literal(let value):
                 result.append(value)
@@ -270,6 +324,17 @@ enum SnippetTemplateEngine {
                     result.addMissingArgument(
                         MissingArgument(name: token.name, options: token.options))
                 }
+            case .browserTab(let format, let modifiers):
+                result.append(
+                    apply(modifiers, to: value(of: context.browserTab, format), encoding: encoding))
+            case .calculator(let expression, let source, let modifiers):
+                let filled = substituting(
+                    argumentValues(segments, userArguments: userArguments), into: expression)
+                guard let answer = context.calculate?(filled) else {
+                    result.append(source)
+                    continue
+                }
+                result.append(apply(modifiers, to: answer, encoding: encoding))
             case .cursor:
                 result.markCursor()
             case .snippetReference(let key, let source):
@@ -295,6 +360,43 @@ enum SnippetTemplateEngine {
             }
         }
         return result
+    }
+
+    private static func value(of tab: BrowserTab?, _ format: BrowserTabFormat) -> String {
+        guard let tab else { return "" }
+        switch format {
+        case .url: return tab.url
+        case .title: return tab.title
+        case .markdown: return tab.markdownLink
+        }
+    }
+
+    /// What each argument this text declares stands for: the typed value, else its default.
+    private static func argumentValues(
+        _ segments: [Segment], userArguments: [String: String]
+    ) -> [String: String] {
+        var values = userArguments
+        for case .argument(let token, _, _) in segments where values[token.name] == nil {
+            if let fallback = token.defaultValue { values[token.name] = fallback }
+        }
+        return values
+    }
+
+    /// Replaces each argument name standing as a whole word; longer names first, so none splits.
+    private static func substituting(
+        _ values: [String: String], into expression: String
+    ) -> String {
+        var filled = expression
+        for (name, value) in values.sorted(by: { $0.key.count > $1.key.count }) {
+            let pattern =
+                "(?<![\\p{L}\\p{N}_])" + NSRegularExpression.escapedPattern(for: name)
+                + "(?![\\p{L}\\p{N}_])"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            filled = regex.stringByReplacingMatches(
+                in: filled, range: NSRange(filled.startIndex..., in: filled),
+                withTemplate: NSRegularExpression.escapedTemplate(for: value))
+        }
+        return filled
     }
 
     private static func apply(
@@ -419,6 +521,18 @@ enum SnippetTemplateEngine {
         case "argument", "query":
             guard let argument = parseArgument(token) else { return nil }
             return .argument(argument, source: source, modifiers: modifiers)
+        case "browser-tab":
+            guard token.hasOnly(["format"]),
+                let format = BrowserTabFormat(rawValue: token.parameters["format"] ?? "url")
+            else { return nil }
+            return .browserTab(format, modifiers: modifiers)
+        case "calculator":
+            guard token.hasOnly(["expression"]),
+                let expression = token.parameters["expression"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                !expression.isEmpty
+            else { return nil }
+            return .calculator(expression: expression, source: source, modifiers: modifiers)
         case "snippet":
             guard let name = token.parameters["name"]?.trimmingCharacters(in: .whitespaces),
                 !name.isEmpty, token.hasOnly(["name"]), modifiers.isEmpty
