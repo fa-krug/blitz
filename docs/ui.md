@@ -794,9 +794,14 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   fixed that, but tears a row's `TextField` and checkbox — both `NSView`s — down when the row scrolls
   off and builds them again when one scrolls on, about 7 ms and 4 ms on macOS 27. A fast scrollbar
   drag replaces a screenful of rows per update, so the list froze for 100–400 ms at a time.
-  Every launcher-item list (`LauncherItemsList`), Quicklinks and custom commands therefore use
+  Every launcher-item list (`LauncherItemsList`), Quicklinks and custom commands therefore switch to
   `SettingsRowsTable` (`Features/Settings/`), an `NSTableView` filling one Form row, generic over
-  the item and the SwiftUI row it hosts. The table keeps a
+  the item and the SwiftUI row it hosts, once they hold more than about a screenful.
+  `SettingsRowsTablePolicy` makes that call on the **unfiltered** count, so typing in a filter never
+  swaps one for the other. Below it native rows win: a hosted row costs about twice a Form row (each
+  is its own hosting view), and a short table would build every row anyway — 11 commands opened in
+  140 ms as Form rows and 215 ms as a table, while 51 System Settings rows took 340 ms and 200 ms.
+  Native rows also scroll without building anything. The table keeps a
   screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
   row's controls update in place. An update never reloads the table once it is in a window: it notes
   a new row count and re-renders only the visible cells whose item differs from the one they show, so

@@ -1,6 +1,15 @@
 import AppKit
 import SwiftUI
 
+/// Whether a list is long enough for `SettingsRowsTable`, whose rows cost twice a `Form`'s.
+enum SettingsRowsTablePolicy {
+    /// About a screenful: a shorter table would build every row anyway, each at twice the cost.
+    private static let minimumRows = 15
+
+    /// Takes the unfiltered count, so a filter keystroke never swaps the table for `Form` rows.
+    static func hosts(rowCount: Int) -> Bool { rowCount > minimumRows }
+}
+
 /// A long Settings list as a table in one `Form` row, reusing a screenful of hosted rows.
 struct SettingsRowsTable<Item: Identifiable & Equatable, Row: View>: View {
     let items: [Item]

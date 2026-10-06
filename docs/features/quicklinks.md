@@ -10,10 +10,10 @@ Quicklinks commands, and `QuicklinkCoordinator.openQuicklink` — the single fun
 shortcuts both reach — refuses to open anything. Bindings stay registered, so re-enabling restores
 every shortcut without re-registering.
 
-The pane's library is one `Form` row holding a `SettingsRowsTable`, because each row carries an alias
-field and a shortcut recorder and a `Form` realizes every row it is handed — see
-[ui.md](../ui.md#settings). A table row has no scroll id, so a search result naming a quicklink
-narrows the pane's filter onto it rather than scrolling to it. The library is its own view holding
+Past a screenful of quicklinks the pane's library is one `Form` row holding a `SettingsRowsTable`,
+because each row carries an alias field and a shortcut recorder and a `Form` realizes every row it
+is handed — see [ui.md](../ui.md#settings). A table row has no scroll id, so a search result naming
+a quicklink narrows the pane's filter onto it rather than scrolling to it. The library is its own view holding
 the filter's state, so a keystroke re-renders that section rather than the whole `Form`, and it
 filters once per render.
 

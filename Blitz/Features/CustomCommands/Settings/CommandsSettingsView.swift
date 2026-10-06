@@ -72,26 +72,18 @@ private struct CustomCommandsSection: View {
                         : "No custom command matches “\(query)”."
                 )
                 .foregroundStyle(.secondary)
+            } else if !SettingsRowsTablePolicy.hosts(rowCount: store.commands.count) {
+                ForEach(results) { command in row(for: command, anchor: .commandsCustomCommands) }
             } else {
                 // One row holding the table: a `Form` realizes every row it is handed.
                 SettingsRowsTable(
                     items: results, rowHeight: Self.rowHeight,
                     isEnabled: settings.customCommandsEnabled
                 ) { command in
-                    CustomCommandSettingsRow(
-                        command: command,
-                        isEnabled: Binding(
-                            get: { command.isEnabled },
-                            set: {
-                                core.customCommandCoordinator.setCustomCommandEnabled(
-                                    $0, id: command.id)
-                            }),
-                        onEdit: { editor = EditorTarget(command: command) },
-                        onDelete: { pendingDeletion = command }
-                    )
-                    .environment(settings)
-                    .environment(aliases)
-                    .environment(hotKeys)
+                    row(for: command, anchor: nil)
+                        .environment(settings)
+                        .environment(aliases)
+                        .environment(hotKeys)
                 }
             }
             Button {
@@ -114,6 +106,18 @@ private struct CustomCommandsSection: View {
         .settingsFilterSeed(.commandsCustomCommands, query: $query) { title in
             store.commands.contains { $0.name == title }
         }
+    }
+
+    private func row(
+        for command: CustomCommand, anchor: SettingsAnchor?
+    ) -> CustomCommandSettingsRow {
+        CustomCommandSettingsRow(
+            command: command, anchor: anchor,
+            isEnabled: Binding(
+                get: { command.isEnabled },
+                set: { core.customCommandCoordinator.setCustomCommandEnabled($0, id: command.id) }),
+            onEdit: { editor = EditorTarget(command: command) },
+            onDelete: { pendingDeletion = command })
     }
 
     private var matches: [CustomCommand] {
@@ -139,12 +143,14 @@ private struct EditorTarget: Identifiable {
 private struct CustomCommandSettingsRow: View {
     @Environment(AppSettings.self) private var settings
     let command: CustomCommand
+    /// Only a native `Form` row can carry the reveal pulse.
+    let anchor: SettingsAnchor?
     @Binding var isEnabled: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        SettingsRow(title: command.name, subtitle: command.command) {
+        SettingsRow(title: command.name, subtitle: command.command, anchor: anchor) {
             Image(systemName: command.symbol)
         } trailing: {
             // An alias only reaches the ranker through the launcher slice, so it dims with it.

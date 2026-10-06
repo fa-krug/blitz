@@ -41,9 +41,10 @@ goes through `AppCore`, which unregisters the hotkey and clears those references
 command. Native settings backups include both commands and bindings; import warns before accepting
 executable content.
 
-The Settings list is a `SettingsRowsTable` sorted by name, filtered by name or command text, since
-each row carries an alias field and a shortcut recorder. Its rows read `AppSettings` from the
-environment rather than a captured value, so "Show in launcher" dims every visible alias at once.
+The Settings list is sorted by name and filtered by name or command text. Past a screenful it is a
+`SettingsRowsTable` (see `SettingsRowsTablePolicy`), since each row carries an alias field and a
+shortcut recorder. Its rows read `AppSettings` from the environment rather than a captured value,
+so "Show in launcher" dims every visible alias at once.
 
 ## Launcher integration
 

@@ -123,26 +123,19 @@ private struct QuicklinkLibrarySection: View {
                         : "No quicklink matches “\(query)”."
                 )
                 .foregroundStyle(.secondary)
+            } else if !SettingsRowsTablePolicy.hosts(rowCount: store.quicklinks.count) {
+                ForEach(results) { quicklink in row(for: quicklink) }
             } else {
                 // One row holding the table: a `Form` realizes every row it is handed.
                 SettingsRowsTable(
                     items: results, rowHeight: Self.rowHeight,
                     isEnabled: settings.quicklinksEnabled
                 ) { quicklink in
-                    QuicklinkSettingsRow(
-                        quicklink: quicklink,
-                        isEnabled: Binding(
-                            get: { quicklink.isEnabled },
-                            set: {
-                                core.quicklinkCoordinator.setQuicklinkEnabled($0, id: quicklink.id)
-                            }),
-                        onEdit: { editor = QuicklinkEditRequest(quicklink: quicklink) },
-                        onDelete: { pendingDeletion = quicklink }
-                    )
-                    .environment(store)
-                    .environment(aliases)
-                    .environment(hotKeys)
-                    .environment(navigation)
+                    row(for: quicklink)
+                        .environment(store)
+                        .environment(aliases)
+                        .environment(hotKeys)
+                        .environment(navigation)
                 }
             }
             Button {
@@ -155,6 +148,16 @@ private struct QuicklinkLibrarySection: View {
         .settingsFilterSeed(.quicklinksQuicklinks, query: $query) { title in
             store.quicklinks.contains { $0.name == title }
         }
+    }
+
+    private func row(for quicklink: Quicklink) -> QuicklinkSettingsRow {
+        QuicklinkSettingsRow(
+            quicklink: quicklink,
+            isEnabled: Binding(
+                get: { quicklink.isEnabled },
+                set: { core.quicklinkCoordinator.setQuicklinkEnabled($0, id: quicklink.id) }),
+            onEdit: { editor = QuicklinkEditRequest(quicklink: quicklink) },
+            onDelete: { pendingDeletion = quicklink })
     }
 
     /// The store already publishes display order, so filtering keeps pins at the top.
