@@ -10,12 +10,18 @@ Quicklinks commands, and `QuicklinkCoordinator.openQuicklink` — the single fun
 shortcuts both reach — refuses to open anything. Bindings stay registered, so re-enabling restores
 every shortcut without re-registering.
 
-Past a screenful of quicklinks the pane's library is one `Form` row holding a `SettingsRowsTable`,
-because each row carries an alias field and a shortcut recorder and a `Form` realizes every row it
-is handed — see [ui.md](../ui.md#settings). A table row has no scroll id, so a search result naming
-a quicklink narrows the pane's filter onto it rather than scrolling to it. The library is its own view holding
-the filter's state, so a keystroke re-renders that section rather than the whole `Form`, and it
-filters once per render.
+The pane's library lists **read-only rows**, and each opens the quicklink's own page — the pane's
+`navigation.page`, its UUID — as an extension's row does. A row is the icon, name and link, then
+badges for what used to be controls: a pin, an eye-slash when hidden from root search, the alias as a
+chip, the shortcut as key caps, and a dimmed label when disabled. The page holds the live controls —
+the Enabled switch, the alias field and the shortcut recorder — beside Edit… (the editor sheet,
+which still owns pin and root-search visibility) and Delete…; Back returns to the row. A row with no
+AppKit control is cheap, so the library is a `LazyVStack` in one `Form` row rather than a
+`SettingsRowsTable`: the pane opens in ~125 ms instead of ~200 and scrolls inside a frame at any size
+— see [ui.md](../ui.md#settings). A lazy row may not be built yet, so a search result naming a
+quicklink narrows the pane's filter onto it rather than scrolling to it. The library is its own view
+holding the filter's state, so a keystroke re-renders that section rather than the whole `Form`, and
+it filters once per render.
 
 ## Invariants
 
@@ -31,9 +37,9 @@ filters once per render.
   slice.
 - **A disabled quicklink is inert, not gone.** `isEnabled == false` takes it out of root search and out
   of Search Quicklinks, and `openQuicklink` refuses it, so no surface can offer or open it. Everything
-  attached — name, link, alias, shortcut, favorite slot, ranking — stays exactly as it was. The
-  **Settings → Quicklinks** row is the one place that turns it back on, through the checkbox launcher
-  items and custom commands carry: last in the row, dimming the alias field and shortcut recorder.
+  attached — name, link, alias, shortcut, favorite slot, ranking — stays exactly as it was. Its page
+  in **Settings → Quicklinks** is the one place that turns it back on, through the Enabled switch,
+  which dims the alias field and shortcut recorder beneath it; the library row dims its label.
 - **A favicon is fetched only when asked.** The editor's refetch button is the feature's one network
   call — nothing fetches in the background, on save or on import — and the PNG it returns lives in
   the quicklink itself, so it travels with every backup, export and duplicate.

@@ -794,14 +794,17 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   fixed that, but tears a row's `TextField` and checkbox — both `NSView`s — down when the row scrolls
   off and builds them again when one scrolls on, about 7 ms and 4 ms on macOS 27. A fast scrollbar
   drag replaces a screenful of rows per update, so the list froze for 100–400 ms at a time.
-  Every launcher-item list (`LauncherItemsList`), Quicklinks and custom commands therefore switch to
+  Every launcher-item list (`LauncherItemsList`) and custom commands therefore switch to
   `SettingsRowsTable` (`Features/Settings/`), an `NSTableView` filling one Form row, generic over
   the item and the SwiftUI row it hosts, once they hold more than about a screenful.
   `SettingsRowsTablePolicy` makes that call on the **unfiltered** count, so typing in a filter never
   swaps one for the other. Below it native rows win: a hosted row costs about twice a Form row (each
   is its own hosting view), and a short table would build every row anyway — 11 commands opened in
   140 ms as Form rows and 215 ms as a table, while 51 System Settings rows took 340 ms and 200 ms.
-  Native rows also scroll without building anything. The table keeps a
+  Native rows also scroll without building anything. **The cheapest row holds no control at all**:
+  Quicklinks lists read-only rows with badges in a `LazyVStack`, and edits each on its own page,
+  which opened the pane in 125 ms against the table's 200 and kept every scroll step inside a frame.
+  The table keeps a
   screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
   row's controls update in place. An update never reloads the table once it is in a window: it notes
   a new row count and re-renders only the visible cells whose item differs from the one they show, so
@@ -819,7 +822,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   focused from becoming first responder, not from its first keystroke, so a field Tab lands in
   isn't resigned by the next update. The row height is the caller's, fixed
   to match the native Form row it stands in for: 45 pt for a one-line launcher row, 52 pt for a
-  quicklink's or custom command's title over its `.caption` subtitle. A negative `.padding` doesn't
+  custom command's title over its `.caption` subtitle. A negative `.padding` doesn't
   move an AppKit view, so the table hangs 11 pt into the Form row's padding at the top (including
   the search divider) and 10 pt at the bottom, matching native row origins without adding space
   after the last row.
