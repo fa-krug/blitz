@@ -794,7 +794,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   fixed that, but tears a row's `TextField` and checkbox — both `NSView`s — down when the row scrolls
   off and builds them again when one scrolls on, about 7 ms and 4 ms on macOS 27. A fast scrollbar
   drag replaces a screenful of rows per update, so the list froze for 100–400 ms at a time.
-  Every launcher-item list (`LauncherItemsList`) and the Quicklinks list therefore use
+  Every launcher-item list (`LauncherItemsList`), Quicklinks and custom commands therefore use
   `SettingsRowsTable` (`Features/Settings/`), an `NSTableView` filling one Form row, generic over
   the item and the SwiftUI row it hosts. The table keeps a
   screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
@@ -814,9 +814,10 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   focused from becoming first responder, not from its first keystroke, so a field Tab lands in
   isn't resigned by the next update. The row height is the caller's, fixed
   to match the native Form row it stands in for: 45 pt for a one-line launcher row, 52 pt for a
-  quicklink's title over its `.caption` link. A negative `.padding` doesn't move an AppKit view, so
-  the table hangs 11 pt into the Form row's padding at the top (including the search divider) and
-  10 pt at the bottom, matching native row origins without adding space after the last row.
+  quicklink's or custom command's title over its `.caption` subtitle. A negative `.padding` doesn't
+  move an AppKit view, so the table hangs 11 pt into the Form row's padding at the top (including
+  the search divider) and 10 pt at the bottom, matching native row origins without adding space
+  after the last row.
   A table row carries no scroll id, so a pane that lists one marks its section with
   `.settingsFilterSeed`, and a search result naming a row narrows the filter onto it instead.
   `SettingsListMetrics` keeps row icons at one size, and `SettingsScopeRow` renders folder and

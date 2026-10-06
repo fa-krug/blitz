@@ -839,7 +839,8 @@ That is the only way in: every such list draws its rows in a hosted table
 whose cells sit outside the `Form`, with no id to scroll to and no window session for the pulse to
 read, so the reveal lands on the section — it always tries the section first, and a row it can find
 still wins. The seed checks that the list really holds the name, so a search result for the
-category switch, which shares the section's anchor, never filters it.
+category switch, which shares the section's anchor, never filters it. Quicklinks and custom
+commands seed their own tables the same way, filtering by name and link or command text.
 
 ## Dragging an application out
 
