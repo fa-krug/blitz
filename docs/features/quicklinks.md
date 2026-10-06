@@ -10,6 +10,11 @@ Quicklinks commands, and `QuicklinkCoordinator.openQuicklink` — the single fun
 shortcuts both reach — refuses to open anything. Bindings stay registered, so re-enabling restores
 every shortcut without re-registering.
 
+The pane's library is one `Form` row holding a `SettingsRowsTable`, because each row carries an alias
+field and a shortcut recorder and a `Form` realizes every row it is handed — see
+[ui.md](../ui.md#settings). A table row has no scroll id, so a search result naming a quicklink
+narrows the pane's filter onto it rather than scrolling to it.
+
 ## Invariants
 
 - **Quicklinks are authored data, and their store never deletes.** A database that will not open is
@@ -246,6 +251,14 @@ order** rather than the table's, and the row reader stays a straight top-to-bott
 Editing preserves the UUID, and with it the quicklink's shortcut, favorite slot, visibility and
 learned ranking. Deleting goes through `AppCore`, which unwinds all four before removing the row.
 Duplicating takes a **new** identity, so the copy can't inherit the original's shortcut.
+
+**A library has to scale to thousands of rows.** `append` — every import and backup restore — is one
+SQLite transaction that validates against a folded-name set, sorts once and fires `onChange` once,
+so the launcher index is republished once per import rather than once per row; a failed write rolls
+the whole batch back, keeping memory and file in step. A single edit is placed by binary search
+rather than a re-sort. The favicon pass remembers the bytes behind every path it wrote, so a commit
+hashes only a new or changed favicon; a file deleted behind the store's back returns on the next
+`load`.
 
 ## Hotkeys
 

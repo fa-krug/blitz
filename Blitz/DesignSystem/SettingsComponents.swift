@@ -357,16 +357,54 @@ struct SettingsFilterField: View {
     }
 }
 
+/// Tab off an alias, for rows the key view loop can't reach; true when it moved focus itself.
+struct AliasTabAction {
+    private let action: @MainActor (_ backward: Bool) -> Bool
+
+    init(_ action: @escaping @MainActor (_ backward: Bool) -> Bool = { _ in false }) {
+        self.action = action
+    }
+
+    @MainActor func callAsFunction(backward: Bool) -> Bool {
+        action(backward)
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var aliasTabHandler = AliasTabAction()
+}
+
+/// Reports first responder rather than editing, so a field Tab lands in counts as focused at once.
+private final class AliasTextView: NSTextView {
+    var onFocusChange: @MainActor (Bool) -> Void = { _ in }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocusChange(true) }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onFocusChange(false) }
+        return resigned
+    }
+}
+
 private struct AliasTextField: NSViewRepresentable {
     @Binding var text: String
     @Binding var focused: Bool
     let onCancel: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.aliasTabHandler) private var tabHandler
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSTextView {
-        let editor = NSTextView()
+        let editor = AliasTextView()
+        editor.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            coordinator?.focusChanged(focused)
+        }
         editor.delegate = context.coordinator
         editor.isRichText = false
         editor.importsGraphics = false
@@ -420,12 +458,9 @@ private struct AliasTextField: NSViewRepresentable {
             return false
         }
 
-        func textDidBeginEditing(_ notification: Notification) {
-            field.focused = true
-        }
-
-        func textDidEndEditing(_ notification: Notification) {
-            field.focused = false
+        // Guarded: `updateNSView` resigns an unfocused field, and that must not write state back.
+        func focusChanged(_ focused: Bool) {
+            if field.focused != focused { field.focused = focused }
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -434,10 +469,12 @@ private struct AliasTextField: NSViewRepresentable {
                 textView.window?.makeFirstResponder(nil)
                 return true
             case #selector(NSResponder.insertTab(_:)):
+                if field.tabHandler(backward: false) { return true }
                 textView.window?.recalculateKeyViewLoop()
                 textView.window?.selectNextKeyView(textView)
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
+                if field.tabHandler(backward: true) { return true }
                 textView.window?.recalculateKeyViewLoop()
                 textView.window?.selectPreviousKeyView(textView)
                 return true

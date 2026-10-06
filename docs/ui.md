@@ -781,15 +781,26 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   fixed that, but tears a row's `TextField` and checkbox — both `NSView`s — down when the row scrolls
   off and builds them again when one scrolls on, about 7 ms and 4 ms on macOS 27. A fast scrollbar
   drag replaces a screenful of rows per update, so the list froze for 100–400 ms at a time.
-  The Applications and Apple Shortcuts lists therefore use `LauncherItemsTable`, an `NSTableView`
-  filling one Form row; the shorter launcher-item lists use native Form rows. The table keeps a
-  screenful of cells and hands each a new entry, and each cell hosts the
-  SwiftUI `LauncherItemRow`, so a reused row's controls update in place. A hosted row inherits nothing
-  from the pane, so the table injects the stores the row reads, and moves Tab on to the next row's
-  alias field itself; rows are a fixed 45 pt to match the native Form rows. A negative `.padding`
-  doesn't move an AppKit view, so the table hangs 11 pt into the Form row's padding at the top
-  (including the search divider) and 10 pt at the bottom, matching native row origins without
-  adding space after the last row.
+  The Applications, Apple Shortcuts and Quicklinks lists therefore use `SettingsRowsTable`
+  (`Features/Settings/`), an `NSTableView` filling one Form row, generic over the item and the
+  SwiftUI row it hosts; the shorter launcher-item lists use native Form rows. The table keeps a
+  screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
+  row's controls update in place — while the IDs are unchanged, even the visible cells are refreshed
+  rather than reloaded, so a focused alias keeps its editor. A hosted row inherits nothing from the
+  pane, so **the caller's row closure injects every store its row reads** (a missed one traps at
+  runtime), and the `Form`'s `.disabled` doesn't reach it either, so the caller passes `isEnabled`.
+  The window's key view loop can't reach a row the table hasn't built, so the table moves Tab and
+  ⇧Tab between rows' alias fields itself: each cell sets `\.aliasTabHandler`, which `AliasField`
+  asks before falling back to the loop, and the walk scrolls each row in and skips a disabled alias.
+  Past either end it declines, and the loop carries focus out of the table. `AliasField` counts as
+  focused from becoming first responder, not from its first keystroke, so a field Tab lands in
+  isn't resigned by the next update. The row height is the caller's, fixed
+  to match the native Form row it stands in for: 45 pt for a one-line launcher row, 52 pt for a
+  quicklink's title over its `.caption` link. A negative `.padding` doesn't move an AppKit view, so
+  the table hangs 11 pt into the Form row's padding at the top (including the search divider) and
+  10 pt at the bottom, matching native row origins without adding space after the last row.
+  A table row carries no scroll id, so a pane that lists one marks its section with
+  `.settingsFilterSeed`, and a search result naming a row narrows the filter onto it instead.
   `SettingsListMetrics` keeps row icons at one size, and `SettingsScopeRow` renders folder and
   application scope icons consistently across pages.
   A long list whose rows hold no AppKit control can stay a `LazyVStack`.
@@ -837,8 +848,9 @@ shortcut"), live held keys, a pending second Globe tap, or a conflict (rejected 
 - **An ancestor draws it.** The open recorder publishes its bounds via `ShortcutRecorderAnchorKey`;
   `.shortcutRecorderPopoverHost()` sits on `SettingsDetailView` — one host above every pane's
   `Form`, and on `OnboardingView`. An overlay on the row would be clipped by the scroll view. A
-  recorder in a `LauncherItemsTable` cell sits in its own hosting view, where the preference stops,
-  so the cell reports the recorder's frame and `LauncherItemsSection` republishes it as the anchor.
+  recorder in a `SettingsRowsTable` cell sits in its own hosting view, where the preference stops,
+  so the cell reports the recorder's frame and the table republishes it as the anchor from a
+  stand-in overlay.
 - **`shortcutPopover.width` is load-bearing.** The callout centres on the recorder only while it
   fits either side of it; wider than that and the clamp kicks in and skews the caret.
   `Tests/callout-test.swift` pins this.
