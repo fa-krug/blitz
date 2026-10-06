@@ -65,7 +65,7 @@ enum BackupApplier {
             guard let text = item.text else { return nil }
             return ClipboardItem(
                 id: UUID(), kind: .text, text: text, imagePath: nil, createdAt: item.createdAt,
-                sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt)
+                sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt, title: item.title)
         case .image:
             guard let name = item.imageName, let url = bundle.clipboardImageURL(named: name) else {
                 return nil
@@ -73,7 +73,7 @@ enum BackupApplier {
             return ClipboardItem(
                 id: UUID(), kind: .image, text: nil, imagePath: url.path,
                 createdAt: item.createdAt, sourceBundleID: item.sourceBundleID,
-                pinnedAt: item.pinnedAt)
+                pinnedAt: item.pinnedAt, title: item.title)
         case .file:
             // A path from another Mac names nothing here, so the row is dropped rather than dead.
             guard let path = item.text, FileManager.default.fileExists(atPath: path) else {
@@ -81,7 +81,7 @@ enum BackupApplier {
             }
             return ClipboardItem(
                 id: UUID(), kind: .file, text: path, imagePath: nil, createdAt: item.createdAt,
-                sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt)
+                sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt, title: item.title)
         }
     }
 

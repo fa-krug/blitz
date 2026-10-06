@@ -50,8 +50,33 @@ struct ClipboardScreen: PaletteScreen {
             guard let item = item(at: selection), item.offersTextExtraction else { return false }
             core.clipboardCoordinator.copyImageText(item)
             return true
+        case .edit:
+            guard let item = item(at: selection) else { return false }
+            core.clipboardCoordinator.renameClip(item)
+            return true
+        case .editContent:
+            guard let item = item(at: selection), item.kind == .text else { return false }
+            core.clipboardCoordinator.editClipText(item)
+            return true
+        case .continueInChat:
+            guard core.settings.aiEnabled, let item = item(at: selection) else { return false }
+            core.clipboardCoordinator.sendToAI(item)
+            return true
+        case .openInApp: return open(at: selection)
         default: return false
         }
+    }
+
+    /// ⌘O — a file in its own app, a link in the browser, an address in Mail.
+    private func open(at selection: Int) -> Bool {
+        guard let item = item(at: selection) else { return false }
+        if item.kind == .file {
+            core.clipboardCoordinator.openClip(item)
+            return true
+        }
+        guard item.openableURL != nil else { return false }
+        core.clipboardCoordinator.openLink(item)
+        return true
     }
 
     /// ⌘1…⌘0 — the Nth visible pinned entry (Pinned section order), like ↵.
@@ -187,20 +212,33 @@ enum ClipboardActionsMenu {
             ) {
                 core.clipboardCoordinator.pasteKeepingWindowOpen(item)
             })
-        if item.isPinned {
+        items += pasteAsItems(item: item, core: core, target: target)
+        items += handOffItems(item: item, core: core)
+        items.append(
+            PopoverMenuItem(
+                title: item.isPinned ? "Unpin Entry" : "Pin Entry",
+                systemImage: item.isPinned ? "pin.slash" : "pin", startsSection: true,
+                shortcut: "⌘."
+            ) {
+                core.clipboardCoordinator.togglePinnedClip(item)
+            })
+        items.append(
+            PopoverMenuItem(title: "Rename…", systemImage: "pencil", shortcut: "⌘E") {
+                core.clipboardCoordinator.renameClip(item)
+            })
+        if item.kind == .text {
             items.append(
                 PopoverMenuItem(
-                    title: "Unpin Entry", systemImage: "pin.slash", startsSection: true, shortcut: "⌘."
+                    title: "Edit Text…", systemImage: "square.and.pencil", shortcut: "⌥⌘E"
                 ) {
-                    core.clipboardCoordinator.togglePinnedClip(item)
+                    core.clipboardCoordinator.editClipText(item)
                 })
-        } else {
-            items.append(
-                PopoverMenuItem(
-                    title: "Pin Entry", systemImage: "pin", startsSection: true, shortcut: "⌘."
-                ) {
-                    core.clipboardCoordinator.togglePinnedClip(item)
-                })
+            if core.settings.snippetsEnabled {
+                items.append(
+                    PopoverMenuItem(title: "Save as Snippet…", systemImage: "curlybraces") {
+                        core.clipboardCoordinator.saveAsSnippet(item)
+                    })
+            }
         }
         if item.offersTextExtraction {
             items.append(
@@ -222,7 +260,9 @@ enum ClipboardActionsMenu {
         }
         if item.kind == .file {
             items.append(
-                PopoverMenuItem(title: "Open", systemImage: "arrow.up.forward.app") {
+                PopoverMenuItem(
+                    title: "Open", systemImage: "arrow.up.forward.app", shortcut: "⌘O"
+                ) {
                     core.clipboardCoordinator.openClip(item)
                 })
             items.append(
@@ -247,6 +287,54 @@ enum ClipboardActionsMenu {
         return PopoverMenuContent(header: headerText(item), items: items)
     }
 
+    /// Only a rich entry has a choice to make, and only among the flavours it actually stored.
+    private static func pasteAsItems(
+        item: ClipboardItem, core: AppCore, target: PasteTarget?
+    ) -> [PopoverMenuItem] {
+        guard item.isRichText else { return [] }
+        var rows = ClipboardRichFormat.allCases.filter { item.formats[$0] != nil }.map { format in
+            PopoverMenuItem(
+                title: format.title, icon: .paste(target, fallback: "doc.richtext")
+            ) {
+                core.clipboardCoordinator.paste(item, as: format)
+            }
+        }
+        rows.append(
+            PopoverMenuItem(title: "Plain Text", icon: .paste(target, fallback: "doc.plaintext")) {
+                core.clipboardCoordinator.pasteAsPlainText(item)
+            })
+        rows[0].sectionTitle = "Paste as"
+        rows[0].startsSection = true
+        return rows
+    }
+
+    /// Where an entry can go besides a paste: its link opened, a chat, or the share sheet.
+    private static func handOffItems(item: ClipboardItem, core: AppCore) -> [PopoverMenuItem] {
+        var rows: [PopoverMenuItem] = []
+        if item.openableURL != nil {
+            let isEmail = item.textForm == .email
+            rows.append(
+                PopoverMenuItem(
+                    title: isEmail ? "Compose Email" : "Open Link",
+                    systemImage: isEmail ? "envelope" : "safari", shortcut: "⌘O"
+                ) {
+                    core.clipboardCoordinator.openLink(item)
+                })
+        }
+        if core.settings.aiEnabled {
+            rows.append(
+                PopoverMenuItem(title: "Send to AI", systemImage: "sparkles", shortcut: "⌘J") {
+                    core.clipboardCoordinator.sendToAI(item)
+                })
+        }
+        rows.append(
+            PopoverMenuItem(title: "Share…", systemImage: "square.and.arrow.up") {
+                core.clipboardCoordinator.shareClip(item)
+            })
+        rows[0].startsSection = true
+        return rows
+    }
+
     private static func icon(
         for action: ClipboardDefaultAction, target: PasteTarget?
     ) -> PopoverMenuIcon {
@@ -258,6 +346,7 @@ enum ClipboardActionsMenu {
     }
 
     private static func headerText(_ item: ClipboardItem) -> String {
+        if let title = item.title { return String(title.prefix(40)) }
         switch item.kind {
         case .text:
             // Collapse whitespace so a multi-line copy stays a clean one-line title.

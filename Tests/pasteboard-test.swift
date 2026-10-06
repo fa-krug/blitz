@@ -22,6 +22,9 @@ struct PasteboardTests {
         aModernFileURLSuppressesTheLegacyFallback()
         fileEntriesWriteBackAsFiles()
         aVanishedFileWritesNothing()
+        richFlavoursAreCaptured()
+        anOversizedFlavourIsDropped()
+        richEntriesWriteBackTheirFlavours()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -303,6 +306,71 @@ struct PasteboardTests {
 
             expect(!Paster.write(store.items[0], store: store, to: pb), "a vanished file refuses")
             expect(pb.string(forType: .string) == "untouched", "and leaves the pasteboard alone")
+        }
+    }
+
+    // MARK: - Rich text
+
+    static let rtf = Data("{\\rtf1\\ansi {\\b bold} text}".utf8)
+    static let html = Data("<b>bold</b> text".utf8)
+
+    static func richFlavoursAreCaptured() {
+        let pb = board()
+        pb.declareTypes([.rtf, .html, .string], owner: nil)
+        pb.setData(rtf, forType: .rtf)
+        pb.setData(html, forType: .html)
+        pb.setString("bold text", forType: .string)
+        let formats = ClipboardManager.richFormats(on: pb)
+        expect(formats[.rtf] == rtf, "the RTF flavour is read as copied")
+        expect(formats[.html] == html, "and so is the HTML one")
+
+        let plain = board()
+        plain.declareTypes([.string], owner: nil)
+        plain.setString("bold text", forType: .string)
+        expect(ClipboardManager.richFormats(on: plain).isEmpty, "plain text carries no flavours")
+    }
+
+    /// A pasted page can carry megabytes of markup; past the cap only its plain text is kept.
+    static func anOversizedFlavourIsDropped() {
+        let pb = board()
+        pb.declareTypes([.rtf, .html, .string], owner: nil)
+        pb.setData(Data(count: ClipboardRichFormat.maxBytes + 1), forType: .rtf)
+        pb.setData(Data(count: ClipboardRichFormat.maxBytes), forType: .html)
+        pb.setString("text", forType: .string)
+        let formats = ClipboardManager.richFormats(on: pb)
+        expect(formats[.rtf] == nil, "a flavour over the cap is dropped")
+        expect(formats[.html]?.count == ClipboardRichFormat.maxBytes, "one at the cap is kept")
+    }
+
+    /// ↵ pastes with the formatting; a "Paste as" row narrows it to one flavour.
+    static func richEntriesWriteBackTheirFlavours() {
+        withScratch { dir in
+            let store = ClipboardStore(directory: dir.appendingPathComponent("store"))
+            let paths = ClipboardStore.writeFormats(
+                [.rtf: rtf, .html: html], into: store.formatsDirectory)
+            store.addText("bold text", sourceBundleID: nil, formats: paths)
+            let entry = store.items[0]
+
+            let all = board()
+            expect(Paster.write(entry, store: store, to: all), "a rich entry writes")
+            expect(all.data(forType: .rtf) == rtf, "with its RTF")
+            expect(all.data(forType: .html) == html, "its HTML")
+            expect(all.string(forType: .string) == "bold text", "and its plain text")
+            expect(
+                all.types?.contains(ClipboardManager.internalType) == true,
+                "marked, so the poller skips it")
+
+            let narrowed = board()
+            expect(Paster.write(entry, store: store, formats: [.html], to: narrowed), "one flavour")
+            expect(narrowed.data(forType: .html) == html, "Paste as HTML writes the HTML")
+            expect(narrowed.types?.contains(.rtf) == false, "and nothing richer beside it")
+            expect(narrowed.string(forType: .string) == "bold text", "with the plain fallback")
+
+            if let path = paths[.rtf] { try? FileManager.default.removeItem(atPath: path) }
+            let partial = board()
+            expect(Paster.write(entry, store: store, to: partial), "a lost flavour still writes")
+            expect(partial.types?.contains(.rtf) == false, "without the flavour that is gone")
+            expect(partial.string(forType: .string) == "bold text", "but with the text")
         }
     }
 

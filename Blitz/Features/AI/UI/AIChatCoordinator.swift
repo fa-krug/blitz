@@ -112,6 +112,16 @@ final class AIChatCoordinator {
         showWindow()
     }
 
+    /// A fresh window chat seeded from elsewhere, leaving whatever Quick AI holds where it is.
+    func startChat(draft: String = "", attaching files: [URL] = []) {
+        guard settings.aiEnabled else { return }
+        chats.newWindowChat()
+        showWindow()
+        let chat = chats.window
+        if !draft.isEmpty { chat.draft = chat.draft.isEmpty ? draft : chat.draft + "\n" + draft }
+        if !files.isEmpty { attach(files: files, to: chat) }
+    }
+
     /// A chat with no message yet is unsaved, so it has nothing to pin, copy or delete.
     func isSaved(_ chat: AIChatState) -> Bool {
         core.chatHistory.conversation(id: chat.session.id) != nil

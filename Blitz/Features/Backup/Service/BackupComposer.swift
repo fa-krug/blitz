@@ -147,7 +147,7 @@ enum BackupComposer {
         return BackupClipboardItem(
             kind: kind, text: item.text, imageName: imageName,
             createdAt: item.createdAt, sourceBundleID: item.sourceBundleID,
-            pinnedAt: item.pinnedAt)
+            pinnedAt: item.pinnedAt, title: item.title)
     }
 
     /// Markdown copied verbatim: both repositories read `.md` back, so a round trip loses nothing.

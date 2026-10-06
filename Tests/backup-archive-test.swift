@@ -115,7 +115,7 @@ struct BackupArchiveTest {
             BackupClipboardItem(
                 kind: .text, text: "carriage\r\nreturn", imageName: nil,
                 createdAt: Date(timeIntervalSince1970: 20), sourceBundleID: nil,
-                pinnedAt: Date(timeIntervalSince1970: 25)),
+                pinnedAt: Date(timeIntervalSince1970: 25), title: "Renamed"),
             BackupClipboardItem(
                 kind: .image, text: nil, imageName: "b.png",
                 createdAt: Date(timeIntervalSince1970: 30), sourceBundleID: nil, pinnedAt: nil)

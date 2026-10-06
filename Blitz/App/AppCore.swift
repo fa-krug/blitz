@@ -938,6 +938,24 @@ final class AppCore {
         await dialogs.describeReminder()
     }
 
+    /// A one-line rename, for the same reason.
+    func editText(
+        title: String, symbol: String, text: String, placeholder: String, label: String,
+        confirmTitle: String
+    ) async -> String? {
+        await dialogs.editText(
+            title: title, symbol: symbol, text: text, placeholder: placeholder, label: label,
+            confirmTitle: confirmTitle)
+    }
+
+    /// A multi-line edit, for the same reason.
+    func editMultilineText(
+        title: String, symbol: String, text: String, label: String, confirmTitle: String
+    ) async -> String? {
+        await dialogs.editMultilineText(
+            title: title, symbol: symbol, text: text, label: label, confirmTitle: confirmTitle)
+    }
+
     /// The snippet argument prompt, for the same reason.
     func fillSnippetArguments(
         snippetName: String, arguments: [SnippetTemplateEngine.MissingArgument]

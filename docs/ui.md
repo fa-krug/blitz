@@ -638,13 +638,17 @@ it would couple two unrelated surfaces.
 
 A dialog carries at most one control beyond its buttons, and `DialogAccessory` makes that structural
 rather than a convention — `.volume` for the Set Volume prompt, `.eventDraft` for New Event,
-`.snippetArguments` for a snippet's `{argument}` values. Text fields take `dialogTextField()`;
+`.snippetArguments` for a snippet's `{argument}` values, and `.text` / `.multilineText` for a
+rename or an edit through `DialogTextInput`. Text fields take `dialogTextField()`;
 New Event groups its fixed start and duration values into two local segmented bars, while a snippet's
 inline enumerated arguments remain `DialogChip`s. Two things follow from the enum:
 
 - **Arrow keys belong to the accessory, not the panel.** `DialogPanel.handlesArrowKeys` is set from
   `DialogAccessory.claimsArrowKeys`, so the slider still steps on ←/→ while the New Event title field
   keeps its caret.
+- **Return belongs to a multi-line box.** `.multilineText` sets `DialogPanel.returnNeedsCommand`
+  from `DialogAccessory.confirmsWithCommandReturn`, so Return types a newline, ⌘↵ saves, and the
+  default button's keycap says ⌘↵.
 - **An accessory can refuse its own primary action.** An invalid draft leaves the dialog up on ↵ and
   on a click alike, which is what a greyed-out button would say if `DialogAction` could carry one.
 

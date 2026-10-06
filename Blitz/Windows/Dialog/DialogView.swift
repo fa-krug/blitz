@@ -58,6 +58,8 @@ struct DialogView: View {
                 case .smartReminder(let note): SmartReminderFields(state: note)
                 case .contactDraft(let draft): ContactDraftFields(state: draft)
                 case .snippetArguments(let arguments): SnippetArgumentFields(state: arguments)
+                case .text(let text): DialogTextInput(state: text, isMultiline: false)
+                case .multilineText(let text): DialogTextInput(state: text, isMultiline: true)
                 case nil: EmptyView()
                 }
             }
@@ -138,7 +140,9 @@ struct DialogView: View {
 
     /// Only the two keys the panel handles are advertised, so a tooltip can't drift.
     private func keyCap(for index: Int) -> String? {
-        if index == request.defaultIndex { return "↵" }
+        if index == request.defaultIndex {
+            return request.accessory?.confirmsWithCommandReturn == true ? "⌘↵" : "↵"
+        }
         if index == request.cancelIndex { return "⎋" }
         return nil
     }

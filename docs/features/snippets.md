@@ -238,6 +238,12 @@ through `AppCore.pendingSnippetEdit`, and **Show in Finder**.
 `Create Snippet` is a launcher command as well as a menu row because the palette swallows ⌘K when a
 screen has no rows: an empty library would otherwise open a browser with nothing to do.
 
+The clipboard history's **Save as Snippet** goes through the same handoff with a draft on
+`SnippetEditRequest`: `Snippet.draft(text:title:)` names it by the clip's title, else by its first
+non-blank line cut to 40 characters, and keeps the text verbatim. Unknown braces stay literal as
+above; when the text holds a token the engine would expand
+(`SnippetTemplateEngine.containsPlaceholders`), the editor says so in one line under the template.
+
 ## Shortcuts
 
 Each snippet can hold a global shortcut, recorded on its row in **Settings → Snippets**, and shown
