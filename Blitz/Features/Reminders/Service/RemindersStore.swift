@@ -178,6 +178,16 @@ final class RemindersStore {
         reminders.first { $0.id == id }
     }
 
+    /// Read from EventKit, so a reminder created a moment ago is found before the reload lands.
+    func openReminder(id: ReminderItem.ID) -> ReminderItem? {
+        guard access == .granted,
+            let reminder = currentStore().calendarItem(withIdentifier: id) as? EKReminder,
+            !reminder.isCompleted, let list = reminder.calendar,
+            !hiddenListIDs.contains(list.calendarIdentifier)
+        else { return nil }
+        return Self.item(from: reminder, colors: [:])
+    }
+
     /// The snapshot once a fetch has landed; a chat can ask before the first one has.
     func loadedReminders() async -> [ReminderItem] {
         if !hasLoaded, reloadTask == nil { reload() }

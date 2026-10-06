@@ -230,7 +230,7 @@ final class RemindersCoordinator {
         return ReminderToolCatalog.tools(canWrite: access.canWrite, now: now, calendar: .current)
     }
 
-    /// Re-checked per call, since Settings can change mid-reply; a write is shown before it lands.
+    /// Re-checked per call, since Settings can change mid-reply; Read & Write is the consent.
     func runTool(_ call: AIToolCall) async -> AIToolResult {
         let access = core.aiSettings.remindersAccess
         guard settings.remindersEnabled, access.canRead else {
@@ -253,28 +253,42 @@ final class RemindersCoordinator {
                 await store.loadedReminders(), query: query, now: Date(), calendar: .current)
             return AIToolResult(callID: call.id, content: answer, isError: false)
         case .create(let draft) where access.canWrite:
-            return await createForChat(draft, callID: call.id)
+            return createForChat(draft, callID: call.id)
+        case .update(let id, let edit) where access.canWrite:
+            return updateForChat(id: id, edit: edit, callID: call.id)
         case .complete(let id) where access.canWrite:
             return await completeForChat(id: id, callID: call.id)
-        case .create, .complete:
+        case .create, .update, .complete:
             return .failure(call.id, "Chat may read reminders but not change them.")
         }
     }
 
-    /// The model's draft fills the New Reminder prompt, so the reader can fix it before it lands.
-    private func createForChat(_ draft: ReminderDraft, callID: String) async -> AIToolResult {
-        guard let draft = await core.editReminder(draft, isNew: true) else {
-            return .failure(callID, "The user declined to add this reminder.")
-        }
-        guard store.create(draft) != nil else {
+    /// Written straight away: the reader asked in the chat, and the transcript shows the call.
+    private func createForChat(_ draft: ReminderDraft, callID: String) -> AIToolResult {
+        guard let id = store.create(draft) else {
             return .failure(callID, "No Reminders list on this Mac accepts new reminders.")
         }
         return AIToolResult(
-            callID: callID, content: ReminderToolCatalog.saved(draft), isError: false)
+            callID: callID, content: ReminderToolCatalog.saved(draft, id: id), isError: false)
+    }
+
+    private func updateForChat(
+        id: ReminderItem.ID, edit: ReminderToolCatalog.Edit, callID: String
+    ) -> AIToolResult {
+        guard let reminder = store.openReminder(id: id) else {
+            return .failure(callID, "No open reminder has that id. List them again.")
+        }
+        let draft = edit.applied(to: ReminderDraft(editing: reminder))
+        guard store.update(reminder, with: draft) else {
+            return .failure(callID, "It may have been changed or deleted somewhere else.")
+        }
+        return AIToolResult(
+            callID: callID, content: ReminderToolCatalog.saved(draft, id: reminder.id),
+            isError: false)
     }
 
     private func completeForChat(id: ReminderItem.ID, callID: String) async -> AIToolResult {
-        guard let reminder = await store.loadedReminders().first(where: { $0.id == id }) else {
+        guard let reminder = store.openReminder(id: id) else {
             return .failure(callID, "No open reminder has that id. List them again.")
         }
         guard

@@ -5,21 +5,40 @@ enum ReminderToolCatalog {
     static let origin = "Reminders"
     static let listName = "reminders_list"
     static let createName = "reminders_create"
+    static let updateName = "reminders_update"
     static let completeName = "reminders_complete"
     /// More than this would crowd out the answer the model was asked for.
     static let maxReminders = 150
     static let maxNotesLength = 400
+    private static let clearDue = "none"
 
     private typealias Invalid = AIToolArguments.Invalid
 
     enum Request: Equatable, Sendable {
         case list(query: String?)
         case create(ReminderDraft)
+        case update(id: ReminderItem.ID, Edit)
         case complete(id: ReminderItem.ID)
     }
 
+    /// An update names only what changes; every field left out keeps the reminder's own.
+    struct Edit: Equatable, Sendable {
+        var title: String?
+        var notes: String?
+        /// `.some(nil)` clears the due date, which `nil` would read as "keep".
+        var due: ReminderDue??
+
+        func applied(to draft: ReminderDraft) -> ReminderDraft {
+            var draft = draft
+            if let title { draft.title = title }
+            if let notes { draft.notes = notes }
+            if let due { draft.due = due }
+            return draft
+        }
+    }
+
     static func handles(_ name: String) -> Bool {
-        name == listName || name == createName || name == completeName
+        [listName, createName, updateName, completeName].contains(name)
     }
 
     /// Writing is offered only where the reader allowed it, so a read-only model never sees it.
@@ -37,8 +56,8 @@ enum ReminderToolCatalog {
         let create = AITool(
             name: createName,
             description: "Add a reminder to the user's default list, in the user's local time. "
-                + "Now: \(now). The user may edit it before saving; the result says what was "
-                + "saved.",
+                + "Now: \(now). The result gives its id. To change a reminder, call "
+                + "\(updateName) instead; never add a second one.",
             parameters: AIToolJSON.object(
                 properties: [
                     "title": AIToolJSON.string("A short task to act on."),
@@ -48,6 +67,21 @@ enum ReminderToolCatalog {
                 ],
                 required: ["title"]),
             origin: origin, title: "Create Reminder")
+        let update = AITool(
+            name: updateName,
+            description: "Change one open reminder, by the id \(listName) or \(createName) gave "
+                + "it, in the user's local time. Now: \(now). Send only the fields that change.",
+            parameters: AIToolJSON.object(
+                properties: [
+                    "id": AIToolJSON.string("The reminder's id."),
+                    "title": AIToolJSON.string("Optional. The new title."),
+                    "due": AIToolJSON.string(
+                        "Optional. YYYY-MM-DD for a day, YYYY-MM-DDTHH:MM for a moment, "
+                            + "\(clearDue) to remove the due date."),
+                    "notes": AIToolJSON.string("Optional. The new notes.")
+                ],
+                required: ["id"]),
+            origin: origin, title: "Update Reminder")
         let complete = AITool(
             name: completeName,
             description: "Mark one open reminder as completed, by the id \(listName) gave it. "
@@ -55,7 +89,7 @@ enum ReminderToolCatalog {
             parameters: AIToolJSON.object(
                 properties: ["id": AIToolJSON.string("The reminder's id.")], required: ["id"]),
             origin: origin, title: "Complete Reminder")
-        return [list, create, complete]
+        return [list, create, update, complete]
     }
 
     static func request(
@@ -71,6 +105,21 @@ enum ReminderToolCatalog {
                 ReminderDraft(
                     title: try arguments.requiredString("title"),
                     notes: arguments.string("notes") ?? "", due: due))
+        case updateName:
+            let due: ReminderDue??
+            if arguments.string("due")?.lowercased() == clearDue {
+                due = .some(nil)
+            } else if let date = try arguments.date("due", calendar: calendar) {
+                due = ReminderDue(date)
+            } else {
+                due = nil
+            }
+            let edit = Edit(
+                title: arguments.string("title"), notes: arguments.string("notes"), due: due)
+            guard edit != Edit() else {
+                throw Invalid("Name a new title, due date or notes to change.")
+            }
+            return .update(id: try arguments.requiredString("id"), edit)
         case completeName:
             return .complete(id: try arguments.requiredString("id"))
         default:
@@ -114,9 +163,9 @@ enum ReminderToolCatalog {
         return .object(record)
     }
 
-    /// What was saved, which may differ from the call: the reader can edit the prompt first.
-    static func saved(_ draft: ReminderDraft) -> String {
-        var record: [String: JSONValue] = ["title": .string(draft.trimmedTitle)]
+    /// What was saved, with the id a later update or completion names it by.
+    static func saved(_ draft: ReminderDraft, id: ReminderItem.ID) -> String {
+        var record: [String: JSONValue] = ["id": .string(id), "title": .string(draft.trimmedTitle)]
         if let due = draft.due { record["due"] = .string(AIToolDate(due).text) }
         if let notes = draft.trimmedNotes {
             record["notes"] = .string(AIToolJSON.clipped(notes, to: maxNotesLength))

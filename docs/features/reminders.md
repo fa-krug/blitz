@@ -43,10 +43,10 @@ whose **Open** shows it in Reminders.
 - **Per-list switches live on `RemindersStore`, not `AppSettings`.** List identifiers are
   machine-specific, so they stay out of the backup, as the calendar's do. They store exclusions, so a
   list added later defaults to on.
-- **A chat changes nothing unseen.** A reminder a chat model creates opens the New Reminder prompt
-  filled in, unlike Smart Reminder's — the reader never asked for it — and a completion is confirmed
-  first. See
-  [Chat tools](#chat-tools).
+- **A chat writes what it was asked, and edits rather than duplicates.** Read & Write is the consent:
+  a create or update lands straight away and the transcript shows the call, while a completion is
+  still confirmed first. An update changes the reminder in place by id, so moving a due date never
+  leaves a second copy behind. See [Chat tools](#chat-tools).
 - **`Model/` stays Foundation-only**; `reminders-test` compiles the shipped sources.
 
 ## The pure layer
@@ -106,7 +106,7 @@ through the HUD, not a dialog.
 ## Chat tools
 
 With Reminders on and Settings → AI → Personal data → Reminders access set past Off, a chat on an
-API connection is offered `reminders_list`, and with Read & Write `reminders_create` and
+API connection is offered `reminders_list`, and with Read & Write `reminders_create`, `reminders_update` and
 `reminders_complete` — see [AI](ai.md) for who gets offered what.
 `RemindersCoordinator.chatTools` decides the list and `runTool` answers a call.
 
@@ -116,11 +116,14 @@ empty. It answers JSON in `ReminderAgenda` order, at most `maxReminders`, each w
 completion names, its list, its due date in the `YYYY-MM-DD[THH:MM]` spelling the calls use, and
 `overdue` where it is.
 
-A create call's draft opens the New Reminder prompt; the reader may edit it, and the answer is what
-was saved, so the model never claims a title the reader changed. A due date the model wrote and
-Blitz cannot read is refused back to it, unlike Smart Reminder's, which drops it: here the model can
-simply try again. Completing looks the id up in the snapshot, so a reminder on a list switched off
-cannot be reached, and asks before it ticks it off on every device.
+A create call writes to the default list with no prompt, and the answer is what was saved with its
+id. An update names a reminder by that id and only the fields that change — `due` set to `none`
+clears the date — and the create tool's description tells the model to update rather than add a
+second. A due date the model wrote and Blitz cannot read is refused back to it, unlike Smart
+Reminder's, which drops it: here the model can simply try again. Updating and completing look the
+id up in EventKit through `RemindersStore.openReminder`, not the snapshot, so a reminder created a
+moment ago is found before the reload lands; one that is completed or on a list switched off cannot
+be reached. Completing asks before it ticks it off on every device.
 
 ## The prompt
 
