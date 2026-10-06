@@ -814,9 +814,9 @@ copied in order to be pasted somewhere else.
 
 **A link can carry values**, in Raycast's own `arguments` query parameter — URL-encoded JSON, read
 by `ExtensionDeepLink.parseArguments`, so a number or a boolean arrives as text exactly as an
-extension link's does. `HotKeyManager.perform(_:arguments:)` hands them on, and only the two kinds
-that have fields read them: a quicklink by `{argument}` name, a custom command by `$n` or by its
-argument's name. `blitz://run/quicklink.<uuid>?arguments={"query":"swift"}` opens at once; a value
+extension link's does. `HotKeyManager.perform(_:arguments:)` hands them on, and only two kinds
+read them: a quicklink by `{argument}` name, a custom command by `$n` or by its argument's name.
+Smart Reminder's field is typed, never linked. `blitz://run/quicklink.<uuid>?arguments={"query":"swift"}` opens at once; a value
 still missing lands on the same fields its shortcut would, with the supplied ones filled. A chord
 passes none. Copy Deeplink hands out the bare link, since the row has no values to put in it.
 

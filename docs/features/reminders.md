@@ -2,8 +2,8 @@
 
 Three surfaces over the Mac's own Reminders: **My Reminders**, a palette screen listing every open
 reminder to edit, complete or delete; **Create Reminder**, a prompt for a title, notes and a due date;
-and **Smart Reminder**, which takes one sentence — `Greg wants tomorrow a cake` — and asks the AI
-model to turn it into `Give Greg a cake`, due tomorrow, written at once and previewed in a banner
+and **Smart Reminder**, which takes one sentence typed inline in root search — `Greg wants tomorrow
+a cake` — and asks the AI model to turn it into `Give Greg a cake`, due tomorrow, written at once and previewed in a banner
 whose **Open** shows it in Reminders.
 
 ## Invariants
@@ -64,12 +64,22 @@ whose **Open** shows it in Reminders.
 
 ## Smart Reminder
 
+The sentence is the row's one inline field in root search, `SmartReminderArgumentsAccessory`, drawn
+with the same `InlineArgumentFields` a custom command's are (see
+[palette.md](palette.md#inline-row-arguments)). There is no dialog: ↵ in the field hands the sentence
+to `LauncherCoordinator.runCommand(_:arguments:)`, and run blank — from its shortcut, the My
+Reminders menu, or ↵ on the row with nothing typed — `RemindersCoordinator.createSmartReminder` opens
+root search on the row alone through `PaletteCoordinator.showArguments`, caret in the field. A miss
+(Reminders or AI off) reports before the field opens, so nothing typed is lost to it.
+
 The model cannot know the date, so the instructions carry it: now as weekday, day, clock and zone,
 then the seven days ahead spelled the same way, so `next Friday` resolves by lookup rather than by
 arithmetic a small on-device model gets wrong. One worked example uses the real tomorrow. The reply
 is one JSON object — `title`, `due` as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, `notes` — and a time is
 added only when the sentence names one, with `morning`, `noon`, `afternoon`, `evening` and `tonight`
-pinned to fixed hours.
+pinned to fixed hours; a time with no day is today. **No day named is no due date**: the instructions forbid defaulting to today or
+tomorrow, and a second example with `"due": null` shows it, since a small model copies its one
+example's date otherwise.
 
 The progress pill says the model is working and its ✕ cancels the run. Guardrails are
 `.permissiveContentTransformations`: the sentence is the reader's own, which the default filter can
@@ -98,7 +108,7 @@ to-do list long enough to need search would crowd apps out of the root.
 | --- | --- | --- |
 | My Reminders | Opens the `.reminders` palette mode. | yes |
 | Create Reminder | Prompts for a title, notes and a due date, and writes the reminder. | yes |
-| Smart Reminder | Prompts for one sentence, writes the AI model's reminder, and previews it in a banner. | yes |
+| Smart Reminder | Takes one sentence in its inline field, writes the AI model's reminder, and previews it in a banner. | yes |
 
 New reminders go on the default Reminders list. A miss — the feature off, no access, AI off — reports
 through the HUD, not a dialog.

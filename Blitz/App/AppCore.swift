@@ -1014,11 +1014,6 @@ final class AppCore {
         await dialogs.editContact(draft)
     }
 
-    /// The Smart Reminder prompt, for the same reason.
-    func describeReminder() async -> String? {
-        await dialogs.describeReminder()
-    }
-
     /// A one-line text prompt, for the same reason.
     func editText(
         title: String, message: String? = nil, symbol: String, text: String, placeholder: String,

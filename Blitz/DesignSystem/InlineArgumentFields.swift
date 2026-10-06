@@ -60,13 +60,17 @@ struct InlineArgumentFields: View {
 
     static func height(_ metrics: InterfaceMetrics) -> CGFloat { metrics.scaled(26) }
 
-    /// The header shrinks the search field to exactly the room left over.
+    /// Clear of the rounded edge, so the caret never sits against the border.
+    static func horizontalPadding(_ metrics: InterfaceMetrics) -> CGFloat { metrics.scaled(14) }
+
+    /// The least the strip needs, which the header keeps clear of the search field.
     static func totalWidth(
         for arguments: [InlineArgument], hasIcon: Bool, metrics: InterfaceMetrics
     ) -> CGFloat {
         let fields = arguments.reduce(0) { $0 + fieldWidth(for: $1, metrics: metrics) }
         let gaps = CGFloat(arguments.count + (hasIcon ? 0 : -1)) * metrics.spacing.xs
-        return fields + gaps + (hasIcon ? height(metrics) : 0)
+        let padding = CGFloat(arguments.count) * horizontalPadding(metrics) * 2
+        return fields + gaps + padding + (hasIcon ? height(metrics) : 0)
     }
 
     static func fieldWidth(for argument: InlineArgument, metrics: InterfaceMetrics) -> CGFloat {
@@ -86,8 +90,11 @@ private struct ArgumentFieldChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .frame(width: InlineArgumentFields.fieldWidth(for: argument, metrics: metrics))
-            .padding(.horizontal, metrics.spacing.sm)
+            // A floor, not a size: the strip fills the row, and its fields split it evenly.
+            .frame(
+                minWidth: InlineArgumentFields.fieldWidth(for: argument, metrics: metrics),
+                maxWidth: .infinity)
+            .padding(.horizontal, InlineArgumentFields.horizontalPadding(metrics))
             .frame(height: InlineArgumentFields.height(metrics))
             .background(
                 RoundedRectangle(cornerRadius: metrics.radius.row, style: .continuous).fill(fill)

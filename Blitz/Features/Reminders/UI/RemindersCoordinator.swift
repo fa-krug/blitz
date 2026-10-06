@@ -98,16 +98,21 @@ final class RemindersCoordinator {
         Task { await create(startingFrom: ReminderDraft()) }
     }
 
-    func createSmartReminder() {
-        paletteCoordinator.hidePalette(restoreFocus: false)
-        guard isReady() else { return }
-        guard settings.aiEnabled else {
-            report("Turn AI on in Settings first")
+    /// A blank note opens root search on the row, its one field focused, as a shortcut lands there.
+    func createSmartReminder(note: String = "") {
+        // Before the field opens, so nobody types a sentence that has nowhere to go.
+        guard isReady(), isAIReady() else {
+            paletteCoordinator.hidePalette(restoreFocus: false)
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
+        let note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else {
+            guard let entry = CommandCatalog.entry(for: .smartReminder) else { return }
+            paletteCoordinator.showArguments(of: entry, values: [:])
+            return
+        }
+        paletteCoordinator.hidePalette(restoreFocus: false)
         Task {
-            guard let note = await core.describeReminder() else { return }
             cancelSmartReminder()
             let run = Task { await interpret(note) }
             smartReminder = run
@@ -313,6 +318,14 @@ final class RemindersCoordinator {
         store.refreshAccess()
         guard settings.remindersEnabled, store.access == .granted else {
             report("Turn Reminders on in Settings first")
+            return false
+        }
+        return true
+    }
+
+    private func isAIReady() -> Bool {
+        guard settings.aiEnabled else {
+            report("Turn AI on in Settings first")
             return false
         }
         return true

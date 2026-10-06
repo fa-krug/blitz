@@ -120,19 +120,6 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.draft
     }
 
-    func describeReminder() async -> String? {
-        let state = SmartReminderState()
-        let request = DialogRequest(
-            title: "Smart Reminder", symbol: "wand.and.stars", tone: .neutral,
-            actions: [
-                DialogAction(title: "Create"),
-                DialogAction(title: "Cancel", role: .cancel)
-            ],
-            defaultIndex: 0, cancelIndex: 1, accessory: .smartReminder(state))
-        guard await present(request) == 0, state.isValid else { return nil }
-        return state.trimmedNote
-    }
-
     /// One line; a blank answer is still an answer, so a caller can clear what it named.
     func editText(
         title: String, message: String? = nil, symbol: String, text: String, placeholder: String,
@@ -218,6 +205,8 @@ final class DialogController: NSObject, NSWindowDelegate {
             }
             self.panel = panel
             place(panel)
+            // Mounts the fields before the panel goes key, or a form's onAppear focus is dropped.
+            panel.contentView?.layoutSubtreeIfNeeded()
             show(panel)
         }
     }

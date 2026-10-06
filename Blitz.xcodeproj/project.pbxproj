@@ -594,6 +594,7 @@
 		AE82B35EE433058610365748 /* ContactDraftFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = C173F4A58065E5D4C1902D97 /* ContactDraftFields.swift */; };
 		AE8DB1E2237712BDF3A38896 /* CalcQuantity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E394C9B2F33775D0EE52D9E7 /* CalcQuantity.swift */; };
 		AF2B24D52631FACB25C72DE2 /* SpotlightShortcutGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = E21C9F6E91E2062332E2285D /* SpotlightShortcutGuide.swift */; };
+		AF8A535C6AA74FF10EE12656 /* SmartReminderArgumentsAccessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = D247126061A3F8896E0004E7 /* SmartReminderArgumentsAccessory.swift */; };
 		AFD6C90220ED09756B602795 /* HotKeyBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 763852F657DAA657146B5148 /* HotKeyBinding.swift */; };
 		B05D200C2BA8A27F4988BCBB /* SystemAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 188AE698B797ECD18EA327FB /* SystemAction.swift */; };
 		B07964B3FD312074F16FC7BE /* FavoriteSlots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E4A66117AB407BF5EB714A /* FavoriteSlots.swift */; };
@@ -765,7 +766,6 @@
 		ED5A90B5BFDC6A5FF3835C94 /* WindowManagementSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4C5FCB6D731CFE2C556459 /* WindowManagementSettingsView.swift */; };
 		ED63DB97A6A89EC21E60A02E /* CalcEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D82642A1531AB4F292A1E9C /* CalcEngine.swift */; };
 		EDA8B04C0C6CFBD65BB41AA2 /* SettingsFileIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B3CF36A73D29B8D6CE3202 /* SettingsFileIssue.swift */; };
-		EDB821347DDC6C70BF566215 /* SmartReminderFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 955644BE38137FF269227FED /* SmartReminderFields.swift */; };
 		EDF3808CFEFCFF0EDD220561 /* AppSettingsKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2867694A6910C4CC6E29C39 /* AppSettingsKey.swift */; };
 		EE06F5E49A8F6F3DC860291D /* CalculatorCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802B9C2AB702B25239510675 /* CalculatorCardView.swift */; };
 		EE0C09E105A6D394A32963B7 /* ExtensionLaunchType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AAD03D39BC87378C24A6948 /* ExtensionLaunchType.swift */; };
@@ -1361,7 +1361,6 @@
 		951C174843186B8D0F38433A /* ChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSession.swift; sourceTree = "<group>"; };
 		9541249A92ABF64C922300F0 /* ExtensionStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionStorage.swift; sourceTree = "<group>"; };
 		9552D6D6B9F5AFAC04188E9A /* BackupCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupCategory.swift; sourceTree = "<group>"; };
-		955644BE38137FF269227FED /* SmartReminderFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartReminderFields.swift; sourceTree = "<group>"; };
 		960514EA67DAD906CE1580F4 /* WindowManagementSettingsFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementSettingsFile.swift; sourceTree = "<group>"; };
 		9620158B1BB66903435A5065 /* ExtensionFormKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionFormKey.swift; sourceTree = "<group>"; };
 		96CF5D754B6146F558D31CC2 /* SystemActionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemActionCoordinator.swift; sourceTree = "<group>"; };
@@ -1541,6 +1540,7 @@
 		D1059D8BE605367DB9E3AE24 /* QuickActionResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionResultView.swift; sourceTree = "<group>"; };
 		D1F160741BE42E03C59B024D /* QuickActionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCoordinator.swift; sourceTree = "<group>"; };
 		D217BE5FDC966469F3AEC6B7 /* GlobeTapDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeTapDetector.swift; sourceTree = "<group>"; };
+		D247126061A3F8896E0004E7 /* SmartReminderArgumentsAccessory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartReminderArgumentsAccessory.swift; sourceTree = "<group>"; };
 		D24F19E2D0CA2BE45A51BA2A /* ScreenTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTarget.swift; sourceTree = "<group>"; };
 		D2824350F40D6710751F4DDE /* ExtensionStoreDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionStoreDetailView.swift; sourceTree = "<group>"; };
 		D2867694A6910C4CC6E29C39 /* AppSettingsKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsKey.swift; sourceTree = "<group>"; };
@@ -3448,7 +3448,7 @@
 				A2FB2338C784B154C7989836 /* RemindersCoordinator.swift */,
 				E509AD7AE5B48512C52515F8 /* RemindersList.swift */,
 				6AB1C00144742C287682294E /* RemindersScreen.swift */,
-				955644BE38137FF269227FED /* SmartReminderFields.swift */,
+				D247126061A3F8896E0004E7 /* SmartReminderArgumentsAccessory.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -4620,7 +4620,7 @@
 				5F6EEBDBE6E1AE476936F32C /* ShortcutRecorder.swift in Sources */,
 				2AA3E46A33924893EF092FA4 /* ShortcutRecorderPopover.swift in Sources */,
 				8CE1791940427F3A63A54CF5 /* Signposts.swift in Sources */,
-				EDB821347DDC6C70BF566215 /* SmartReminderFields.swift in Sources */,
+				AF8A535C6AA74FF10EE12656 /* SmartReminderArgumentsAccessory.swift in Sources */,
 				5E58B939A16F89BF3308059C /* SmartReminderPrompt.swift in Sources */,
 				F8E5B6D46A0D5BEB40A490B3 /* SmartReminderRunner.swift in Sources */,
 				EB5EB9D7193A1B6F7C406093 /* Snippet.swift in Sources */,

@@ -237,6 +237,9 @@ struct RemindersTests {
         expect(
             text.contains(#""due": "2026-10-04""#),
             "the worked example's tomorrow is the real tomorrow")
+        expect(
+            text.contains(#""due": null"#) && text.contains("Never guess one"),
+            "and a second example names no day, so no date is an answer rather than a gap")
     }
 
     // MARK: - Chat tools
