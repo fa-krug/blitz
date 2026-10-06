@@ -324,4 +324,15 @@ final class ExtensionCoordinator {
             confirmRole: alert.isDestructive ? .destructive : .standard,
             dismissTitle: alert.dismissTitle)
     }
+
+    /// Nil when the user cancels; only the first four candidates get a button.
+    func chooseApplication(toOpen target: URL, from candidates: [URL]) async -> URL? {
+        let shown = Array(candidates.prefix(4))
+        let index = await core.choose(
+            title: "Open With", message: target.lastPathComponent, symbol: "arrow.up.forward.app",
+            options: shown.map { DialogAction(title: $0.deletingPathExtension().lastPathComponent) }
+                + [DialogAction(title: "Cancel", role: .cancel)],
+            defaultIndex: 0)
+        return shown.indices.contains(index) ? shown[index] : nil
+    }
 }
