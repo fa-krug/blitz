@@ -56,7 +56,8 @@ struct SettingsFileTest {
             "snippets.enabled", "extensions.enabled", "calendar.enabled",
             "calendar.autoJoinMeetings", "calendar.cameraPreview", "quickActions.enabled",
             "ai.mcpEnabled", "mcp.enabled", "clipboard.textSearchEnabled", "ai.calendarAccess",
-            "ai.remindersAccess"
+            "ai.remindersAccess", "fileSearch.screenshotTextSearch",
+            "fileSearch.screenshotTextSearchEnabled"
         ]
         check(
             "no capability grant has a settings.json key",

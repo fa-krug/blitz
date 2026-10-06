@@ -354,7 +354,13 @@ enum SettingsSearchCatalog {
             keywords: ["folders", "locations", "home", "add folder"]),
         .init(
             group: .fileSearchIgnorePatterns, "Ignore Patterns",
-            keywords: ["exclude", "glob", "node_modules", "skip"])
+            keywords: ["exclude", "glob", "node_modules", "skip"]),
+        .init(
+            .fileSearchScreenshots, "Enable Screenshot Search",
+            keywords: ["screenshots", "screen capture", "images", "spotlight"]),
+        .init(
+            .fileSearchScreenshots, "Search text in screenshots",
+            keywords: ["ocr", "recognize", "text recognition", "vision", "screen capture"])
     ]
 
     private static let notes: [SettingsSearchEntry] = [

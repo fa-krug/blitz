@@ -35,6 +35,7 @@ open with an `## Invariants` section; read it before changing anything in that a
 [emoji](features/emoji.md) ·
 [dictionary](features/dictionary.md) ·
 [file search](features/file-search.md) ·
+[screenshots](features/screenshots.md) ·
 [menu search](features/menu-search.md) ·
 [notes](features/notes.md) ·
 [snippets](features/snippets.md) ·

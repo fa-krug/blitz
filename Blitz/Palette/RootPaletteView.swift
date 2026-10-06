@@ -79,6 +79,9 @@ struct RootPaletteView: View {
         case .fileSearch:
             return FileSearchScreen(
                 session: fileSearch, core: core, vm: vm, openActions: openActions)
+        case .screenshots:
+            return ScreenshotScreen(
+                session: core.screenshotSearch, core: core, vm: vm, openActions: openActions)
         case .menuSearch:
             return MenuSearchScreen(
                 session: menuSearch, core: core, vm: vm, openActions: openActions)
@@ -392,6 +395,7 @@ struct RootPaletteView: View {
                 if vm.collapseQueryLineBreaks() { return }
                 land()
                 if vm.mode == .fileSearch { fileSearch.search(vm.query, filter: vm.fileSearchFilter) }
+                if vm.mode == .screenshots { core.screenshotSearch.search(vm.query) }
                 if vm.mode == .dictionary { dictionary.lookUp(vm.query) }
                 if vm.mode == .extensionStore { extensionStore.search(vm.query) }
                 if vm.mode == .menuSearch { menuSearch.filter(vm.query) }
@@ -430,6 +434,11 @@ struct RootPaletteView: View {
                     fileSearch.search(vm.query, filter: vm.fileSearchFilter)
                 } else {
                     fileSearch.cancel()
+                }
+                if vm.mode == .screenshots {
+                    core.screenshotSearch.search(vm.query)
+                } else {
+                    core.screenshotSearch.cancel()
                 }
                 if vm.mode == .dictionary {
                     dictionary.lookUp(vm.query)

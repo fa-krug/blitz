@@ -99,7 +99,9 @@ final class FileSearchCoordinator {
         Paster.pasteFile(result.url, previousApp: previous)
     }
 
-    func trash(_ result: FileSearchResult) {
+    /// `session` is whichever list the row came from; Search Screenshots keeps a session of its own.
+    func trash(_ result: FileSearchResult, from session: FileSearchSession? = nil) {
+        let session = session ?? self.session
         Task {
             do {
                 try await Task.detached(priority: .userInitiated) {

@@ -269,6 +269,9 @@ screen to the launcher without changing palette visibility.
 Search Files is bindable like every other built-in command — `AppEntry.hotKeyAction` answers
 `.command(.searchFiles)`, so its launcher row prints a bound chord as a keycap.
 
+The pane also seats Search Screenshots, a separate feature with its own switch that borrows this
+screen's list, preview and actions; see [screenshots.md](screenshots.md).
+
 This pane is the command's only one: `SettingsTab.ownedCommands` names it, so Settings ▸ Commands
 neither lists it nor gates it behind `Enable Commands`. Launcher visibility is `VisibilityStore`'s,
 keyed on the entry's `preferenceKey`. The entry behind it comes from

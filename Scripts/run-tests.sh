@@ -123,6 +123,9 @@ run file-search-session-test Blitz/Platform/Signposts.swift \
                              $L/SearchRelevance.swift \
                              Blitz/Features/FileSearch/Model/*.swift \
                              Blitz/Features/FileSearch/Service/*.swift
+run screenshot-test        $L/SearchRelevance.swift \
+                           Blitz/Features/FileSearch/Model/*.swift \
+                           Blitz/Features/Screenshots/Model/*.swift
 run menu-search-test       $L/SearchRelevance.swift \
                            Blitz/Features/MenuSearch/Model/*.swift \
                            Blitz/Features/MenuSearch/Service/*.swift

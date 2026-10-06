@@ -84,6 +84,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `fuzz-test` | `Launcher/Model/LauncherMatch.swift`, `LauncherOrder.swift`, `LauncherSuggestions.swift`, `EntryNaming.swift`, `ScriptRomanization.swift`, `SearchRelevance.swift`, `LauncherRankingStore.swift` — **a new ranking complaint is a new case in its `denseIndex`** |
 | `file-search-test` | `FileSearch/Model/`, plus the shared `FuzzyMatch` scorer |
 | `file-search-session-test` | serialized query execution, debounce coalescing and cancellation |
+| `screenshot-test` | all of `Screenshots/Model/` — the `date:` prefix, the Spotlight expression, scopes and eligibility, match selection, what still needs reading, and the text store's round trip, search and prune on a scratch database |
 | `menu-search-test` | `MenuSearch/Model/` decisions, `MenuSearch/Service/` session filtering, the shared `FuzzyMatch` scorer |
 | `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
 | `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |
@@ -180,6 +181,8 @@ when touching a pure file:
 - `Features/PaletteRowIndex.swift` still imports Foundation alone, despite living under `Features/`
 - `Quicklinks/Model/` is still handed the home directory rather than reading it
 - `FileSearch/Model/` is still handed the home directory rather than reading it
+- `Screenshots/Model/` is still handed the home directory, the capture location and the filesystem's
+  answers rather than reading them
 
 ## Build and size checks
 
