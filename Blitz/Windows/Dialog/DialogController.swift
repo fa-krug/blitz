@@ -184,6 +184,8 @@ final class DialogController: NSObject, NSWindowDelegate {
             }
             self.panel = panel
             place(panel)
+            // Mounts the fields before the panel goes key, or a form's onAppear focus is dropped.
+            panel.contentView?.layoutSubtreeIfNeeded()
             show(panel)
         }
     }
