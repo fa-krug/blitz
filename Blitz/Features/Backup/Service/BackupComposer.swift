@@ -40,9 +40,13 @@ enum BackupComposer {
             plan.learning[.ranking] = try? encoder.encode(core.launcherRanking.visits)
             plan.learning[.emoji] = try? encoder.encode(core.frequentEmoji.records)
             plan.learning[.calculator] = try? encoder.encode(core.calcHistory.entries)
+            // Only what is already on disk: history kept in memory must not leave through a backup.
+            let history = core.launcherQueryHistory
+            let queries = history.persists ? history.history.queries : []
+            if !queries.isEmpty { plan.learning[.queries] = try? encoder.encode(queries) }
             plan.learningRecords =
                 core.launcherRanking.visits.count + core.frequentEmoji.records.count
-                + core.calcHistory.entries.count
+                + core.calcHistory.entries.count + queries.count
         }
         return plan
     }

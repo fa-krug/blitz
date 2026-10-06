@@ -88,7 +88,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
 | `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |
 | `scopes-test` | `Launcher/Model/SearchScopes.swift` |
-| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift` — what ↑ recalls, and when it leaves the key to the list |
+| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift`, `LauncherQueryHistoryStore.swift` — what ↑ and ↓ recall, when they leave the key to the list, that a shell line is never kept, and the file's round trip and deletion |
 | `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
 | `calc-test` | all of `Calculator/Model/` |
 | `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
@@ -102,7 +102,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `emoji-test` | `Emoji/Model/EmojiCatalog.swift`, `EmojiGridGeometry.swift`, the generated data and keyword packs |
 | `emoji-search-test` | `Emoji/Service/EmojiIndex.swift`, `FrequentEmojiStore.swift`, `Scripts/gen-emoji.js`'s keyword format, multilingual search |
 | `palette-navigation-test` | `Palette/PaletteState.swift`'s screen motions — `prepare`, `replace`, `push`, `pop` |
-| `palette-selection-test` | `Features/PaletteRowIndex.swift` |
+| `palette-selection-test` | `Features/PaletteRowIndex.swift` — the flat index, section starts, ⌘↑/↓ jumps and ⌥↑/↓ pages |
 | `interface-size-test` | `DesignSystem/InterfaceMetrics.swift`, `Features/Settings/InterfaceSize.swift`, `Extensions/Model/ExtensionFormMetrics.swift` |
 | `palette-placement-test` | `DesignSystem/Theme.swift`, `Palette/PalettePlacement.swift` |
 | `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
@@ -430,7 +430,12 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - An app removed since the last open drops out after a reopen
 - Learned ranking still surfaces your habitual result for a short query
 - ↑ in an empty field (compact bar included) recalls the last search acted on, a further ↑ steps
-  older, and ↑ after editing the recalled query moves through the list instead
+  older, ↓ steps back newer to an empty field, and ↑ after editing the recalled query moves through
+  the list instead
+- Quit and relaunch: ↑ still recalls; a query run through Run Shell Command never appears; with
+  Remember search history off, `launcher-history.json` is gone and a relaunch recalls nothing
+- ⌘↓/⌘↑ jump section heads and ⌥↓/⌥↑ move a page in the launcher, clipboard, emoji grid and an
+  extension list
 - An application row drags onto the Dock and into a Finder window as a copy, never a move, and a
   landed drop hides the palette; a click still launches; no other kind of row drags
 

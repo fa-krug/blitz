@@ -19,6 +19,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case hyperKeyQuickPress = "hyperKey.quickPress"
     case calcNumberStyle = "calculator.numberStyle"
     case launcherShowsSuggestions = "search.showsSuggestions"
+    case launcherSavesSearchHistory = "search.savesHistory"
     case rootSearchSensitivity = "search.sensitivity"
     case searchScopes = "applications.searchScopes"
     case customCommandsEnabled = "commands.enabled"

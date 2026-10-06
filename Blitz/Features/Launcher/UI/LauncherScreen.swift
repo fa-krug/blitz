@@ -268,7 +268,7 @@ struct LauncherScreen: PaletteScreen {
     }
 
     func activate(at selection: Int) {
-        if row(at: selection) != nil { recordQuery() }
+        if let row = row(at: selection) { recordQuery(from: Self.origin(of: row)) }
         switch row(at: selection) {
         // Error cards no-op — copyCalculatorResult only acts on value payloads.
         case .calc(let result): core.calculatorCoordinator.copyCalculatorResult(result)
@@ -284,20 +284,37 @@ struct LauncherScreen: PaletteScreen {
         }
     }
 
-    private func recordQuery() {
+    private func recordQuery(from origin: LauncherQueryHistory.Origin = .result) {
         guard !listsArgumentRow else { return }
-        core.launcherCoordinator.recordQuery(vm.query)
+        core.launcherCoordinator.recordQuery(vm.query, from: origin)
     }
 
-    func recallQuery(at selection: Int) -> Bool {
+    /// Both shell variants, the output window and the terminal, run through this one fallback.
+    private static func origin(of row: Row) -> LauncherQueryHistory.Origin {
+        guard case .fallback(.builtin(.runShellCommand), _) = row else { return .result }
+        return .shellCommand
+    }
+
+    func recallQuery(_ direction: Int, at selection: Int) -> Bool {
         guard selection == landingSelection else { return false }
-        let history = core.launcherCoordinator.queryHistory
-        guard let index = history.older(than: vm.query, recalled: vm.recalledQueryIndex) else {
-            return false
+        let history = core.launcherCoordinator.queryHistory.history
+        let recalled = vm.recalledQueryIndex
+        if direction < 0 {
+            guard let index = history.older(than: vm.query, recalled: recalled) else { return false }
+            recall(history[index], at: index)
+            return true
         }
-        vm.query = history[index]
-        vm.recalledQueryIndex = index
+        switch history.newer(than: vm.query, recalled: recalled) {
+        case .recall(let index): recall(history[index], at: index)
+        case .clear: recall("", at: nil)
+        case nil: return false
+        }
         return true
+    }
+
+    private func recall(_ query: String, at index: Int?) {
+        vm.query = query
+        vm.recalledQueryIndex = index
     }
 
     /// The card's meeting or a meeting row's; both answer the meeting menu's chords.
@@ -418,6 +435,20 @@ struct LauncherScreen: PaletteScreen {
         guard let app = pinnedFavorites.dropFirst(index).first else { return false }
         core.launcherCoordinator.launch(app)
         return true
+    }
+
+    /// The card, then each section `LauncherList` draws, in its order, then the fallbacks.
+    var sectionStarts: [Int] {
+        var counts = [results.count]
+        if showSections {
+            let pinned = favoriteCount + meetingCount + suggestionCount
+            let kinds = Dictionary(grouping: results.dropFirst(pinned), by: \.kind)
+            counts = [favoriteCount, meetingCount, suggestionCount]
+                + LauncherList.kindOrder.map { kinds[$0]?.count ?? 0 }
+        }
+        let index = PaletteRowIndex(
+            hasCalculator: leadCard != nil, sectionCounts: counts + [fallbacks.count])
+        return index.sectionStarts
     }
 
     /// Empty while a query is typed, the only state in which the section is off screen.

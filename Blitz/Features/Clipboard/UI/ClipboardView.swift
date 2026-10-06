@@ -32,13 +32,18 @@ struct ClipboardList: View {
         selectedID != nil && selectedID == results.first?.id
     }
 
+    /// The header an entry sits under; the screen's section jumps break on the same titles.
+    static func sectionTitle(for item: ClipboardItem) -> String {
+        item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+    }
+
     /// Pins share one header; the rest are newest-first, a header per date bucket.
     private var rows: [Row] {
         var rows: [Row] = []
         var currentTitle: String?
         var pinnedSlot = 0
         for item in results {
-            let title = item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+            let title = Self.sectionTitle(for: item)
             if title != currentTitle {
                 rows.append(.header(title))
                 currentTitle = title

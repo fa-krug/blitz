@@ -5,7 +5,9 @@ struct GeneralSettingsView: View {
     @Environment(AppSettings.self) private var settings
     private var hyperTap: HyperKeyTap { core.hyperKeyTap }
     private var launcherRanking: LauncherRankingStore { core.launcherRanking }
+    private var queryHistory: LauncherQueryHistoryStore { core.launcherQueryHistory }
     @State private var confirmingRankingReset = false
+    @State private var confirmingHistoryClear = false
     @State private var inputSources: [InputSourceSwitcher.Option] = []
 
     /// The Hyper modifier chord as prose glyphs, tracking the Include Shift toggle.
@@ -187,6 +189,19 @@ struct GeneralSettingsView: View {
                     SettingsRowTitle(.generalSearch, "Learned ranking")
                     Text("Learned privately from the results you pick.")
                 }
+                Toggle(isOn: $settings.launcherSavesSearchHistory) {
+                    SettingsRowTitle(.generalSearch, "Remember search history")
+                    Text("↑ recalls searches after a restart. Shell commands are never kept.")
+                }
+                LabeledContent {
+                    Button("Clear…", role: .destructive) {
+                        confirmingHistoryClear = true
+                    }
+                    .disabled(queryHistory.isEmpty)
+                } label: {
+                    SettingsRowTitle(.generalSearch, "Search history")
+                    Text("The searches ↑ walks back through.")
+                }
             } header: {
                 SettingsSectionHeader(.generalSearch)
             }
@@ -204,6 +219,18 @@ struct GeneralSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Blitz will relearn your preferred results as you use the launcher.")
+        }
+        .confirmationDialog(
+            "Clear launcher search history?",
+            isPresented: $confirmingHistoryClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                queryHistory.clear()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("↑ will start again from the next search you run.")
         }
         .onAppear(perform: refreshInputSources)
         .onReceive(

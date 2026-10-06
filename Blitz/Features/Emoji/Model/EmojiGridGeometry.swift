@@ -44,6 +44,17 @@ struct EmojiGridGeometry {
         return starts[s - 1] + min(lastRowStart + local % columns, previousCount - 1)
     }
 
+    /// ⌥↑/↓ — `rows` visual rows at once, keeping the column as a single step does.
+    func page(from sel: Int, rows: Int, forward: Bool) -> Int {
+        var current = sel
+        for _ in 0..<max(rows, 1) {
+            let next = forward ? down(from: current) : up(from: current)
+            if next == current { break }
+            current = next
+        }
+        return current
+    }
+
     /// Keep the same visual slot after a pin disappears, falling back to the preceding last slot.
     static func selectionAfterRemovingPin(at index: Int, remainingCount: Int) -> Int {
         min(max(index, 0), max(remainingCount - 1, 0))

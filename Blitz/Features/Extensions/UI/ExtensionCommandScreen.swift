@@ -54,6 +54,8 @@ struct ExtensionCommandScreen: PaletteScreen {
         return (selection + (backwards ? -1 : 1) + rows.count) % rows.count
     }
 
+    var sectionStarts: [Int] { PaletteRowIndex(sectionCounts: screen.sectionCounts).sectionStarts }
+
     /// A Grid needs both axes: without this ↓ walks sideways one tile at a time.
     func move(_ delta: Int, axis: PaletteAxis, from selection: Int) -> Int? {
         guard case .grid(let layout) = screen.kind, !rows.isEmpty else { return nil }

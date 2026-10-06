@@ -495,6 +495,7 @@ struct RootPaletteView: View {
                 if let reorder = movePinnedOrFavorite(1, modifiers: press.modifiers) { return reorder }
                 // A control's own list owns every navigation key while it is up.
                 if vm.isControlListOpen { return .ignored }
+                if recallQuery(1, modifiers: press.modifiers) { return .handled }
                 if isCollapsed {
                     // The compact bar shows no selection, so Down reveals the list's first row.
                     vm.selection = 0
@@ -505,18 +506,20 @@ struct RootPaletteView: View {
                     moveMenu(1)
                     return .handled
                 }
+                if let jump = jumpVertically(1, modifiers: press.modifiers) { return jump }
                 return moveVertically(1)
             }
             .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { press in
                 if let reorder = movePinnedOrFavorite(-1, modifiers: press.modifiers) { return reorder }
                 if vm.isControlListOpen { return .ignored }
                 // Ahead of the compact guard: an empty field is exactly where history starts.
-                if recallQuery(modifiers: press.modifiers) { return .handled }
+                if recallQuery(-1, modifiers: press.modifiers) { return .handled }
                 if isCollapsed { return .ignored }
                 if menuOpen {
                     moveMenu(-1)
                     return .handled
                 }
+                if let jump = jumpVertically(-1, modifiers: press.modifiers) { return jump }
                 return moveVertically(-1)
             }
             // Horizontal arrows step the grid; elsewhere they stay with the caret.
@@ -1287,12 +1290,59 @@ struct RootPaletteView: View {
         return true
     }
 
-    private func recallQuery(modifiers: SwiftUI.EventModifiers) -> Bool {
+    /// ↓ answers only mid-walk, so a plain step down the list never touches the field.
+    private func recallQuery(_ direction: Int, modifiers: SwiftUI.EventModifiers) -> Bool {
         guard modifiers.isDisjoint(with: [.command, .option, .control, .shift]), !menuOpen,
             argumentFocused == nil, !vm.isComposing
         else { return false }
+        if direction > 0, vm.recalledQueryIndex == nil { return false }
         let screen = screen
-        return screen.recallQuery(at: selection(in: screen))
+        return screen.recallQuery(direction, at: selection(in: screen))
+    }
+
+    /// ⌘↑/↓ jump a section and ⌥↑/↓ a page; nil leaves every other chord to the one-row step.
+    private func jumpVertically(
+        _ direction: Int, modifiers: SwiftUI.EventModifiers
+    ) -> KeyPress.Result? {
+        let chord = modifiers.intersection([.command, .option, .control, .shift])
+        guard chord == .command || chord == .option else { return nil }
+        let screen = screen
+        let selection = selection(in: screen)
+        if let extensionScreen = screen as? ExtensionCommandScreen,
+            extensionScreen.dispatchShortcut(
+                key: direction > 0 ? .downArrow : .upArrow, modifiers: modifiers, at: selection)
+        {
+            return .handled
+        }
+        guard !isExtensionForm, !screen.ownsVerticalKeys(at: selection) else { return nil }
+        let count = screen.rows.count
+        guard count > 0 else { return .handled }
+        if argumentFocused != nil { returnFocusToSearchField() }
+        if chord == .command {
+            let starts = screen.sectionStarts
+            vm.selection =
+                direction > 0
+                ? PaletteRowIndex.nextSectionStart(after: selection, in: starts) ?? count - 1
+                : PaletteRowIndex.currentOrPreviousSectionStart(before: selection, in: starts) ?? 0
+        } else {
+            vm.selection =
+                screen.page(direction, from: selection, viewportHeight: listViewportHeight)
+                ?? PaletteRowIndex.page(
+                    from: selection, by: direction * visibleRowCount, count: count)
+        }
+        scroll = ScrollIntent(kind: .follow)
+        return .handled
+    }
+
+    /// The expanded palette less its header and bottom bar: the height the rows scroll in.
+    private var listViewportHeight: CGFloat {
+        metrics.size.panelHeight - metrics.size.compactHeight - metrics.size.bottomBarHeight
+    }
+
+    /// Whole result rows the viewport shows, which is how far one ⌥↑/↓ page moves.
+    private var visibleRowCount: Int {
+        let rowHeight = metrics.size.resultRowIcon + metrics.spacing.sm * 2
+        return max(1, Int(listViewportHeight / rowHeight))
     }
 
     /// Claimed whole on the launcher and emoji grid, so a press at an end cannot reach the caret.

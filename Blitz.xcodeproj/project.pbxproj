@@ -362,6 +362,7 @@
 		715A7E655C4BB2986D41E347 /* QuicklinkEditorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FB8CEE880578C098B2F3CBD /* QuicklinkEditorPanel.swift */; };
 		7285927533DEA8AF098E6C50 /* RoomPickerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8BD31AD38228FDAEC0D4F26 /* RoomPickerScreen.swift */; };
 		72A9CCA80781B558DEC61C53 /* FileSearchPreviewKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AEDB145A35F4D6EA0DFDB42 /* FileSearchPreviewKind.swift */; };
+		7344F585C24AE87581C4BE54 /* LauncherQueryHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC2F21436E71CF9D24E3C3A9 /* LauncherQueryHistoryStore.swift */; };
 		7414D9EADC8CBFB25E22D745 /* AIDataAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77733242648FBAD2F0876BDD /* AIDataAccess.swift */; };
 		747E4643726E60055C14232B /* CustomCommandCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC7A3CCAD55CABEF2236D1C /* CustomCommandCoordinator.swift */; };
 		74A58B6AEBA49CA6DEDAD288 /* DialogController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6044B16E01A152A5B51C4F7C /* DialogController.swift */; };
@@ -1478,6 +1479,7 @@
 		CAED09D7E6A9B5A064307B2D /* ActivationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationPolicy.swift; sourceTree = "<group>"; };
 		CB7C80336EBCFC33C2754E6F /* ContactLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLink.swift; sourceTree = "<group>"; };
 		CBC2091F8CC6BBB5A3E5B197 /* ExtensionStorePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionStorePanel.swift; sourceTree = "<group>"; };
+		CC2F21436E71CF9D24E3C3A9 /* LauncherQueryHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherQueryHistoryStore.swift; sourceTree = "<group>"; };
 		CD5E800AD819B7F674D4BF45 /* SymbolImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolImage.swift; sourceTree = "<group>"; };
 		CD9AE3213B670F6D01C1CA83 /* EmojiIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiIndex.swift; sourceTree = "<group>"; };
 		CDE7E401FCD04F45213C6F98 /* NoteDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDocument.swift; sourceTree = "<group>"; };
@@ -2703,6 +2705,7 @@
 				FB64F4848C636353ABCF0BC6 /* LauncherMatch.swift */,
 				2C0BF4212B13AAC6FE9F1F83 /* LauncherOrder.swift */,
 				9B542CB7054B9C66BDC56A13 /* LauncherQueryHistory.swift */,
+				CC2F21436E71CF9D24E3C3A9 /* LauncherQueryHistoryStore.swift */,
 				5CCB45B77D9A78C15643A8F6 /* LauncherRankingStore.swift */,
 				53AE33142C37CC5D9E192139 /* LauncherSuggestions.swift */,
 				4A3A0AABD156677BEA825144 /* ScriptRomanization.swift */,
@@ -4177,6 +4180,7 @@
 				A574ED3FC2A51FF6A9DC997B /* LauncherMatch.swift in Sources */,
 				9B81BE4F57CFD25AA3B32755 /* LauncherOrder.swift in Sources */,
 				D80359E243E52E45923A4448 /* LauncherQueryHistory.swift in Sources */,
+				7344F585C24AE87581C4BE54 /* LauncherQueryHistoryStore.swift in Sources */,
 				FDC6F5B51F28AA837EFBEB1F /* LauncherRankingStore.swift in Sources */,
 				1885D63DAFD9BEB45903C9C5 /* LauncherScreen.swift in Sources */,
 				8E9C8046516128E2E509C97C /* LauncherSuggestions.swift in Sources */,

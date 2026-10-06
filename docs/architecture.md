@@ -16,6 +16,7 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │                                                                            │
 │ SearchRelevance · LauncherMatch · EntryNaming · ScriptRomanization ·       │
 │ LauncherOrder · LauncherSuggestions · LauncherRankingStore · SearchScopes · │
+│ LauncherQueryHistory{,Store} ·                                             │
 │ FileSearch{Query,Result,Scope} ·                                           │
 │ Calculator/* · EmojiCatalog · EmojiGridGeometry · SystemAction ·            │
 │ VolumeLevel ·                                                              │
@@ -92,7 +93,8 @@ the shared primitives and system shims every feature draws on. Neither may depen
 
 `AppCore.shared` (`App/AppCore.swift`) is a `@MainActor` singleton owning every long-lived thing in the
 app: the stores (`AppIndex`, `ClipboardStore`, `SnippetsStore`, `QuicklinkStore`, `CustomCommandStore`,
-`FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `CalculatorHistoryStore`,
+`FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `LauncherQueryHistoryStore`,
+`CalculatorHistoryStore`,
 `CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`), the
 managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
@@ -230,7 +232,7 @@ Blitz/
   Windows/          the non-palette AppKit surfaces: AppWindowController, Dialog/, HUD/, About/
   Assets.xcassets/  the app icon and the bundled image sets some catalog symbols resolve to
   Features/
-    PaletteRowIndex.swift   the flat selection index — palette-owned, so it sits at the top
+    PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
     Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ MenuSearch/
     Notes/ Quicklinks/ Snippets/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ Backup/
     WindowManagement/ Onboarding/ Updates/ Support/ AI/ Settings/

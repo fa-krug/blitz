@@ -6,6 +6,7 @@ struct BackupBundle: Sendable {
         case ranking
         case emoji
         case calculator
+        case queries
     }
 
     let root: URL
