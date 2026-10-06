@@ -16,6 +16,12 @@ final class QuicklinkStore {
     /// Each favicon written out as a file, which is what the launcher's icon cache draws from.
     private(set) var faviconPaths: [UUID: String] = [:]
 
+    /// The bytes behind each path, so an unchanged favicon is compared rather than rehashed.
+    private struct WrittenFavicon {
+        let png: Data
+        let path: String
+    }
+
     private static let schema = """
         CREATE TABLE IF NOT EXISTS quicklinks(
           id TEXT PRIMARY KEY NOT NULL,
@@ -38,6 +44,7 @@ final class QuicklinkStore {
     @ObservationIgnored private var upsertStmt: OpaquePointer?
     @ObservationIgnored private var loadStmt: OpaquePointer?
     @ObservationIgnored private var deleteStmt: OpaquePointer?
+    @ObservationIgnored private var writtenFavicons: [UUID: WrittenFavicon] = [:]
 
     /// `directory` defaults per channel; the harness passes a throwaway one.
     init(directory: URL? = nil) {
@@ -138,13 +145,33 @@ final class QuicklinkStore {
                 showsInRootSearch: source.showsInRootSearch))
     }
 
-    /// Adds a batch, skipping anything invalid — the import and backup path. Returns what landed.
+    /// The import and backup path: one transaction, one `onChange`, invalid entries skipped.
     @discardableResult
     func append(_ incoming: [Quicklink]) -> [Quicklink] {
+        guard isAvailable else { return [] }
+        var owners: [String: Set<UUID>] = [:]
+        var keys: [UUID: String] = [:]
+        for quicklink in quicklinks {
+            let key = Self.nameKey(quicklink.name)
+            owners[key, default: []].insert(quicklink.id)
+            keys[quicklink.id] = key
+        }
         var added: [Quicklink] = []
         for candidate in incoming {
-            if let stored = try? add(candidate) { added.append(stored) }
+            guard let value = try? normalized(candidate) else { continue }
+            let key = Self.nameKey(value.name)
+            guard owners[key, default: []].allSatisfy({ $0 == value.id }) else { continue }
+            if let previous = keys[value.id] { owners[previous]?.remove(value.id) }
+            owners[key, default: []].insert(value.id)
+            keys[value.id] = key
+            added.append(value)
         }
+        guard !added.isEmpty, persist(added) else { return [] }
+
+        var latest: [UUID: Quicklink] = [:]
+        for value in added { latest[value.id] = value }
+        let kept = quicklinks.filter { latest[$0.id] == nil }
+        commit((kept + latest.values).sorted(by: Quicklink.precedes))
         return added
     }
 
@@ -158,7 +185,37 @@ final class QuicklinkStore {
     }
 
     private func write(_ value: Quicklink) throws(QuicklinkError) {
-        guard let stmt = upsertStmt else { throw .storageUnavailable }
+        guard upsert(value) else { throw .storageUnavailable }
+        var updated = quicklinks.filter { $0.id != value.id }
+        updated.insert(value, at: Self.insertionIndex(of: value, in: updated))
+        commit(updated)
+    }
+
+    /// A binary search, since the list is already in `precedes` order and its compare is localized.
+    private static func insertionIndex(of value: Quicklink, in sorted: [Quicklink]) -> Int {
+        var low = 0
+        var high = sorted.count
+        while low < high {
+            let mid = (low + high) / 2
+            if Quicklink.precedes(sorted[mid], value) { low = mid + 1 } else { high = mid }
+        }
+        return low
+    }
+
+    /// Rolled back whole on any failure, so the in-memory list never holds a row the file lacks.
+    private func persist(_ values: [Quicklink]) -> Bool {
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return false }
+        guard values.allSatisfy(upsert),
+            sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK
+        else {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            return false
+        }
+        return true
+    }
+
+    private func upsert(_ value: Quicklink) -> Bool {
+        guard let stmt = upsertStmt else { return false }
         sqlite3_bind_text(stmt, 1, value.id.uuidString, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(stmt, 2, value.name, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(stmt, 3, value.link, -1, SQLITE_TRANSIENT)
@@ -182,11 +239,7 @@ final class QuicklinkStore {
         let status = sqlite3_step(stmt)
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
-        guard status == SQLITE_DONE else { throw .storageUnavailable }
-
-        var updated = quicklinks.filter { $0.id != value.id }
-        updated.append(value)
-        commit(updated.sorted(by: Quicklink.precedes))
+        return status == SQLITE_DONE
     }
 
     private func bind(_ stmt: OpaquePointer, _ index: Int32, _ value: String?) {
@@ -207,9 +260,15 @@ final class QuicklinkStore {
     /// Named by content, so a file is written once and a quicklink that drops one leaves an orphan.
     private func writeFaviconFiles(pruning: Bool) {
         let fileManager = FileManager.default
-        var paths: [UUID: String] = [:]
+        // A load starts over, so the folder is reconciled against the database rather than memory.
+        let known = pruning ? [:] : writtenFavicons
+        var written: [UUID: WrittenFavicon] = [:]
         for quicklink in quicklinks {
             guard let favicon = quicklink.favicon else { continue }
+            if let previous = known[quicklink.id], previous.png == favicon {
+                written[quicklink.id] = previous
+                continue
+            }
             let name = QuicklinkFavicon.fileName(for: favicon)
             let url = faviconDirectory.appendingPathComponent(name)
             if !fileManager.fileExists(atPath: url.path) {
@@ -217,8 +276,10 @@ final class QuicklinkStore {
                     at: faviconDirectory, withIntermediateDirectories: true)
                 guard (try? favicon.write(to: url, options: .atomic)) != nil else { continue }
             }
-            paths[quicklink.id] = url.path
+            written[quicklink.id] = WrittenFavicon(png: favicon, path: url.path)
         }
+        writtenFavicons = written
+        let paths = written.mapValues(\.path)
         if pruning,
             let files = try? fileManager.contentsOfDirectory(
                 at: faviconDirectory, includingPropertiesForKeys: nil)
@@ -232,6 +293,15 @@ final class QuicklinkStore {
     }
 
     private func validated(_ draft: Quicklink) throws(QuicklinkError) -> Quicklink {
+        let value = try normalized(draft)
+        let key = Self.nameKey(value.name)
+        guard !quicklinks.contains(where: { $0.id != value.id && Self.nameKey($0.name) == key })
+        else { throw .duplicateName }
+        return value
+    }
+
+    /// Every rule but the duplicate name, which `add` and `append` check against different sets.
+    private func normalized(_ draft: Quicklink) throws(QuicklinkError) -> Quicklink {
         guard isAvailable else { throw .storageUnavailable }
         var value = draft
         value.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -253,20 +323,19 @@ final class QuicklinkStore {
             QuicklinkDestination.containsPlaceholder(value.link)
                 || QuicklinkDestination.detect(value.link) != nil
         else { throw .unresolvableLink }
-        guard
-            !quicklinks.contains(where: {
-                $0.id != value.id
-                    && $0.name.compare(value.name, options: .caseInsensitive) == .orderedSame
-            })
-        else { throw .duplicateName }
         return value
     }
 
+    /// The one sense in which two names collide, so a batch and a single add agree.
+    private static func nameKey(_ name: String) -> String {
+        name.folding(options: [.caseInsensitive], locale: nil)
+    }
+
     private static func uniqueName(basedOn name: String, taken: [String]) -> String {
-        let folded = Set(taken.map { $0.folding(options: [.caseInsensitive], locale: .current) })
+        let folded = Set(taken.map(nameKey))
         var candidate = name + " Copy"
         var suffix = 2
-        while folded.contains(candidate.folding(options: [.caseInsensitive], locale: .current)) {
+        while folded.contains(nameKey(candidate)) {
             candidate = "\(name) Copy \(suffix)"
             suffix += 1
         }

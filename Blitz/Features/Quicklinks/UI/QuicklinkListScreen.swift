@@ -10,18 +10,29 @@ struct QuicklinkListScreen: PaletteScreen {
     let openActions: () -> Void
     /// Opens the palette's own menu for an `options=` field, keyed by argument name.
     let openArgumentOptions: (String) -> Void
+    /// Filtered once per screen: every selection lookup reads it, and a library can be large.
+    let rows: [Quicklink]
 
-    var rows: [Quicklink] {
+    init(
+        store: QuicklinkStore, core: AppCore, vm: PaletteState,
+        openActions: @escaping () -> Void, openArgumentOptions: @escaping (String) -> Void
+    ) {
+        self.store = store
+        self.core = core
+        self.vm = vm
+        self.openActions = openActions
+        self.openArgumentOptions = openArgumentOptions
         let query = vm.query.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return store.enabled }
-        return store.enabled.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        rows =
+            query.isEmpty
+            ? store.enabled
+            : store.enabled.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     var primaryActionTitle: String { "Open Quicklink" }
 
     private func quicklink(at selection: Int) -> Quicklink? {
-        let rows = rows
-        return rows.indices.contains(selection) ? rows[selection] : nil
+        rows.indices.contains(selection) ? rows[selection] : nil
     }
 
     func actions(at selection: Int) -> PopoverMenuContent? {
@@ -87,7 +98,6 @@ struct QuicklinkListScreen: PaletteScreen {
 
     @ViewBuilder
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
-        let rows = rows
         if rows.isEmpty {
             EmptyResults(text: store.enabled.isEmpty ? "No quicklinks yet" : "No matching quicklinks")
         } else {
@@ -96,11 +106,15 @@ struct QuicklinkListScreen: PaletteScreen {
                 QuicklinkList(
                     results: rows, selectedID: selected?.id, scroll: scroll,
                     onSelect: { link in
-                        if let index = rows.firstIndex(of: link) { vm.selection = index }
+                        if let index = rows.firstIndex(where: { $0.id == link.id }) {
+                            vm.selection = index
+                        }
                     },
                     onActivate: { activate(at: vm.selection) },
                     onActions: { link in
-                        if let index = rows.firstIndex(of: link) { vm.selection = index }
+                        if let index = rows.firstIndex(where: { $0.id == link.id }) {
+                            vm.selection = index
+                        }
                         openActions()
                     }
                 )

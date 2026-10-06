@@ -68,7 +68,9 @@ struct LauncherItemsList: View {
     @Environment(VisibilityStore.self) private var visibility
     @Environment(AliasStore.self) private var aliases
     @Environment(HotKeyManager.self) private var hotKeys
-    @State private var recorderFrame: CGRect?
+
+    /// One line of text over 24 pt controls, as a native grouped `Form` row lays it out.
+    private static let tableRowHeight: CGFloat = 45
 
     var body: some View {
         if entries.isEmpty {
@@ -79,24 +81,14 @@ struct LauncherItemsList: View {
             ForEach(entries) { entry in LauncherItemRow(entry: entry, anchor: anchor) }
         } else {
             // One row holding the table: a `Form` realizes every row it is handed.
-            LauncherItemsTable(
-                entries: entries, isEnabled: isEnabled,
-                visibility: visibility, aliases: aliases, hotKeys: hotKeys,
-                recorderFrame: $recorderFrame
-            )
-            .overlay(alignment: .topLeading) { recorderStandIn }
-        }
-    }
-
-    /// The open recorder's anchor can't leave its hosted row, so this republishes its bounds here.
-    @ViewBuilder
-    private var recorderStandIn: some View {
-        if let recorderFrame {
-            Color.clear
-                .frame(width: recorderFrame.width, height: recorderFrame.height)
-                .anchorPreference(key: ShortcutRecorderAnchorKey.self, value: .bounds) { $0 }
-                .position(x: recorderFrame.midX, y: recorderFrame.midY)
-                .allowsHitTesting(false)
+            SettingsRowsTable(
+                items: entries, rowHeight: Self.tableRowHeight, isEnabled: isEnabled
+            ) { entry in
+                LauncherItemRow(entry: entry)
+                    .environment(visibility)
+                    .environment(aliases)
+                    .environment(hotKeys)
+            }
         }
     }
 }

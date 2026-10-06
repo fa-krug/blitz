@@ -6,9 +6,15 @@ struct QuicklinksSettingsView: View {
     @Environment(QuicklinkStore.self) private var store
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
+    @Environment(AliasStore.self) private var aliases
+    @Environment(HotKeyManager.self) private var hotKeys
+    @Environment(SettingsNavigationState.self) private var navigation
     @State private var query = ""
     @State private var editor: QuicklinkEditRequest?
     @State private var pendingDeletion: Quicklink?
+
+    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
+    private static let libraryRowHeight: CGFloat = 52
 
     var body: some View {
         @Bindable var settings = settings
@@ -80,7 +86,11 @@ struct QuicklinksSettingsView: View {
                 )
                 .foregroundStyle(.secondary)
             } else {
-                ForEach(results) { quicklink in
+                // One row holding the table: a `Form` realizes every row it is handed.
+                SettingsRowsTable(
+                    items: results, rowHeight: Self.libraryRowHeight,
+                    isEnabled: settings.quicklinksEnabled
+                ) { quicklink in
                     QuicklinkSettingsRow(
                         quicklink: quicklink,
                         isEnabled: Binding(
@@ -89,7 +99,12 @@ struct QuicklinksSettingsView: View {
                                 core.quicklinkCoordinator.setQuicklinkEnabled($0, id: quicklink.id)
                             }),
                         onEdit: { editor = QuicklinkEditRequest(quicklink: quicklink) },
-                        onDelete: { pendingDeletion = quicklink })
+                        onDelete: { pendingDeletion = quicklink }
+                    )
+                    .environment(store)
+                    .environment(aliases)
+                    .environment(hotKeys)
+                    .environment(navigation)
                 }
             }
             Button {
@@ -97,6 +112,10 @@ struct QuicklinksSettingsView: View {
             } label: {
                 SettingsRowTitle(.quicklinksQuicklinks, "Add Quicklink")
             }
+        }
+        // A table row has no id to scroll to, so a jump to one narrows the list onto it instead.
+        .settingsFilterSeed(.quicklinksQuicklinks, query: $query) { title in
+            store.quicklinks.contains { $0.name == title }
         }
     }
 

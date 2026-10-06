@@ -22,7 +22,11 @@ struct QuicklinkTests {
         persistence()
         readsADatabaseWrittenElsewhere()
         corruptDatabaseIsPreserved()
+        batchAppend()
+        replaceNotifiesTwice()
+        batchAppendAtScale()
         faviconStorage()
+        faviconPathsSurviveOtherEdits()
         faviconDiscovery()
         archiveRoundTrip()
         archiveMerge()
@@ -330,6 +334,86 @@ struct QuicklinkTests {
             "a mutation refuses rather than pretending to save")
     }
 
+    // MARK: - Batches
+
+    /// An import is one transaction and one `onChange`, held to the rules a single add follows.
+    static func batchAppend() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        do {
+            let store = QuicklinkStore(directory: dir)
+            _ = try? store.add(link("GitHub", "https://github.com"))
+            var changes = 0
+            store.onChange = { _ in changes += 1 }
+            let added = store.append([
+                link("Jira", "https://jira.example.com"),
+                link("JIRA", "https://other.example.com"),
+                link("github", "https://elsewhere.com"),
+                link("", "https://empty.example.com"),
+                link("Broken", "not a url"),
+                link("  Docs  ", "https://docs.example.com")
+            ])
+            expect(
+                added.map(\.name) == ["Jira", "Docs"],
+                "a batch skips in-batch and library duplicates and invalid entries, keeping order")
+            expect(changes == 1, "a batch notifies once, however many rows it adds")
+            expect(names(store) == ["Docs", "GitHub", "Jira"], "a batch lands sorted")
+            expect(
+                throwsError(store, link("jira", "https://x.com")) == .duplicateName,
+                "a single add rejects a name a batch stored, in the same case-insensitive sense")
+            expect(
+                store.append([link("docs", "https://x.com")]).isEmpty, "a repeat batch adds nothing")
+            expect(changes == 1, "a batch that adds nothing does not notify")
+        }
+
+        let reopened = QuicklinkStore(directory: dir)
+        reopened.load()
+        expect(names(reopened) == ["Docs", "GitHub", "Jira"], "a batch survives a reopen")
+    }
+
+    static func replaceNotifiesTwice() {
+        withStore { store in
+            _ = store.append([link("Alpha"), link("Bravo")])
+            var changes = 0
+            store.onChange = { _ in changes += 1 }
+            let count = store.replace(with: [link("Charlie"), link("Delta"), link("Echo")])
+            expect(count == 3, "a replace reports what it stored")
+            expect(names(store) == ["Charlie", "Delta", "Echo"], "a replace swaps the whole set")
+            expect(changes == 2, "a replace notifies for the clear and once for the batch")
+        }
+    }
+
+    /// No wall-clock bound: a regression to per-row commits shows up as thousands of notifications.
+    static func batchAppendAtScale() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let count = 2_000
+
+        do {
+            let store = QuicklinkStore(directory: dir)
+            var changes = 0
+            store.onChange = { _ in changes += 1 }
+            let incoming = (0..<count).map { index in
+                var draft = link("Link \(index)", "https://example.com/\(index)")
+                if index.isMultiple(of: 10) { draft.favicon = Data("icon \(index)".utf8) }
+                return draft
+            }
+            expect(store.append(incoming).count == count, "a large batch stores every row")
+            expect(changes == 1, "a large batch notifies once")
+            expect(store.faviconPaths.count == count / 10, "a large batch writes every favicon")
+
+            let before = store.faviconPaths
+            if let first = store.quicklinks.first { try? store.togglePinned(id: first.id) }
+            expect(store.faviconPaths == before, "pinning one row leaves every favicon path alone")
+        }
+
+        let reopened = QuicklinkStore(directory: dir)
+        reopened.load()
+        expect(reopened.quicklinks.count == count, "a large batch survives a reopen")
+        expect(reopened.faviconPaths.count == count / 10, "its favicons are written again on load")
+    }
+
     // MARK: - Favicons
 
     /// The blob is the source; the file is derived from it, so it may be pruned but never stale.
@@ -388,6 +472,52 @@ struct QuicklinkTests {
         pruned.load()
         let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         expect(files.count == 1, "a reload prunes the files no quicklink references any more")
+    }
+
+    /// Paths are reused across edits rather than rehashed, so they must never drift from the bytes.
+    static func faviconPathsSurviveOtherEdits() {
+        withStore { store in
+            var github = link("GitHub", "https://github.com")
+            github.favicon = Data("github icon".utf8)
+            var jira = link("Jira", "https://jira.example.com")
+            jira.favicon = Data("jira icon".utf8)
+            _ = store.append([github, jira, link("Plain")])
+            guard let githubPath = store.faviconPaths[github.id],
+                let jiraPath = store.faviconPaths[jira.id]
+            else { return fail("a batch writes each favicon out") }
+
+            if let plain = store.quicklinks.first(where: { $0.name == "Plain" }) {
+                try? store.togglePinned(id: plain.id)
+            }
+            try? store.setEnabled(false, id: jira.id)
+            try? store.setShowsInRootSearch(false, id: github.id)
+            expect(
+                store.faviconPaths == [github.id: githubPath, jira.id: jiraPath],
+                "pinning, disabling and hiding leave favicon paths where they were")
+
+            var refetched = store.quicklink(id: github.id)!
+            refetched.favicon = Data("github icon, redrawn".utf8)
+            try? store.update(refetched)
+            let newPath = store.faviconPaths[github.id]
+            expect(newPath != nil && newPath != githubPath, "a changed favicon moves its path")
+            expect(
+                newPath.flatMap { FileManager.default.contents(atPath: $0) } == refetched.favicon,
+                "the moved path holds the new bytes")
+            expect(store.faviconPaths[jira.id] == jiraPath, "the other favicon keeps its path")
+
+            refetched.favicon = Data("github icon".utf8)
+            try? store.update(refetched)
+            expect(
+                store.faviconPaths[github.id] == githubPath,
+                "restoring the old favicon returns to the old file")
+
+            refetched.favicon = nil
+            try? store.update(refetched)
+            expect(store.faviconPaths[github.id] == nil, "dropping a favicon drops its path")
+            expect(
+                FileManager.default.contents(atPath: jiraPath) == jira.favicon,
+                "a file still referenced is untouched")
+        }
     }
 
     static func faviconDiscovery() {

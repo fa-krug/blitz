@@ -64,6 +64,7 @@
 		151225E9559F3018456EFDD7 /* FallbackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1B83422289250460570E71 /* FallbackStore.swift */; };
 		157CC12068A1427200404C66 /* MeetingDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D54814BDB434320A031273 /* MeetingDay.swift */; };
 		15D76A4CAAF02DE21D39BBF2 /* EmojiKeywords in Resources */ = {isa = PBXBuildFile; fileRef = 9E2A56A5B2CE4BA778805C64 /* EmojiKeywords */; };
+		160740C5DB455EA6F4FECBB8 /* SettingsRowsTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A5AC9ADE67BCEB27064216 /* SettingsRowsTable.swift */; };
 		162FB00245AA84282AEAF2F5 /* SymbolImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD5E800AD819B7F674D4BF45 /* SymbolImage.swift */; };
 		1641E01CA1D1D0EEE9BCED22 /* CustomWindowSize.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44A24DE52B23F2399647B1E /* CustomWindowSize.swift */; };
 		164E460CC96BE919115D8BDC /* MCPOAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97F0662FFAB3DACDBEBAF5D /* MCPOAuthService.swift */; };
@@ -756,7 +757,6 @@
 		F109E17209373CD21CDA614D /* CurrencyRateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBFB13274BA16D256BCBE99 /* CurrencyRateStore.swift */; };
 		F13EB3063849408B5F4560E2 /* BackupManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA8AD64A4B22898FD8359301 /* BackupManifest.swift */; };
 		F1946431FCF99F919D5F8B1C /* BackupBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF40B8780E3B9D18947E8FAF /* BackupBundle.swift */; };
-		F2086B2480134F50D13AE158 /* LauncherItemsTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E6825D539368F896132E1A8 /* LauncherItemsTable.swift */; };
 		F2CBEB8313E7EA3FBFFC9486 /* ExtensionFieldHint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7797052FC8D42613204FE3CF /* ExtensionFieldHint.swift */; };
 		F36030993CD0C02F14B0E038 /* ScheduleScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E81C73F5AA9ED5CB254723D /* ScheduleScreen.swift */; };
 		F36067ADC15E35B586E67456 /* ExtensionLaunchError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD54B76716BE003770E27175 /* ExtensionLaunchError.swift */; };
@@ -1081,7 +1081,6 @@
 		4E3FD2695512DD21C4643D8B /* BackupArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupArchive.swift; sourceTree = "<group>"; };
 		4E4E543B77F6C8D015940D15 /* ExtensionImageSize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionImageSize.swift; sourceTree = "<group>"; };
 		4E527BF34A3F48D74D2A614D /* RoomMinimumSizeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMinimumSizeStore.swift; sourceTree = "<group>"; };
-		4E6825D539368F896132E1A8 /* LauncherItemsTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherItemsTable.swift; sourceTree = "<group>"; };
 		4E77AAA268FCBE13B1F31C34 /* ClipboardTextWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTextWorker.swift; sourceTree = "<group>"; };
 		4EF25E9D2721A9FBCBB6904C /* SystemPromptEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPromptEditor.swift; sourceTree = "<group>"; };
 		4F80F550DBCCB6734330DE82 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
@@ -1409,6 +1408,7 @@
 		B56204F4324D2D94BBA54CDF /* SystemActionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemActionRunner.swift; sourceTree = "<group>"; };
 		B59B9534D3036AA84353C245 /* MathBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathBox.swift; sourceTree = "<group>"; };
 		B5A2D01108D790E8447B71EF /* CommandsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsSettingsView.swift; sourceTree = "<group>"; };
+		B5A5AC9ADE67BCEB27064216 /* SettingsRowsTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRowsTable.swift; sourceTree = "<group>"; };
 		B645BF8AC225449833724A94 /* OverflowFade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverflowFade.swift; sourceTree = "<group>"; };
 		B66ABD424B73298A27446A18 /* AIToolRounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIToolRounds.swift; sourceTree = "<group>"; };
 		B755BCB684DDCE83A6A2A985 /* AISettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsStore.swift; sourceTree = "<group>"; };
@@ -2380,6 +2380,7 @@
 				BFAE022BB9C54D6ECE2E5387 /* SettingsHistory.swift */,
 				0F10491A92405D59CF53AC85 /* SettingsNavigationState.swift */,
 				C216F1DF0A2403515C153BD4 /* SettingsRootView.swift */,
+				B5A5AC9ADE67BCEB27064216 /* SettingsRowsTable.swift */,
 				C3BF9687D7A3E2773353C493 /* SettingsScrollTarget.swift */,
 				C60217AA29D3F892B9498DC8 /* SettingsSearchCatalog.swift */,
 				3DC77E431596BD7D3C664B3F /* SettingsSidebarView.swift */,
@@ -2842,7 +2843,6 @@
 				DE90A0329A386613E7C92E38 /* FallbacksSettingsView.swift */,
 				30B7175186DC16646BACDAF9 /* FeatureCommandsSection.swift */,
 				84C55F6201710605EFDAF2CC /* LauncherItemsSection.swift */,
-				4E6825D539368F896132E1A8 /* LauncherItemsTable.swift */,
 				57DC3251504E7254D0A09B68 /* SearchScopesSection.swift */,
 				3F7A235008D52078E562F84E /* SystemSettingsSettingsView.swift */,
 			);
@@ -4173,7 +4173,6 @@
 				32157130429CBC5001AC5895 /* LaunchAtLogin.swift in Sources */,
 				A976569FC110E9919EDAE058 /* LauncherCoordinator.swift in Sources */,
 				591FCE58F7D9837240EAD007 /* LauncherItemsSection.swift in Sources */,
-				F2086B2480134F50D13AE158 /* LauncherItemsTable.swift in Sources */,
 				306DF0105F52D29DF0FF18F9 /* LauncherList.swift in Sources */,
 				A574ED3FC2A51FF6A9DC997B /* LauncherMatch.swift in Sources */,
 				9B81BE4F57CFD25AA3B32755 /* LauncherOrder.swift in Sources */,
@@ -4438,6 +4437,7 @@
 				A54DAE6B7193F12B437C28D9 /* SettingsNavigationState.swift in Sources */,
 				E88DB9AF85DDE1138BDC740C /* SettingsPaneScanner.swift in Sources */,
 				B523545254B4674D15CFC72F /* SettingsRootView.swift in Sources */,
+				160740C5DB455EA6F4FECBB8 /* SettingsRowsTable.swift in Sources */,
 				23CBB2BAFE6F4F9BB7A4BDEE /* SettingsScrollTarget.swift in Sources */,
 				30D33D5BEC67C65A7B857471 /* SettingsSearchCatalog.swift in Sources */,
 				88187F93355B3CA8E8B3427D /* SettingsSidebarView.swift in Sources */,
