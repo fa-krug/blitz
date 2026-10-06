@@ -47,6 +47,12 @@
   it extracts fresh in the helper and puts the text on the pasteboard — the `item_text` table
   itself is still never copied from. What an entry *is* still comes from the content that was
   captured.
+- **New per-entry data lives in side tables, never in new columns.** `items` has no migration:
+  `openDatabase()` runs `CREATE TABLE IF NOT EXISTS`, so a column an older file lacks makes a
+  statement fail to prepare, the open fail and the history get wiped. A title (`item_titles`) and a
+  rich entry's flavours (`item_formats`) are therefore rows keyed by `item_id`, created with
+  `IF NOT EXISTS` on every open and emptied by an `AFTER DELETE ON items` trigger, the same shape as
+  `item_text`. `clipboard-test` opens a file stripped of them to pin this.
 - **No recognition ever runs in the app process.** `ClipboardTextWorker` spawns one bundled
   `ClipboardTextHelper` per item and reaps it, which is the whole reason Vision's and PDFKit's
   allocations do not accumulate in Blitz. The helper is handed a path and answers with text.
@@ -133,6 +139,10 @@ filter applies after the limit. `promote` updates the row's timestamp and rowid 
 rather than deleting and re-inserting it, because a delete would take the row's recognized text with
 it; an update trigger moves the original-text FTS entry to the new rowid. The UUID and the image blob
 are untouched.
+
+Every read selects the same columns (`ClipboardStore.columns`), which pull the title and a
+`group_concat` of the flavours from the side tables through indexed correlated subqueries, so a row
+carries both wherever it comes from — the load, a search, the OCR query or a backup's stream.
 
 Files under the store's own `imagesDir` are **owned**: pruned and deleted with their row. External
 references — an image imported from another app's cache — are left on disk when the row goes. A
@@ -229,6 +239,63 @@ The bounds are the indexer's, stated precisely: the helper truncates its output 
 bytes, so a text-dense scan can copy *partial* text under a success HUD, and an input over 32 MB
 extracts as empty and lands in **No text found**. The source row is not promoted — a copy is not a
 paste.
+
+## Renaming, editing and handing off
+
+The ⌘K menu carries these beside the paste rows; the chords need the expanded list, like the others.
+
+| Action | Chord | Applies to | What it does |
+| --- | --- | --- | --- |
+| Rename… | ⌘E | every entry | A one-line `DialogController` prompt; a blank name clears the title |
+| Edit Text… | ⌥⌘E | text | A multi-line prompt, saved with ⌘↵ since Return types a newline |
+| Save as Snippet… | — | text, snippets on | Opens the Snippets editor on a new snippet holding the text |
+| Open Link / Compose Email | ⌘O | links, addresses | The default browser, or a `mailto:` for the mail app |
+| Open | ⌘O | files | The file in its own app, as before |
+| Send to AI | ⌘J | every entry, AI on | Text becomes a new chat's draft; an image or a file is attached |
+| Share… | — | every entry | The system share sheet: text as a string, links as URLs, files as files |
+
+**A title names the row and nothing else.** The list row and the ⌘K header show it in place of the
+content, the preview still shows the content with the title as an Information row, and pasting,
+copying and the type filter never read it. Search matches it: in memory for the resident window and
+the pins, and through a `LIKE` join on `item_titles` folded into the FTS statement for older rows —
+`LIKE` because the table holds only what someone renamed, so a scan of it costs nothing, and in the
+main statement rather than the OCR query so a title is found whether or not text search is on.
+
+**Edit Text rewrites the row in place.** `updateText(_:of:)` runs `UPDATE items SET text`, so the
+`items_au` trigger moves the FTS entry and the row keeps its id, rowid, place, pin and title. It drops
+the entry's stored flavours with their files: an edited entry pasting its old formatting would be
+wrong.
+
+**Send to AI never takes over Quick AI.** `AIChatCoordinator.startChat` opens a fresh window chat —
+`continueInWindow` would move Quick AI's conversation across — and hands files to `attach(files:to:)`,
+so an unsupported type or a model without vision is refused there as it is for a drop.
+
+**Share is the second user of the one system popover** that
+[File Search](file-search.md#invariants) explains: `Platform/SharePicker.swift` holds the picker and
+anchors it to the palette's trailing edge, and the palette stays up under it.
+
+## Rich text
+
+**Capture.** When the poller records a text entry it also reads `public.rtf` and `public.html`
+(`ClipboardManager.richFormats(on:)`). A flavour over `ClipboardRichFormat.maxBytes` (1 MB) is
+dropped and the entry keeps its plain text. The flavours are written off the poll
+(`ClipboardStore.writeFormats`) to `imagesDir/formats/<uuid>.<ext>`, so `owns` covers them, and the
+row is inserted once they land, as an image's is. A repeat copy discards the files it wrote.
+`Kind` stays `.text`; a stored flavour makes the entry rich, which the row tile (`doc.richtext`) and
+the Information block's Type say.
+
+**Paste.** ↵ and every other paste declare the stored flavours, then `.string`, then the internal
+marker, so the receiver takes the richest it reads — the original formatting, as Raycast does. A rich
+entry's ⌘K adds a **Paste as** section: Rich Text and HTML, each only when stored, and Plain Text. A
+flavour whose file has gone is skipped and the text still pastes. Paste as Plain Text (⌃⌘↵) is
+unchanged.
+
+**Lifetime.** The files go with their row: `remove` deletes them in place, and Clear History and a
+retention cut read their paths before the delete — the cascade takes the rows — and delete them off
+the main actor with the image blobs. A pin keeps them.
+
+**Backups and the Raycast import carry plain text only.** A backup restores the title but not the
+flavours, which would make the bundle carry another app's markup for every clip.
 
 ## Type filter
 

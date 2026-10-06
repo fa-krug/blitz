@@ -20,6 +20,20 @@ struct Snippet: Sendable, Hashable {
         self.isEnabled = isEnabled
         self.showsConfirmation = showsConfirmation
     }
+
+    /// How long a name taken from a clip's first line may run.
+    static let draftNameLimit = 40
+
+    /// A clip saved as a snippet: named by its title, else by its first line, and kept verbatim.
+    static func draft(text: String, title: String?) -> Snippet {
+        let titled = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let firstLine =
+            text.split(whereSeparator: \.isNewline)
+            .lazy.map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
+        let name = titled.isEmpty ? String(firstLine.prefix(draftNameLimit)) : titled
+        return Snippet(name: name.trimmingCharacters(in: .whitespaces), text: text)
+    }
 }
 
 /// Fingerprint of a snippet file's bytes, detecting an external edit before a save or delete.

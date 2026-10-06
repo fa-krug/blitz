@@ -13,6 +13,7 @@ struct SnippetsTests {
         // The in-process delivery tier drives a real text view, which needs AppKit awake.
         _ = NSApplication.shared
         testIdentityAndRevision()
+        testClipDraft()
         testRaycastImport()
         try testMarkdownCodec()
         try testRepositoryStorage()
@@ -51,6 +52,36 @@ struct SnippetsTests {
         check(
             "source revision changes with source content",
             SnippetSourceRevision(content: "same") != SnippetSourceRevision(content: "same\n"))
+    }
+
+    /// Save as Snippet from the clipboard: the name comes from the title or the first line.
+    private static func testClipDraft() {
+        let titled = Snippet.draft(text: "Dear team,\nthanks", title: "  Sign-off  ")
+        check("a clip's title names the draft", titled.name == "Sign-off")
+        check("and the text is kept verbatim", titled.text == "Dear team,\nthanks")
+        check("a draft is enabled, with no keyword", titled.isEnabled && titled.keyword == nil)
+
+        let untitled = Snippet.draft(text: "\n\n   Dear team,  \nthanks", title: nil)
+        check("an untitled clip is named by its first non-blank line", untitled.name == "Dear team,")
+        let blankTitle = Snippet.draft(text: "Body", title: "   ")
+        check("a blank title falls back to the first line", blankTitle.name == "Body")
+
+        let long = String(repeating: "word ", count: 20)
+        let capped = Snippet.draft(text: long, title: nil)
+        check(
+            "the first line is cut to the name limit",
+            capped.name.count <= Snippet.draftNameLimit && long.hasPrefix(capped.name))
+        check(
+            "an empty clip leaves the name for the editor",
+            Snippet.draft(text: "", title: nil).name.isEmpty)
+
+        check(
+            "a real token in clip text is a placeholder",
+            SnippetTemplateEngine.containsPlaceholders("Hi {clipboard}"))
+        check(
+            "unknown braces stay literal text",
+            !SnippetTemplateEngine.containsPlaceholders("func f() { return {x} }"))
+        check("plain text has no placeholders", !SnippetTemplateEngine.containsPlaceholders("Hi"))
     }
 
     private static func testRaycastImport() {

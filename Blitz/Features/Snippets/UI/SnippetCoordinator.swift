@@ -122,9 +122,9 @@ final class SnippetCoordinator {
         paletteCoordinator.togglePalette(mode: .snippets)
     }
 
-    /// Opens the Snippets pane with the editor showing `record`; nil is a new snippet.
-    func editSnippet(_ record: StoredSnippet?) {
-        core.pendingSnippetEdit = SnippetEditRequest(record: record)
+    /// Opens the Snippets pane with the editor showing `record`; nil is a new one, from `draft`.
+    func editSnippet(_ record: StoredSnippet?, draft: Snippet? = nil) {
+        core.pendingSnippetEdit = SnippetEditRequest(record: record, draft: draft)
         settingsCoordinator.showSettings(tab: .snippets)
     }
 

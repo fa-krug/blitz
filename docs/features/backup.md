@@ -130,6 +130,8 @@ Per category:
   UI. A row is deduped on its text, or on the path its image takes; the blob keeps the name the bundle
   gave it, so importing one file twice lands on the same path and adds nothing. Only a file inside
   `imagesDir` is one retention can ever reclaim, which is why the blob moves there before the row lands.
+  A clip's title travels as `BackupClipboardItem.title` and lands in `item_titles` beside its new row;
+  a rich entry's RTF and HTML flavours do not travel, so it restores as plain text.
 - **Snippets** merge through `importSnippets`, deduped on name and body so importing the same file
   twice doesn't leave a second copy of everything. Importing snippets does not enable snippets.
 - **Notes** land as new files through `NotesRepository.importNotes`, which suffixes a title that is

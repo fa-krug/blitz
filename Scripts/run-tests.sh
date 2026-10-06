@@ -152,14 +152,16 @@ run reminders-test         Blitz/Features/Reminders/Model/*.swift \
                            $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
                            $A/AIToolArguments.swift $A/AIToolJSON.swift
 run contacts-test          Blitz/Features/Contacts/Model/*.swift
+# `Q` is the URL detector a drag payload builds its link with, rather than a second one.
+Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
                            Blitz/Features/Clipboard/Model/ColorFormat.swift \
-                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
-# `Q` is the URL detector a drag payload builds its link with, rather than a second one.
-Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Features/Clipboard/Model/ClipDragPayload.swift $Q
 run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q
 run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q
 run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
@@ -169,6 +171,7 @@ run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
                            Blitz/Platform/ProcessExit.swift
 run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
@@ -179,6 +182,7 @@ run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
 run index clipboard-file-performance \
                            Blitz/Platform/PasteboardFiles.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
@@ -228,6 +232,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/FileSearch/Model/FileSearchFilter.swift \
@@ -249,6 +254,7 @@ run palette-navigation-test Blitz/Palette/PaletteState.swift \
                            Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
                            Blitz/Features/FileSearch/Model/FileSearchFilter.swift \

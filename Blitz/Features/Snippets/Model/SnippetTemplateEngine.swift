@@ -134,6 +134,14 @@ enum SnippetTemplateEngine {
         return declared
     }
 
+    /// Whether anything in `text` would expand. Parsed, so a literal brace run doesn't count.
+    static func containsPlaceholders(_ text: String) -> Bool {
+        parseSegments(text).contains { segment in
+            if case .literal = segment { return false }
+            return true
+        }
+    }
+
     /// Whether the template reads the selection. Parsed, so a literal brace run doesn't count.
     static func usesSelection(_ text: String) -> Bool {
         parseSegments(text).contains { segment in

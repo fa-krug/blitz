@@ -53,7 +53,7 @@ struct SnippetsSettingsView: View {
         .formStyle(.grouped)
         .settingsScrollTarget(.snippets)
         .settingsEditorPanel(item: $editor) { request in
-            SnippetEditorPanel(record: request.record)
+            SnippetEditorPanel(record: request.record, draft: request.draft)
         }
         .onChange(of: core.pendingSnippetEdit?.id, initial: true) { _, _ in
             guard let request = core.pendingSnippetEdit else { return }
@@ -177,6 +177,8 @@ struct SnippetEditRequest: Identifiable {
     let id = UUID()
     /// nil for a snippet that has no file yet.
     let record: StoredSnippet?
+    /// What a new snippet starts from, such as a clip saved from the clipboard history.
+    var draft: Snippet?
 }
 
 private struct SnippetSettingsRow: View {
@@ -235,10 +237,14 @@ private struct SnippetEditorPanel: View {
     @State private var showsConfirmation: Bool
     @State private var errorMessage: String?
     @State private var isSaving = false
+    /// Text brought in from elsewhere may hold braces the engine reads as placeholders.
+    private let draftHasPlaceholders: Bool
 
-    init(record: StoredSnippet?) {
+    init(record: StoredSnippet?, draft: Snippet? = nil) {
         self.record = record
-        let snippet = record?.snippet
+        let snippet = record?.snippet ?? draft
+        draftHasPlaceholders =
+            record == nil && draft.map { SnippetTemplateEngine.containsPlaceholders($0.text) } == true
         _name = State(initialValue: snippet?.name ?? "")
         _keyword = State(initialValue: snippet?.keyword ?? "")
         _text = State(initialValue: snippet?.text ?? "")
@@ -305,6 +311,11 @@ private struct SnippetEditorPanel: View {
                 .focused($isTemplateFocused)
                 .accessibilityLabel("Snippet template")
                 .accessibilityHint("Enter the text Blitz expands.")
+            if draftHasPlaceholders {
+                Text("Parts of this text in braces will expand as placeholders.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
