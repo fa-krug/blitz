@@ -384,6 +384,11 @@ struct RootPaletteView: View {
         emojiObservers(content)
             // Every show bumps focusToken so the search field refocuses.
             .onChange(of: vm.focusToken) {
+                // The key re-bump lands after the pending field took the caret, so it re-asserts it.
+                if focusPendingArgument() {
+                    vm.pendingArgumentEntryID = nil
+                    return
+                }
                 searchFocused = !screen.hidesSearchField
             }
             // A preserved screen re-summons as it was left, so a menu must end with the palette.
@@ -812,6 +817,8 @@ struct RootPaletteView: View {
         searchField
             // A ceiling, not a size, so the row squeezes a long query before the strip overruns.
             .frame(minWidth: searchFieldFloor, maxWidth: searchFieldWidth)
+            // Sized first beside a strip, so the strip's fields fill only what the query leaves.
+            .layoutPriority(headerAccessory == nil ? 0 : 1)
             .opacity(hidesSearchField ? 0 : 1)
             .allowsHitTesting(!hidesSearchField)
             .accessibilityHidden(hidesSearchField)
@@ -1426,18 +1433,20 @@ struct RootPaletteView: View {
 
     /// AppKit selects the whole query as the field editor comes back, which is the wanted reset.
     private func returnFocusToSearchField() {
+        vm.pendingArgumentEntryID = nil
         argumentFocused = nil
         searchFocused = true
     }
 
     /// The palette was opened to fill one row's fields, so the caret starts in the first empty one.
-    private func focusPendingArgument() {
+    @discardableResult
+    private func focusPendingArgument() -> Bool {
         guard vm.pendingArgumentEntryID != nil,
             let field = headerAccessory?.firstIncompleteField
-        else { return }
+        else { return false }
         argumentFocused = field
         searchFocused = false
-        vm.pendingArgumentEntryID = nil
+        return true
     }
 
     /// An `options=` field is chosen from the palette's own menu, never typed into.

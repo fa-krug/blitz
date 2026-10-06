@@ -59,8 +59,11 @@ struct LauncherScreen: PaletteScreen {
         self.scrollToFollow = scrollToFollow
 
         // Listed even when hidden from search: the shortcut that opened it still has to be answered.
-        let pinned = vm.argumentEntryID.flatMap(core.customCommands.command(entryID:))
-            .map(AppEntry.init).flatMap { $0.name == vm.query ? $0 : nil }
+        let pinned = vm.argumentEntryID.flatMap { id in
+            core.customCommands.command(entryID: id).map(AppEntry.init)
+                ?? CommandCatalog.all.first { $0.id == id }
+        }
+        .flatMap { $0.name == vm.query ? $0 : nil }
         let ordered =
             pinned.map { AppIndex.Results(entries: [$0]) }
             ?? appIndex.orderedResults(
@@ -167,6 +170,11 @@ struct LauncherScreen: PaletteScreen {
                 metrics: core.settings.interfaceSize.metrics, focus: focus,
                 onSubmit: { activate(at: selection) })
         }
+        if entry.kind == .command {
+            return SmartReminderArgumentsAccessory.make(
+                entry: entry, vm: vm, metrics: core.settings.interfaceSize.metrics, focus: focus,
+                onSubmit: { activate(at: selection) })
+        }
         return ExtensionArgumentsAccessory.make(
             entry: entry, coordinator: core.extensionCoordinator,
             values: { name in headerFieldBinding(entry: entry, name: name) },
@@ -189,6 +197,7 @@ struct LauncherScreen: PaletteScreen {
             guard let command = core.customCommands.command(entryID: entry.id) else { return [:] }
             return CustomCommandArgumentsAccessory.values(for: command, vm: vm)
         }
+        if entry.kind == .command { return SmartReminderArgumentsAccessory.values(for: entry, vm: vm) }
         var values: [String: String] = [:]
         for argument in core.extensionCoordinator.commandArguments(for: entry) ?? [] {
             let typed = vm.commandArguments[PaletteState.argumentKey(entry.id, argument.name)] ?? ""

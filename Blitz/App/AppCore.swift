@@ -933,11 +933,6 @@ final class AppCore {
         await dialogs.editContact(draft)
     }
 
-    /// The Smart Reminder prompt, for the same reason.
-    func describeReminder() async -> String? {
-        await dialogs.describeReminder()
-    }
-
     /// The snippet argument prompt, for the same reason.
     func fillSnippetArguments(
         snippetName: String, arguments: [SnippetTemplateEngine.MissingArgument]

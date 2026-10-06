@@ -16,13 +16,17 @@ enum SmartReminderPrompt {
 
             title: a short task to act on, starting with a verb, in the language of the note. \
             Keep every name, and leave the date and time out of it.
-            due: when it is due, resolved against the dates below. Add a time only when the note \
-            names one: morning is 09:00, noon 12:00, afternoon 15:00, evening 18:00, \
-            tonight 20:00. null when the note names no day.
+            due: only a day or time the note itself names, resolved against the dates below. \
+            Add a time only when the note names one: morning is 09:00, noon 12:00, \
+            afternoon 15:00, evening 18:00, tonight 20:00; a time with no day is today. \
+            When the note names no day and no time, due is null. Never guess one, and never \
+            default to today or tomorrow: a reminder without a due date is a valid answer.
             notes: any detail the title leaves out, otherwise null.
 
             Example: "Greg wants tomorrow a cake" becomes \
             {"title": "Give Greg a cake", "due": "\(day(tomorrow, calendar))", "notes": null}
+            Example: "ask Anna about the slides" becomes \
+            {"title": "Ask Anna about the slides", "due": null, "notes": null}
 
             Now: \(weekday(now, calendar)) \(day(now, calendar)) \(clock(now, calendar)), \
             time zone \(calendar.timeZone.identifier).

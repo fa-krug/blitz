@@ -176,9 +176,10 @@ a third screen; ringing round forever therefore never grows the stack past two.
 ### Inline row arguments
 
 A selected row can declare arguments, and they are typed **in the header, beside the search field** —
-not on a screen of their own. Three features answer this way, each owning its own strip: an extension
+not on a screen of their own. Four features answer this way, each owning its own strip: an extension
 command through `ExtensionArgumentsAccessory`, a quicklink through `QuicklinkArgumentsAccessory`, a
-custom command through `CustomCommandArgumentsAccessory`. The last two draw the same fields,
+custom command through `CustomCommandArgumentsAccessory`, and Smart Reminder through
+`SmartReminderArgumentsAccessory`. The last three draw the same fields,
 `DesignSystem/InlineArgumentFields`; an extension draws its own. The palette knows none of them: `PaletteScreen.headerAccessory(at:focus:)` hands back a `PaletteHeaderAccessory`
 — a width, the field names in Tab order, the first field still owed a value, a menu for a field that is
 chosen rather than typed, and an opaque view. That costs the header its one simple rule, so it holds
@@ -187,8 +188,11 @@ these invariants:
 - The search field sits at **one structural position, always**. It is never moved inside an `if`:
   flipping the branch tears down its field editor, which drops first responder mid-navigation. Only
   its *width* changes — it is sized to its own text so the chips sit right after it, as they do in
-  Raycast. That width is a ceiling rather than a size, and the spacer after the strip is given room
-  last, so a long query is squeezed before the strip can run into the screen's own header controls.
+  Raycast. That width is a ceiling rather than a size, and beside a strip the field is laid out
+  first, so a long query is squeezed before the strip can run into the screen's own header controls.
+  `PaletteHeaderAccessory.width` is the strip's floor, not its size: `InlineArgumentFields` then takes
+  all the room the query leaves and splits it evenly between its fields. An extension's strip is its
+  own and stays as wide as it draws itself; the spacer after it takes the rest.
 - **`Placement` is what a strip does to the field beside it.** `.afterQuery` (root search) drops the
   prompt and squeezes the field to the typed text, so the chips follow what was typed and a glyph
   anchors them to the row. `.besideSearchField` (a screen of its own, where that row is already
@@ -226,9 +230,11 @@ The typed values live on `PaletteState.commandArguments`, keyed by
 `$1`–`$3` — and are cleared with the rest of the screen.
 `PaletteState.pendingArgumentEntryID` is how a *shortcut* reaches them: a quicklink opened with values
 still missing shows its own screen and names the row, and the header focuses that row's first empty
-field instead of the search field. A custom command has no screen of its own, so it also sets
-`argumentEntryID`, which lists that row alone in root search while the query is its name. Both are set
-**after** `showPalette`, since `prepare` clears them.
+field instead of the search field. A custom command or Smart Reminder has no screen of its own, so it
+also sets `argumentEntryID`, which lists that row alone in root search while the query is its name.
+Both are set **after** `showPalette`, since `prepare` clears them. A summon from hidden re-bumps
+`focusToken` a turn after the panel goes key, which would put the caret back in the search field, so
+the pending id survives until that bump re-asserts the field, or until focus leaves the ring.
 
 The flat `selection` index is the single source of truth for highlight / activation and **must always
 match the visible row order**, including the card at index 0 when present — the calculator's (see

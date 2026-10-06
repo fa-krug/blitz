@@ -660,8 +660,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - ⌘↵ and a click on the circle complete; ⌘⌫ asks before deleting; ⌘O opens the reminder itself
 - Smart Reminder with `Greg wants tomorrow a cake` writes `Give Greg a cake` due tomorrow and shows
   the banner; its **Open** shows the reminder in Reminders, hovering holds it, and it fades after 5s.
-  Esc on the sentence creates nothing. `call mum friday 5pm` lands on the coming Friday at 17:00
-  with an alarm
+  Its shortcut opens root search on the row with the caret in the field; Esc creates nothing. `call mum friday 5pm` lands on the coming Friday at 17:00
+  with an alarm; `ask Anna about the slides` lands with no due date
 - Smart Reminder's ✕ on the progress pill stops it and creates nothing; a model failure offers
   `Write It Myself` with the sentence as the title
 - With AI off, Smart Reminder leaves the launcher and its shortcut does nothing; My Reminders and

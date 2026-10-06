@@ -85,7 +85,7 @@ final class LauncherCoordinator {
                 AppLauncher.open(app.url)
                 return
             }
-            runCommand(id)
+            runCommand(id, arguments: arguments)
             return
         }
         if app.kind == .quickAction {
@@ -172,7 +172,7 @@ final class LauncherCoordinator {
     }
 
     /// The one funnel a built-in command runs through, from a palette row or its global shortcut.
-    func runCommand(_ id: CommandID) {
+    func runCommand(_ id: CommandID, arguments: [String: String] = [:]) {
         switch id {
         case .quickAI:
             core.quickAICoordinator.show()
@@ -225,7 +225,8 @@ final class LauncherCoordinator {
         case .createReminder:
             core.remindersCoordinator.createReminder()
         case .smartReminder:
-            core.remindersCoordinator.createSmartReminder()
+            core.remindersCoordinator.createSmartReminder(
+                note: arguments[SmartReminderArgumentsAccessory.fieldID] ?? "")
         case .searchContacts:
             core.contactsCoordinator.show()
         case .showNotes:

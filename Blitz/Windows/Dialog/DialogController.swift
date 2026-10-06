@@ -120,19 +120,6 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.draft
     }
 
-    func describeReminder() async -> String? {
-        let state = SmartReminderState()
-        let request = DialogRequest(
-            title: "Smart Reminder", symbol: "wand.and.stars", tone: .neutral,
-            actions: [
-                DialogAction(title: "Create"),
-                DialogAction(title: "Cancel", role: .cancel)
-            ],
-            defaultIndex: 0, cancelIndex: 1, accessory: .smartReminder(state))
-        guard await present(request) == 0, state.isValid else { return nil }
-        return state.trimmedNote
-    }
-
     func fillSnippetArguments(
         snippetName: String, arguments: [SnippetTemplateEngine.MissingArgument]
     ) async -> [String: String]? {
