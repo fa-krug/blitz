@@ -871,10 +871,10 @@ turn supplies. That is a sandbox boundary on a local CLI, not Blitz describing i
 switch must not be able to lift it.
 
 `mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).
-`aiConnections`, `aiDefaultModel`, `aiSystemPrompt` and `aiSystemPromptEnabled` are deliberately
-excluded from settings backups. The first is meaningless without machine-local Keychain items; the
-second names an external destination and must not silently redirect AI traffic after an import; the
-last two are standing instructions and the switch that sends them, both of which change every
+`aiConnections`, `aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt` and
+`aiSystemPromptEnabled` are deliberately excluded from settings backups. The first is meaningless
+without machine-local Keychain items; the two models name an external destination and must not
+silently redirect AI traffic after an import; the last two are standing instructions and the switch that sends them, both of which change every
 answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and `aiNewChatAfter`
 join them: all three are decisions about conversations that never leave the Mac that had them, and
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it

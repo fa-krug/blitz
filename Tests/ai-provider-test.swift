@@ -94,6 +94,7 @@ struct AIProviderTests {
         codexProtocolFramesRoundTrip()
         installedCLIStreamsDecode()
         settingsPersistAndRepairSelections()
+        smartReminderModelOverridesAndFallsBack()
         installedModelLoadingPreferencePersists()
         shownModelsFilterThePicker()
         switchedOffRoutesLeaveTheDefault()
@@ -1090,6 +1091,56 @@ struct AIProviderTests {
                 == .api(
                     connection: secondID, model: "gemini-model", effort: nil),
             "removing the default connection falls forward to another API model")
+    }
+
+    static func smartReminderModelOverridesAndFallsBack() {
+        let suite = "AIProviderTests.smartReminderModel"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let connectionID = UUID()
+        let store = AISettingsStore(defaults: defaults, isAppleIntelligenceAvailable: { true })
+        store.save(AIConnection(id: connectionID, name: "Fast", models: ["small", "large"]))
+        expect(store.smartReminderModel == nil, "Smart Reminder follows the default unless chosen")
+        expect(
+            store.smartReminderRoute == store.defaultModel,
+            "an unset override routes to the default model")
+
+        let small = AIModelSelection.api(connection: connectionID, model: "small", effort: nil)
+        store.selectSmartReminderModel(small)
+        store.selectSmartReminderModel(
+            .api(connection: connectionID, model: "missing", effort: nil))
+        expect(store.smartReminderRoute == small, "a model the connection lacks is not selectable")
+        expect(
+            AISettingsStore(defaults: defaults).smartReminderModel == small,
+            "the override survives a restart")
+
+        store.setRoute(.api(connectionID), enabled: false)
+        expect(store.smartReminderModel == nil, "switching its route off drops the override")
+        store.setRoute(.api(connectionID), enabled: true)
+
+        store.selectSmartReminderModel(small)
+        store.save(AIConnection(id: connectionID, name: "Fast", models: ["large"]))
+        expect(
+            store.smartReminderModel == nil, "a model removed from its connection drops the override")
+
+        store.selectSmartReminderModel(
+            .api(connection: connectionID, model: "large", effort: nil))
+        store.removeConnection(id: connectionID)
+        expect(store.smartReminderModel == nil, "a removed connection drops the override")
+        expect(
+            store.smartReminderRoute == .appleIntelligence,
+            "with no override Smart Reminder takes the default again")
+
+        store.selectSmartReminderModel(.claude(model: "sonnet", effort: nil))
+        expect(
+            store.smartReminderRoute == .appleIntelligence,
+            "an installed route that is switched off is not used")
+        store.reconcile(
+            installed: .claude, models: [InstalledAIModel(id: "haiku", name: "Haiku")],
+            isUnavailable: false)
+        expect(
+            store.smartReminderModel == nil,
+            "an installed model the tool no longer lists drops the override")
     }
 
     static func installedModelLoadingPreferencePersists() {

@@ -596,6 +596,9 @@ enum SettingsSearchCatalog {
             group: .remindersCommands, "Reminders commands",
             keywords: ["shortcut", "launcher", "create reminder", "smart", "ai", "natural language"]),
         .init(
+            group: .remindersSmartReminder, "Smart Reminder",
+            keywords: ["ai", "llm", "model", "reasoning effort", "natural language"]),
+        .init(
             group: .remindersLists, "Lists",
             keywords: ["accounts", "sources", "choose", "icloud", "exchange"])
     ]
