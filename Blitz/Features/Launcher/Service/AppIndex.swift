@@ -738,9 +738,12 @@ final class AppIndex {
 
     /// Index order, never score: a Settings list keeps the row being edited under the caret.
     func entries(matching query: String, where include: (AppEntry) -> Bool) -> [AppEntry] {
+        let query = LauncherOrder.Query(query)
+        // Unfiltered, the pane mustn't observe visits and re-render on every launch.
+        guard !query.isEmpty else { return apps.filter(include) }
         let usage = ranking.snapshot()
         return LauncherOrder.matching(
-            apps.filter(include), query: LauncherOrder.Query(query), sensitivity: sensitivity,
+            apps.filter(include), query: query, sensitivity: sensitivity,
             profile: \.search, signals: { signals(for: $0, usage: usage) })
     }
 
