@@ -97,6 +97,7 @@ extension SettingsAnchor {
 
     static let remindersReminders = Self(tab: .reminders, title: "Reminders")
     static let remindersCommands = Self(tab: .reminders, title: "Commands")
+    static let remindersSmartReminder = Self(tab: .reminders, title: "Smart Reminder")
     static let remindersLists = Self(tab: .reminders, title: "Lists")
 
     static let contactsContacts = Self(tab: .contacts, title: "Contacts")
