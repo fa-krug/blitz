@@ -194,10 +194,13 @@ run index clipboard-file-performance \
                            Blitz/Features/Clipboard/Service/ClipboardManager.swift
 run emoji-test             Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Emoji/Model/EmojiGridGeometry.swift \
+                           Blitz/Features/Emoji/Model/EmojiKeywords.swift \
                            Blitz/Features/Emoji/Model/EmojiData.generated.swift
 run emoji-search-test      Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Emoji/Model/EmojiData.generated.swift \
+                           Blitz/Features/Emoji/Model/EmojiKeywords.swift \
                            Blitz/Features/Emoji/Service/EmojiIndex.swift \
+                           Blitz/Features/Emoji/Service/EmojiKeywordStore.swift \
                            Blitz/Features/Emoji/Service/FrequentEmojiStore.swift \
                            Blitz/Features/Emoji/Service/PinnedEmojiStore.swift \
                            Blitz/Features/Launcher/Model/SearchRelevance.swift \
@@ -507,7 +510,8 @@ run slow -O raycast-test   Blitz/Features/Backup/Model/RaycastImportError.swift 
                            Blitz/Features/Backup/Service/Scrypt.swift \
                            Blitz/Platform/Compression/Zlib.swift
 run settings-backup-test   Blitz/Features/Settings/AppSettingsKey.swift \
-                           Blitz/Features/Backup/Model/SettingsBackupCoverage.swift
+                           Blitz/Features/Backup/Model/SettingsBackupCoverage.swift \
+                           Blitz/Features/Emoji/Model/EmojiKeywords.swift
 run settings-file-test     Blitz/Features/Settings/Model/*.swift \
                            Blitz/Features/Settings/Service/SettingsFileMonitor.swift \
                            Blitz/Features/Settings/Service/SettingsFileRepository.swift \

@@ -103,6 +103,28 @@ struct EmojiTests {
                 "\(preferred) reads the \(expected) packs")
         }
 
+        // Custom keywords: what Edit Keywords takes, and the bounds every load and import applies.
+        expect(
+            EmojiKeywords.terms(from: " yes ,  thumbs   up,,YES, Yés ,") == ["yes", "thumbs up"],
+            "input splits on commas, collapses whitespace and drops blank and folded repeats")
+        expect(EmojiKeywords.terms(from: " , ").isEmpty, "a blank field has no terms")
+        expect(
+            EmojiKeywords.input(for: ["yes", "thumbs up"]) == "yes, thumbs up",
+            "terms prefill the field as they are typed")
+        expect(
+            EmojiKeywords.terms(from: EmojiKeywords.input(for: ["a", "b c"])) == ["a", "b c"],
+            "prefilled terms survive an unedited save")
+        expect(
+            EmojiKeywords.normalized([String(repeating: "x", count: 100)])
+                == [String(repeating: "x", count: EmojiKeywords.termLengthCap)],
+            "an overlong term is cut to the cap")
+        expect(
+            EmojiKeywords.normalized((0..<50).map(String.init)).count == EmojiKeywords.termCap,
+            "a glyph's terms are capped")
+        expect(
+            EmojiKeywords.normalized(["A": ["x"], "": ["y"], "B": ["", " "]]) == ["A": ["x"]],
+            "a map drops blank glyphs and glyphs left without terms")
+
         // Skin tone application
         expect(EmojiCatalog.applyTone(.dark, to: "👋") == "👋🏿", "modifier appended")
         let victory = entries.first { $0.name == "victory hand" }!
@@ -113,6 +135,10 @@ struct EmojiTests {
                 && toned.unicodeScalars.contains { $0.value == 0x1F3FB },
             "tone strips VS16 and appends the modifier")
         expect(victory.display(tone: .none) == victory.glyph, "tone .none leaves the glyph alone")
+        expect(
+            Set(EmojiSkinTone.allCases.map { victory.display(tone: $0) }).count
+                == EmojiSkinTone.allCases.count,
+            "each skin-tone menu row pastes a distinct variant")
         expect(
             holdingHands!.display(tone: .dark) == holdingHands!.glyph,
             "tone ignored on non-capable entries")

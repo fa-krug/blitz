@@ -1,7 +1,11 @@
 import SwiftUI
 
 struct EmojiSettingsView: View {
+    @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
+    @State private var confirmingKeywordReset = false
+
+    private var keywords: EmojiKeywordStore { core.emojiKeywords }
 
     var body: some View {
         @Bindable var settings = settings
@@ -31,9 +35,43 @@ struct EmojiSettingsView: View {
             } header: {
                 SettingsSectionHeader(.emojiAppearance)
             }
+
+            Section {
+                LabeledContent {
+                    Button("Reset…", role: .destructive) {
+                        confirmingKeywordReset = true
+                    }
+                    .disabled(keywords.keywords.isEmpty)
+                } label: {
+                    SettingsRowTitle(.emojiSearch, "Custom Keywords")
+                    Text(keywordSummary)
+                }
+            } header: {
+                SettingsSectionHeader(.emojiSearch)
+            }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.emoji)
+        .confirmationDialog(
+            "Reset custom emoji keywords?",
+            isPresented: $confirmingKeywordReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Keywords", role: .destructive) {
+                keywords.removeAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Search goes back to the built-in keywords alone.")
+        }
+    }
+
+    private var keywordSummary: String {
+        switch keywords.keywords.count {
+        case 0: "Add your own with Edit Keywords (⌘E) in the picker."
+        case 1: "1 emoji has words of your own."
+        case let count: "\(count) emoji have words of your own."
+        }
     }
 }
 

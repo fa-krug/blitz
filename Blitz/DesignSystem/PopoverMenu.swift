@@ -7,6 +7,8 @@ enum PopoverMenuIcon: Equatable {
     case file(path: String)
     /// A picture's own preview, decoded once per id: a staged file's row shows what it removes.
     case thumbnail(id: UUID, data: Data)
+    /// A character drawn in the icon slot: an emoji row shows the variant it pastes.
+    case glyph(String)
     /// No glyph and no slot: a run of rows under one repeated icon says more without it.
     case blank
 
@@ -377,6 +379,10 @@ private struct PopoverMenuRow: View {
                         MenuFileIcon(path: path)
                     case .thumbnail(let id, let data):
                         MenuThumbnail(id: id, data: data)
+                    case .glyph(let text):
+                        Text(text)
+                            .font(.system(size: metrics.scaled(Theme.Typography.menuSymbolSize)))
+                            .frame(width: metrics.size.menuIcon, height: metrics.size.menuIcon)
                     }
                 }
                 Text(item.title)

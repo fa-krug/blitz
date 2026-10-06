@@ -110,6 +110,24 @@ struct SettingsBackupTest {
             naming("externally sourced fields have no AppSettings key", Array(notActuallyExternal)),
             notActuallyExternal.isEmpty)
 
+        // Custom emoji keywords ride a backup as content, so an import meets the same bounds.
+        let hostile: [String: [String]] = [
+            "": ["orphan"], "👍": [" yes ", "YES", "", String(repeating: "z", count: 500)],
+            "👎": [" ", ","]
+        ]
+        let restored = EmojiKeywords.normalized(hostile)
+        check(
+            "an imported keyword map drops blank glyphs and empty term lists",
+            Set(restored.keys) == ["👍"])
+        check(
+            "imported keywords are trimmed, deduplicated and length-capped",
+            restored["👍"] == ["yes", String(repeating: "z", count: EmojiKeywords.termLengthCap)])
+        let flood = Dictionary(
+            uniqueKeysWithValues: (0..<(EmojiKeywords.glyphCap + 10)).map { ("g\($0)", ["t"]) })
+        check(
+            "an imported keyword map is capped",
+            EmojiKeywords.normalized(flood).count == EmojiKeywords.glyphCap)
+
         print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
         exit(failures == 0 ? 0 : 1)
     }

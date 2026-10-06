@@ -884,7 +884,7 @@ private struct AIProviderTile: View {
             Image(name).resizable().renderingMode(.template).scaledToFit()
         case .symbol(let name):
             Image(systemName: name).resizable().scaledToFit()
-        case .file, .thumbnail, .blank:
+        case .file, .thumbnail, .blank, .glyph:
             Image(systemName: "sparkles").resizable().scaledToFit()
         }
     }

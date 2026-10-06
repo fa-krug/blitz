@@ -53,6 +53,7 @@ final class AppCore {
     let emojiIndex = EmojiIndex()
     let frequentEmoji = FrequentEmojiStore()
     let pinnedEmoji = PinnedEmojiStore()
+    let emojiKeywords = EmojiKeywordStore()
     let runningApps = RunningAppsMonitor()
     let palette = PaletteState()
     let fileSearch = FileSearchSession()
@@ -187,8 +188,8 @@ final class AppCore {
         appIndex: appIndex, palette: palette, windowController: windowController,
         paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var emojiCoordinator = EmojiCoordinator(
-        frequentEmoji: frequentEmoji, settings: settings, windowController: windowController,
-        paletteCoordinator: paletteCoordinator)
+        frequentEmoji: frequentEmoji, keywords: emojiKeywords, settings: settings,
+        windowController: windowController, paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var calculatorCoordinator = CalculatorCoordinator(
         calcHistory: calcHistory, paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var calendarCoordinator = CalendarCoordinator(
@@ -294,6 +295,11 @@ final class AppCore {
             pinnedEmoji.onPersistenceFailure = { [weak self] in
                 self?.showMessage("Couldn't save Emoji & Symbols pins", tone: .danger)
             }
+            emojiKeywords.onPersistenceFailure = { [weak self] in
+                self?.showMessage("Couldn't save emoji keywords", tone: .danger)
+            }
+            emojiKeywords.onChange = { [weak self] in self?.emojiIndex.setCustomKeywords($0) }
+            emojiIndex.setCustomKeywords(emojiKeywords.keywords)
 
             appIndex.start(settings: settings)
             clipboardCoordinator.applyEnabled()
@@ -1013,14 +1019,14 @@ final class AppCore {
         await dialogs.describeReminder()
     }
 
-    /// A one-line rename, for the same reason.
+    /// A one-line text prompt, for the same reason.
     func editText(
-        title: String, symbol: String, text: String, placeholder: String, label: String,
-        confirmTitle: String
+        title: String, message: String? = nil, symbol: String, text: String, placeholder: String,
+        label: String, confirmTitle: String
     ) async -> String? {
         await dialogs.editText(
-            title: title, symbol: symbol, text: text, placeholder: placeholder, label: label,
-            confirmTitle: confirmTitle)
+            title: title, message: message, symbol: symbol, text: text, placeholder: placeholder,
+            label: label, confirmTitle: confirmTitle)
     }
 
     /// A multi-line edit, for the same reason.

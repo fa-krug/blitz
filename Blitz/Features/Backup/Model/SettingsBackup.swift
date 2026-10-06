@@ -15,6 +15,7 @@ struct SettingsBackup: Codable {
     var hiddenLauncherKinds: [String]?
     var launcherAliases: [String: String]?
     var pinnedEmoji: [String]?
+    var emojiKeywords: [String: [String]]?
 
     /// Enums store by raw value, so an unknown one is ignored rather than failing.
     struct SettingsData: Codable {
@@ -121,6 +122,7 @@ struct SettingsBackup: Codable {
         var hiddenItems = 0
         var aliases = 0
         var pinnedEmoji = 0
+        var emojiKeywords = 0
         var customCommands = 0
         var quicklinks = 0
         var windowLayouts = 0
@@ -257,6 +259,7 @@ extension SettingsBackup {
         backup.hiddenLauncherKinds = Array(core.visibility.disabledKinds)
         backup.launcherAliases = core.aliases.aliases
         backup.pinnedEmoji = core.pinnedEmoji.glyphs
+        backup.emojiKeywords = core.emojiKeywords.keywords
         return backup
     }
 
@@ -302,6 +305,10 @@ extension SettingsBackup {
         if let pinnedEmoji {
             core.pinnedEmoji.replace(pinnedEmoji)
             summary.pinnedEmoji = core.pinnedEmoji.glyphs.count
+        }
+        if let emojiKeywords {
+            core.emojiKeywords.replace(emojiKeywords)
+            summary.emojiKeywords = core.emojiKeywords.keywords.count
         }
         return summary
     }
