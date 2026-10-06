@@ -41,8 +41,7 @@ struct LauncherItemsSection: View {
         Section {
             SettingsFilterField(prompt: searchPrompt, query: $query)
             LauncherItemsList(
-                entries: entries, query: query, isEnabled: visibility.isKindEnabled(kind),
-                anchor: anchor)
+                entries: entries, query: query, isEnabled: visibility.isKindEnabled(kind))
         } header: {
             SettingsSectionHeader(anchor)
         }
@@ -58,8 +57,6 @@ struct LauncherItemsList: View {
     let entries: [AppEntry]
     let query: String
     let isEnabled: Bool
-    /// Lets a `Form` row carry the reveal pulse; a hosted table cell has no window session to read.
-    var anchor: SettingsAnchor?
 
     @Environment(VisibilityStore.self) private var visibility
     @Environment(AliasStore.self) private var aliases
@@ -73,8 +70,6 @@ struct LauncherItemsList: View {
             Text(query.isEmpty ? "Nothing here yet." : "No matches for “\(query)”.")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
-        } else if entries.first?.kind != .application && entries.first?.kind != .appleShortcut {
-            ForEach(entries) { entry in LauncherItemRow(entry: entry, anchor: anchor) }
         } else {
             // One row holding the table: a `Form` realizes every row it is handed.
             SettingsRowsTable(
@@ -92,14 +87,12 @@ struct LauncherItemsList: View {
 /// One launcher item's row; a table cell hosts it and hands it new entries as the list scrolls.
 struct LauncherItemRow: View {
     let entry: AppEntry
-    var anchor: SettingsAnchor?
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
         SettingsRow(
             title: entry.name,
-            labelOpacity: visibility.isItemVisible(entry) ? 1 : 0.45,
-            anchor: anchor
+            labelOpacity: visibility.isItemVisible(entry) ? 1 : 0.45
         ) {
             // Keyed so a reused cell seeds the new entry's icon on its first frame.
             AppIconView(app: entry)

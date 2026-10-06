@@ -835,7 +835,7 @@ its filter field through `settingsFilterSeed`, so a long list shows the row rath
 That field filters through `AppIndex.entries(matching:where:)`: the launcher's own match test
 (`LauncherOrder.matching`) over the pane's slice alone, in list order, with neither the ranked
 pass's 200-row cap nor its category words.
-For Applications and Apple Shortcuts that is the only way in: they draw their rows in a hosted table
+That is the only way in: every such list draws its rows in a hosted table
 whose cells sit outside the `Form`, with no id to scroll to and no window session for the pulse to
 read, so the reveal lands on the section — it always tries the section first, and a row it can find
 still wins. The seed checks that the list really holds the name, so a search result for the
