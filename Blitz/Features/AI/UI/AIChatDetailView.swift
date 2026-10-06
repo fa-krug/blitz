@@ -586,7 +586,7 @@ private struct MenuIconImage: View {
             } else {
                 Image(systemName: "sparkles")
             }
-        case .file, .thumbnail, .blank:
+        case .file, .thumbnail, .blank, .glyph:
             Image(systemName: "sparkles")
         }
     }

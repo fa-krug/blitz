@@ -135,12 +135,12 @@ final class DialogController: NSObject, NSWindowDelegate {
 
     /// One line; a blank answer is still an answer, so a caller can clear what it named.
     func editText(
-        title: String, symbol: String, text: String, placeholder: String, label: String,
-        confirmTitle: String
+        title: String, message: String? = nil, symbol: String, text: String, placeholder: String,
+        label: String, confirmTitle: String
     ) async -> String? {
         let state = DialogTextState(text: text, placeholder: placeholder, label: label)
         let request = DialogRequest(
-            title: title, symbol: symbol, tone: .neutral,
+            title: title, message: message, symbol: symbol, tone: .neutral,
             actions: [
                 DialogAction(title: confirmTitle),
                 DialogAction(title: "Cancel", role: .cancel)

@@ -17,15 +17,17 @@ A palette sub-screen (reached like Clipboard / Calculator History) presenting a 
 | --- | --- |
 | `Model/EmojiCatalog.swift` | The catalog model — groups, names, keywords |
 | `Model/EmojiGridGeometry.swift` | Pure grid math — columns, item sizing |
+| `Model/EmojiKeywords.swift` | Custom keyword parsing and the bounds every load and import applies |
 | `Model/EmojiData.generated.swift` | The dataset |
 | `Resources/EmojiKeywords/<language>.txt` | CLDR keyword packs, `glyph\|terms` per line |
 | `Service/EmojiIndex.swift` | Search index over the catalog |
 | `Service/FrequentEmojiStore.swift` | Persisted emoji history and usage counts |
 | `Service/PinnedEmojiStore.swift` | Persisted pins, in the order the user set |
+| `Service/EmojiKeywordStore.swift` | Persisted custom keywords, base glyph → terms |
 | `UI/EmojiGridView.swift` | The SwiftUI grid |
 | `UI/EmojiScreen.swift`, `UI/EmojiCoordinator.swift` | The palette screen and its action surface |
 
-The index and the store are **effects**, so they live under `Service/` — only the three files above them
+The index and the stores are **effects**, so they live under `Service/` — only the four files above them
 are pure.
 
 ## Search
@@ -35,8 +37,9 @@ are pure.
   subsequence never spans two keywords.
 - **Every word of a multiword query must start a word** in the name or a keyword, in any order. A literal
   phrase outranks words found in the name, which outrank words assembled from name and keywords.
-- **A full name ranks first, then a complete leading name word, then an exact keyword**, then a partial
-  leading word: `birthday` keeps 🎂 first, and `pray` favours the annotation over "prayer beads".
+- **A full name ranks first, then an exact custom keyword, then a complete leading name word, then an
+  exact CLDR keyword**, then a partial leading word: `birthday` keeps 🎂 first, and `pray` favours the
+  annotation over "prayer beads".
 - **Colon-wrapped queries are unwrapped**, so `:+1:` reuses CLDR's `+1` annotation with no alias table.
 - **Other languages add keywords; English always stays.** `AppCore` loads one pack per language in
   `Locale.preferredLanguages`, matched by `Bundle.preferredLocalizations` (`zh-HK` reads `zh-Hant`), so
@@ -48,8 +51,28 @@ are pure.
 - **Search text is folded once, at load.** `EmojiIndex` keeps a `FuzzyMatch.Candidate` for each name
   and keyword, so a keystroke folds only the query. Folding non-ASCII keywords per keystroke made one
   pack cost 5–7× the English-only search.
+- **Custom keywords outrank CLDR's at every tier.** They score as a catalog keyword does but without
+  its penalty, so only the exact name beats an exact custom keyword. `EmojiIndex` keeps them folded per
+  glyph, apart from the parsed catalog, so an edit bumps the index's revision without a reparse and a
+  catalog reload keeps them. Multiword queries may match words inside them too.
 - **Usage breaks ties, never tiers.** The top 100 glyphs from `FrequentEmojiStore.top` add a 100…1
   bonus, and the store's identity and revision are in the search memo key.
+
+## Skin tones and custom keywords
+
+`AppSettings.emojiSkinTone` is the default every paste and copy applies. For a tone-capable entry the
+Actions menu adds a **Paste with Skin Tone** section: one row per `EmojiSkinTone`, its icon the variant
+it pastes (`PopoverMenuIcon.glyph`), so a one-off tone never changes the default.
+`EmojiCoordinator.pasteEmoji(_:tone:)` takes the override; usage is still counted on the untoned glyph.
+
+**Edit Keywords… (⌘E)** opens a one-line `DialogController.editText` prompt, prefilled with the
+emoji's current terms, comma-separated. Saving normalizes them through `EmojiKeywords` — whitespace
+collapses, a term repeated in another case or accent keeps its first spelling, blank terms drop — and
+an emptied field clears the emoji's terms. `EmojiKeywordStore` keeps them in `emoji-keywords.json`
+under Application Support, keyed by base glyph and kept out of the generated dataset so a regeneration
+never drops them. `AppCore` pushes every change into `EmojiIndex.setCustomKeywords`. The configuration
+backup carries them beside the pins, and an import replaces them under the same bounds a load applies.
+Settings › Emoji › Search counts them and offers Reset….
 
 ## Rendering
 

@@ -99,8 +99,8 @@ If a change touches anything in the right column, the harness on the left is man
 | `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |
 | `clipboard-test` | `Clipboard/Model/ClipboardStore.swift` — side tables, titles, edits, rich-text flavours — `ClipboardFilter.swift`, `ClipboardFileKind.swift`, `ClipDragPayload.swift`'s Open Link URL, the colour trio |
 | `pasteboard-test` | `Clipboard/Service/ClipboardManager.swift` capture and `Paster.write` — what a Finder copy reads as, what a file entry writes back, and a rich entry's RTF/HTML capture, cap and write-back |
-| `emoji-test` | `Emoji/Model/EmojiCatalog.swift`, `EmojiGridGeometry.swift`, the generated data and keyword packs |
-| `emoji-search-test` | `Emoji/Service/EmojiIndex.swift`, `FrequentEmojiStore.swift`, `Scripts/gen-emoji.js`'s keyword format, multilingual search |
+| `emoji-test` | `Emoji/Model/EmojiCatalog.swift`, `EmojiGridGeometry.swift`, `EmojiKeywords.swift`, the generated data and keyword packs |
+| `emoji-search-test` | `Emoji/Service/EmojiIndex.swift`, `FrequentEmojiStore.swift`, `PinnedEmojiStore.swift`, `EmojiKeywordStore.swift`, `Scripts/gen-emoji.js`'s keyword format, multilingual search, custom keyword ranking |
 | `palette-navigation-test` | `Palette/PaletteState.swift`'s screen motions — `prepare`, `replace`, `push`, `pop` |
 | `palette-selection-test` | `Features/PaletteRowIndex.swift` — the flat index, section starts, ⌘↑/↓ jumps and ⌥↑/↓ pages |
 | `interface-size-test` | `DesignSystem/InterfaceMetrics.swift`, `Features/Settings/InterfaceSize.swift`, `Extensions/Model/ExtensionFormMetrics.swift` |

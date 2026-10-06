@@ -115,6 +115,9 @@ struct HeaderMenuButton: View {
                     MenuFileIcon(path: path)
                 case .thumbnail(let id, let data):
                     MenuThumbnail(id: id, data: data)
+                case .glyph(let text):
+                    Text(text)
+                        .font(.system(size: metrics.scaled(symbolSize)))
                 }
                 Text(title)
                     .font(metrics.typography.bar)

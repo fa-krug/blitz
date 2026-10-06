@@ -14,16 +14,25 @@ final class EmojiIndex {
         let order: Int
     }
 
+    /// `joined` gates the per-keyword walk and answers multiword terms; `list` keeps each phrase.
+    private struct FoldedKeywords: Sendable {
+        let joined: FuzzyMatch.Candidate
+        let list: [FuzzyMatch.Candidate]
+
+        init(_ terms: [String]) {
+            joined = FuzzyMatch.Candidate(terms.joined(separator: ","))
+            list = terms.map(FuzzyMatch.Candidate.init)
+        }
+    }
+
     /// An entry's text folded once at load, so a keystroke folds only the query.
     private struct FoldedEntry: Sendable {
         let name: FuzzyMatch.Candidate
-        let keywords: FuzzyMatch.Candidate
-        let keywordList: [FuzzyMatch.Candidate]
+        let keywords: FoldedKeywords
 
         init(_ entry: EmojiEntry) {
             name = FuzzyMatch.Candidate(entry.name)
-            keywords = FuzzyMatch.Candidate(entry.keywords)
-            keywordList = entry.keywords.split(separator: ",").map { FuzzyMatch.Candidate(String($0)) }
+            keywords = FoldedKeywords(entry.keywords.split(separator: ",").map(String.init))
         }
     }
 
@@ -38,8 +47,10 @@ final class EmojiIndex {
     private var byGlyph: [String: EmojiEntry] = [:]
     /// Parallel to `entries`.
     private var foldedEntries: [FoldedEntry] = []
+    /// Keyed by glyph rather than parallel, so an edit never waits on or reparses the catalog.
+    private var customKeywords: [String: FoldedKeywords] = [:]
     @ObservationIgnored private var searchMemo = Memo<SearchKey, [EmojiEntry]>()
-    /// Bumped on each load, so the key above names the catalog it scored.
+    /// Bumped on each load and keyword edit, so the key above names the text it scored.
     private var revision = 0
 
     var isLoaded: Bool { !entries.isEmpty }
@@ -73,6 +84,12 @@ final class EmojiIndex {
 
     func entry(for glyph: String) -> EmojiEntry? { byGlyph[glyph] }
 
+    /// The user's own terms, which outrank the catalog's keywords.
+    func setCustomKeywords(_ keywords: [String: [String]]) {
+        customKeywords = keywords.mapValues(FoldedKeywords.init)
+        revision &+= 1
+    }
+
     /// Ranked fuzzy matches over names and keywords; an empty query returns nothing.
     func search(_ query: String, frequent: FrequentEmojiStore, limit: Int = 320) -> [EmojiEntry] {
         let trimmed = FuzzyMatch.normalized(query).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -95,7 +112,10 @@ final class EmojiIndex {
                 }, uniquingKeysWith: max)
             var scored: [ScoredEntry] = []
             for (order, entry) in entries.enumerated() {
-                guard let textScore = Self.textScore(query, terms: terms, folded: foldedEntries[order])
+                let custom = customKeywords.isEmpty ? nil : customKeywords[entry.glyph]
+                guard
+                    let textScore = Self.textScore(
+                        query, terms: terms, folded: foldedEntries[order], custom: custom)
                 else { continue }
                 let score = textScore + (frecency[entry.glyph] ?? 0)
                 scored.append(ScoredEntry(entry: entry, score: score, order: order))
@@ -111,18 +131,21 @@ final class EmojiIndex {
     /// Just under half a tier, so an equal-quality name match always wins.
     private static let keywordPenalty = 500
     private static let frecencyLimit = 100
-    /// A complete leading name word: above an exact keyword, below the exact name.
+    /// A complete leading name word scores just under this, which also caps any keyword.
     private static let leadingWordScore = 95_000
     /// Scattered query words rank below every literal phrase, name-only words first.
     private static let nameWordsScore = 60_000
     private static let mixedWordsScore = 50_000
 
     private static func textScore(
-        _ query: FuzzyMatch.Query, terms: [String], folded: FoldedEntry
+        _ query: FuzzyMatch.Query, terms: [String], folded: FoldedEntry, custom: FoldedKeywords?
     ) -> Int? {
         var nameOnly = true
         for term in terms where !containsWordStart(term, in: folded.name.text) {
-            guard !term.contains(","), containsWordStart(term, in: folded.keywords.text) else { return nil }
+            guard !term.contains(","),
+                containsWordStart(term, in: folded.keywords.joined.text)
+                    || custom.map({ containsWordStart(term, in: $0.joined.text) }) == true
+            else { return nil }
             nameOnly = false
         }
 
@@ -139,11 +162,24 @@ final class EmojiIndex {
             let ordered = nameMatch?.tier == .subsequence ? nameMatch?.score ?? 0 : 0
             best = max(best ?? Int.min, (nameOnly ? nameWordsScore : mixedWordsScore) + ordered)
         }
-        guard !folded.keywordList.isEmpty, FuzzyMatch.score(query, candidate: folded.keywords) != nil
-        else { return best }
-        for keyword in folded.keywordList {
+        // Unpenalised, so the user's own term outranks a catalog keyword of the same quality.
+        if let custom, let score = keywordScore(query, in: custom) {
+            best = max(best ?? Int.min, score)
+        }
+        if let score = keywordScore(query, in: folded.keywords) {
+            best = max(best ?? Int.min, score - keywordPenalty)
+        }
+        return best
+    }
+
+    /// Capped at a leading name word, so only the exact name outranks an exact keyword.
+    private static func keywordScore(_ query: FuzzyMatch.Query, in keywords: FoldedKeywords) -> Int? {
+        guard !keywords.list.isEmpty, FuzzyMatch.score(query, candidate: keywords.joined) != nil
+        else { return nil }
+        var best: Int?
+        for keyword in keywords.list {
             guard let match = FuzzyMatch.match(query, candidate: keyword) else { continue }
-            best = max(best ?? Int.min, min(match.score, leadingWordScore) - keywordPenalty)
+            best = max(best ?? Int.min, min(match.score, leadingWordScore))
             if match.tier == .exact { break }
         }
         return best
