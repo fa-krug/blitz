@@ -866,11 +866,12 @@ running dot and the availability of the running-only actions:
   user leaves standing, relaunches nothing and leaves that app running. The palette dismisses the
   moment the quit is asked for and never restores focus — either the relaunch takes it, or the app
   that refused the quit is the one asking for it.
-- **Quit All Applications** a system action. `AppLauncher.quitAllTargets()` is the
+- **Quit All Applications** — a system action. `AppLauncher.quitAllTargets()` is the
   policy (every `.regular` app except Finder — `terminate()` only relaunches it — and Blitz,
   excluded by PID because About/Settings temporarily flips it to `.regular`). `SystemActionCoordinator.quitAllApps()`
-  resolves that list **once**, confirms it with an `NSAlert`, then terminates exactly what was
-  confirmed. The palette hides before the alert — it is a floating panel and would sit above it.
+  resolves that list **once**, confirms it through `DialogController` (`AppCore.confirm`), then
+  terminates exactly what was confirmed. The palette hides before the dialog — it is a floating
+  panel and would sit above it.
 
 Every quit but Force Quit is a graceful `NSRunningApplication.terminate()`, so an app with unsaved
 work still puts up its own save sheet.
