@@ -17,7 +17,7 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │ SearchRelevance · LauncherMatch · EntryNaming · ScriptRomanization ·       │
 │ LauncherOrder · LauncherSuggestions · LauncherRankingStore · SearchScopes · │
 │ LauncherQueryHistory{,Store} ·                                             │
-│ FileSearch{Query,Result,Scope} ·                                           │
+│ FileSearch{Query,Result,Scope} · Screenshot{Query,File,TextStore} ·        │
 │ Calculator/* · EmojiCatalog · EmojiGridGeometry · SystemAction ·            │
 │ VolumeLevel ·                                                              │
 │ WindowCommand · WindowPlacementEngine · WindowActionMemory · WindowLayout/* ·      │
@@ -39,7 +39,8 @@ Independently of the folder tree, every mature subsystem has converged on the sa
                                    │ consumed by
 ┌─ EFFECT ─────────────────────────▼─────────────────────────────────────────┐
 │ All platform I/O, one folder per feature.                                  │
-│ AppIndex · FileSearchService · SettingsPaneScanner ·                       │
+│ AppIndex · FileSearchService · ScreenshotService · ScreenshotIndexer ·     │
+│ SettingsPaneScanner ·                                                      │
 │ AXWindowAccess · AXScreens · WindowInventory · WindowLayoutRunner ·        │
 │ RoomWindowSweep · RoomRunner ·                                             │
 │ IconCache · WindowMover · UninstallScanner · UninstallRunner ·             │
@@ -96,7 +97,8 @@ app: the stores (`AppIndex`, `ClipboardStore`, `SnippetsStore`, `QuicklinkStore`
 `FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `LauncherQueryHistoryStore`,
 `CalculatorHistoryStore`,
 `CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`), the
-managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer`, the opt-in `SettingsFileRepository`,
+managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer` and
+`ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
 (`AppSettings`, `PaletteState`, `FileSearchSession`, `MenuSearchSession`, `UninstallSession`,
 `MeetingClock`), `NotesStore`, the twenty-one feature coordinators, and the
@@ -116,7 +118,8 @@ fine too; deciding something with one is what the rule forbids. `showNotice`, `c
 
 New long-lived state belongs on `AppCore`, wired in `start()`. Do not create a competing singleton: this is a singleton, not a container.
 
-Clipboard text recognition is the one feature that leaves the process. `AppCore` owns the indexer;
+Text recognition — the clipboard's and Search Screenshots' — is the one thing that leaves the
+process. `AppCore` owns both indexers;
 the stateless `ClipboardTextWorker` runs one bundled `ClipboardTextHelper` per item, from
 `Contents/Helpers`, and reaps it before returning. Vision's and PDFKit's allocations therefore belong
 to a process that exits, and the helper — which has no database, clipboard or settings access — is
@@ -234,7 +237,8 @@ Blitz/
   Assets.xcassets/  the app icon and the bundled image sets some catalog symbols resolve to
   Features/
     PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
-    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ MenuSearch/
+    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ Screenshots/
+    MenuSearch/
     Notes/ Quicklinks/ Snippets/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ Backup/
     WindowManagement/ Onboarding/ Updates/ Support/ AI/ Settings/
     Extensions/

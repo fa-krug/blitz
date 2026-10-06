@@ -56,6 +56,8 @@
 - **No recognition ever runs in the app process.** `ClipboardTextWorker` spawns one bundled
   `ClipboardTextHelper` per item and reaps it, which is the whole reason Vision's and PDFKit's
   allocations do not accumulate in Blitz. The helper is handed a path and answers with text.
+  Search Screenshots spawns the same helper through the same worker; see
+  [screenshots.md](screenshots.md).
 
 ## Poll-based capture
 

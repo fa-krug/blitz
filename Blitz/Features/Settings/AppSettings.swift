@@ -307,6 +307,17 @@ final class AppSettings {
         didSet { defaults.set(fileSearchScopes, forKey: Key.fileSearchScopes.rawValue) }
     }
 
+    var screenshotSearchEnabled: Bool {
+        didSet { defaults.set(screenshotSearchEnabled, forKey: Key.screenshotSearchEnabled.rawValue) }
+    }
+
+    /// Per machine and never carried by a backup: it starts background recognition on this Mac.
+    var screenshotTextSearchEnabled: Bool {
+        didSet {
+            defaults.set(screenshotTextSearchEnabled, forKey: Key.screenshotTextSearchEnabled.rawValue)
+        }
+    }
+
     /// Only what the user added; the shipped rules are compiled into `FileSearchIgnoreList`.
     var fileSearchIgnorePatterns: [String] {
         didSet {
@@ -702,6 +713,8 @@ final class AppSettings {
             ?? FileSearchScope.defaultScopes
         fileSearchIgnorePatterns =
             defaults.stringArray(forKey: Key.fileSearchIgnorePatterns.rawValue) ?? []
+        screenshotSearchEnabled = defaults.bool(forKey: Key.screenshotSearchEnabled.rawValue)
+        screenshotTextSearchEnabled = defaults.bool(forKey: Key.screenshotTextSearchEnabled.rawValue)
         notesEnabled = defaults.bool(forKey: Key.notesEnabled.rawValue)
         notesRendersMarkdown =
             defaults.object(forKey: Key.notesRendersMarkdown.rawValue) == nil

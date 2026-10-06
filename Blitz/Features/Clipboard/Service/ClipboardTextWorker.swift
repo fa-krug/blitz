@@ -11,12 +11,15 @@ nonisolated enum ClipboardTextWorker {
     private static let queue = DispatchQueue(
         label: "de.fa-krug.blitz.clipboard-text", qos: .background, attributes: .concurrent)
 
+    static var bundledHelper: URL {
+        Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ClipboardTextHelper")
+    }
+
     static func extract(_ item: ClipboardItem) async throws -> String {
         guard let path = item.imagePath ?? item.filePath else { return "" }
         let kind = item.kind == .image ? ClipboardFileKind.image : ClipboardFileKind.of(path: path)
         guard kind == .image || kind == .pdf else { return "" }
-        let executable = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ClipboardTextHelper")
-        return try await extract(at: URL(fileURLWithPath: path), isPDF: kind == .pdf, executable: executable)
+        return try await extract(at: URL(fileURLWithPath: path), isPDF: kind == .pdf, executable: bundledHelper)
     }
 
     static func extract(

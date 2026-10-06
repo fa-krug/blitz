@@ -223,8 +223,9 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         // Built per query and never indexed, so no pane lists one.
         guard !CommandCatalog.isQueryDriven(self) else { return nil }
         if let settingsOwner {
-            // The one owned command its pane seats beside the settings only it reads.
+            // The owned commands their panes seat beside the settings only they read.
             if id == CommandID.searchMenuItems.rawValue { return .row(.navigationMenuSearch, name) }
+            if id == CommandID.searchScreenshots.rawValue { return .row(.fileSearchScreenshots, name) }
             return SettingsAnchor.commands(ownedBy: settingsOwner).map { .row($0, name) }
         }
         switch kind {

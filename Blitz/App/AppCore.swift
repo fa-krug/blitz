@@ -56,6 +56,10 @@ final class AppCore {
     let runningApps = RunningAppsMonitor()
     let palette = PaletteState()
     let fileSearch = FileSearchSession()
+    /// File Search's session over a different query: the captures Spotlight knows about.
+    let screenshotSearch: FileSearchSession
+    let screenshotText: ScreenshotTextStore
+    @ObservationIgnored private var screenshotIndexer: ScreenshotIndexer?
     let dictionary = DictionarySession()
     let extensionStore = ExtensionStoreSession()
     let menuSearch = MenuSearchSession()
@@ -103,8 +107,8 @@ final class AppCore {
 
     @ObservationIgnored private(set) lazy var paletteCoordinator = PaletteCoordinator(
         palette: palette, settings: settings, appIndex: appIndex,
-        fileSearch: fileSearch, menuSearch: menuSearch, windowSwitch: windowSwitch,
-        windowController: windowController)
+        fileSearch: fileSearch, screenshots: screenshotSearch, menuSearch: menuSearch,
+        windowSwitch: windowSwitch, windowController: windowController)
     /// Its own window and lifecycle: neither coordinator shows or closes the other's surface.
     @ObservationIgnored private(set) lazy var settingsCoordinator = SettingsCoordinator(core: self)
     @ObservationIgnored private(set) lazy var onboardingCoordinator = OnboardingCoordinator(
@@ -199,6 +203,10 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var fileSearchCoordinator = FileSearchCoordinator(
         settings: settings, appIndex: appIndex, session: fileSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, windowController: windowController, core: self)
+    @ObservationIgnored private(set) lazy var screenshotCoordinator = ScreenshotCoordinator(
+        settings: settings, appIndex: appIndex, session: screenshotSearch,
+        textStore: screenshotText, palette: palette, paletteCoordinator: paletteCoordinator,
+        core: self)
     @ObservationIgnored private(set) lazy var menuSearchCoordinator = MenuSearchCoordinator(
         settings: settings, appIndex: appIndex, session: menuSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, core: self)
@@ -252,6 +260,10 @@ final class AppCore {
             persists: settings.launcherSavesSearchHistory)
         self.settings = settings
         self.chatHistory = chatHistory
+        let screenshotText = ScreenshotTextStore(
+            url: AppPaths.applicationSupport().appending(path: "screenshots.sqlite3"))
+        self.screenshotText = screenshotText
+        screenshotSearch = Self.screenshotSession(settings: settings, text: screenshotText)
         supportReminders = SupportReminderStore(settings: settings)
         aiChats = AIChatSurfacesState(history: chatHistory)
         appIndex = AppIndex(ranking: launcherRanking, aliases: aliases)
@@ -288,6 +300,7 @@ final class AppCore {
             extensions.start(appIndex: appIndex, coordinator: extensionCoordinator)
             extensionCoordinator.applyEnabled()
             fileSearchCoordinator.applyEnabled()
+            screenshotCoordinator.applyEnabled()
             windowSwitchCoordinator.applyEnabled()
             menuSearchCoordinator.applyEnabled()
             fileSearchCoordinator.applyPolicy()
@@ -332,6 +345,7 @@ final class AppCore {
             paletteCoordinator.onScreenOpening = { [weak self] mode in
                 switch mode {
                 case .menuSearch: self?.menuSearchCoordinator.load()
+                case .screenshots: self?.screenshotIndexer?.schedule()
                 case .switchWindows: self?.windowSwitchCoordinator.load()
                 case .rooms, .roomWindows: self?.roomCoordinator.load()
                 case .reminders: self?.remindersCoordinator.remindersWillShow()
@@ -544,9 +558,42 @@ final class AppCore {
         indexer.start()
     }
 
+    /// Idempotent, as the clipboard's is: either switch flipping re-runs the whole decision.
+    func applyScreenshotTextSearch() {
+        guard settings.screenshotSearchEnabled, settings.screenshotTextSearchEnabled else {
+            screenshotIndexer?.stop()
+            return
+        }
+        let indexer =
+            screenshotIndexer
+            ?? ScreenshotIndexer(
+                store: screenshotText, homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                canRun: { ClipboardTextIndexer.isSystemIdle })
+        screenshotIndexer = indexer
+        indexer.start()
+    }
+
+    /// The switch is read per search, so turning text search off stops matching on the next key.
+    private static func screenshotSession(
+        settings: AppSettings, text: ScreenshotTextStore
+    ) -> FileSearchSession {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return FileSearchSession(
+            policy: FileSearchPolicy(scopes: [], ignorePatterns: [], homeDirectory: home),
+            debounce: .milliseconds(120)
+        ) { query, _, policy in
+            let store = await settings.screenshotTextSearchEnabled ? text : nil
+            return try await Task.detached(priority: .userInitiated) {
+                try ScreenshotService.search(
+                    query: query, homeDirectory: policy.homeDirectory, text: store)
+            }.value
+        }
+    }
+
     func prepareForTermination() {
         settingsFile?.flush()
         clipboardTextIndexer?.stop()
+        screenshotIndexer?.stop()
         // Caps Lock first: its remap is the one teardown that outlives the process.
         hyperKeyTap.prepareForTermination()
         windowLayoutCoordinator.prepareForTermination()
@@ -662,6 +709,11 @@ final class AppCore {
         track(
             { _ = $0.clipboardTextSearchEnabled }, reproject: { $0.applyClipboardTextSearch() })
         track({ _ = $0.fileSearchEnabled }, reproject: { $0.fileSearchCoordinator.applyEnabled() })
+        track(
+            { _ = $0.screenshotSearchEnabled },
+            reproject: { $0.screenshotCoordinator.applyEnabled() })
+        track(
+            { _ = $0.screenshotTextSearchEnabled }, reproject: { $0.applyScreenshotTextSearch() })
         // Two features, one switch: each coordinator gates only its own command and mode.
         track(
             { _ = $0.navigationEnabled },

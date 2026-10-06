@@ -52,6 +52,12 @@ struct SettingsBackupTest {
         check(
             "user ignore patterns ride the settings backup",
             mirrored["fileSearchIgnorePatterns"] == .fileSearchIgnorePatterns)
+        check(
+            "screenshot search rides the settings backup",
+            mirrored["screenshotSearchEnabled"] == .screenshotSearchEnabled)
+        check(
+            "screenshot text recognition never rides a backup",
+            excluded[AppSettingsKey.screenshotTextSearchEnabled.rawValue] != nil)
         check("notes enablement rides the settings backup", mirrored["notesEnabled"] == .notesEnabled)
         check(
             "Markdown rendering rides the settings backup",
