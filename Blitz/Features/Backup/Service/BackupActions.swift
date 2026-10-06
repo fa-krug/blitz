@@ -20,6 +20,8 @@ enum BackupActions {
         /// Set when the library wouldn't open; the rest of the import still applied.
         var quicklinksError: String?
         var missingImages: Int
+        /// The launcher landed on ⌘Space, which macOS still hands to Spotlight.
+        var launcherBlockedBySpotlight: Bool
     }
 
     // MARK: - Blitz native (own file panels; dialogs come from `AppCore`)
@@ -183,7 +185,14 @@ enum BackupActions {
             snippetsError: snippetsError,
             quicklinksImported: quicklinksImported,
             quicklinksError: quicklinksError,
-            missingImages: result.missingImages)
+            missingImages: result.missingImages,
+            launcherBlockedBySpotlight: launcherBlockedBySpotlight(core: core))
+    }
+
+    /// Raycast users often run it on ⌘Space, which only works once Spotlight lets go of it.
+    private static func launcherBlockedBySpotlight(core: AppCore) -> Bool {
+        core.hotKeys.binding(for: .togglePalette) == .combo(SpotlightShortcut.commandSpace)
+            && !SpotlightHandoffSession.currentHolders().isEmpty
     }
 
     /// Every Raycast channel (stable, beta, alpha, internal) shares this bundle-id prefix.
@@ -260,6 +269,9 @@ enum BackupActions {
     /// Not everything an import applies settles in the running app, so say to relaunch.
     private static let restartAfterImportText = "Quit and reopen Blitz to finish."
 
+    private static let spotlightHoldsLauncherText =
+        "Spotlight still takes ⌘Space; Settings › General shows how to free it."
+
     /// One sentence per Raycast category that actually moved, shared by the pane and onboarding.
     static func raycastText(_ outcome: RaycastOutcome) -> String {
         var parts: [String] = []
@@ -287,6 +299,7 @@ enum BackupActions {
             message += " \(outcome.missingImages) images were unavailable and skipped."
         }
         if !parts.isEmpty { message += " \(restartAfterImportText)" }
+        if outcome.launcherBlockedBySpotlight { message += " \(spotlightHoldsLauncherText)" }
         return message
     }
 

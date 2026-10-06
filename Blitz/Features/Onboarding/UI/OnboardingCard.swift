@@ -62,3 +62,18 @@ struct OnboardingRow<Trailing: View>: View {
         .padding(.vertical, Theme.Spacing.lg)
     }
 }
+
+/// The keys a tip teaches, as the launcher draws its own hints.
+struct OnboardingKeycaps: View {
+    let keycaps: [String]
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xxs) {
+            ForEach(Array(keycaps.enumerated()), id: \.offset) { _, cap in
+                KeyCapChip(text: cap, style: .outline)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(keycaps.joined())
+    }
+}

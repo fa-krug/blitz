@@ -36,9 +36,7 @@ struct GeneralSettingsView: View {
         @Bindable var settings = settings
         return Form {
             Section {
-                SettingsRow(title: "App Launcher", anchor: .generalGlobalShortcuts) {
-                    ShortcutRecorder(action: .togglePalette)
-                }
+                LauncherShortcutRows(hotKeys: core.hotKeys)
             } header: {
                 SettingsSectionHeader(.generalGlobalShortcuts)
             }
@@ -78,6 +76,12 @@ struct GeneralSettingsView: View {
                         SettingsRowTitle(.generalGeneral, "Auto-switch input source")
                         Text("While the launcher is open.")
                     }
+                }
+                LabeledContent {
+                    Button("Show Tour") { core.onboardingCoordinator.showOnboarding() }
+                } label: {
+                    SettingsRowTitle(.generalGeneral, "Welcome Tour")
+                    Text("The first-run setup, plus a few tips.")
                 }
             } header: {
                 SettingsSectionHeader(.generalGeneral)
@@ -243,6 +247,44 @@ struct GeneralSettingsView: View {
 
     private func refreshInputSources() {
         inputSources = core.inputSourceSwitcher.options(selecting: settings.autoSwitchInputSourceID)
+    }
+}
+
+/// The launcher's recorder, and a warning while macOS still takes its ⌘Space for Spotlight.
+private struct LauncherShortcutRows: View {
+    @State private var spotlight: SpotlightHandoffSession
+
+    init(hotKeys: HotKeyManager) {
+        _spotlight = State(initialValue: SpotlightHandoffSession(hotKeys: hotKeys))
+    }
+
+    var body: some View {
+        SettingsRow(title: "App Launcher", anchor: .generalGlobalShortcuts) {
+            ShortcutRecorder(action: .togglePalette)
+        }
+        .onAppear { spotlight.refresh() }
+        // Coming back from System Settings is what activates Blitz again.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            spotlight.refresh()
+        }
+        if spotlight.isLauncherBlocked {
+            HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .frame(width: Theme.Size.settingsRowIcon)
+                Text("Spotlight still opens with ⌘Space.")
+                    .foregroundStyle(.orange)
+                Spacer(minLength: Theme.Spacing.lg)
+                if !spotlight.isWaiting {
+                    Button("Fix…") { spotlight.showGuide() }
+                }
+            }
+            if spotlight.isWaiting {
+                SpotlightShortcutGuide(holders: spotlight.holders)
+            }
+        }
     }
 }
 

@@ -43,7 +43,9 @@ passphrase.
 An applications command hides the launched app's path after `::=::` in its id, resolved through
 `Bundle` to a bundle ID — the same resolution the hotkey, favorite and alias mappers all use. Hotkeys
 are `LayoutIndependent` key codes with named modifiers, and always import as a `.combo`: Raycast has no
-double-tap binding. A clipboard record's representations are nested and its timestamps carry fractional
+double-tap binding. When the launcher lands on ⌘Space while macOS still gives that chord to
+Spotlight, the result line says so and points at Settings › General, which shows how to free it (see
+[hotkeys.md](hotkeys.md#taking-space-from-spotlight)). A clipboard record's representations are nested and its timestamps carry fractional
 seconds; only an `image/*` representation whose file still exists becomes an image clip, and the rest
 are counted as missing rather than dropped silently. Quicklinks land through `QuicklinkArchive.merge`,
 so they add to the library and never replace it. `{Query}` is rewritten to `{argument}`; an `openWith`

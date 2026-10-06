@@ -666,7 +666,8 @@ id is what keeps "which pane owns this" out of the entry-ID namespace.
 Fourteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
 Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts, Quicklinks and Extensions. What
 is left in Settings › Commands is the set no feature switch governs: Calculator History, Open Camera,
-the three backup commands, Check for Updates, Blitz Settings, About, Support and Quit.
+the three backup commands, Check for Updates, Show Welcome Tour, Blitz Settings, About, Support and
+Quit.
 
 A pane's list is also its display order, so `CommandID`'s declaration order is grouped by owner.
 Nothing keys on that order — `CommandCatalog.all` sorts by name and every preference keys on the raw
