@@ -68,7 +68,7 @@ clipboard/items.jsonl      one clip per line
 clipboard/images/<uuid>.png
 snippets/<name>.md         copied verbatim
 notes/<name>.md            copied verbatim
-learning/{ranking,emoji,calculator}.json
+learning/{ranking,emoji,calculator,queries}.json
 ```
 
 A category the user didn't tick has no key in `counts` and no files in the archive, which is how the
@@ -135,6 +135,8 @@ Per category:
 - **Notes** land as new files through `NotesRepository.importNotes`, which suffixes a title that is
   already taken rather than overwriting it.
 - **Learning** replaces. Merging two Macs' frecency tables produces a table describing neither.
+  Search history is part of it, written only while **Remember search history** is on, so a backup
+  never saves searches the Mac was keeping in memory alone.
 
 An `id` never travels with a clip: `items.id` is `UNIQUE`, so a re-import minting fresh identities is
 what keeps a second pass from silently failing its inserts. Same reasoning as `QuicklinkArchive.merge`.

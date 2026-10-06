@@ -14,6 +14,12 @@ struct ClipboardScreen: PaletteScreen {
 
     var landingSelection: Int { store.landingIndex(in: vm.query, filter: vm.clipboardFilter) }
 
+    /// Pinned, then one section per date bucket, as `ClipboardList` heads them.
+    var sectionStarts: [Int] {
+        let titles = rows.map(ClipboardList.sectionTitle)
+        return titles.indices.filter { $0 == 0 || titles[$0] != titles[$0 - 1] }
+    }
+
     var primaryActionTitle: String {
         let defaultAction = core.settings.clipboardDefaultAction
         let action = item(at: vm.selection).flatMap { defaultAction.action(for: .return, on: $0) }

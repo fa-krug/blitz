@@ -126,6 +126,10 @@ enum BackupApplier {
             core.calcHistory.replace(entries)
             applied += entries.count
         }
+        if let queries = bundle.decodeLearning(.queries, as: [String].self) {
+            core.launcherQueryHistory.replace(queries)
+            applied += queries.count
+        }
         return applied
     }
 

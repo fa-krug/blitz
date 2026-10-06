@@ -7,6 +7,7 @@ final class AppCore {
     static let shared = AppCore()
 
     let launcherRanking: LauncherRankingStore
+    let launcherQueryHistory: LauncherQueryHistoryStore
     let appIndex: AppIndex
     let customCommands = CustomCommandStore()
     let quicklinks = QuicklinkStore()
@@ -159,8 +160,8 @@ final class AppCore {
         })
 
     @ObservationIgnored private(set) lazy var launcherCoordinator = LauncherCoordinator(
-        ranking: launcherRanking, windowController: windowController,
-        paletteCoordinator: paletteCoordinator,
+        ranking: launcherRanking, queryHistory: launcherQueryHistory,
+        windowController: windowController, paletteCoordinator: paletteCoordinator,
         settingsCoordinator: settingsCoordinator,
         customCommandCoordinator: customCommandCoordinator,
         systemActionCoordinator: systemActionCoordinator,
@@ -245,6 +246,9 @@ final class AppCore {
         let settings = AppSettings()
         let chatHistory = ChatHistoryStore(directory: AppPaths.applicationSupport())
         self.launcherRanking = launcherRanking
+        launcherQueryHistory = LauncherQueryHistoryStore(
+            fileURL: AppPaths.applicationSupport().appendingPathComponent("launcher-history.json"),
+            persists: settings.launcherSavesSearchHistory)
         self.settings = settings
         self.chatHistory = chatHistory
         supportReminders = SupportReminderStore(settings: settings)
@@ -721,6 +725,9 @@ final class AppCore {
             reproject: { $0.extensionCoordinator.applyExtensionsLauncherPresence() })
         track({ _ = $0.snippetsFolder }, reproject: { $0.applySnippetsFolder() })
         track({ _ = $0.notesFolder }, reproject: { $0.applyNotesFolder() })
+        track(
+            { _ = $0.launcherSavesSearchHistory },
+            reproject: { $0.launcherQueryHistory.persists = $0.settings.launcherSavesSearchHistory })
         trackChatRoute()
     }
 

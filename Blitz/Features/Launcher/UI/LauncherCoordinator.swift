@@ -21,11 +21,11 @@ final class LauncherCoordinator {
     private let calendarCoordinator: CalendarCoordinator
     /// The backup commands only, which need the live stores to gather from and apply to.
     private unowned let core: AppCore
-    /// In memory only: a search can hold what the user would never want written to disk.
-    private(set) var queryHistory = LauncherQueryHistory()
+    let queryHistory: LauncherQueryHistoryStore
 
     init(
         ranking: LauncherRankingStore,
+        queryHistory: LauncherQueryHistoryStore,
         windowController: PaletteWindowController,
         paletteCoordinator: PaletteCoordinator,
         settingsCoordinator: SettingsCoordinator,
@@ -44,6 +44,7 @@ final class LauncherCoordinator {
         core: AppCore
     ) {
         self.ranking = ranking
+        self.queryHistory = queryHistory
         self.windowController = windowController
         self.paletteCoordinator = paletteCoordinator
         self.settingsCoordinator = settingsCoordinator
@@ -64,8 +65,8 @@ final class LauncherCoordinator {
 
     // MARK: - Activation
 
-    func recordQuery(_ query: String) {
-        queryHistory.record(query)
+    func recordQuery(_ query: String, from origin: LauncherQueryHistory.Origin) {
+        queryHistory.record(query, from: origin)
     }
 
     func launch(

@@ -110,6 +110,65 @@ struct PaletteRowIndexTests {
         }
     }
 
+    /// ⌘↑/↓: the card is a section of its own, an empty section is never a landing spot.
+    static func sectionJumps() {
+        let launcher = PaletteRowIndex(hasCalculator: true, sectionCounts: [2, 0, 3, 1])
+        expect(launcher.sectionStarts == [0, 1, 3, 6], "the card, then each non-empty section")
+        expect(PaletteRowIndex(sectionCounts: []).sectionStarts == [], "no rows, no sections")
+        expect(PaletteRowIndex(sectionCounts: [0, 4]).sectionStarts == [0], "a leading gap is skipped")
+        let starts = launcher.sectionStarts
+        expect(PaletteRowIndex.nextSectionStart(after: 0, in: starts), 1, "⌘↓ leaves the card")
+        expect(PaletteRowIndex.nextSectionStart(after: 1, in: starts), 3, "⌘↓ from a head")
+        expect(PaletteRowIndex.nextSectionStart(after: 4, in: starts), 6, "⌘↓ from mid-section")
+        expect(PaletteRowIndex.nextSectionStart(after: 6, in: starts), nil, "the last section has no next")
+        expect(
+            PaletteRowIndex.currentOrPreviousSectionStart(before: 5, in: starts), 3,
+            "⌘↑ mid-section goes to its own head")
+        expect(
+            PaletteRowIndex.currentOrPreviousSectionStart(before: 3, in: starts), 1,
+            "⌘↑ at a head goes to the previous one")
+        expect(
+            PaletteRowIndex.currentOrPreviousSectionStart(before: 1, in: starts), 0,
+            "⌘↑ from the first section lands on the card")
+        expect(
+            PaletteRowIndex.currentOrPreviousSectionStart(before: 0, in: starts), nil,
+            "the top has nowhere above it")
+        expect(PaletteRowIndex.nextSectionStart(after: 0, in: [0]), nil, "one section: ⌘↓ has no head")
+
+        // Exhaustive: ⌘↓ then ⌘↑ from any head returns to it, and every jump lands on a head.
+        for a in 0...3 {
+            for b in 0...3 {
+                for c in 0...3 {
+                    let index = PaletteRowIndex(sectionCounts: [a, b, c])
+                    let starts = index.sectionStarts
+                    for flat in 0..<index.count {
+                        let next = PaletteRowIndex.nextSectionStart(after: flat, in: starts)
+                        let back = PaletteRowIndex.currentOrPreviousSectionStart(before: flat, in: starts)
+                        expect(next.map(starts.contains) ?? true, "[\(a),\(b),\(c)] ⌘↓ lands on a head")
+                        expect(back.map(starts.contains) ?? true, "[\(a),\(b),\(c)] ⌘↑ lands on a head")
+                        expect(next.map { $0 > flat } ?? true, "[\(a),\(b),\(c)] ⌘↓ moves down")
+                        expect(back.map { $0 < flat } ?? true, "[\(a),\(b),\(c)] ⌘↑ moves up")
+                        if starts.contains(flat), let next {
+                            expect(
+                                PaletteRowIndex.currentOrPreviousSectionStart(before: next, in: starts),
+                                flat, "[\(a),\(b),\(c)] ⌘↓ then ⌘↑ returns to \(flat)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// ⌥↑/↓: a page is a clamped step, so it stops at either end and never wraps.
+    static func paging() {
+        expect(PaletteRowIndex.page(from: 2, by: 10, count: 30), 12, "a page down")
+        expect(PaletteRowIndex.page(from: 12, by: -10, count: 30), 2, "a page up")
+        expect(PaletteRowIndex.page(from: 25, by: 10, count: 30), 29, "a page down stops at the last row")
+        expect(PaletteRowIndex.page(from: 4, by: -10, count: 30), 0, "a page up stops at the first")
+        expect(PaletteRowIndex.page(from: 0, by: 10, count: 0), 0, "an empty list holds at zero")
+        expect(PaletteRowIndex.page(from: 0, by: -1, count: 1), 0, "a single row stays put")
+    }
+
     static func main() {
         // Empty list: nothing resolves and the clamp still yields a usable selection.
         let empty = PaletteRowIndex(sectionCounts: [])
@@ -417,6 +476,9 @@ struct PaletteRowIndexTests {
                 }
             }
         }
+
+        sectionJumps()
+        paging()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }

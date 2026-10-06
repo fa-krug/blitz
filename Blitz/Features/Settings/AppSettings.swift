@@ -122,6 +122,14 @@ final class AppSettings {
         }
     }
 
+    /// Off keeps launcher searches in memory only, and deletes the ones already on disk.
+    var launcherSavesSearchHistory: Bool {
+        didSet {
+            defaults.set(
+                launcherSavesSearchHistory, forKey: Key.launcherSavesSearchHistory.rawValue)
+        }
+    }
+
     /// How loose a fuzzy root-search hit may be and still show.
     var rootSearchSensitivity: SearchSensitivity {
         didSet {
@@ -658,6 +666,9 @@ final class AppSettings {
         launcherShowsSuggestions =
             defaults.object(forKey: Key.launcherShowsSuggestions.rawValue) == nil
             || defaults.bool(forKey: Key.launcherShowsSuggestions.rawValue)
+        launcherSavesSearchHistory =
+            defaults.object(forKey: Key.launcherSavesSearchHistory.rawValue) == nil
+            || defaults.bool(forKey: Key.launcherSavesSearchHistory.rawValue)
         rootSearchSensitivity =
             defaults.string(forKey: Key.rootSearchSensitivity.rawValue)
             .flatMap(SearchSensitivity.init) ?? .default

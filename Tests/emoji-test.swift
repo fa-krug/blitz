@@ -169,6 +169,16 @@ struct EmojiTests {
         let tenColumns = EmojiGridGeometry(counts: [20], columns: 10)
         expect(tenColumns.down(from: 7) == 17, "ten-column navigation keeps its visual column")
 
+        // ⌥↑/↓ pages by visual rows, each step the one ↑/↓ takes.
+        expect(g.page(from: 3, rows: 2, forward: true) == 19, "a page down keeps its column")
+        expect(g.page(from: 19, rows: 2, forward: false) == 3, "a page up retraces it")
+        expect(g.page(from: 3, rows: 99, forward: true) == 27, "a long page stops on the last row")
+        expect(g.page(from: 27, rows: 99, forward: false) == 1, "and a long page up on the first")
+        expect(g.page(from: 5, rows: 0, forward: true) == g.down(from: 5), "a page is at least a row")
+        expect(
+            EmojiGridGeometry(counts: [], columns: 8).page(from: 0, rows: 4, forward: true) == 0,
+            "an empty grid pages nowhere")
+
         if failures == 0 {
             print("emoji-test: all checks passed (\(entries.count) records)")
         } else {
