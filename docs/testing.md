@@ -118,9 +118,9 @@ If a change touches anything in the right column, the harness on the left is man
 | `window-room-test` | `WindowManagement/Model/Room*.swift` — every room layout and its minimum sizes, the grid, arrangement reading, window matching, parking, the plan, Tab's choices and the three stores |
 | `custom-command-test` | `CustomCommands/Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` — sessions, Stop, typed input and the terminal handoff — plus `Platform/PseudoTerminal.swift` |
 | `uninstall-test` | all five pure files in `Uninstall/Model/` |
-| `quicklink-test` | all of `Quicklinks/Model/` |
+| `quicklink-test` | all of `Quicklinks/Model/` — tags included — plus `Platform/BrowserTab.swift`'s tab URL matching |
 | `apple-shortcut-test` | all of `AppleShortcuts/Model/` — the `shortcuts list` parser and entry ids |
-| `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/`, plus `Platform/HealthTicker.swift` |
+| `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/` — `{browser-tab}` and `{calculator}` against an injected tab and evaluator — plus `Platform/HealthTicker.swift` and `BrowserTab.swift` |
 | `notes-test` | all of `Notes/Model/` and `Notes/Service/`, including the Markdown parser, edit plans and reveal policy, plus the real fuzzy matcher and signposts |
 | `notes-editor-test` | the Notes editor, rendered and literal, with real TextKit 2 and AppKit editing objects: styling, reveal, layout fragments, keys, chords, checkboxes and links |
 | `raycast-test` | `Backup/Service/RaycastDecoder.swift`, `Scrypt.swift`, `Platform/Compression/Zlib.swift` |
@@ -465,6 +465,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - `{selection}` falls back per the Settings choice
 - Pin, duplicate, delete and Open with Default all behave; import and export round-trip
 - Display order is pinned first by pin time, then by name
+- With **Focus an open tab** on, a website quicklink switches to a matching tab in Safari and in Chrome
+  (first use raises the Automation prompt); with no matching tab, or the browser quit, it opens
+  normally; denying Automation opens the link and then offers System Settings
+- Create Quicklink over Safari or Chrome opens the editor filled from the front tab; **Use Current
+  Browser Tab** fills it from whichever browser window is frontmost
+- Tags show as chips, match in the search field, and ⌘P filters by one; the ⌘K Open With section
+  opens once in the chosen app without changing the saved one
 
 ### Apple Shortcuts
 
@@ -598,6 +605,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
 - Editing a snippet file externally reloads it
+- `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
+  denied, the expansion is abandoned and the dialog offers System Settings; no browser running
+  expands to nothing
+- `{calculator expression="2 * 21"}` expands to `42`, in the calculator's number format
 
 ### Calculator and currency
 

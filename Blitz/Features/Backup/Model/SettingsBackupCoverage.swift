@@ -92,6 +92,8 @@ enum SettingsBackupCoverage {
             "Machine-local geometry: every entry names a display this Mac has, and no other one.",
         AppSettingsKey.autoSwitchInputSource.rawValue:
             "Names a keyboard input source installed on this Mac; another Mac may not have it.",
+        AppSettingsKey.quicklinkPrefersExistingTabs.rawValue:
+            "Reads every open tab's address over Automation; an import must not switch that on.",
         AppSettingsKey.meetingBrowser.rawValue:
             "Names a browser installed on this Mac; another Mac may not have it.",
         AppSettingsKey.calendarEnabled.rawValue:

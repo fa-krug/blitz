@@ -70,6 +70,10 @@ Quicklinks reuse Blitz's one template engine — the same
 [`SnippetTemplateEngine`](snippets.md#template-tokens) snippets use, so every token and every modifier
 is available and there is no second parser to keep in sync. `{cursor}` and `{snippet:…}` are text
 concerns with nothing to resolve against in a destination, so they are left literal.
+`{browser-tab}` and `{calculator expression="…"}` work as they do in a snippet: the front browser
+tab's URL (or `format="title"`), read over AppleScript only when the link uses the token, and a
+calculator answer. The tab is read before the context is captured, so the open waits for it; a
+refused Apple event names the quicklink and offers Automation settings instead of opening.
 
 ```text
 https://google.com/search?q={argument}
@@ -156,12 +160,33 @@ with an **Open with Default** recovery button rather than silently falling back.
 
 "Open in a new window" passes `--new-window` to the handler. Chromium and Firefox accept it, Safari
 ignores it, and an app that doesn't understand an argument drops it — so the setting is honest about
-applying only to handlers that accept one. Off is plain `NSWorkspace.open`, which reuses the
-frontmost tab; that is what "prefer existing tabs" means, so it is the same switch rather than a
-second one.
+applying only to handlers that accept one. Off is plain `NSWorkspace.open`, which opens a new tab.
+
+**"Focus an open tab"** (`quicklinkPrefersExistingTabs`, off by default because it needs Automation)
+makes a website quicklink switch to a tab already showing it. `QuicklinkLauncher.open` resolves the
+browser the link would open in — the quicklink's Open With app, else the default handler — and, when
+that is a supported browser (`BrowserTabs`: Safari, Safari Technology Preview, Orion, Chrome, Arc,
+Brave, Edge, Vivaldi, Chromium) **that is already running**, lists its tabs over AppleScript, selects
+the first match and raises its window. No match, a browser that isn't running, Firefox, or any
+scripting error falls back to the normal open. Two URLs match when `BrowserTab.matchKey` agrees:
+scheme and host fold case, the `#fragment` and a trailing slash are ignored, and the query must match
+exactly, order included. A refused Apple event (`-1743`) still opens the link, then says so with an
+**Open System Settings…** recovery. The flag is kept out of settings backups, since it makes Blitz
+read every open tab's address.
 
 Every failure — unresolvable link, missing file, missing app, refused open — reports through
 Blitz's own dialog and leaves no partial state.
+
+## Creating from a browser tab
+
+**Create Quicklink** run over a supported browser opens the editor already filled in: the command
+reads the app the palette covered (the frontmost app when a shortcut runs it with the palette closed)
+before hiding, asks that browser for its front tab, and hands the tab to the pane on
+`QuicklinkEditRequest.browserTab`, so name is the page title and link is its URL. Any failure opens a
+blank editor. The editor's **Use Current Browser Tab** button does the same on demand against the
+running browser whose window is frontmost (`BrowserTabs.mostRecentBrowser`, which reads the window
+list front to back), replacing the link and filling the name only when it is empty; its failures,
+including a refused Automation prompt, show under the form.
 
 ## Favicons
 
@@ -218,13 +243,26 @@ like Search Snippets and the clipboard: the list on the left, a **detail pane** 
 the selected quicklink's glyph over an Information block (name, link, the app it opens with, its
 shortcut, when it was created). Like Calculator History it stays out of the Tab cycle and exits via the
 back chevron or a bare backspace.
-Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), Edit,
-Duplicate, Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (`⌘F`, only for a resolved
-path), and Delete (`⌘⌫`).
+Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
+**Open With** section, Edit, Duplicate, Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder
+(`⌘F`, only for a resolved path), and Delete (`⌘⌫`).
 
-Choosing an _arbitrary_ app belongs to the editor, which has a picker; `PopoverMenu` is a flat list
-with no nesting, so the palette offers the one alternative that always exists — bypass the saved app
-and use the system handler, once, without changing what is saved.
+The Open With section lists the system default first, marked, then up to six more apps
+`NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked
+about `QuicklinkDestination.handlerProbe` — the link with its placeholders blanked, which names the
+same handlers as the filled link would; a templated *path* has no file to ask about, so it gets no
+section. Choosing an app opens once with it and saves nothing: the choice rides
+`QuicklinkCoordinator.HandlerOverride`, the same one-shot override ⌘↵'s system default uses, so it
+survives a trip to the argument fields too. Choosing among *every* installed app belongs to the
+editor's picker.
+
+**Tags.** A quicklink carries free-form tags, typed in the editor as a comma-separated list and kept
+trimmed, non-empty and unique ignoring case (`Quicklink.normalizedTags`). Rows show up to three as
+chips and the detail pane lists them all. The search field matches a tag as well as the name — the
+launcher's root search still indexes only the name. With any tag in the library the header gains a
+tag button, and **⌘P** opens it through `PaletteFilterAction.quicklinkTag`: All Tags, then every tag
+alphabetically. The choice is `PaletteState.quicklinkTagFilter`, reset on every summon and mode
+change like the clipboard's type filter.
 
 ## Storage
 
@@ -242,6 +280,9 @@ prepared statements, an `isolated deinit`):
   library. The store publishes `isAvailable == false`, every mutation refuses with
   `QuicklinkError.storageUnavailable`, and the pane says so. `Tests/quicklink-test.swift` asserts the
   file survives byte-for-byte.
+
+Tags are one `tags TEXT` column, one tag per line, `NULL` for none — normalization folds a line
+break inside a tag, so the split is lossless.
 
 `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a new column arrives as an unchecked
 `ALTER TABLE … ADD COLUMN … DEFAULT` right after the schema, which fails harmlessly once the column is
@@ -278,7 +319,7 @@ missing shows the quicklink's screen with the supplied fields already filled (se
 
 `QuicklinkArchive` is a versioned JSON document (`{"version": 1, "quicklinks": [...]}`), pretty-printed
 with ISO 8601 dates so it can be hand-edited; a bare array decodes too, and only `name` and `link` are
-required. Duplicate detection is by **name or destination** — either match means the user already has
+required — `tags` is an optional array, so a file written before tags imports untagged. Duplicate detection is by **name or destination** — either match means the user already has
 it — compared against the existing library _and_ against the rest of the incoming file, so one file
 can't import its own duplicates. Skipped entries are counted and reported in the summary. An import
 takes a fresh identity for every entry, so it can never collide with a shortcut an existing quicklink

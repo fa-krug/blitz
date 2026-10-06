@@ -57,6 +57,19 @@ enum QuicklinkDestination: Hashable, Sendable {
         return absolutePath(trimmed, homeDirectory: homeDirectory) == nil
     }
 
+    /// A URL of the link's kind for Launch Services, placeholders blanked; nil for a templated path.
+    static func handlerProbe(_ link: String, homeDirectory: String = NSHomeDirectory()) -> URL? {
+        let blanked = link.replacing(#/\{[^{}]*\}/#, with: "")
+        switch detect(blanked, homeDirectory: homeDirectory) {
+        case .web(let url), .network(let url), .deeplink(let url):
+            return url
+        case .path(let path):
+            return containsPlaceholder(link) ? nil : URL(fileURLWithPath: path)
+        case nil:
+            return nil
+        }
+    }
+
     /// True while a placeholder remains; validation accepts it and the open path reports.
     static func containsPlaceholder(_ link: String) -> Bool {
         guard let opening = link.firstIndex(of: "{") else { return false }

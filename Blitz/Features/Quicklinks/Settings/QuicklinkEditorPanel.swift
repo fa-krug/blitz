@@ -5,6 +5,8 @@ import SwiftUI
 struct QuicklinkEditRequest: Identifiable {
     let id = UUID()
     var quicklink: Quicklink?
+    /// Seeds a new quicklink's name and link from the browser tab Create Quicklink was run over.
+    var browserTab: BrowserTab?
 }
 
 /// Add / edit panel for a single quicklink, presented from the Quicklinks pane.
@@ -26,17 +28,20 @@ struct QuicklinkEditorPanel: View {
     @State private var errorMessage: String?
     @State private var showingAppPicker = false
     @State private var showingIconPicker = false
+    @State private var isReadingBrowserTab = false
+    @State private var tagList: String
 
-    init(quicklink: Quicklink?) {
+    init(quicklink: Quicklink?, browserTab: BrowserTab? = nil) {
         self.quicklink = quicklink
-        _name = State(initialValue: quicklink?.name ?? "")
-        _link = State(initialValue: quicklink?.link ?? "")
+        _name = State(initialValue: quicklink?.name ?? browserTab?.title ?? "")
+        _link = State(initialValue: quicklink?.link ?? browserTab?.url ?? "")
         _iconSymbol = State(initialValue: quicklink?.iconSymbol)
         _favicon = State(initialValue: quicklink?.favicon)
         _faviconImage = State(initialValue: quicklink?.favicon.flatMap(NSImage.init(data:)))
         _openWithBundleID = State(initialValue: quicklink?.openWithBundleID)
         _showsInRootSearch = State(initialValue: quicklink?.showsInRootSearch ?? true)
         _isPinned = State(initialValue: quicklink?.isPinned ?? false)
+        _tagList = State(initialValue: quicklink?.tags.joined(separator: ", ") ?? "")
     }
 
     var body: some View {
@@ -55,6 +60,7 @@ struct QuicklinkEditorPanel: View {
                     Text("Link")
                         .font(.callout.weight(.medium))
                     Spacer()
+                    browserTabButton
                     insertMenu
                 }
                 TextField("https://github.com/search?q={argument}", text: $link)
@@ -66,6 +72,16 @@ struct QuicklinkEditorPanel: View {
             HStack(spacing: Theme.Spacing.xl) {
                 iconField
                 openWithField
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("Tags")
+                    .font(.callout.weight(.medium))
+                TextField("work, docs", text: $tagList)
+                    .settingsEditorTextField()
+                Text("Separate tags with commas. Search Quicklinks matches and filters by them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -123,6 +139,22 @@ struct QuicklinkEditorPanel: View {
         }
     }
 
+    /// Reads the most recently used browser that is running; a title only fills an empty name.
+    private var browserTabButton: some View {
+        Button {
+            useCurrentBrowserTab()
+        } label: {
+            if isReadingBrowserTab {
+                ProgressView().controlSize(.small)
+            } else {
+                Text("Use Current Browser Tab")
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(isReadingBrowserTab)
+        .help("Fill in the link from the front tab of Safari or a Chromium browser")
+    }
+
     /// Only tokens meaningful in a destination; `{cursor}` and `{snippet:…}` stay literal.
     private var insertMenu: some View {
         Menu("Insert…") {
@@ -131,6 +163,7 @@ struct QuicklinkEditorPanel: View {
             Divider()
             Button("Clipboard") { insert("{clipboard}") }
             Button("Selected Text") { insert("{selection}") }
+            Button("Browser Tab") { insert("{browser-tab}") }
             Divider()
             Button("Date") { insert("{date}") }
             Button("Time") { insert("{time}") }
@@ -138,6 +171,7 @@ struct QuicklinkEditorPanel: View {
             Button("Custom Date Format") { insert("{date format=\"yyyy-MM-dd\"}") }
             Divider()
             Button("UUID") { insert("{uuid}") }
+            Button("Calculator") { insert("{calculator expression=\"2 * 21\"}") }
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -285,6 +319,28 @@ struct QuicklinkEditorPanel: View {
         }
     }
 
+    private func useCurrentBrowserTab() {
+        errorMessage = nil
+        guard let browser = BrowserTabs.mostRecentBrowser() else {
+            errorMessage = "Open Safari or a Chromium browser first."
+            return
+        }
+        isReadingBrowserTab = true
+        Task {
+            defer { isReadingBrowserTab = false }
+            do throws(BrowserTabs.Failure) {
+                guard let tab = try await BrowserTabs.frontTab(of: browser) else {
+                    errorMessage = "\(browser.localizedName ?? "The browser") has no open tab."
+                    return
+                }
+                link = tab.url
+                if trimmed(name).isEmpty { name = tab.title }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     private func insert(_ token: String) {
         link += token
     }
@@ -304,7 +360,8 @@ struct QuicklinkEditorPanel: View {
             showsInRootSearch: showsInRootSearch,
             // Re-pinning keeps the original stamp, so saving an edit doesn't move the row.
             pinnedAt: isPinned ? (existing?.pinnedAt ?? Date()) : nil,
-            createdAt: existing?.createdAt ?? Date())
+            createdAt: existing?.createdAt ?? Date(),
+            tags: Quicklink.tags(fromList: tagList))
         do {
             if existing == nil {
                 try core.quicklinkCoordinator.addQuicklink(draft)

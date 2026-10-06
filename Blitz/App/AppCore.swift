@@ -899,6 +899,17 @@ final class AppCore {
             title: title, message: message, symbol: symbol, artwork: artwork, recovery: recovery)
     }
 
+    /// Every refused browser read lands here, so each offers the Automation pane the same way.
+    func reportBrowserTabFailure(_ failure: BrowserTabs.Failure, title: String) async {
+        let recovery = failure.needsAutomationPermission ? "Open System Settings…" : nil
+        guard
+            await reportFailure(
+                title: title, message: failure.message, symbol: "safari", recovery: recovery),
+            failure.needsAutomationPermission
+        else { return }
+        Permissions.openAutomationSettings()
+    }
+
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.
     func showMessage(_ message: String, tone: DialogTone = .success) {
         bannerHUD.dismiss()

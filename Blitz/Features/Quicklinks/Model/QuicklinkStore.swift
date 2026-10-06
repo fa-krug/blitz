@@ -33,7 +33,8 @@ final class QuicklinkStore {
           pinned_at REAL,
           created_at REAL NOT NULL,
           is_enabled INTEGER NOT NULL DEFAULT 1,
-          favicon BLOB
+          favicon BLOB,
+          tags TEXT
         );
         """
 
@@ -142,7 +143,7 @@ final class QuicklinkStore {
                 name: Self.uniqueName(basedOn: source.name, taken: quicklinks.map(\.name)),
                 link: source.link, openWithBundleID: source.openWithBundleID,
                 iconSymbol: source.iconSymbol, favicon: source.favicon, isEnabled: source.isEnabled,
-                showsInRootSearch: source.showsInRootSearch))
+                showsInRootSearch: source.showsInRootSearch, tags: source.tags))
     }
 
     /// The import and backup path: one transaction, one `onChange`, invalid entries skipped.
@@ -236,6 +237,7 @@ final class QuicklinkStore {
             sqlite3_bind_null(stmt, 9)
         }
         sqlite3_bind_double(stmt, 10, value.createdAt.timeIntervalSince1970)
+        bind(stmt, 11, value.tags.isEmpty ? nil : value.tags.joined(separator: "\n"))
         let status = sqlite3_step(stmt)
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
@@ -313,6 +315,7 @@ final class QuicklinkStore {
             draft.openWithBundleID?
             .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         value.favicon = draft.favicon?.isEmpty == false ? draft.favicon : nil
+        value.tags = Quicklink.normalizedTags(draft.tags)
         guard !value.name.isEmpty else { throw .emptyName }
         guard !value.link.isEmpty else { throw .emptyLink }
         guard !value.name.contains("\0"), !value.link.contains("\0") else {
@@ -363,6 +366,7 @@ final class QuicklinkStore {
             db, "ALTER TABLE quicklinks ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1", nil, nil,
             nil)
         sqlite3_exec(db, "ALTER TABLE quicklinks ADD COLUMN favicon BLOB", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE quicklinks ADD COLUMN tags TEXT", nil, nil, nil)
         // After the schema, so a column added later can be indexed the same way.
         sqlite3_exec(
             db,
@@ -372,19 +376,20 @@ final class QuicklinkStore {
             """
             INSERT INTO quicklinks(
               id, name, link, open_with, icon, favicon, is_enabled, in_root_search, pinned_at,
-              created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?)
+              created_at, tags)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
               name = excluded.name, link = excluded.link, open_with = excluded.open_with,
               icon = excluded.icon, favicon = excluded.favicon, is_enabled = excluded.is_enabled,
-              in_root_search = excluded.in_root_search, pinned_at = excluded.pinned_at
+              in_root_search = excluded.in_root_search, pinned_at = excluded.pinned_at,
+              tags = excluded.tags
             """
         )
         // Both statements name columns in the struct's order, not the order the table grew in.
         loadStmt = prepare(
             """
             SELECT id, name, link, open_with, icon, favicon, is_enabled, in_root_search, pinned_at,
-              created_at
+              created_at, tags
             FROM quicklinks
             """
         )
@@ -417,7 +422,8 @@ final class QuicklinkStore {
             isEnabled: sqlite3_column_int(stmt, 6) != 0,
             showsInRootSearch: sqlite3_column_int(stmt, 7) != 0,
             pinnedAt: columnDate(stmt, 8),
-            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9)))
+            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9)),
+            tags: columnString(stmt, 10).map { $0.components(separatedBy: "\n") } ?? [])
     }
 
     /// A zero-length blob reads back as a null pointer, which is the same "no favicon".

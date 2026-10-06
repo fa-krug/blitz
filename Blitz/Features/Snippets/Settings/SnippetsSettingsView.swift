@@ -337,6 +337,11 @@ private struct SnippetEditorPanel: View {
             Section("Arguments") {
                 placeholderItem("{argument name=\"Name\"}")
             }
+            Section("Browser & Calculator") {
+                placeholderItem("{browser-tab}")
+                placeholderItem("{browser-tab format=\"markdown\"}")
+                placeholderItem("{calculator expression=\"2 * 21\"}")
+            }
             Section("Snippets") {
                 placeholderItem("{snippet name=\"Name\"}")
             }

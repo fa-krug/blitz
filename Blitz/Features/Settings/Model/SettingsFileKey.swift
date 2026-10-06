@@ -27,6 +27,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case quicklinksEnabled = "quicklinks.enabled"
     case quicklinksShowInLauncher = "quicklinks.showInLauncher"
     case quicklinkOpensNewWindow = "quicklinks.opensNewWindow"
+    case quicklinkPrefersExistingTabs = "quicklinks.prefersExistingTabs"
     case quicklinkSelectionFallback = "quicklinks.selectionFallback"
     case quicklinkConfirmsBeforeDelete = "quicklinks.confirmsBeforeDelete"
     case appleShortcutsEnabled = "appleShortcuts.enabled"

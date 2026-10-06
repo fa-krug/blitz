@@ -81,6 +81,15 @@ enum Permissions {
     }
 
     @MainActor
+    static func openAutomationSettings() {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @MainActor
     static func openCalendarSettings() {
         guard
             let url = URL(

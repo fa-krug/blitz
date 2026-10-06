@@ -200,6 +200,22 @@ struct RootPaletteView: View {
             })
     }
 
+    /// Every tag the enabled library uses; empty means the screen draws no tag button at all.
+    private var quicklinkTags: [String] { Quicklink.allTags(in: quicklinks.enabled) }
+
+    /// All Tags stays above the divider, the way All Categories does.
+    private var quicklinkTagContent: PopoverMenuContent {
+        let all = PopoverMenuItem(title: "All Tags", systemImage: "tag") {
+            vm.quicklinkTagFilter = nil
+        }
+        let tags = quicklinkTags.enumerated().map { index, tag in
+            PopoverMenuItem(title: tag, systemImage: "tag", startsSection: index == 0) {
+                vm.quicklinkTagFilter = tag
+            }
+        }
+        return PopoverMenuContent(items: [all] + tags)
+    }
+
     private var appMenuContent: PopoverMenuContent {
         let appName = Bundle.main.appDisplayName
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -256,6 +272,8 @@ struct RootPaletteView: View {
             return headerMenu(fileSearchFilterContent, width: metrics.size.fileSearchFilterMenuWidth)
         case .emojiCategory:
             return headerMenu(emojiCategoryContent, width: metrics.size.emojiCategoryMenuWidth)
+        case .quicklinkTag:
+            return headerMenu(quicklinkTagContent, width: metrics.size.menuWidth)
         case .aiModel:
             return headerMenu(
                 AIModelMenu.models(coordinator: core.aiChatCoordinator, chat: quickAI),
@@ -409,6 +427,7 @@ struct RootPaletteView: View {
             .modifier(ExtensionSelectionForwarder(screen: extensionScreen, selection: vm.selection))
             // A narrower list means the old index points at a different row, or at none.
             .onChange(of: vm.clipboardFilter) { land() }
+            .onChange(of: vm.quicklinkTagFilter) { land() }
             // The filter is part of the query, so narrowing re-runs it rather than thinning rows.
             .onChange(of: vm.fileSearchFilter) {
                 land()
@@ -418,6 +437,7 @@ struct RootPaletteView: View {
                 vm.clipboardFilter = .all
                 vm.fileSearchFilter = .all
                 vm.emojiCategoryFilter = .all
+                vm.quicklinkTagFilter = nil
                 vm.emojiGridColumnsOverride = nil
                 vm.fileSearchQuickLook = false
                 if menuOpen { closeMenus() }
@@ -722,6 +742,13 @@ struct RootPaletteView: View {
                     help: "Filter by category  ⌘P",
                     action: toggleEmojiCategory)
             }
+            if !isCollapsed, vm.mode == .quicklinks, !quicklinkTags.isEmpty {
+                headerGutter(width: metrics.spacing.md)
+                HeaderMenuButton(
+                    title: vm.quicklinkTagFilter ?? "All Tags", systemImage: "tag",
+                    isOpen: openMenu == .quicklinkTag, help: "Filter by tag  ⌘P",
+                    action: toggleQuicklinkTag)
+            }
             if !isCollapsed, vm.mode == .ai {
                 headerGutter(width: metrics.spacing.md)
                 AIModelButton(
@@ -1007,16 +1034,28 @@ struct RootPaletteView: View {
         open(.fileSearchFilter, highlighting: active)
     }
 
+    /// Opens on the active tag; All Tags is row 0, so each tag sits one below its index.
+    private func toggleQuicklinkTag() {
+        if openMenu == .quicklinkTag {
+            closeMenus()
+            return
+        }
+        let active = vm.quicklinkTagFilter.flatMap { quicklinkTags.firstIndex(of: $0) }
+        open(.quicklinkTag, highlighting: active.map { $0 + 1 } ?? 0)
+    }
+
     private func performFilterAction() -> Bool {
         switch PaletteFilterAction.resolve(
             collapsed: isCollapsed, mode: vm.mode,
-            commandHasAccessory: extensionCommandScreen?.searchAccessory != nil)
+            commandHasAccessory: extensionCommandScreen?.searchAccessory != nil,
+            hasQuicklinkTags: vm.mode == .quicklinks && !quicklinkTags.isEmpty)
         {
         case .extensionAccessory: toggleExtensionSearchAccessory()
         case .clipboardFilter: toggleClipboardFilter()
         case .fileSearchFilter: toggleFileSearchFilter()
         case .emojiCategory: toggleEmojiCategory()
         case .aiModel: toggleAIModel()
+        case .quicklinkTag: toggleQuicklinkTag()
         case .ignored: return false
         }
         return true
@@ -1244,8 +1283,8 @@ struct RootPaletteView: View {
         case .app: .bottomLeading
         case .actions: .bottomTrailing
         case .argumentOptions: .belowHeaderTrailing
-        case .clipboardFilter, .fileSearchFilter, .emojiCategory, .aiModel, .aiReasoning,
-            .aiAttachments, .extensionAccessory:
+        case .clipboardFilter, .fileSearchFilter, .emojiCategory, .quicklinkTag, .aiModel,
+            .aiReasoning, .aiAttachments, .extensionAccessory:
             .belowHeaderTrailing
         case nil: nil
         }
@@ -1549,6 +1588,7 @@ private enum OpenMenu {
     case clipboardFilter
     case fileSearchFilter
     case emojiCategory
+    case quicklinkTag
     case aiModel
     case aiReasoning
     case aiAttachments

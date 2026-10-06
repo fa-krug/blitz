@@ -81,7 +81,7 @@ Accessibility grant. Each entitlement in `Blitz/Blitz.entitlements` earns its pl
 | Entitlement | Without it |
 | --- | --- |
 | `com.apple.security.cs.allow-jit` | JavaScriptCore cannot JIT, and every extension command runs on the interpreter |
-| `com.apple.security.automation.apple-events` | Every Apple event is refused with `-1743` and no prompt — Get Info, the Finder selection an extension reads, and the System Events–driven system actions all die silently |
+| `com.apple.security.automation.apple-events` | Every Apple event is refused with `-1743` and no prompt — Get Info, the Finder selection an extension reads, the System Events–driven system actions, and every browser tab read (`{browser-tab}`, a quicklink focusing an open tab, an extension's `getFrontmostBrowserTab`) all die silently |
 | `com.apple.security.device.camera` | The camera prompt never appears and access resolves as denied |
 | `com.apple.security.personal-information.calendars` | `requestFullAccessToEvents()` returns `false` in milliseconds with no dialog, and Blitz never appears under System Settings › Calendars |
 
