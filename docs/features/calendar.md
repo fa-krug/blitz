@@ -346,7 +346,9 @@ disagree with it.
 TCC announces nothing when a grant changes in Settings. `refreshAccess()` is why anything that acts on
 `access` outside those three re-reads first: the enable path, so its guard cannot bounce off a stale
 `.granted` and leave a dead button, and the Calendar pane on appear, so a grant made in Settings while
-the feature was off is not reported as still missing.
+the feature was off is not reported as still missing. EventKit caches its status per process, so a
+grant made from Blitz still reads `.notDetermined` until relaunch; `Permissions` remembers the
+request's own answer and reports that type as granted, for reminders as well as the calendar.
 
 The Permissions pane shows calendar access alongside Accessibility, and when TCC has no record it
 offers the same consent path rather than only opening System Settings — the Calendars pane there
