@@ -268,9 +268,9 @@ struct RemindersTests {
         expect(
             both.map(\.name) == [
                 ReminderToolCatalog.listName, ReminderToolCatalog.createName,
-                ReminderToolCatalog.completeName
+                ReminderToolCatalog.updateName, ReminderToolCatalog.completeName
             ],
-            "read and write adds create and complete")
+            "read and write adds create, update and complete")
         expect(
             both.allSatisfy { ReminderToolCatalog.handles($0.name) && !$0.name.contains("__") },
             "the names route home and never look like a server's")
@@ -304,6 +304,35 @@ struct RemindersTests {
             toolRequest(ReminderToolCatalog.completeName, #"{"id": "x-1"}"#) == .complete(id: "x-1"),
             "completing names the reminder by id")
         expect(toolRequest(ReminderToolCatalog.completeName, "{}") == nil, "and cannot without one")
+
+        let today = ReminderDue(year: 2026, month: 10, day: 3)
+        expect(
+            toolRequest(ReminderToolCatalog.updateName, #"{"id": "x-1", "due": "2026-10-03"}"#)
+                == .update(id: "x-1", .init(due: .some(today))),
+            "an update carries only the field that changes")
+        expect(
+            toolRequest(ReminderToolCatalog.updateName, #"{"id": "x-1", "due": "None"}"#)
+                == .update(id: "x-1", .init(due: .some(nil))),
+            "none clears the due date")
+        expect(
+            toolRequest(ReminderToolCatalog.updateName, #"{"id": "x-1", "title": "Eggs"}"#)
+                == .update(id: "x-1", .init(title: "Eggs")),
+            "a missing due date is kept, not cleared")
+        expect(
+            toolRequest(ReminderToolCatalog.updateName, #"{"id": "x-1"}"#) == nil,
+            "nothing to change is refused")
+        expect(
+            toolRequest(ReminderToolCatalog.updateName, #"{"title": "Eggs"}"#) == nil,
+            "an update names its reminder")
+        let original = ReminderDraft(
+            title: "Buy eggs", notes: "free range", due: ReminderDue(year: 2026, month: 10, day: 4))
+        expect(
+            ReminderToolCatalog.Edit(due: .some(today)).applied(to: original)
+                == ReminderDraft(title: "Buy eggs", notes: "free range", due: today),
+            "an edit keeps every field it does not name")
+        expect(
+            ReminderToolCatalog.Edit(due: .some(nil)).applied(to: original).due == nil,
+            "and clears the due date when asked")
     }
 
     static func chatToolAnswers() {
@@ -329,10 +358,11 @@ struct RemindersTests {
         expect(milk.contains("whenever") && !milk.contains("later"), "a query matches notes too")
 
         let saved = ReminderToolCatalog.saved(
-            ReminderDraft(title: " Cake ", notes: "", due: ReminderDue(year: 2026, month: 10, day: 4)))
+            ReminderDraft(title: " Cake ", notes: "", due: ReminderDue(year: 2026, month: 10, day: 4)),
+            id: "x-1")
         expect(
-            saved == #"{"saved":{"due":"2026-10-04","title":"Cake"}}"#,
-            "the model learns what was actually saved")
+            saved == #"{"saved":{"due":"2026-10-04","id":"x-1","title":"Cake"}}"#,
+            "the model learns what was saved and the id that changes it")
     }
 
     // MARK: - Helpers

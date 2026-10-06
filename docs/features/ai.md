@@ -119,9 +119,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   whose loop Blitz runs: an API connection. Codex and the Claude command run their own client and
   are handed servers, not Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
   that writes, so the model never sees one it may not use; every call re-checks the setting, since
-  it can change mid-reply. A write is always shown first — an event through Blitz's confirm, a new
-  reminder in the same prompt Smart Reminder fills, where the reader can edit it — and the result
-  tells the model what was actually saved. `@server` narrows a turn to that server alone, and the
+  it can change mid-reply. An event is shown first through Blitz's confirm; a reminder is
+  written straight away, Read & Write being the consent, and edited in place by id rather than
+  duplicated — and the result tells the model what was actually saved. `@server` narrows a turn to that server alone, and the
   chat's Use Tools switch withholds these with the rest. Both keys are excluded from backups and
   have no `settings.json` key: each grants a model a capability. The tools themselves live with
   their features — see [Calendar](calendar.md#chat-tools) and [Reminders](reminders.md#chat-tools).
