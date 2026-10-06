@@ -142,8 +142,12 @@ private extension MenuPanelCorner {
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool
     /// The selection an arrow key lands on, or nil to leave the key to the palette's own default.
     func move(_ delta: Int, axis: PaletteAxis, from selection: Int) -> Int?
-    /// ↑ at the landing row: true when the screen put an earlier search in the field instead.
-    func recallQuery(at selection: Int) -> Bool
+    /// ↑ at the landing row, or ↓ mid-walk: true when the screen put another search in the field.
+    func recallQuery(_ direction: Int, at selection: Int) -> Bool
+    /// The first flat index of each section, ascending, which ⌘↑/↓ jump between.
+    var sectionStarts: [Int] { get }
+    /// ⌥↑/↓ by a screen's own geometry, or nil for a linear page through `rows`.
+    func page(_ direction: Int, from selection: Int, viewportHeight: CGFloat) -> Int?
     /// Controls the row wants beside the search field; `focus` is lent, never owned.
     func headerAccessory(
         at selection: Int, focus: FocusState<String?>.Binding
@@ -178,7 +182,9 @@ extension PaletteScreen {
     func pasteKeepingWindowOpen(at selection: Int) -> Bool { false }
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool { false }
     func move(_ delta: Int, axis: PaletteAxis, from selection: Int) -> Int? { nil }
-    func recallQuery(at selection: Int) -> Bool { false }
+    func recallQuery(_ direction: Int, at selection: Int) -> Bool { false }
+    var sectionStarts: [Int] { [0] }
+    func page(_ direction: Int, from selection: Int, viewportHeight: CGFloat) -> Int? { nil }
     func headerAccessory(
         at selection: Int, focus: FocusState<String?>.Binding
     )

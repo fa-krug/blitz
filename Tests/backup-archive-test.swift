@@ -31,6 +31,7 @@ struct BackupArchiveTest {
 
         roundTrip(in: root)
         clipboardLines(in: root)
+        learningParts(in: root)
         noAbsolutePathsEscape(in: root)
         formatGuard(in: root)
         rejectsGarbage(in: root)
@@ -102,6 +103,38 @@ struct BackupArchiveTest {
             (attributes?[.ownerAccountID] as? NSNumber)?.uint32Value == getuid())
     }
 
+    // MARK: - Learning
+
+    /// Each part is its own file, so search history travels beside the ranking, not inside it.
+    static func learningParts(in root: URL) {
+        let source = BackupBundle(root: root.appendingPathComponent("learning-seal"))
+        try? source.prepare([.learning])
+        let names = Set(BackupBundle.LearningPart.allCases.map { source.learningURL($0).lastPathComponent })
+        check("every learning part has its own file", names.count == BackupBundle.LearningPart.allCases.count)
+        check(
+            "search history is a learning part",
+            source.learningURL(.queries).lastPathComponent == "queries.json")
+        let queries = ["notes", "2+2", "café ☕︎"]
+        try? source.encode(queries, to: source.learningURL(.queries))
+
+        let archive = root.appendingPathComponent("learning.blitz")
+        let opened = root.appendingPathComponent("learning-open")
+        do {
+            try BackupArchive.seal(directory: source.root, into: archive)
+            try BackupArchive.open(file: archive, into: opened)
+        } catch {
+            check("a learning backup seals and opens (\(error))", false)
+            return
+        }
+        let reopened = BackupBundle(root: opened)
+        check(
+            "search history survives the round trip in order",
+            reopened.decodeLearning(.queries, as: [String].self) == queries)
+        check(
+            "a part never written reads as absent",
+            reopened.decodeLearning(.ranking, as: [String: String].self) == nil)
+    }
+
     // MARK: - Clipboard
 
     static func clipboardLines(in root: URL) {
@@ -115,7 +148,7 @@ struct BackupArchiveTest {
             BackupClipboardItem(
                 kind: .text, text: "carriage\r\nreturn", imageName: nil,
                 createdAt: Date(timeIntervalSince1970: 20), sourceBundleID: nil,
-                pinnedAt: Date(timeIntervalSince1970: 25)),
+                pinnedAt: Date(timeIntervalSince1970: 25), title: "Renamed"),
             BackupClipboardItem(
                 kind: .image, text: nil, imageName: "b.png",
                 createdAt: Date(timeIntervalSince1970: 30), sourceBundleID: nil, pinnedAt: nil)

@@ -44,6 +44,10 @@ enum PaletteShortcut: Equatable {
     case configure
     /// ⌘J, Quick AI handing its conversation to the AI Chat window.
     case continueInChat
+    /// ⌘E, the row's own name or keywords rather than its content.
+    case edit
+    /// ⌥⌘E, the row's content itself.
+    case editContent
     /// ⌘., which AppKit binds to `cancelOperation:`, so it arrives as a token instead of a key.
     case pin
     /// ⌘1…⌘0, matched by key code in the panel and handed over as a slot.
@@ -74,6 +78,7 @@ enum PaletteShortcut: Equatable {
         if command, option, matches(",") { return .settings }
         if command, shift, matches(",") { return .configure }
         if command, matches("j") { return .continueInChat }
+        if command, matches("e"), !shift, !control { return option ? .editContent : .edit }
         return nil
     }
 
@@ -81,7 +86,8 @@ enum PaletteShortcut: Equatable {
     var requiresExpanded: Bool {
         switch self {
         case .copyFile, .copyName, .copyPath, .copyText, .pasteFile, .quickLook, .openInApp,
-            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure:
+            .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure,
+            .edit, .editContent:
             true
         case .commandDelete, .delete, .deleteAll, .pin, .favoriteSlot, .continueInChat, .newItem,
             .settings, .copyCalculation:
@@ -93,7 +99,7 @@ enum PaletteShortcut: Equatable {
         switch self {
         case .delete, .deleteAll, .copyFile, .copyName, .copyPath, .copyText, .copyCalculation,
             .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings,
-            .configure:
+            .configure, .edit, .editContent:
             true
         case .commandDelete, .pasteFile, .quit, .forceQuit, .restart, .pin, .favoriteSlot,
             .continueInChat:

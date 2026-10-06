@@ -416,6 +416,12 @@ final class ExtensionHostBridge: ExtensionHostAPI {
         case "selectedText":
             return try selectedText()
 
+        case "frontmostBrowserTab":
+            guard let browser = BrowserTabs.browser(preferring: [context?.pasteTarget]),
+                let tab = try await BrowserTabs.frontTab(of: browser)
+            else { return nil }
+            return ["url": tab.url, "title": tab.title]
+
         case "selectedFinderItems":
             return try finderSelection()
 

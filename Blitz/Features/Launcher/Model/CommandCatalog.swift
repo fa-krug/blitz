@@ -54,7 +54,7 @@ extension SettingsTab {
             [.createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks]
         case .ai: [.quickAI, .aiChat]
         case .quickActions: [.fixGrammar, .rewrite, .translate, .summarize]
-        case .fileSearch: [.searchFiles]
+        case .fileSearch: [.searchFiles, .searchScreenshots]
         case .notes: [.showNotes, .createNote, .searchNotes]
         case .snippets: [.searchSnippets, .createSnippet]
         case .navigation: [.switchWindows, .searchMenuItems]
@@ -66,7 +66,7 @@ extension SettingsTab {
             [.joinNextMeeting, .mySchedule, .createEvent, .copyMeetingLink, .openInCalendar]
         case .reminders: [.myReminders, .createReminder, .smartReminder]
         case .contacts: [.searchContacts]
-        case .extensions: [.extensionStore]
+        case .extensions: [.extensionStore, .checkForExtensionUpdates]
         default: []
         }
     }

@@ -2,10 +2,14 @@ import AVFoundation
 import AppKit
 import Contacts
 import EventKit
+import Synchronization
 // `@preconcurrency` downgrades AX diagnostics: the option key is a constant C global.
 @preconcurrency import ApplicationServices
 
 enum Permissions {
+    /// EventKit caches status per process: a grant made here reads `.notDetermined` until relaunch.
+    private static let eventKitGrants = Mutex<Set<EKEntityType>>([])
+
     static func isAccessibilityTrusted() -> Bool {
         AXIsProcessTrusted()
     }
@@ -27,31 +31,44 @@ enum Permissions {
         NSWorkspace.shared.open(url)
     }
 
+    /// The Keyboard pane, whose Keyboard Shortcuts… sheet holds Spotlight's own shortcut.
+    @MainActor
+    static func openKeyboardSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     static func calendarAccess() -> CalendarAccess {
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess: return .granted
-        case .notDetermined: return .notDetermined
-        // Write-only is the same as nothing here: Blitz only ever reads.
-        default: return .denied
-        }
+        eventKitAccess(for: .event)
     }
 
     /// The store is built and dropped here: a grant is process-wide, so nothing travels.
     nonisolated static func requestCalendarAccess() async -> Bool {
-        (try? await EKEventStore().requestFullAccessToEvents()) ?? false
+        let granted = (try? await EKEventStore().requestFullAccessToEvents()) ?? false
+        if granted { eventKitGrants.withLock { _ = $0.insert(.event) } }
+        return granted
     }
 
-    /// EventKit's own three states, which reminders share with the calendar.
     static func remindersAccess() -> CalendarAccess {
-        switch EKEventStore.authorizationStatus(for: .reminder) {
-        case .fullAccess: return .granted
-        case .notDetermined: return .notDetermined
-        default: return .denied
-        }
+        eventKitAccess(for: .reminder)
     }
 
     nonisolated static func requestRemindersAccess() async -> Bool {
-        (try? await EKEventStore().requestFullAccessToReminders()) ?? false
+        let granted = (try? await EKEventStore().requestFullAccessToReminders()) ?? false
+        if granted { eventKitGrants.withLock { _ = $0.insert(.reminder) } }
+        return granted
+    }
+
+    /// EventKit's own three states, which reminders share with the calendar.
+    private static func eventKitAccess(for type: EKEntityType) -> CalendarAccess {
+        switch EKEventStore.authorizationStatus(for: type) {
+        case .fullAccess: return .granted
+        case .notDetermined:
+            return eventKitGrants.withLock { $0.contains(type) } ? .granted : .notDetermined
+        // Write-only is the same as nothing here: Blitz needs to read.
+        default: return .denied
+        }
     }
 
     /// Anything short of the whole address book reads as no access: Blitz lists every card.
@@ -78,6 +95,15 @@ enum Permissions {
     /// The one camera prompt, raised from the gesture that asked for it.
     nonisolated static func requestCameraAccess() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .video)
+    }
+
+    @MainActor
+    static func openAutomationSettings() {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @MainActor

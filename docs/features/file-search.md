@@ -46,10 +46,11 @@ feature is enabled in Settings.
   AirDrop, Mail and Messages, and re-drawing it would mean re-implementing the transports and losing
   whatever the system adds. So this row hands off, and the two rules it does keep are that the palette
   is never hidden and that the row stays visible beside the sheet — which is what anchoring to
-  `PaletteWindowController.anchorView` buys. The picker is retained on the coordinator, because it
-  dies with its last reference, and `NSItemProvider(contentsOf:)` failing (a file that vanished between
-  the query and the keystroke) leaves the palette exactly as it was, which is the only failure this row
-  can have.
+  `PaletteWindowController.anchorView` buys. `Platform/SharePicker.swift` is the one place a sheet is
+  shown, shared with the [clipboard history's Share](clipboard.md#renaming-editing-and-handing-off),
+  and it retains the picker because it dies with its last reference. `NSItemProvider(contentsOf:)`
+  failing (a file that vanished between the query and the keystroke) leaves the palette exactly as it
+  was, which is the only failure this row can have.
 
 ## Query path
 
@@ -268,6 +269,9 @@ screen to the launcher without changing palette visibility.
 
 Search Files is bindable like every other built-in command — `AppEntry.hotKeyAction` answers
 `.command(.searchFiles)`, so its launcher row prints a bound chord as a keycap.
+
+The pane also seats Search Screenshots, a separate feature with its own switch that borrows this
+screen's list, preview and actions; see [screenshots.md](screenshots.md).
 
 This pane is the command's only one: `SettingsTab.ownedCommands` names it, so Settings ▸ Commands
 neither lists it nor gates it behind `Enable Commands`. Launcher visibility is `VisibilityStore`'s,

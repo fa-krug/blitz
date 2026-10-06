@@ -23,12 +23,14 @@ enum SettingsBackupCoverage {
         "showFavoritesInCompactMode": .showFavoritesInCompactMode,
         "searchScopes": .searchScopes,
         "launcherShowsSuggestions": .launcherShowsSuggestions,
+        "launcherSavesSearchHistory": .launcherSavesSearchHistory,
         "rootSearchSensitivity": .rootSearchSensitivity,
         "openOnCursorScreen": .openOnCursorScreen,
         "paletteDraggable": .paletteDraggable,
         "fileSearchEnabled": .fileSearchEnabled,
         "fileSearchScopes": .fileSearchScopes,
         "fileSearchIgnorePatterns": .fileSearchIgnorePatterns,
+        "screenshotSearchEnabled": .screenshotSearchEnabled,
         "notesEnabled": .notesEnabled,
         "notesRendersMarkdown": .notesRendersMarkdown,
         "notesShowsFormattingBar": .notesShowsFormattingBar,
@@ -53,6 +55,7 @@ enum SettingsBackupCoverage {
         "quicklinkConfirmsBeforeDelete": .quicklinkConfirmsBeforeDelete,
         "appleShortcutsEnabled": .appleShortcutsEnabled,
         "extensionsShowInLauncher": .extensionsShowInLauncher,
+        "extensionsAutoUpdate": .extensionsAutoUpdate,
         "calendarShowInLauncher": .calendarShowInLauncher,
         "calendarLauncherLimit": .calendarLauncherLimit,
         "calendarSpan": .calendarSpan,
@@ -75,6 +78,8 @@ enum SettingsBackupCoverage {
     static let deliberatelyExcluded: [String: String] = [
         AppSettingsKey.clipboardTextSearchEnabled.rawValue:
             "Background OCR is an opt-in processing choice on this Mac; a backup must not enable it.",
+        AppSettingsKey.screenshotTextSearchEnabled.rawValue:
+            "Background OCR is an opt-in processing choice on this Mac; a backup must not enable it.",
         AppSettingsKey.snippetsEnabled.rawValue:
             "Doubles as keyword-expansion consent; an import must not enable keystroke listening.",
         AppSettingsKey.extensionPackageManager.rawValue:
@@ -90,6 +95,8 @@ enum SettingsBackupCoverage {
             "Machine-local geometry: every entry names a display this Mac has, and no other one.",
         AppSettingsKey.autoSwitchInputSource.rawValue:
             "Names a keyboard input source installed on this Mac; another Mac may not have it.",
+        AppSettingsKey.quicklinkPrefersExistingTabs.rawValue:
+            "Reads every open tab's address over Automation; an import must not switch that on.",
         AppSettingsKey.meetingBrowser.rawValue:
             "Names a browser installed on this Mac; another Mac may not have it.",
         AppSettingsKey.calendarEnabled.rawValue:

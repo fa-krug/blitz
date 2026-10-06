@@ -7,6 +7,7 @@ final class AppCore {
     static let shared = AppCore()
 
     let launcherRanking: LauncherRankingStore
+    let launcherQueryHistory: LauncherQueryHistoryStore
     let appIndex: AppIndex
     let customCommands = CustomCommandStore()
     let quicklinks = QuicklinkStore()
@@ -52,9 +53,14 @@ final class AppCore {
     let emojiIndex = EmojiIndex()
     let frequentEmoji = FrequentEmojiStore()
     let pinnedEmoji = PinnedEmojiStore()
+    let emojiKeywords = EmojiKeywordStore()
     let runningApps = RunningAppsMonitor()
     let palette = PaletteState()
     let fileSearch = FileSearchSession()
+    /// File Search's session over a different query: the captures Spotlight knows about.
+    let screenshotSearch: FileSearchSession
+    let screenshotText: ScreenshotTextStore
+    @ObservationIgnored private var screenshotIndexer: ScreenshotIndexer?
     let dictionary = DictionarySession()
     let extensionStore = ExtensionStoreSession()
     let menuSearch = MenuSearchSession()
@@ -63,6 +69,7 @@ final class AppCore {
     let uninstall = UninstallSession()
     let notesStore: NotesStore
     let extensions: ExtensionManager
+    let extensionUpdates: ExtensionUpdateScheduler
     let chatHistory: ChatHistoryStore
     let aiChats: AIChatSurfacesState
     let aiSettings = AISettingsStore(
@@ -101,8 +108,8 @@ final class AppCore {
 
     @ObservationIgnored private(set) lazy var paletteCoordinator = PaletteCoordinator(
         palette: palette, settings: settings, appIndex: appIndex,
-        fileSearch: fileSearch, menuSearch: menuSearch, windowSwitch: windowSwitch,
-        windowController: windowController)
+        fileSearch: fileSearch, screenshots: screenshotSearch, menuSearch: menuSearch,
+        windowSwitch: windowSwitch, windowController: windowController)
     /// Its own window and lifecycle: neither coordinator shows or closes the other's surface.
     @ObservationIgnored private(set) lazy var settingsCoordinator = SettingsCoordinator(core: self)
     @ObservationIgnored private(set) lazy var onboardingCoordinator = OnboardingCoordinator(
@@ -114,9 +121,9 @@ final class AppCore {
         appIndex: appIndex, runningApps: runningApps, hotKeys: hotKeys, favorites: favorites,
         visibility: visibility, ranking: launcherRanking, aliases: aliases, core: self)
     @ObservationIgnored private(set) lazy var extensionCoordinator = ExtensionCoordinator(
-        extensions: extensions, store: extensionStore, appIndex: appIndex, palette: palette,
-        paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
-        settings: settings, core: self)
+        extensions: extensions, store: extensionStore, updates: extensionUpdates,
+        appIndex: appIndex, palette: palette, paletteCoordinator: paletteCoordinator,
+        settingsCoordinator: settingsCoordinator, settings: settings, core: self)
     @ObservationIgnored private(set) lazy var windowCommandCoordinator = WindowCommandCoordinator(
         settings: settings, paletteCoordinator: paletteCoordinator, windowMover: windowMover,
         spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes)
@@ -159,8 +166,8 @@ final class AppCore {
         })
 
     @ObservationIgnored private(set) lazy var launcherCoordinator = LauncherCoordinator(
-        ranking: launcherRanking, windowController: windowController,
-        paletteCoordinator: paletteCoordinator,
+        ranking: launcherRanking, queryHistory: launcherQueryHistory,
+        windowController: windowController, paletteCoordinator: paletteCoordinator,
         settingsCoordinator: settingsCoordinator,
         customCommandCoordinator: customCommandCoordinator,
         systemActionCoordinator: systemActionCoordinator,
@@ -181,8 +188,8 @@ final class AppCore {
         appIndex: appIndex, palette: palette, windowController: windowController,
         paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var emojiCoordinator = EmojiCoordinator(
-        frequentEmoji: frequentEmoji, settings: settings, windowController: windowController,
-        paletteCoordinator: paletteCoordinator)
+        frequentEmoji: frequentEmoji, keywords: emojiKeywords, settings: settings,
+        windowController: windowController, paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var calculatorCoordinator = CalculatorCoordinator(
         calcHistory: calcHistory, paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var calendarCoordinator = CalendarCoordinator(
@@ -197,6 +204,10 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var fileSearchCoordinator = FileSearchCoordinator(
         settings: settings, appIndex: appIndex, session: fileSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, windowController: windowController, core: self)
+    @ObservationIgnored private(set) lazy var screenshotCoordinator = ScreenshotCoordinator(
+        settings: settings, appIndex: appIndex, session: screenshotSearch,
+        textStore: screenshotText, palette: palette, paletteCoordinator: paletteCoordinator,
+        core: self)
     @ObservationIgnored private(set) lazy var menuSearchCoordinator = MenuSearchCoordinator(
         settings: settings, appIndex: appIndex, session: menuSearch, palette: palette,
         paletteCoordinator: paletteCoordinator, core: self)
@@ -245,14 +256,22 @@ final class AppCore {
         let settings = AppSettings()
         let chatHistory = ChatHistoryStore(directory: AppPaths.applicationSupport())
         self.launcherRanking = launcherRanking
+        launcherQueryHistory = LauncherQueryHistoryStore(
+            fileURL: AppPaths.applicationSupport().appendingPathComponent("launcher-history.json"),
+            persists: settings.launcherSavesSearchHistory)
         self.settings = settings
         self.chatHistory = chatHistory
+        let screenshotText = ScreenshotTextStore(
+            url: AppPaths.applicationSupport().appending(path: "screenshots.sqlite3"))
+        self.screenshotText = screenshotText
+        screenshotSearch = Self.screenshotSession(settings: settings, text: screenshotText)
         supportReminders = SupportReminderStore(settings: settings)
         aiChats = AIChatSurfacesState(history: chatHistory)
         appIndex = AppIndex(ranking: launcherRanking, aliases: aliases)
         let clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
         self.clipboardManager = clipboardManager
         extensions = ExtensionManager(clipboardStore: clipboardStore)
+        extensionUpdates = ExtensionUpdateScheduler(extensions: extensions)
         snippetsStore = SnippetsStore(repository: Self.snippetsRepository(for: settings))
         textInjector = TextInjector(
             clipboardManager: clipboardManager,
@@ -276,12 +295,18 @@ final class AppCore {
             pinnedEmoji.onPersistenceFailure = { [weak self] in
                 self?.showMessage("Couldn't save Emoji & Symbols pins", tone: .danger)
             }
+            emojiKeywords.onPersistenceFailure = { [weak self] in
+                self?.showMessage("Couldn't save emoji keywords", tone: .danger)
+            }
+            emojiKeywords.onChange = { [weak self] in self?.emojiIndex.setCustomKeywords($0) }
+            emojiIndex.setCustomKeywords(emojiKeywords.keywords)
 
             appIndex.start(settings: settings)
             clipboardCoordinator.applyEnabled()
             extensions.start(appIndex: appIndex, coordinator: extensionCoordinator)
             extensionCoordinator.applyEnabled()
             fileSearchCoordinator.applyEnabled()
+            screenshotCoordinator.applyEnabled()
             windowSwitchCoordinator.applyEnabled()
             menuSearchCoordinator.applyEnabled()
             fileSearchCoordinator.applyPolicy()
@@ -326,6 +351,7 @@ final class AppCore {
             paletteCoordinator.onScreenOpening = { [weak self] mode in
                 switch mode {
                 case .menuSearch: self?.menuSearchCoordinator.load()
+                case .screenshots: self?.screenshotIndexer?.schedule()
                 case .switchWindows: self?.windowSwitchCoordinator.load()
                 case .rooms, .roomWindows: self?.roomCoordinator.load()
                 case .reminders: self?.remindersCoordinator.remindersWillShow()
@@ -538,9 +564,42 @@ final class AppCore {
         indexer.start()
     }
 
+    /// Idempotent, as the clipboard's is: either switch flipping re-runs the whole decision.
+    func applyScreenshotTextSearch() {
+        guard settings.screenshotSearchEnabled, settings.screenshotTextSearchEnabled else {
+            screenshotIndexer?.stop()
+            return
+        }
+        let indexer =
+            screenshotIndexer
+            ?? ScreenshotIndexer(
+                store: screenshotText, homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                canRun: { ClipboardTextIndexer.isSystemIdle })
+        screenshotIndexer = indexer
+        indexer.start()
+    }
+
+    /// The switch is read per search, so turning text search off stops matching on the next key.
+    private static func screenshotSession(
+        settings: AppSettings, text: ScreenshotTextStore
+    ) -> FileSearchSession {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return FileSearchSession(
+            policy: FileSearchPolicy(scopes: [], ignorePatterns: [], homeDirectory: home),
+            debounce: .milliseconds(120)
+        ) { query, _, policy in
+            let store = await settings.screenshotTextSearchEnabled ? text : nil
+            return try await Task.detached(priority: .userInitiated) {
+                try ScreenshotService.search(
+                    query: query, homeDirectory: policy.homeDirectory, text: store)
+            }.value
+        }
+    }
+
     func prepareForTermination() {
         settingsFile?.flush()
         clipboardTextIndexer?.stop()
+        screenshotIndexer?.stop()
         // Caps Lock first: its remap is the one teardown that outlives the process.
         hyperKeyTap.prepareForTermination()
         windowLayoutCoordinator.prepareForTermination()
@@ -656,6 +715,11 @@ final class AppCore {
         track(
             { _ = $0.clipboardTextSearchEnabled }, reproject: { $0.applyClipboardTextSearch() })
         track({ _ = $0.fileSearchEnabled }, reproject: { $0.fileSearchCoordinator.applyEnabled() })
+        track(
+            { _ = $0.screenshotSearchEnabled },
+            reproject: { $0.screenshotCoordinator.applyEnabled() })
+        track(
+            { _ = $0.screenshotTextSearchEnabled }, reproject: { $0.applyScreenshotTextSearch() })
         // Two features, one switch: each coordinator gates only its own command and mode.
         track(
             { _ = $0.navigationEnabled },
@@ -719,8 +783,14 @@ final class AppCore {
         track(
             { _ = $0.extensionsShowInLauncher },
             reproject: { $0.extensionCoordinator.applyExtensionsLauncherPresence() })
+        track(
+            { _ = $0.extensionsAutoUpdate },
+            reproject: { $0.extensionCoordinator.applyAutoUpdate() })
         track({ _ = $0.snippetsFolder }, reproject: { $0.applySnippetsFolder() })
         track({ _ = $0.notesFolder }, reproject: { $0.applyNotesFolder() })
+        track(
+            { _ = $0.launcherSavesSearchHistory },
+            reproject: { $0.launcherQueryHistory.persists = $0.settings.launcherSavesSearchHistory })
         trackChatRoute()
     }
 
@@ -887,6 +957,17 @@ final class AppCore {
             title: title, message: message, symbol: symbol, artwork: artwork, recovery: recovery)
     }
 
+    /// Every refused browser read lands here, so each offers the Automation pane the same way.
+    func reportBrowserTabFailure(_ failure: BrowserTabs.Failure, title: String) async {
+        let recovery = failure.needsAutomationPermission ? "Open System Settings…" : nil
+        guard
+            await reportFailure(
+                title: title, message: failure.message, symbol: "safari", recovery: recovery),
+            failure.needsAutomationPermission
+        else { return }
+        Permissions.openAutomationSettings()
+    }
+
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.
     func showMessage(_ message: String, tone: DialogTone = .success) {
         bannerHUD.dismiss()
@@ -931,6 +1012,24 @@ final class AppCore {
     /// The contact prompt, for the same reason.
     func editContact(_ draft: ContactDraft) async -> ContactDraft? {
         await dialogs.editContact(draft)
+    }
+
+    /// A one-line text prompt, for the same reason.
+    func editText(
+        title: String, message: String? = nil, symbol: String, text: String, placeholder: String,
+        label: String, confirmTitle: String
+    ) async -> String? {
+        await dialogs.editText(
+            title: title, message: message, symbol: symbol, text: text, placeholder: placeholder,
+            label: label, confirmTitle: confirmTitle)
+    }
+
+    /// A multi-line edit, for the same reason.
+    func editMultilineText(
+        title: String, symbol: String, text: String, label: String, confirmTitle: String
+    ) async -> String? {
+        await dialogs.editMultilineText(
+            title: title, symbol: symbol, text: text, label: label, confirmTitle: confirmTitle)
     }
 
     /// The snippet argument prompt, for the same reason.

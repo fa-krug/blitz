@@ -19,6 +19,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case hyperKeyQuickPress = "hyperKey.quickPress"
     case calcNumberStyle = "calculator.numberStyle"
     case launcherShowsSuggestions = "search.showsSuggestions"
+    case launcherSavesSearchHistory = "search.savesHistory"
     case rootSearchSensitivity = "search.sensitivity"
     case searchScopes = "applications.searchScopes"
     case customCommandsEnabled = "commands.enabled"
@@ -26,6 +27,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case quicklinksEnabled = "quicklinks.enabled"
     case quicklinksShowInLauncher = "quicklinks.showInLauncher"
     case quicklinkOpensNewWindow = "quicklinks.opensNewWindow"
+    case quicklinkPrefersExistingTabs = "quicklinks.prefersExistingTabs"
     case quicklinkSelectionFallback = "quicklinks.selectionFallback"
     case quicklinkConfirmsBeforeDelete = "quicklinks.confirmsBeforeDelete"
     case appleShortcutsEnabled = "appleShortcuts.enabled"
@@ -43,6 +45,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case fileSearchEnabled = "fileSearch.enabled"
     case fileSearchScopes = "fileSearch.scopes"
     case fileSearchIgnorePatterns = "fileSearch.ignorePatterns"
+    case screenshotSearchEnabled = "fileSearch.screenshotsEnabled"
     case notesEnabled = "notes.enabled"
     case notesRendersMarkdown = "notes.rendersMarkdown"
     case notesShowsFormattingBar = "notes.showsFormattingBar"
@@ -80,6 +83,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case calendarMenuBarHidesWhenEmpty = "calendar.menuBarHidesWhenEmpty"
     case hideCurrentEvent = "calendar.hideCurrentEventAfterMinutes"
     case extensionsShowInLauncher = "extensions.showInLauncher"
+    case extensionsAutoUpdate = "extensions.autoUpdate"
 
     /// The top-level object the key sits in.
     var section: String { String(rawValue.prefix { $0 != "." }) }

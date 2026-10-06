@@ -1,5 +1,10 @@
 import Foundation
 
+/// Only `RenderNode.arguments(from:)` reaches for the runtime, and this harness never runs JS.
+enum ExtensionRuntime {
+    static func jsonArray(from json: String) -> [Any] { [] }
+}
+
 /// The parts of installing from the store or from GitHub that can be checked without a network.
 @main
 @MainActor
@@ -11,6 +16,10 @@ struct ExtensionStoreTests {
         gitHubSourceParsing()
         gitHubURLs()
         storeResponse()
+        storeDetailFields()
+        storePaging()
+        readmeURLs()
+        pagination()
         gitHubTree()
         packageManagers()
         abbreviation()
@@ -172,6 +181,188 @@ struct ExtensionStoreTests {
         check(
             "a de-listed lookup offers nothing",
             (try? ExtensionStoreResponse.parseEntry(Data(delisted.utf8))) == .some(nil))
+    }
+
+    static func storeDetailFields() {
+        print("\n# store detail fields")
+        let entry = """
+            {"id":"abc","name":"coffee","title":"Coffee","status":"active",
+             "download_url":"https://example.com/coffee.zip","commit_sha":"d4e5",
+             "author":{"name":"Max","handle":"mooxl"},"owner":{"handle":"raycast"},
+             "categories":["Productivity","System"],"updated_at":1777037738,
+             "readme_url":"https://github.com/raycast/extensions/tree/abc/extensions/coffee/README.md",
+             "readme_assets_path":"https://github.com/raycast/extensions/raw/abc/extensions/coffee//",
+             "metadata":["https://files.raycast.com/one","https://files.raycast.com/two"],
+             "changelog":{"versions":[
+               {"title":"Better sleep","date":"2026-09-28","markdown":"- Faster"},
+               {"title":"Older","date":"2026-01-01","markdown":"- Slower"}]}}
+            """
+        guard let coffee = try? ExtensionStoreResponse.parseEntry(Data(entry.utf8)) else {
+            check("a full lookup parses", false)
+            return
+        }
+        check("the owner's handle addresses a lookup", coffee.handle == "raycast")
+        check("categories are read", coffee.categories == ["Productivity", "System"])
+        check(
+            "the update date is read",
+            coffee.updatedAt == Date(timeIntervalSince1970: 1_777_037_738))
+        check(
+            "the README points at the raw file",
+            coffee.readmeURL?.absoluteString
+                == "https://raw.githubusercontent.com/raycast/extensions/abc/extensions/coffee/README.md")
+        check(
+            "the assets folder loses its doubled slash",
+            coffee.readmeAssetsURL?.absoluteString
+                == "https://raw.githubusercontent.com/raycast/extensions/abc/extensions/coffee/")
+        check("screenshots are read", coffee.screenshotURLs.count == 2)
+        check(
+            "only the newest change is kept",
+            coffee.latestChange?.title == "Better sleep" && coffee.latestChange?.markdown == "- Faster")
+
+        let reshaped = """
+            {"id":"abc","name":"coffee","status":"active","download_url":"https://example.com/c.zip",
+             "categories":"Productivity","changelog":[1,2],"metadata":{"nope":true}}
+            """
+        let lenient = try? ExtensionStoreResponse.parseEntry(Data(reshaped.utf8))
+        check(
+            "a reshaped extra reads as absent",
+            lenient?.categories == [] && lenient?.latestChange == nil)
+        check(
+            "rather than failing the install",
+            lenient?.downloadURL.absoluteString == "https://example.com/c.zip")
+        check("no author or owner leaves no handle", lenient?.handle == nil)
+    }
+
+    static func storePaging() {
+        print("\n# store paging")
+        let url = ExtensionStoreResponse.popularURL(page: 3)?.absoluteString ?? ""
+        check(
+            "popular is the store's own listing, not a search",
+            url.hasPrefix("https://www.raycast.com/frontend_api/extensions?"))
+        check("popular pages", url.contains("page=3"))
+        check("popular asks for macOS", url.contains("platform=macOS"))
+
+        guard let page = try? ExtensionStoreResponse.parsePage(Data(storePayload.utf8)) else {
+            check("a page parses", false)
+            return
+        }
+        check("a page counts every entry it carried", page.entryCount == 3)
+        check("an untotalled page assumes more", page.hasMore(afterSeeing: 3))
+        let totalled = #"{"data":[{"id":"a","name":"a"}],"total_results":11}"#
+        guard let last = try? ExtensionStoreResponse.parsePage(Data(totalled.utf8)) else {
+            check("a totalled page parses", false)
+            return
+        }
+        check("the total is read", last.total == 11)
+        check("short of the total there is more", last.hasMore(afterSeeing: 10))
+        check("at the total there is none", !last.hasMore(afterSeeing: 11))
+        let empty = #"{"data":[],"total_results":11}"#
+        check(
+            "an empty page ends the listing",
+            (try? ExtensionStoreResponse.parsePage(Data(empty.utf8)))?.hasMore(afterSeeing: 0) == false)
+    }
+
+    static func readmeURLs() {
+        print("\n# readme")
+        let tree = URL(string: "https://github.com/o/r/tree/sha/extensions/x/README.md")!
+        check(
+            "a tree link becomes raw",
+            ExtensionStoreReadme.rawURL(tree)?.absoluteString
+                == "https://raw.githubusercontent.com/o/r/sha/extensions/x/README.md")
+        let blob = URL(string: "https://github.com/o/r/blob/main/README.md")!
+        check(
+            "so does a blob link",
+            ExtensionStoreReadme.rawURL(blob)?.absoluteString
+                == "https://raw.githubusercontent.com/o/r/main/README.md")
+        let raw = URL(string: "https://raw.githubusercontent.com/o/r/main/README.md")!
+        check("a raw link is kept", ExtensionStoreReadme.rawURL(raw) == raw)
+        check(
+            "another host is refused",
+            ExtensionStoreReadme.rawURL(URL(string: "https://gitlab.com/o/r/tree/a/b")!) == nil)
+        check(
+            "a repository root is refused",
+            ExtensionStoreReadme.rawURL(URL(string: "https://github.com/o/r")!) == nil)
+
+        let base = URL(string: "https://raw.githubusercontent.com/o/r/sha/extensions/x/")!
+        let folder = "https://raw.githubusercontent.com/o/r/sha/extensions/x"
+        let markdown = """
+            ![Shot](./media/one.png)
+            ![Remote](https://example.com/two.png)
+            <img src="media/three.png" width="300">
+            [Anchor](#install) and ![Up](../shared/four.png "Title")
+            """
+        let resolved = ExtensionStoreReadme.resolvingRelativeImages(in: markdown, base: base)
+        check(
+            "a dot-relative image resolves into the folder",
+            resolved.contains("![Shot](\(folder)/media/one.png)"))
+        check(
+            "an absolute image is untouched",
+            resolved.contains("![Remote](https://example.com/two.png)"))
+        check(
+            "an img tag resolves too",
+            resolved.contains("<img src=\"\(folder)/media/three.png\""))
+        check("a link is not an image", resolved.contains("[Anchor](#install)"))
+        check(
+            "a parent path resolves above the folder",
+            resolved.contains(
+                "https://raw.githubusercontent.com/o/r/sha/extensions/shared/four.png \"Title\""))
+    }
+
+    static func pagination() {
+        print("\n# pagination")
+        let prop: [String: RenderValue] = [
+            "hasMore": .bool(true), "pageSize": .number(20),
+            "onLoadMore": .handler("7:pagination.onLoadMore")
+        ]
+        guard let pagination = ExtensionPagination(prop) else {
+            check("a pagination prop parses", false)
+            return
+        }
+        check("the handler is read", pagination.handler == "7:pagination.onLoadMore")
+        check("half a page from the end triggers", pagination.triggerIndex(itemCount: 40) == 30)
+        check(
+            "a one-item page triggers on its last row",
+            ExtensionPagination(hasMore: true, pageSize: 1, handler: "h").triggerIndex(itemCount: 5)
+                == 4)
+        check("no prop, no pagination", ExtensionPagination(nil) == nil)
+        check(
+            "a missing page size falls back",
+            ExtensionPagination(["hasMore": .bool(true)])?.pageSize
+                == ExtensionPagination.defaultPageSize)
+
+        var latch = ExtensionPagination.Latch()
+        check(
+            "an early row asks for nothing",
+            !latch.shouldLoad(pagination, reaching: 5, itemCount: 40, isLoading: false))
+        check(
+            "the trigger row asks once",
+            latch.shouldLoad(pagination, reaching: 30, itemCount: 40, isLoading: false))
+        check(
+            "and never again for the same count",
+            !latch.shouldLoad(pagination, reaching: 39, itemCount: 40, isLoading: false))
+        check(
+            "a grown list asks again past its new trigger",
+            latch.shouldLoad(pagination, reaching: 55, itemCount: 60, isLoading: false))
+
+        var loading = ExtensionPagination.Latch()
+        check(
+            "never while loading",
+            !loading.shouldLoad(pagination, reaching: 35, itemCount: 40, isLoading: true))
+        check(
+            "but the reach is kept for when the load settles",
+            loading.shouldLoad(pagination, reaching: nil, itemCount: 40, isLoading: false))
+
+        var finished = ExtensionPagination.Latch()
+        let done = ExtensionPagination(hasMore: false, pageSize: 20, handler: "h")
+        check(
+            "never once hasMore is false",
+            !finished.shouldLoad(done, reaching: 39, itemCount: 40, isLoading: false))
+
+        var shrinking = ExtensionPagination.Latch()
+        _ = shrinking.shouldLoad(pagination, reaching: 39, itemCount: 40, isLoading: false)
+        check(
+            "a list that shrank for a new search starts from its top",
+            !shrinking.shouldLoad(pagination, reaching: nil, itemCount: 20, isLoading: false))
     }
 
     // MARK: - GitHub trees

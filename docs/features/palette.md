@@ -12,9 +12,10 @@ The command palette is a borderless floating `NSPanel` hosting SwiftUI; see
   controller stays the authority.
 - **The flat `selection` index must match the visible row order exactly**, including the inline
   calculator card at index 0 when present. Selection is the single source of truth for highlight and
-  activation. `Features/PaletteRowIndex.swift` is that mapping and stays **Foundation-only and pure** —
-  no SwiftUI, no AppKit — so `palette-selection-test` compiles the shipped type rather than a copy.
-  Section headers are not selectable and never consume an index.
+  activation. `Features/PaletteRowIndex.swift` is that mapping — sections, their starts, and the
+  section-jump and page maths over them — and stays **Foundation-only and pure**, no SwiftUI, no
+  AppKit, so `palette-selection-test` compiles the shipped type rather than a copy. Section headers
+  are not selectable and never consume an index.
 - **A menu owns native text input while it is open.** Its panel becomes key so the menu field gets an
   AppKit field editor; the palette field stays mounted and inert beneath it.
 - **The search field is never mounted conditionally.** A screen that owns the keyboard itself hides it
@@ -131,9 +132,26 @@ that returning looks like never having left — and offers four motions over it:
 which would throw away the very selection being restored.
 
 **↑ at the landing row asks the screen for an earlier search first** through
-`PaletteScreen.recallQuery(at:)`, which only the launcher answers
-([launcher.md](launcher.md#search-history)). The check runs ahead of the compact bar's guard, and
+`PaletteScreen.recallQuery(_:at:)`, which only the launcher answers
+([launcher.md](launcher.md#search-history)); ↓ asks for a newer one, but only while
+`recalledQueryIndex` says a walk is under way. The check runs ahead of the compact bar's guard, and
 never while a menu, an argument field or an IME composition has the key.
+
+**⌘↑/⌘↓ jump between sections and ⌥↑/⌥↓ move a page.** Each screen reports
+`PaletteScreen.sectionStarts` — the flat index each visible section begins at, `[0]` by default —
+and `PaletteRowIndex.nextSectionStart(after:in:)` and `currentOrPreviousSectionStart(before:in:)`
+pick the landing row: ⌘↓ goes to the next section's first row, or the last row from inside the last
+section; ⌘↑ goes to the head of the current section, or the previous head when already on one. The
+launcher counts its lead card, Favorites, Meetings, Suggestions, each kind in `LauncherList.kindOrder`
+and the fallbacks; the clipboard breaks on `ClipboardList.sectionTitle`, Pinned and then each date
+bucket; an extension list or grid on `ExtensionScreen.sectionCounts`; the emoji grid on its sections.
+A page is the number of result rows the list viewport shows — the expanded panel less the header and
+bottom bar, over the `InterfaceMetrics` row height — stepped through `PaletteRowIndex.page`, unless
+the screen answers `page(_:from:viewportHeight:)` itself: the emoji grid moves that many visual rows
+through `EmojiGridGeometry.page`, keeping the column as ↓ does. ⌥⌘ stays with Move Favorite / Move
+Pin. Neither chord acts while a menu or a control's list is open, on a row that owns ↑/↓, or in an
+extension `Form`; and an extension action that declares the same chord as its own shortcut runs
+instead.
 
 **Escape clears a non-empty query before it leaves the screen**, so one press clears and the next
 leaves: an extension screen exits itself first (it keeps a stack the palette cannot see), then a
@@ -566,7 +584,9 @@ other rule it applies. Nothing else changes: the arrow handlers in `RootPaletteV
 navigation code, so the compact bar's expand-on-↓, the grid's row and column steps, menu highlight
 movement and the scroll-into-view intent all follow for free. The caret keeps ⌃F/⌃B off the grid
 because `moveHorizontally` leaves →/← `.ignored` there, and the field editor then moves by a character
-exactly as the chord natively would. A chord carrying any modifier beyond ⌃ — ⌃⇧Q, say — is left alone.
+exactly as the chord natively would. A chord carrying any modifier beyond ⌃ — ⌃⇧Q, say — is left alone,
+so there is no Emacs spelling of the section jump or the page: ⌥⌃N stays the field editor's, and only
+the arrows' own ⌘ and ⌥ forms reach `jumpVertically`.
 
 Character shortcut handlers accept every key so SwiftUI still calls them when the active input
 source produces a non-ASCII character. Inside the callback, `ASCIIKeyboardLayout` resolves

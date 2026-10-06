@@ -106,7 +106,7 @@ enum FileSearchService {
         }
     }
 
-    private nonisolated static func execute<Value>(
+    nonisolated static func execute<Value>(
         expression: String, scopes: [URL], sortedBy stamp: CFString?,
         reading read: (MDQuery, CFIndex) -> Value
     ) throws -> Value {
@@ -125,7 +125,7 @@ enum FileSearchService {
         return read(query, MDQueryGetResultCount(query))
     }
 
-    private nonisolated static func path(in query: MDQuery, at index: CFIndex) -> String? {
+    nonisolated static func path(in query: MDQuery, at index: CFIndex) -> String? {
         guard let raw = MDQueryGetResultAtIndex(query, index) else { return nil }
         let item = Unmanaged<MDItem>.fromOpaque(raw).takeUnretainedValue()
         return MDItemCopyAttribute(item, kMDItemPath) as? String

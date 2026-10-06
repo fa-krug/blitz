@@ -2,10 +2,11 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The first-launch wizard, built from the app's own controls; re-runnable from Settings.
+/// The first-launch wizard, built from the app's own controls; re-runnable as the Welcome Tour.
 struct OnboardingView: View {
-    @State private var step = 0
+    @State private var step = OnboardingStep.first
     @State private var model = OnboardingModel()
+    @State private var spotlight: SpotlightHandoffSession
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
     @Environment(HotKeyManager.self) private var hotKeys
@@ -13,10 +14,13 @@ struct OnboardingView: View {
     @State private var accessibilityTrusted = Permissions.isAccessibilityTrusted()
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    private static let lastStep = 3
     static let width: CGFloat = 520
     /// Only until the first layout measures the real one, which is what the window then takes.
     static let initialSize = CGSize(width: width, height: 352)
+
+    init(spotlight: SpotlightHandoffSession) {
+        _spotlight = State(initialValue: spotlight)
+    }
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -46,10 +50,20 @@ struct OnboardingView: View {
         // Onboarding's shortcut step has a recorder too, and it isn't inside a `SettingsPane`.
         .shortcutRecorderPopoverHost()
         .animation(.easeInOut(duration: 0.2), value: step)
-        .onAppear { accessibilityTrusted = Permissions.isAccessibilityTrusted() }
+        .animation(.easeInOut(duration: 0.2), value: spotlight.showsGuide)
+        .onAppear {
+            accessibilityTrusted = Permissions.isAccessibilityTrusted()
+            spotlight.refresh()
+        }
         .onReceive(refreshTimer) { _ in
             let trusted = Permissions.isAccessibilityTrusted()
             if trusted != accessibilityTrusted { accessibilityTrusted = trusted }
+        }
+        // Coming back from System Settings is what activates Blitz again.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            spotlight.refresh()
         }
     }
 
@@ -59,9 +73,9 @@ struct OnboardingView: View {
         VStack(spacing: Theme.Spacing.md) {
             heroMark
             VStack(spacing: Theme.Spacing.xs) {
-                Text(title)
+                Text(step.title)
                     .font(.title2.weight(.bold))
-                Text(subtitle)
+                Text(step.subtitle ?? readyMessage)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -72,7 +86,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var heroMark: some View {
-        if step == 0 {
+        if step == .shortcut {
             Image(nsImage: Self.appIcon)
                 .resizable()
                 .frame(width: 60, height: 60)
@@ -85,37 +99,21 @@ struct OnboardingView: View {
         }
     }
 
-    private var title: String {
-        switch step {
-        case 0: "Welcome to Blitz"
-        case 1: "Enable Pasting"
-        case 2: "Import from Raycast"
-        default: "You're all set"
-        }
-    }
-
-    private var subtitle: String {
-        switch step {
-        case 0: "Set a shortcut to summon the launcher from anywhere."
-        case 1: "Let Blitz paste items back into the app you were using."
-        case 2: "Bring your shortcuts, favorites, and clipboard history along."
-        default: readyMessage
-        }
-    }
-
     private var heroSymbol: String {
         switch step {
-        case 1: "accessibility"
-        case 2: "wand.and.stars"
-        default: "checkmark"
+        case .accessibility: "accessibility"
+        case .raycastImport: "wand.and.stars"
+        case .tips: "lightbulb"
+        case .shortcut, .done: "checkmark"
         }
     }
 
     private var heroTint: Color {
         switch step {
-        case 1: .blue
-        case 2: .orange
-        default: .green
+        case .accessibility: .blue
+        case .raycastImport: .orange
+        case .tips: .purple
+        case .shortcut, .done: .green
         }
     }
 
@@ -131,10 +129,11 @@ struct OnboardingView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch step {
-        case 0: shortcutStep
-        case 1: accessibilityStep
-        case 2: raycastStep
-        default: doneStep
+        case .shortcut: shortcutStep
+        case .accessibility: accessibilityStep
+        case .raycastImport: raycastStep
+        case .tips: tipsStep
+        case .done: doneStep
         }
     }
 
@@ -147,7 +146,10 @@ struct OnboardingView: View {
                     subtitle: "Press this shortcut to open Blitz.",
                     systemImage: "magnifyingglass", tint: .blue
                 ) {
-                    ShortcutRecorder(action: .togglePalette)
+                    HStack(spacing: Theme.Spacing.sm) {
+                        commandSpaceControl
+                        ShortcutRecorder(action: .togglePalette)
+                    }
                 }
                 OnboardingDivider()
                 OnboardingRow(
@@ -159,7 +161,34 @@ struct OnboardingView: View {
                         .labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
             }
-            caption("You can change these anytime in Settings.")
+            if spotlight.showsGuide {
+                OnboardingCard {
+                    SpotlightShortcutGuide(holders: spotlight.holders)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.vertical, Theme.Spacing.lg)
+                }
+            }
+            if let owner = spotlight.conflictOwner {
+                statusLine(
+                    "⌘Space is already \(owner)'s shortcut. Change that one first.",
+                    systemImage: "exclamationmark.triangle.fill", tint: .orange)
+            } else {
+                caption("You can change these anytime in Settings.")
+            }
+        }
+    }
+
+    /// Spotlight owns ⌘Space out of the box, and the recorder can't capture a chord macOS takes.
+    @ViewBuilder
+    private var commandSpaceControl: some View {
+        if spotlight.launcherUsesCommandSpace, !spotlight.isLauncherBlocked {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .accessibilityLabel("⌘Space opens Blitz")
+        } else if !spotlight.launcherUsesCommandSpace {
+            Button("Use ⌘Space") { spotlight.useCommandSpace() }
+                .controlSize(.small)
+                .disabled(spotlight.isWaiting)
         }
     }
 
@@ -211,6 +240,57 @@ struct OnboardingView: View {
         }
     }
 
+    /// Resolved through `PaletteTabAction`, so the Tab card names where Tab really goes.
+    private var tips: [OnboardingTip] {
+        let action = PaletteTabAction.resolve(
+            mode: .launcher, aiEnabled: settings.aiEnabled,
+            clipboardEnabled: settings.clipboardEnabled)
+        return OnboardingTip.all(tab: OnboardingTip.TabDestination(action))
+    }
+
+    private var tipsStep: some View {
+        let tips = tips
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            OnboardingCard {
+                ForEach(Array(tips.enumerated()), id: \.element) { index, tip in
+                    if index > 0 { OnboardingDivider() }
+                    OnboardingRow(
+                        title: tip.title, subtitle: tip.message,
+                        systemImage: Self.symbol(for: tip), tint: Self.tint(for: tip)
+                    ) {
+                        OnboardingKeycaps(keycaps: tip.keycaps)
+                    }
+                }
+            }
+            if tips.contains(where: \.offersAISettings) {
+                Button("Turn on AI in Settings › AI") {
+                    core.settingsCoordinator.showSettings(tab: .ai)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                .padding(.horizontal, Theme.Spacing.xs)
+            }
+        }
+    }
+
+    private static func symbol(for tip: OnboardingTip) -> String {
+        switch tip {
+        case .actions: "command"
+        case .aliases: "character.cursor.ibeam"
+        case .tab(.quickAI): "sparkles"
+        case .tab(.clipboard): "doc.on.clipboard"
+        case .tab(.nowhere): "arrow.right.to.line"
+        }
+    }
+
+    private static func tint(for tip: OnboardingTip) -> Color {
+        switch tip {
+        case .actions: .blue
+        case .aliases: .orange
+        case .tab: .purple
+        }
+    }
+
     private var doneStep: some View {
         caption("Everything's ready. Hit Get Started to open the launcher.")
             .frame(maxWidth: .infinity, alignment: .center)
@@ -221,16 +301,19 @@ struct OnboardingView: View {
     private var footer: some View {
         VStack(spacing: Theme.Spacing.lg) {
             HStack(spacing: Theme.Spacing.sm) {
-                ForEach(0...Self.lastStep, id: \.self) { index in
+                ForEach(OnboardingStep.allCases, id: \.self) { page in
                     Circle()
-                        .fill(index == step ? Color.primary : Color.primary.opacity(0.2))
+                        .fill(page == step ? Color.primary : Color.primary.opacity(0.2))
                         .frame(width: 7, height: 7)
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                "Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)")
             HStack {
-                if step > 0 {
+                if let previous = step.previous {
                     Button {
-                        step -= 1
+                        step = previous
                     } label: {
                         Label("Back", systemImage: "chevron.left")
                     }
@@ -243,7 +326,7 @@ struct OnboardingView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
-                if step == 2 && model.importing {
+                if step == .raycastImport && model.importing {
                     Button {
                     } label: {
                         HStack(spacing: Theme.Spacing.sm) {
@@ -266,14 +349,15 @@ struct OnboardingView: View {
     }
 
     private var showsSkip: Bool {
-        (step == 1 && !accessibilityTrusted) || (step == 2 && !model.didImport)
+        (step == .accessibility && !accessibilityTrusted)
+            || (step == .raycastImport && !model.didImport)
     }
 
     private var primaryTitle: String {
         switch step {
-        case 0: "Continue"
-        case 1: accessibilityTrusted ? "Continue" : "Grant Access"
-        case 2:
+        case .shortcut, .tips: "Continue"
+        case .accessibility: accessibilityTrusted ? "Continue" : "Grant Access"
+        case .raycastImport:
             if model.didImport {
                 "Continue"
             } else if model.importing {
@@ -281,21 +365,21 @@ struct OnboardingView: View {
             } else {
                 "Import"
             }
-        default: "Get Started"
+        case .done: "Get Started"
         }
     }
 
     private var primaryDisabled: Bool {
-        step == 2 && !model.didImport && !model.canImport
+        step == .raycastImport && !model.didImport && !model.canImport
     }
 
     private func primaryAction() {
         switch step {
-        case 1 where !accessibilityTrusted:
+        case .accessibility where !accessibilityTrusted:
             Permissions.openAccessibilitySettings()
-        case 2 where !model.didImport:
+        case .raycastImport where !model.didImport:
             model.run(core: core)
-        case Self.lastStep:
+        case .done:
             core.onboardingCoordinator.finishOnboarding()
         default:
             advance()
@@ -303,7 +387,7 @@ struct OnboardingView: View {
     }
 
     private func advance() {
-        step = min(step + 1, Self.lastStep)
+        step = step.next ?? OnboardingStep.last
     }
 
     // MARK: - Shared bits

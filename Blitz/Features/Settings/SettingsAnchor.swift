@@ -56,6 +56,7 @@ extension SettingsAnchor {
     static let fileSearchCommands = Self(tab: .fileSearch, title: "Commands")
     static let fileSearchSearchScopes = Self(tab: .fileSearch, title: "Search Scopes")
     static let fileSearchIgnorePatterns = Self(tab: .fileSearch, title: "Ignore Patterns")
+    static let fileSearchScreenshots = Self(tab: .fileSearch, title: "Screenshots")
 
     static let notesNotes = Self(tab: .notes, title: "Notes")
     static let notesOptions = Self(tab: .notes, title: "Options")
@@ -86,6 +87,7 @@ extension SettingsAnchor {
 
     static let emojiCommands = Self(tab: .emoji, title: "Commands")
     static let emojiAppearance = Self(tab: .emoji, title: "Appearance")
+    static let emojiSearch = Self(tab: .emoji, title: "Search")
 
     static let calendarCalendar = Self(tab: .calendar, title: "Calendar")
     static let calendarCommands = Self(tab: .calendar, title: "Commands")

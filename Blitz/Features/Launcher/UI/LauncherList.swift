@@ -56,6 +56,13 @@ struct LauncherList: View {
         }
     }
 
+    /// Publication order, so rows match the flat index; the screen's section jumps read it too.
+    static let kindOrder: [AppEntry.Kind] = [
+        .meeting, .application, .systemSettings, .extensionCommand, .quicklink, .contact,
+        .appleShortcut, .snippet, .systemAction, .windowLayout, .windowRoom, .windowCommand,
+        .customCommand, .quickAction, .command
+    ]
+
     private enum Row: Identifiable {
         case header(String)
         /// Its own case, because only this header carries a gear.
@@ -117,12 +124,7 @@ struct LauncherList: View {
             rows.append(.header("Suggestions"))
             rows.append(contentsOf: suggestions.map { .app($0, slot: nil) })
         }
-        // Publication order, so rows match the flat index.
-        let kinds: [AppEntry.Kind] = [
-            .meeting, .application, .systemSettings, .extensionCommand, .quicklink, .contact,
-            .appleShortcut, .snippet, .systemAction, .windowLayout, .windowRoom, .windowCommand,
-            .customCommand, .quickAction, .command
-        ]
+        let kinds = Self.kindOrder
         for kind in kinds {
             guard let group = grouped[kind], !group.isEmpty else { continue }
             rows.append(.header(kind.descriptor.sectionTitle))

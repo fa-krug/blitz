@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Search Quicklinks: the library filtered by the search field, pinned entries first.
@@ -23,10 +24,10 @@ struct QuicklinkListScreen: PaletteScreen {
         self.openActions = openActions
         self.openArgumentOptions = openArgumentOptions
         let query = vm.query.trimmingCharacters(in: .whitespaces)
-        rows =
-            query.isEmpty
-            ? store.enabled
-            : store.enabled.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let tag = vm.quicklinkTagFilter
+        rows = store.enabled.filter { quicklink in
+            (tag.map(quicklink.hasTag) ?? true) && (query.isEmpty || quicklink.matches(query))
+        }
     }
 
     var primaryActionTitle: String { "Open Quicklink" }
@@ -151,6 +152,7 @@ enum QuicklinkActionsMenu {
                         id: quicklink.id, forcingDefaultApp: true, values: values)
                 })
         }
+        items += openWithItems(quicklink: quicklink, core: core, values: values)
         items.append(
             PopoverMenuItem(title: "Edit Quicklink", systemImage: "pencil", startsSection: true) {
                 core.paletteCoordinator.hidePalette(restoreFocus: false)
@@ -202,5 +204,34 @@ enum QuicklinkActionsMenu {
                 Task { await core.quicklinkCoordinator.deleteQuicklink(id: quicklink.id) }
             })
         return PopoverMenuContent(header: quicklink.name, items: items)
+    }
+
+    /// Past the default, this many of the other apps that can open the link; the editor has all.
+    private static let alternativeAppLimit = 6
+
+    /// The system default first, then other handlers; choosing one opens once without saving it.
+    private static func openWithItems(
+        quicklink: Quicklink, core: AppCore, values: [String: String]
+    ) -> [PopoverMenuItem] {
+        guard let probe = QuicklinkDestination.handlerProbe(quicklink.link) else { return [] }
+        let workspace = NSWorkspace.shared
+        let defaultApp = workspace.urlForApplication(toOpen: probe)?.standardizedFileURL
+        var apps = defaultApp.map { [$0] } ?? []
+        for app in workspace.urlsForApplications(toOpen: probe).map(\.standardizedFileURL)
+        where !apps.contains(app) && apps.count < alternativeAppLimit + 1 {
+            apps.append(app)
+        }
+        return apps.enumerated().compactMap { index, app in
+            guard let bundleID = Bundle(url: app)?.bundleIdentifier else { return nil }
+            let name = FileManager.default.displayName(atPath: app.path)
+            return PopoverMenuItem(
+                title: app == defaultApp ? "\(name) (Default)" : name,
+                icon: .file(path: app.path), sectionTitle: index == 0 ? "Open With" : nil,
+                startsSection: index == 0
+            ) {
+                core.quicklinkCoordinator.openQuicklink(
+                    id: quicklink.id, openingWith: bundleID, values: values)
+            }
+        }
     }
 }

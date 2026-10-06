@@ -43,6 +43,8 @@ enum DialogAccessory {
     case reminderDraft(ReminderDraftState)
     case contactDraft(ContactDraftState)
     case snippetArguments(SnippetArgumentsState)
+    case text(DialogTextState)
+    case multilineText(DialogTextState)
 
     /// A form is filled in rather than answered, so it takes the wider, one-line-header layout.
     var isForm: Bool {
@@ -56,13 +58,20 @@ enum DialogAccessory {
         return false
     }
 
+    /// Return types a newline in a multi-line box, so only ⌘↵ may confirm.
+    var confirmsWithCommandReturn: Bool {
+        if case .multilineText = self { return true }
+        return false
+    }
+
     /// False while the primary action has nothing it could write, as a greyed-out button would be.
     @MainActor var acceptsPrimaryAction: Bool {
         switch self {
         case .eventDraft(let state): state.draft.isValid
         case .reminderDraft(let state): state.draft.isValid
         case .contactDraft(let state): state.draft.isValid
-        case .volume, .snippetArguments: true
+        case .multilineText(let state): !state.isBlank
+        case .volume, .snippetArguments, .text: true
         }
     }
 }

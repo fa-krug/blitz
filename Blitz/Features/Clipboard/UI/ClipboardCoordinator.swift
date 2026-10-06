@@ -100,6 +100,15 @@ final class ClipboardCoordinator {
         }
     }
 
+    /// A "Paste as" row: the one stored flavour, beside the plain text a receiver falls back to.
+    func paste(_ item: ClipboardItem, as format: ClipboardRichFormat) {
+        let previous = windowController.previousApp
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        if Paster.paste(item, store: clipboardStore, previousApp: previous, formats: [format]) {
+            selectClip(item)
+        }
+    }
+
     /// A file's path stays valid text after the file goes, so this never reports it missing.
     func pasteAsPlainText(_ item: ClipboardItem) {
         let previous = windowController.previousApp
@@ -200,6 +209,75 @@ final class ClipboardCoordinator {
         guard let url = clipURL(for: item) else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
         AppLauncher.open(url)
+    }
+
+    /// ⌘O on a link or an address: the default browser or mail app takes it.
+    func openLink(_ item: ClipboardItem) {
+        guard let url = item.openableURL else { return }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        AppLauncher.open(url)
+    }
+
+    /// The palette stays up under the sheet, as File Search's Share does.
+    func shareClip(_ item: ClipboardItem) {
+        let shared: Any
+        switch item.dragPayload {
+        case .link(let url, _): shared = url
+        case .text(let text): shared = text
+        case .file:
+            guard let url = clipURL(for: item) else { return }
+            shared = url
+        }
+        guard let anchor = paletteCoordinator.anchorView else { return }
+        SharePicker.show([shared], from: anchor)
+    }
+
+    /// ⌘E. The palette stays up behind the dialog, so the row shows its new name landing.
+    func renameClip(_ item: ClipboardItem) {
+        Task {
+            guard
+                let title = await core.editText(
+                    title: item.title == nil ? "Name Entry" : "Rename Entry", symbol: "pencil",
+                    text: item.title ?? "", placeholder: "Leave empty to show the content",
+                    label: "Name", confirmTitle: "Save")
+            else { return }
+            clipboardStore.setTitle(title, for: item)
+        }
+    }
+
+    /// ⌥⌘E on a text entry. Edited in place, so it keeps its place, its pin and its title.
+    func editClipText(_ item: ClipboardItem) {
+        guard item.kind == .text, let text = item.text else { return }
+        Task {
+            guard
+                let edited = await core.editMultilineText(
+                    title: "Edit Entry", symbol: "square.and.pencil", text: text, label: "Content",
+                    confirmTitle: "Save"),
+                edited != text
+            else { return }
+            clipboardStore.updateText(edited, of: item)
+        }
+    }
+
+    /// Opens the Snippets editor on a new snippet holding the clip's text.
+    func saveAsSnippet(_ item: ClipboardItem) {
+        guard item.kind == .text, let text = item.text else { return }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        core.snippetCoordinator.editSnippet(nil, draft: Snippet.draft(text: text, title: item.title))
+    }
+
+    /// ⌘J. Text becomes a new chat's draft; an image or a file is attached under the chat's rules.
+    func sendToAI(_ item: ClipboardItem) {
+        guard settings.aiEnabled else { return }
+        switch item.kind {
+        case .text:
+            paletteCoordinator.hidePalette(restoreFocus: false)
+            core.aiChatCoordinator.startChat(draft: item.text ?? "")
+        case .image, .file:
+            guard let url = clipURL(for: item) else { return }
+            paletteCoordinator.hidePalette(restoreFocus: false)
+            core.aiChatCoordinator.startChat(attaching: [url])
+        }
     }
 
     /// Unmarked, so the path enters history like any other copy the reader meant to make.

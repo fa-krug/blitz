@@ -120,6 +120,39 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.draft
     }
 
+    /// One line; a blank answer is still an answer, so a caller can clear what it named.
+    func editText(
+        title: String, message: String? = nil, symbol: String, text: String, placeholder: String,
+        label: String, confirmTitle: String
+    ) async -> String? {
+        let state = DialogTextState(text: text, placeholder: placeholder, label: label)
+        let request = DialogRequest(
+            title: title, message: message, symbol: symbol, tone: .neutral,
+            actions: [
+                DialogAction(title: confirmTitle),
+                DialogAction(title: "Cancel", role: .cancel)
+            ],
+            defaultIndex: 0, cancelIndex: 1, accessory: .text(state))
+        guard await present(request) == 0 else { return nil }
+        return state.text
+    }
+
+    /// Several lines, saved with ⌘↵; a blank answer is refused rather than returned.
+    func editMultilineText(
+        title: String, symbol: String, text: String, label: String, confirmTitle: String
+    ) async -> String? {
+        let state = DialogTextState(text: text, label: label)
+        let request = DialogRequest(
+            title: title, symbol: symbol, tone: .neutral,
+            actions: [
+                DialogAction(title: confirmTitle),
+                DialogAction(title: "Cancel", role: .cancel)
+            ],
+            defaultIndex: 0, cancelIndex: 1, accessory: .multilineText(state))
+        guard await present(request) == 0, !state.isBlank else { return nil }
+        return state.text
+    }
+
     func fillSnippetArguments(
         snippetName: String, arguments: [SnippetTemplateEngine.MissingArgument]
     ) async -> [String: String]? {
@@ -154,6 +187,7 @@ final class DialogController: NSObject, NSWindowDelegate {
                 width: width, minHeight: 0)
             let panel = DialogPanel(content: content, cornerRadius: metrics.radius.panel)
             panel.handlesArrowKeys = request.accessory?.claimsArrowKeys ?? false
+            panel.returnNeedsCommand = request.accessory?.confirmsWithCommandReturn ?? false
             panel.delegate = self
             panel.onKey = { [weak self] key in
                 guard let self else { return }

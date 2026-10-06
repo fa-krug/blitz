@@ -103,6 +103,28 @@ struct EmojiTests {
                 "\(preferred) reads the \(expected) packs")
         }
 
+        // Custom keywords: what Edit Keywords takes, and the bounds every load and import applies.
+        expect(
+            EmojiKeywords.terms(from: " yes ,  thumbs   up,,YES, Yés ,") == ["yes", "thumbs up"],
+            "input splits on commas, collapses whitespace and drops blank and folded repeats")
+        expect(EmojiKeywords.terms(from: " , ").isEmpty, "a blank field has no terms")
+        expect(
+            EmojiKeywords.input(for: ["yes", "thumbs up"]) == "yes, thumbs up",
+            "terms prefill the field as they are typed")
+        expect(
+            EmojiKeywords.terms(from: EmojiKeywords.input(for: ["a", "b c"])) == ["a", "b c"],
+            "prefilled terms survive an unedited save")
+        expect(
+            EmojiKeywords.normalized([String(repeating: "x", count: 100)])
+                == [String(repeating: "x", count: EmojiKeywords.termLengthCap)],
+            "an overlong term is cut to the cap")
+        expect(
+            EmojiKeywords.normalized((0..<50).map(String.init)).count == EmojiKeywords.termCap,
+            "a glyph's terms are capped")
+        expect(
+            EmojiKeywords.normalized(["A": ["x"], "": ["y"], "B": ["", " "]]) == ["A": ["x"]],
+            "a map drops blank glyphs and glyphs left without terms")
+
         // Skin tone application
         expect(EmojiCatalog.applyTone(.dark, to: "👋") == "👋🏿", "modifier appended")
         let victory = entries.first { $0.name == "victory hand" }!
@@ -113,6 +135,10 @@ struct EmojiTests {
                 && toned.unicodeScalars.contains { $0.value == 0x1F3FB },
             "tone strips VS16 and appends the modifier")
         expect(victory.display(tone: .none) == victory.glyph, "tone .none leaves the glyph alone")
+        expect(
+            Set(EmojiSkinTone.allCases.map { victory.display(tone: $0) }).count
+                == EmojiSkinTone.allCases.count,
+            "each skin-tone menu row pastes a distinct variant")
         expect(
             holdingHands!.display(tone: .dark) == holdingHands!.glyph,
             "tone ignored on non-capable entries")
@@ -168,6 +194,16 @@ struct EmojiTests {
         expect(sixColumns.down(from: 2) == 8, "six-column navigation keeps its visual column")
         let tenColumns = EmojiGridGeometry(counts: [20], columns: 10)
         expect(tenColumns.down(from: 7) == 17, "ten-column navigation keeps its visual column")
+
+        // ⌥↑/↓ pages by visual rows, each step the one ↑/↓ takes.
+        expect(g.page(from: 3, rows: 2, forward: true) == 19, "a page down keeps its column")
+        expect(g.page(from: 19, rows: 2, forward: false) == 3, "a page up retraces it")
+        expect(g.page(from: 3, rows: 99, forward: true) == 27, "a long page stops on the last row")
+        expect(g.page(from: 27, rows: 99, forward: false) == 1, "and a long page up on the first")
+        expect(g.page(from: 5, rows: 0, forward: true) == g.down(from: 5), "a page is at least a row")
+        expect(
+            EmojiGridGeometry(counts: [], columns: 8).page(from: 0, rows: 4, forward: true) == 0,
+            "an empty grid pages nowhere")
 
         if failures == 0 {
             print("emoji-test: all checks passed (\(entries.count) records)")

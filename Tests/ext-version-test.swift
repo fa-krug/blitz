@@ -11,6 +11,9 @@ struct ExtensionVersionStoreTests {
         reconciling()
         forgetting()
         persisting()
+        scheduling()
+        deferring()
+        summarizing()
 
         print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
         print("\(passes) passed, \(failures) failed")
@@ -72,6 +75,79 @@ struct ExtensionVersionStoreTests {
             ExtensionVersionStore(fileURL: makeFile()).tracked.isEmpty)
     }
 
+    // MARK: - Automatic updates
+
+    static func scheduling() {
+        print("\n# scheduling")
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let day = ExtensionUpdatePolicy.checkInterval
+        let retry = ExtensionUpdatePolicy.retryInterval
+        check("a first launch is due", ExtensionUpdatePolicy.isDue(lastCheckedAt: nil, now: now))
+        check(
+            "a check an hour ago is not",
+            !ExtensionUpdatePolicy.isDue(lastCheckedAt: now.addingTimeInterval(-3600), now: now))
+        check(
+            "a day later it is",
+            ExtensionUpdatePolicy.isDue(lastCheckedAt: now.addingTimeInterval(-day), now: now))
+        check(
+            "a future stamp can't park the loop past a day",
+            ExtensionUpdatePolicy.nextWait(
+                lastCheckedAt: now.addingTimeInterval(3 * day), now: now, hasDeferred: false) == day)
+        check(
+            "an answered check sleeps a day",
+            ExtensionUpdatePolicy.nextWait(lastCheckedAt: now, now: now, hasDeferred: false) == day)
+        check(
+            "an unanswered one retries sooner",
+            ExtensionUpdatePolicy.nextWait(
+                lastCheckedAt: now.addingTimeInterval(-2 * day), now: now, hasDeferred: false)
+                == retry)
+        check(
+            "and so does one that deferred an extension",
+            ExtensionUpdatePolicy.nextWait(lastCheckedAt: now, now: now, hasDeferred: true) == retry)
+    }
+
+    static func deferring() {
+        print("\n# deferring")
+        let split = ExtensionUpdatePolicy.partition(["a", "b", "c"], busy: ["b"])
+        check("an idle extension updates", split.ready == ["a", "c"])
+        check("a busy one waits", split.deferred == ["b"])
+        check("nothing busy defers nothing", ExtensionUpdatePolicy.partition(["a"], busy: []).deferred.isEmpty)
+    }
+
+    static func summarizing() {
+        print("\n# summarizing")
+        typealias Outcome = ExtensionUpdatePolicy.Outcome
+        check(
+            "updates are counted",
+            Outcome(answered: true, available: 2, updated: 2).summary(installing: true)
+                == "Updated 2 extensions")
+        check(
+            "one is singular",
+            Outcome(answered: true, available: 1, updated: 1).summary(installing: true)
+                == "Updated 1 extension")
+        let partial = Outcome(answered: true, available: 2, updated: 1, failed: ["Coffee"])
+        check(
+            "a failure is named beside what worked",
+            partial.summary(installing: true) == "Updated 1 extension; couldn't update Coffee")
+        check("and reads as a failure", partial.isFailure)
+        check(
+            "an unreachable store says so",
+            Outcome().summary(installing: true) == "Couldn't reach the Raycast Store"
+                && Outcome().isFailure)
+        check(
+            "a check alone offers what it found",
+            Outcome(answered: true, available: 3).summary(installing: false)
+                == "3 extension updates available")
+        check(
+            "a busy extension is promised later",
+            Outcome(answered: true, available: 1, deferred: ["coffee"]).summary(installing: true)
+                == "1 extension is in use and will update later")
+        check(
+            "nothing pending is up to date",
+            Outcome(answered: true).summary(installing: true) == "Extensions are up to date"
+                && !Outcome(answered: true).isFailure)
+    }
+
     // MARK: - Helpers
 
     /// Scratch state of its own, never the machine's extension files.
@@ -82,9 +158,11 @@ struct ExtensionVersionStoreTests {
 
     static func listing(_ name: String, commit: String?) -> ExtensionListing {
         ExtensionListing(
-            id: name, name: name, title: name, summary: "", author: "", lightIconURL: nil,
-            darkIconURL: nil, commandCount: 1, downloadCount: nil,
-            downloadURL: URL(fileURLWithPath: "/dev/null"), commitSHA: commit)
+            id: name, name: name, title: name, summary: "", author: "", handle: nil,
+            lightIconURL: nil, darkIconURL: nil, commandCount: 1, downloadCount: nil,
+            downloadURL: URL(fileURLWithPath: "/dev/null"), commitSHA: commit, categories: [],
+            updatedAt: nil, readmeURL: nil, readmeAssetsURL: nil, screenshotURLs: [],
+            latestChange: nil)
     }
 
     static func check(_ description: String, _ condition: Bool) {

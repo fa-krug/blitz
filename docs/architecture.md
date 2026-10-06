@@ -16,7 +16,8 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │                                                                            │
 │ SearchRelevance · LauncherMatch · EntryNaming · ScriptRomanization ·       │
 │ LauncherOrder · LauncherSuggestions · LauncherRankingStore · SearchScopes · │
-│ FileSearch{Query,Result,Scope} ·                                           │
+│ LauncherQueryHistory{,Store} ·                                             │
+│ FileSearch{Query,Result,Scope} · Screenshot{Query,File,TextStore} ·        │
 │ Calculator/* · EmojiCatalog · EmojiGridGeometry · SystemAction ·            │
 │ VolumeLevel ·                                                              │
 │ WindowCommand · WindowPlacementEngine · WindowActionMemory · WindowLayout/* ·      │
@@ -38,7 +39,8 @@ Independently of the folder tree, every mature subsystem has converged on the sa
                                    │ consumed by
 ┌─ EFFECT ─────────────────────────▼─────────────────────────────────────────┐
 │ All platform I/O, one folder per feature.                                  │
-│ AppIndex · FileSearchService · SettingsPaneScanner ·                       │
+│ AppIndex · FileSearchService · ScreenshotService · ScreenshotIndexer ·     │
+│ SettingsPaneScanner ·                                                      │
 │ AXWindowAccess · AXScreens · WindowInventory · WindowLayoutRunner ·        │
 │ RoomWindowSweep · RoomRunner ·                                             │
 │ IconCache · WindowMover · UninstallScanner · UninstallRunner ·             │
@@ -92,9 +94,11 @@ the shared primitives and system shims every feature draws on. Neither may depen
 
 `AppCore.shared` (`App/AppCore.swift`) is a `@MainActor` singleton owning every long-lived thing in the
 app: the stores (`AppIndex`, `ClipboardStore`, `SnippetsStore`, `QuicklinkStore`, `CustomCommandStore`,
-`FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `CalculatorHistoryStore`,
+`FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `LauncherQueryHistoryStore`,
+`CalculatorHistoryStore`,
 `CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`), the
-managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer`, the opt-in `SettingsFileRepository`,
+managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer` and
+`ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
 (`AppSettings`, `PaletteState`, `FileSearchSession`, `MenuSearchSession`, `UninstallSession`,
 `MeetingClock`), `NotesStore`, the twenty-one feature coordinators, and the
@@ -114,7 +118,8 @@ fine too; deciding something with one is what the rule forbids. `showNotice`, `c
 
 New long-lived state belongs on `AppCore`, wired in `start()`. Do not create a competing singleton: this is a singleton, not a container.
 
-Clipboard text recognition is the one feature that leaves the process. `AppCore` owns the indexer;
+Text recognition — the clipboard's and Search Screenshots' — is the one thing that leaves the
+process. `AppCore` owns both indexers;
 the stateless `ClipboardTextWorker` runs one bundled `ClipboardTextHelper` per item, from
 `Contents/Helpers`, and reaps it before returning. Vision's and PDFKit's allocations therefore belong
 to a process that exits, and the helper — which has no database, clipboard or settings access — is
@@ -138,7 +143,8 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
 - **Settings and Onboarding** — titled `NSWindow`s, one `Windows/AppWindowController.swift` each, owned
   by `SettingsCoordinator` and `OnboardingCoordinator`. SwiftUI `Settings` and `Window` scenes are
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
-  palette's in both directions.
+  palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
+  Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
 - **Notes** — a persistent, titled, non-activating `NotesPanel` managed by `NotesWindowController`.
   The user owns its size and AppKit autosaves the frame; its TextKit 2 editor renders Markdown over the
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed
@@ -221,7 +227,7 @@ Blitz/
   DesignSystem/     Theme (the token source), KeyCapChip, Tooltip, SymbolImage,
                     GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/, Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
-                    AppDisplayName,
+                    AppDisplayName, SymbolicHotKeys,
                     NotificationToken, AppPaths, Signposts, HealthTicker, Memo, ActivationPolicy,
                     Images/, Compression/
   Resources/        RaycastRuntime.generated.js, the embedded extension runtime
@@ -230,8 +236,9 @@ Blitz/
   Windows/          the non-palette AppKit surfaces: AppWindowController, Dialog/, HUD/, About/
   Assets.xcassets/  the app icon and the bundled image sets some catalog symbols resolve to
   Features/
-    PaletteRowIndex.swift   the flat selection index — palette-owned, so it sits at the top
-    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ MenuSearch/
+    PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
+    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ Screenshots/
+    MenuSearch/
     Notes/ Quicklinks/ Snippets/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ Backup/
     WindowManagement/ Onboarding/ Updates/ Support/ AI/ Settings/
     Extensions/
@@ -247,8 +254,9 @@ Tests/              the standalone harnesses, one Swift file each
 Scripts/            run-tests.sh, the two data generators, packaging, formatting, editor setup
 ```
 
-A larger feature splits into all four sub-folders; a small one stays flat, as `Onboarding/` does. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the Settings
-shell rather than the feature.
+A feature splits into the sub-folders it has something for; a small one may stay flat until the flat
+folder stops being scannable. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the
+Settings shell rather than the feature, and `Onboarding/` has none because its tour is its own window.
 
 Every `SettingsTab` maps to one `…SettingsView`, and each is a stock `Form` with
 `.formStyle(.grouped)` — see [ui.md](ui.md#settings). A pane lives with its feature; only a pane no

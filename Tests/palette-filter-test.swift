@@ -19,10 +19,11 @@ struct PaletteFilterTests {
     }
 
     static func resolve(
-        collapsed: Bool = false, mode: PaletteMode, accessory: Bool = false
+        collapsed: Bool = false, mode: PaletteMode, accessory: Bool = false, tags: Bool = false
     ) -> PaletteFilterAction {
         PaletteFilterAction.resolve(
-            collapsed: collapsed, mode: mode, commandHasAccessory: accessory)
+            collapsed: collapsed, mode: mode, commandHasAccessory: accessory,
+            hasQuicklinkTags: tags)
     }
 
     static func main() {
@@ -58,17 +59,33 @@ struct PaletteFilterTests {
             resolve(mode: .fileSearch, accessory: true), .fileSearchFilter,
             "off an extension screen the flag cannot reach file search's own filter either")
 
+        expect(
+            resolve(mode: .quicklinks, tags: true), .quicklinkTag,
+            "a tagged library opens Search Quicklinks' tag filter")
+        expect(
+            resolve(mode: .quicklinks, accessory: true, tags: true), .quicklinkTag,
+            "a stale extension accessory cannot replace the tag filter")
+        expect(
+            resolve(mode: .quicklinks), .ignored,
+            "an untagged library draws no tag button, so ⌘P stays with the field")
+        expect(
+            resolve(collapsed: true, mode: .quicklinks, tags: true), .ignored,
+            "the compact bar draws no tag button either")
+        expect(
+            resolve(mode: .clipboard, tags: true), .clipboardFilter,
+            "tags elsewhere cannot reach another screen's filter")
+
         // Every other mode was untouched by ⌘P before and has to stay that way.
         for mode in [
             PaletteMode.launcher, .aiHistory, .calculatorHistory,
-            .quicklinks, .snippets, .schedule, .uninstall
+            .snippets, .schedule, .uninstall
         ] {
             expect(
                 resolve(mode: mode), .ignored,
                 "\(mode.rawValue) has no header filter, so ⌘P stays with the field")
             expect(
-                resolve(mode: mode, accessory: true), .ignored,
-                "\(mode.rawValue) opens no filter even if a stale accessory flag says so")
+                resolve(mode: mode, accessory: true, tags: true), .ignored,
+                "\(mode.rawValue) opens no filter even if a stale flag says so")
         }
 
         // Collapsed there is no header to hang a button off, so no filter may open.

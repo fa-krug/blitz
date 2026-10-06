@@ -45,6 +45,7 @@ enum SettingsFileSchema {
         case .hyperKeyQuickPress: return bind(settings, \.hyperKeyQuickPress)
         case .calcNumberStyle: return bind(settings, \.calcNumberStyle)
         case .launcherShowsSuggestions: return bind(settings, \.launcherShowsSuggestions)
+        case .launcherSavesSearchHistory: return bind(settings, \.launcherSavesSearchHistory)
         case .rootSearchSensitivity: return bind(settings, \.rootSearchSensitivity)
         case .searchScopes: return bind(settings, \.searchScopes) { SearchScopes.normalize($0) }
         case .customCommandsEnabled: return bind(settings, \.customCommandsEnabled)
@@ -52,6 +53,7 @@ enum SettingsFileSchema {
         case .quicklinksEnabled: return bind(settings, \.quicklinksEnabled)
         case .quicklinksShowInLauncher: return bind(settings, \.quicklinksShowInLauncher)
         case .quicklinkOpensNewWindow: return bind(settings, \.quicklinkOpensNewWindow)
+        case .quicklinkPrefersExistingTabs: return bind(settings, \.quicklinkPrefersExistingTabs)
         case .quicklinkSelectionFallback: return bind(settings, \.quicklinkSelectionFallback)
         case .quicklinkConfirmsBeforeDelete: return bind(settings, \.quicklinkConfirmsBeforeDelete)
         case .appleShortcutsEnabled: return bind(settings, \.appleShortcutsEnabled)
@@ -69,6 +71,7 @@ enum SettingsFileSchema {
         case .fileSearchEnabled: return bind(settings, \.fileSearchEnabled)
         case .fileSearchScopes: return bind(settings, \.fileSearchScopes)
         case .fileSearchIgnorePatterns: return bind(settings, \.fileSearchIgnorePatterns)
+        case .screenshotSearchEnabled: return bind(settings, \.screenshotSearchEnabled)
         case .notesEnabled: return bind(settings, \.notesEnabled)
         case .notesRendersMarkdown: return bind(settings, \.notesRendersMarkdown)
         case .notesShowsFormattingBar: return bind(settings, \.notesShowsFormattingBar)
@@ -110,6 +113,7 @@ enum SettingsFileSchema {
         case .calendarMenuBarHidesWhenEmpty: return bind(settings, \.calendarMenuBarHidesWhenEmpty)
         case .hideCurrentEvent: return bind(settings, \.hideCurrentEvent)
         case .extensionsShowInLauncher: return bind(settings, \.extensionsShowInLauncher)
+        case .extensionsAutoUpdate: return bind(settings, \.extensionsAutoUpdate)
         }
     }
 

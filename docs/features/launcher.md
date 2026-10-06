@@ -36,9 +36,10 @@ earliest scope wins).
   `publishEntries` runs on the main actor whenever any unrelated slice changes.
 - **The fields stay separate.** Which field matched is half of what the comparator reads — an exact
   subtitle, an exact alternate title and a keyword hit are three different rules.
-- **`Model/SearchScopes.swift`, `Model/LauncherRankingStore.swift` and
-  `Model/LauncherQueryHistory.swift` are pure too** — the ranking store takes its clock via `now` and
-  its path via `fileURL`, for `scopes-test`, `ranking-test` and `query-history-test`.
+- **`Model/SearchScopes.swift`, `Model/LauncherRankingStore.swift`,
+  `Model/LauncherQueryHistory.swift` and `Model/LauncherQueryHistoryStore.swift` are pure too** — the
+  ranking store takes its clock via `now` and both stores their path via `fileURL`, for
+  `scopes-test`, `ranking-test` and `query-history-test`.
 
 ## Search scopes
 
@@ -445,21 +446,33 @@ per-item reset in its Actions menu, and users can clear all learned ranking in G
 ## Search history
 
 ↑ at the top of the list puts the last search back in the field, as Raycast's root search does, and
-each further ↑ steps one search older while the field still reads the entry it recalled. Editing the
-query ends the walk, so from then on ↑ moves through the list again. ↑ at the oldest entry, or with
-the highlight below the first row, also moves through the list. The check runs ahead of the compact
-bar's guard, because an empty field is exactly where a recall starts, and a recalled query expands
-the bar like any typed one.
+each further ↑ steps one search older while the field still reads the entry it recalled. ↓ walks back
+the other way, one search newer, and from the newest it empties the field again. ↓ answers only while
+`PaletteState.recalledQueryIndex` is set, so a plain ↓ down the list is never taken from it. Editing
+the query ends the walk, so from then on both arrows move through the list again. ↑ at the oldest
+entry, or with the highlight below the first row, also moves through the list. The check runs ahead
+of the compact bar's guard, because an empty field is exactly where a recall starts, and a recalled
+query expands the bar like any typed one.
 
 A search is recorded when `LauncherScreen` acts on a row with ↵ or a click: a result, a fallback or
 a card. That is wider than a visit, because a fallback and a copied calculation are exactly the
 searches worth typing again. A row a shortcut opened root search onto records nothing, because its
-name was never typed. `LauncherQueryHistory` is the pure half: newest first, a repeat moved to the
-front, trimmed, at most 20 searches of at most 256 characters. `LauncherCoordinator` holds it **in
-memory only**. A search can hold what the user would never want written to disk, such as a shell
-command typed into the Run Shell Command fallback, so nothing about it is persisted, backed up or
-mirrored into `settings.json`. `PaletteState.recalledQueryIndex` is the walk's position, reset with
-the rest of a freshly opened screen.
+name was never typed. **A query run through the Run Shell Command fallback is never recorded**, in
+either variant — the output window or the terminal — because a shell line is where a token or a
+password ends up. `LauncherScreen` passes the row's `LauncherQueryHistory.Origin`, and the pure model
+drops a `.shellCommand` search before it touches the list.
+
+`LauncherQueryHistory` is the pure half: newest first, a repeat moved to the front, trimmed, at most
+20 searches of at most 256 characters. `LauncherQueryHistoryStore` owns it on `AppCore`, and
+`LauncherCoordinator.queryHistory` is that store. It persists to `launcher-history.json` in
+Application Support with the ranking store's shape: detached, chained writes, and `flush()` for
+whoever reads the file back. **Remember search history** in General settings
+(`launcherSavesSearchHistory`, `search.savesHistory` in `settings.json`, carried by a settings
+backup) is on by default. Off keeps searches in memory for the session, as before, and deletes the
+file at once; a store opened with it off deletes a file left behind too. **Search history — Clear…**
+beside Learned ranking empties the list and the file. The history travels with a backup's Launcher
+Learning as `learning/queries.json`, but only while it is being saved: a history kept in memory must
+not leave through a backup either.
 
 ## The empty list
 
@@ -653,7 +666,8 @@ id is what keeps "which pane owns this" out of the entry-ID namespace.
 Fourteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
 Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts, Quicklinks and Extensions. What
 is left in Settings › Commands is the set no feature switch governs: Calculator History, Open Camera,
-the three backup commands, Check for Updates, Blitz Settings, About, Support and Quit.
+the three backup commands, Check for Updates, Show Welcome Tour, Blitz Settings, About, Support and
+Quit.
 
 A pane's list is also its display order, so `CommandID`'s declaration order is grouped by owner.
 Nothing keys on that order — `CommandCatalog.all` sorts by name and every preference keys on the raw
@@ -866,11 +880,12 @@ running dot and the availability of the running-only actions:
   user leaves standing, relaunches nothing and leaves that app running. The palette dismisses the
   moment the quit is asked for and never restores focus — either the relaunch takes it, or the app
   that refused the quit is the one asking for it.
-- **Quit All Applications** a system action. `AppLauncher.quitAllTargets()` is the
+- **Quit All Applications** — a system action. `AppLauncher.quitAllTargets()` is the
   policy (every `.regular` app except Finder — `terminate()` only relaunches it — and Blitz,
   excluded by PID because About/Settings temporarily flips it to `.regular`). `SystemActionCoordinator.quitAllApps()`
-  resolves that list **once**, confirms it with an `NSAlert`, then terminates exactly what was
-  confirmed. The palette hides before the alert — it is a floating panel and would sit above it.
+  resolves that list **once**, confirms it through `DialogController` (`AppCore.confirm`), then
+  terminates exactly what was confirmed. The palette hides before the dialog — it is a floating
+  panel and would sit above it.
 
 Every quit but Force Quit is a graceful `NSRunningApplication.terminate()`, so an app with unsaved
 work still puts up its own save sheet.

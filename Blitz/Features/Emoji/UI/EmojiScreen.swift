@@ -76,8 +76,12 @@ struct EmojiScreen: PaletteScreen {
     }
 
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
-        guard shortcut == .pin, let entry = entry(at: selection) else { return false }
-        togglePin(entry)
+        guard let entry = entry(at: selection) else { return false }
+        switch shortcut {
+        case .pin: togglePin(entry)
+        case .edit: core.emojiCoordinator.editKeywords(entry)
+        default: return false
+        }
         return true
     }
 
@@ -122,6 +126,18 @@ struct EmojiScreen: PaletteScreen {
         case .horizontal:
             return min(max(selection + delta, 0), count - 1)
         }
+    }
+
+    var sectionStarts: [Int] { sections.map(\.start) }
+
+    /// A page is as many visual rows as the viewport shows, so the column survives the jump.
+    func page(_ direction: Int, from selection: Int, viewportHeight: CGFloat) -> Int? {
+        let metrics = core.settings.interfaceSize.metrics
+        let pitch = EmojiGrid.cellSize(columns: columns, metrics: metrics) + metrics.spacing.md
+        let geometry = EmojiGridGeometry(
+            counts: sections.map(\.entries.count), columns: columns.rawValue)
+        return geometry.page(
+            from: selection, rows: max(1, Int(viewportHeight / pitch)), forward: direction > 0)
     }
 
     func body(selection: Int, scroll: ScrollIntent) -> AnyView {
@@ -204,12 +220,24 @@ enum EmojiActionsMenu {
                 icon: .paste(target, fallback: "macwindow"), shortcut: "⌥↵"
             ) {
                 core.emojiCoordinator.pasteEmojiKeepingWindowOpen(entry)
-            },
+            }
+        ]
+        if entry.supportsSkinTone {
+            items += EmojiSkinTone.allCases.enumerated().map { offset, tone in
+                PopoverMenuItem(
+                    title: tone.title, icon: .glyph(entry.display(tone: tone)),
+                    sectionTitle: offset == 0 ? "Paste with Skin Tone" : nil,
+                    startsSection: offset == 0
+                ) {
+                    core.emojiCoordinator.pasteEmoji(entry, tone: tone)
+                }
+            }
+        }
+        items.append(
             PopoverMenuItem(
                 title: pinPosition == nil ? "Pin \(noun)" : "Unpin \(noun)",
                 systemImage: pinPosition == nil ? "pin" : "pin.slash",
-                startsSection: true, shortcut: "⌘.", action: togglePin)
-        ]
+                startsSection: true, shortcut: "⌘.", action: togglePin))
         if let pinPosition {
             items.append(
                 PopoverMenuItem(
@@ -222,6 +250,10 @@ enum EmojiActionsMenu {
                     isEnabled: pinPosition < pinCount - 1, shortcut: "⌥⌘↓"
                 ) { movePin(1) })
         }
+        items.append(
+            PopoverMenuItem(title: "Edit Keywords…", systemImage: "tag", shortcut: "⌘E") {
+                core.emojiCoordinator.editKeywords(entry)
+            })
         items.append(contentsOf: [
             PopoverMenuItem(
                 title: "Actual Size", systemImage: "magnifyingglass",

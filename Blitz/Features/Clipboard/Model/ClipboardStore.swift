@@ -18,8 +18,14 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
     let sourceBundleID: String?
     /// When the entry was pinned; pins lead the list and are exempt from pruning.
     let pinnedAt: Date?
+    /// The reader's own name for the entry, kept in `item_titles` beside the row.
+    let title: String?
+    /// Styled flavours of a text entry, each an owned file under `formatsDirectory`.
+    let formats: [ClipboardRichFormat: String]
 
     var isPinned: Bool { pinnedAt != nil }
+
+    var isRichText: Bool { !formats.isEmpty }
 
     /// The referenced path, so no call site re-derives a file entry's meaning from `text`.
     var filePath: String? { kind == .file ? text : nil }
@@ -36,10 +42,12 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         }
     }
 
-    init(text: String, sourceBundleID: String?) {
+    init(
+        text: String, sourceBundleID: String?, formats: [ClipboardRichFormat: String] = [:]
+    ) {
         self.init(
             id: UUID(), kind: .text, text: text, imagePath: nil, createdAt: Date(),
-            sourceBundleID: sourceBundleID)
+            sourceBundleID: sourceBundleID, formats: formats)
     }
 
     init(imagePath: String, createdAt: Date = Date(), sourceBundleID: String?) {
@@ -57,7 +65,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
 
     init(
         id: UUID, kind: Kind, text: String?, imagePath: String?, createdAt: Date,
-        sourceBundleID: String?, pinnedAt: Date? = nil
+        sourceBundleID: String?, pinnedAt: Date? = nil, title: String? = nil,
+        formats: [ClipboardRichFormat: String] = [:]
     ) {
         self.id = id
         self.kind = kind
@@ -66,6 +75,8 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.sourceBundleID = sourceBundleID
         self.pinnedAt = pinnedAt
+        self.title = title
+        self.formats = formats
     }
 
     /// Copy with the two fields the store rewrites; the pin is always stated outright.
@@ -73,12 +84,26 @@ struct ClipboardItem: Identifiable, Hashable, Sendable {
         ClipboardItem(
             id: id, kind: kind, text: text, imagePath: imagePath,
             createdAt: createdAt ?? self.createdAt, sourceBundleID: sourceBundleID,
-            pinnedAt: pinnedAt)
+            pinnedAt: pinnedAt, title: title, formats: formats)
     }
 
-    /// Case-insensitive substring match: how the store filters without FTS.
+    /// The edited text; stored formats would paste the old content, so they go with it.
+    func with(text: String) -> ClipboardItem {
+        ClipboardItem(
+            id: id, kind: kind, text: text, imagePath: imagePath, createdAt: createdAt,
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt, title: title)
+    }
+
+    func with(title: String?) -> ClipboardItem {
+        ClipboardItem(
+            id: id, kind: kind, text: text, imagePath: imagePath, createdAt: createdAt,
+            sourceBundleID: sourceBundleID, pinnedAt: pinnedAt, title: title, formats: formats)
+    }
+
+    /// Case-insensitive substring match on the content or the title: search without FTS.
     func matches(_ query: String) -> Bool {
-        text?.localizedCaseInsensitiveContains(query) ?? false
+        text?.localizedCaseInsensitiveContains(query) == true
+            || title?.localizedCaseInsensitiveContains(query) == true
     }
 }
 
@@ -241,6 +266,33 @@ final class ClipboardStore {
         END;
         """
 
+    /// Side tables, never columns: a column an older file lacks fails the open and wipes history.
+    private static let sideSchema = """
+        CREATE TABLE IF NOT EXISTS item_titles(
+          item_id TEXT NOT NULL UNIQUE, title TEXT NOT NULL
+        );
+        CREATE TRIGGER IF NOT EXISTS items_title_ad AFTER DELETE ON items BEGIN
+          DELETE FROM item_titles WHERE item_id = old.id;
+        END;
+        CREATE TABLE IF NOT EXISTS item_formats(
+          item_id TEXT NOT NULL, uti TEXT NOT NULL, path TEXT NOT NULL, UNIQUE(item_id, uti)
+        );
+        CREATE TRIGGER IF NOT EXISTS items_formats_ad AFTER DELETE ON items BEGIN
+          DELETE FROM item_formats WHERE item_id = old.id;
+        END;
+        """
+
+    /// Every read selects these, so `row` decodes a title and formats wherever a row comes from.
+    nonisolated private static func columns(_ table: String) -> String {
+        """
+        \(table).id, \(table).kind, \(table).text, \(table).image_path, \(table).created_at,
+        \(table).source_app, \(table).pinned_at,
+        (SELECT title FROM item_titles WHERE item_id = \(table).id),
+        (SELECT group_concat(uti || char(9) || path, char(10)) FROM item_formats
+          WHERE item_id = \(table).id)
+        """
+    }
+
     private static let extractionSchema = """
         CREATE TABLE IF NOT EXISTS item_text(
           item_id TEXT NOT NULL UNIQUE, text TEXT NOT NULL
@@ -271,6 +323,8 @@ final class ClipboardStore {
     /// Internal, not private: a backup names both to stream the table and adopt its blobs.
     let imagesDir: URL
     let dbURL: URL
+    /// Captured rich-text flavours; inside `imagesDir`, so `owns` already covers them.
+    var formatsDirectory: URL { imagesDir.appendingPathComponent("formats", isDirectory: true) }
     @ObservationIgnored private var db: OpaquePointer?
     @ObservationIgnored private var insertStmt: OpaquePointer?
     @ObservationIgnored private var loadStmt: OpaquePointer?
@@ -356,9 +410,64 @@ final class ClipboardStore {
         return sqlite3_step(stmt) == SQLITE_ROW ? sqlite3_column_int64(stmt, 0) : 0
     }
 
-    func addText(_ text: String, sourceBundleID: String?) {
-        if items.first?.kind == .text, items.first?.text == text { return }
-        insert(ClipboardItem(text: text, sourceBundleID: sourceBundleID))
+    /// `formats` are files already written by `writeFormats`; a repeat copy discards them.
+    func addText(
+        _ text: String, sourceBundleID: String?, formats: [ClipboardRichFormat: String] = [:]
+    ) {
+        if items.first?.kind == .text, items.first?.text == text {
+            deleteOwned(Array(formats.values))
+            return
+        }
+        insert(ClipboardItem(text: text, sourceBundleID: sourceBundleID, formats: formats))
+    }
+
+    /// Off-main file IO; a flavour that fails to write is simply not offered later.
+    nonisolated static func writeFormats(
+        _ formats: [ClipboardRichFormat: Data], into directory: URL
+    ) -> [ClipboardRichFormat: String] {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var written: [ClipboardRichFormat: String] = [:]
+        for (format, data) in formats {
+            let url = directory.appendingPathComponent(
+                UUID().uuidString + "." + format.fileExtension)
+            if (try? data.write(to: url, options: .atomic)) != nil { written[format] = url.path }
+        }
+        return written
+    }
+
+    /// Rewritten in place, keeping the rowid and with it any recognized text keyed to the row.
+    func updateText(_ text: String, of item: ClipboardItem) {
+        guard item.kind == .text,
+            let stmt = prepare("UPDATE items SET text = ?1 WHERE id = ?2")
+        else { return }
+        sqlite3_bind_text(stmt, 1, text, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, item.id.uuidString, -1, SQLITE_TRANSIENT)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+        let current = items.first { $0.id == item.id } ?? item
+        if let drop = prepare("DELETE FROM item_formats WHERE item_id = ?1") {
+            sqlite3_bind_text(drop, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
+            sqlite3_step(drop)
+            sqlite3_finalize(drop)
+        }
+        deleteOwned(Array(current.formats.values))
+        replace(current.with(text: text))
+    }
+
+    /// A blank title clears it, so the row reads as its content again.
+    func setTitle(_ title: String, for item: ClipboardItem) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sql =
+            trimmed.isEmpty
+            ? "DELETE FROM item_titles WHERE item_id = ?1"
+            : "INSERT OR REPLACE INTO item_titles(item_id, title) SELECT id, ?2 FROM items WHERE id = ?1"
+        guard let stmt = prepare(sql) else { return }
+        sqlite3_bind_text(stmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
+        if !trimmed.isEmpty { sqlite3_bind_text(stmt, 2, trimmed, -1, SQLITE_TRANSIENT) }
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+        let current = items.first { $0.id == item.id } ?? item
+        replace(current.with(title: trimmed.isEmpty ? nil : trimmed))
     }
 
     /// One row per file. Batched, so a multi-file copy prunes once rather than once per file.
@@ -421,19 +530,18 @@ final class ClipboardStore {
     func clearAll() {
         invalidateSearch()
         extractionGeneration = UUID()
+        // Read before the delete: the cascade trigger takes the format rows with their items.
+        let formats = ownedPaths(
+            """
+            SELECT f.path FROM item_formats f JOIN items i ON i.id = f.item_id
+            WHERE i.pinned_at IS NULL
+            """)
         // RETURNING hands back the deleted blobs in the same pass, so no separate SELECT is needed.
-        if db != nil,
-            let stmt = prepare("DELETE FROM items WHERE pinned_at IS NULL RETURNING image_path")
-        {
-            var orphaned: [String] = []
-            while sqlite3_step(stmt) == SQLITE_ROW {
-                if let path = Self.columnString(stmt, 0), owns(path) { orphaned.append(path) }
-            }
-            sqlite3_finalize(stmt)
-            if !orphaned.isEmpty {
-                Task.detached(priority: .utility) {
-                    for path in orphaned { try? FileManager.default.removeItem(atPath: path) }
-                }
+        let orphaned =
+            formats + ownedPaths("DELETE FROM items WHERE pinned_at IS NULL RETURNING image_path")
+        if !orphaned.isEmpty {
+            Task.detached(priority: .utility) {
+                for path in orphaned { try? FileManager.default.removeItem(atPath: path) }
             }
         }
         // Every pinned row is resident however old, so the window stays whole without a reload.
@@ -462,12 +570,12 @@ final class ClipboardStore {
         guard
             let stmt = prepare(
                 """
-                SELECT id, kind, text, image_path, created_at, source_app, pinned_at
-                FROM items WHERE kind IN ('image', 'file')
-                  AND id NOT IN (SELECT item_id FROM item_text)
-                  AND id NOT IN (SELECT item_id FROM item_text_failures
+                SELECT \(Self.columns("i"))
+                FROM items i WHERE i.kind IN ('image', 'file')
+                  AND i.id NOT IN (SELECT item_id FROM item_text)
+                  AND i.id NOT IN (SELECT item_id FROM item_text_failures
                     WHERE attempts >= 3 OR retry_at > ?1)
-                ORDER BY rowid DESC LIMIT 1
+                ORDER BY i.rowid DESC LIMIT 1
                 """)
         else { return nil }
         defer { sqlite3_finalize(stmt) }
@@ -592,6 +700,7 @@ final class ClipboardStore {
         guard let stmt = searchStmt, q.count >= 3 else { return fallbackSearch(q) }
         let match = "\"" + q.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         sqlite3_bind_text(stmt, 1, match, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, Self.likePattern(q), -1, SQLITE_TRANSIENT)
         var results: [ClipboardItem] = []
         var status = sqlite3_step(stmt)
         while status == SQLITE_ROW {
@@ -601,6 +710,16 @@ final class ClipboardStore {
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
         return status == SQLITE_DONE ? results : fallbackSearch(q)
+    }
+
+    /// A substring pattern for `LIKE … ESCAPE '\'`, so a typed `%` or `_` stays literal.
+    nonisolated private static func likePattern(_ query: String) -> String {
+        var escaped = ""
+        for character in query {
+            if character == "%" || character == "_" || character == "\\" { escaped.append("\\") }
+            escaped.append(character)
+        }
+        return "%" + escaped + "%"
     }
 
     private func invalidateSearch(preservingMatches: Bool = false) {
@@ -676,18 +795,18 @@ final class ClipboardStore {
         sqlite3_progress_handler(db, 1000, { _ in Task.isCancelled ? 1 : 0 }, nil)
         let isShort = query.count < 3
         let kind = filter == .image ? "i.kind = 'image'" : filter == .file ? "i.kind = 'file'" : "1"
-        let columns = "i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app, i.pinned_at"
+        let selected = columns("i")
         let sql =
             isShort
             ? """
-            SELECT \(columns), t.text FROM item_text t JOIN items i ON i.id = t.item_id
+            SELECT \(selected), t.text FROM item_text t JOIN items i ON i.id = t.item_id
             WHERE \(kind) AND (i.pinned_at IS NOT NULL OR i.rowid >= COALESCE(
               (SELECT rowid FROM items WHERE pinned_at IS NULL ORDER BY rowid DESC LIMIT 1 OFFSET \(memoryWindow - 1)), 0))
             ORDER BY i.pinned_at IS NULL, i.pinned_at, i.rowid DESC
             """
             : """
             SELECT * FROM (
-              SELECT \(columns), NULL AS recognized, i.rowid AS rid FROM items i
+              SELECT \(selected), NULL AS recognized, i.rowid AS rid FROM items i
                 WHERE i.pinned_at IS NULL AND i.rowid IN (
                 SELECT i.rowid FROM item_text_fts f
                   JOIN item_text t ON t.rowid = f.rowid JOIN items i ON i.id = t.item_id
@@ -696,7 +815,7 @@ final class ClipboardStore {
                 LIMIT \(searchLimit) + (SELECT COUNT(*) FROM items WHERE pinned_at IS NOT NULL)
               )
               UNION ALL
-              SELECT \(columns), t.text AS recognized, i.rowid AS rid
+              SELECT \(selected), t.text AS recognized, i.rowid AS rid
                 FROM items i JOIN item_text t ON t.item_id = i.id
                 WHERE i.pinned_at IS NOT NULL AND \(kind)
             ) ORDER BY pinned_at IS NULL, pinned_at, rid DESC
@@ -714,7 +833,7 @@ final class ClipboardStore {
             guard let item = row(stmt) else { continue }
             if let residentIDs, !residentIDs.contains(item.id) { continue }
             if isShort || item.isPinned,
-                columnString(stmt, 7)?.localizedCaseInsensitiveContains(query) != true
+                columnString(stmt, 9)?.localizedCaseInsensitiveContains(query) != true
             {
                 continue
             }
@@ -796,6 +915,17 @@ final class ClipboardStore {
         trimWindow()
     }
 
+    /// Swaps an edited row in where it sits; one beyond the window only refreshes the search.
+    private func replace(_ updated: ClipboardItem) {
+        textSearchMatches = textSearchMatches.map { $0.id == updated.id ? updated : $0 }
+        if let index = items.firstIndex(where: { $0.id == updated.id }) {
+            items[index] = updated
+        } else {
+            invalidateSearch(preservingMatches: true)
+            searchRevision += 1
+        }
+    }
+
     /// Cap the in-memory window, but never drop a pinned row: those render however old they are.
     private func trimWindow() {
         guard items.count > Self.memoryWindow, let index = items.lastIndex(where: { !$0.isPinned })
@@ -805,6 +935,7 @@ final class ClipboardStore {
 
     private func insert(_ item: ClipboardItem) {
         if let stmt = insertStmt { Self.bindAndInsert(stmt, item) }
+        insertFormats(of: item)
         items.insert(item, at: 0)
         trimWindow()
         prune()
@@ -837,6 +968,37 @@ final class ClipboardStore {
         sqlite3_step(stmt)
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
+    }
+
+    private func insertFormats(of item: ClipboardItem) {
+        guard !item.formats.isEmpty,
+            let stmt = prepare(
+                "INSERT OR REPLACE INTO item_formats(item_id, uti, path) VALUES(?1, ?2, ?3)")
+        else { return }
+        defer { sqlite3_finalize(stmt) }
+        for (format, path) in item.formats {
+            sqlite3_bind_text(stmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 2, format.rawValue, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, 3, path, -1, SQLITE_TRANSIENT)
+            sqlite3_step(stmt)
+            sqlite3_reset(stmt)
+        }
+    }
+
+    /// The first column of every row `sql` yields, kept only where the file is ours.
+    private func ownedPaths(_ sql: String) -> [String] {
+        guard db != nil, let stmt = prepare(sql) else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        var paths: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let path = Self.columnString(stmt, 0), owns(path) { paths.append(path) }
+        }
+        return paths
+    }
+
+    /// A row's own files, a blob or a flavour or two, so they go in place rather than off-main.
+    private func deleteOwned(_ paths: [String]) {
+        for path in paths where owns(path) { try? FileManager.default.removeItem(atPath: path) }
     }
 
     /// Whether a path is inside our images directory; only those are ours to delete.
@@ -882,8 +1044,7 @@ final class ClipboardStore {
     }
 
     private func deleteBlob(_ item: ClipboardItem) {
-        guard let path = item.imagePath, owns(path) else { return }
-        try? FileManager.default.removeItem(atPath: path)
+        deleteOwned([item.imagePath].compactMap(\.self) + item.formats.values)
     }
 
     private func openDatabase() -> Bool {
@@ -892,26 +1053,31 @@ final class ClipboardStore {
                 == SQLITE_OK,
             sqlite3_exec(db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nil, nil, nil)
                 == SQLITE_OK,
-            sqlite3_exec(db, Self.schema, nil, nil, nil) == SQLITE_OK
+            sqlite3_exec(db, Self.schema, nil, nil, nil) == SQLITE_OK,
+            sqlite3_exec(db, Self.sideSchema, nil, nil, nil) == SQLITE_OK
         else { return false }
         insertStmt = prepare(Self.insertSQL)
         // Two indexed branches, deliberately not one OR. See docs/features/clipboard.md#store.
         loadStmt = prepare(
             """
-            SELECT id, kind, text, image_path, created_at, source_app, pinned_at FROM (
+            SELECT \(Self.columns("i")) FROM (
               SELECT rowid AS rid, * FROM items WHERE rowid >= ?1
               UNION ALL
               SELECT rowid AS rid, * FROM items WHERE pinned_at IS NOT NULL AND rowid < ?1
-            ) ORDER BY rid DESC
+            ) AS i ORDER BY rid DESC
             """)
         windowFloorStmt = prepare(
             "SELECT rowid FROM items WHERE pinned_at IS NULL ORDER BY rowid DESC LIMIT 1 OFFSET ?")
         searchStmt = prepare(
             """
-            SELECT i.id, i.kind, i.text, i.image_path, i.created_at, i.source_app, i.pinned_at
-            FROM (
-              SELECT rowid FROM items_fts WHERE items_fts MATCH ?
-              ORDER BY rowid DESC LIMIT \(Self.searchLimit)
+            SELECT \(Self.columns("i")) FROM (
+              SELECT rowid FROM (
+                SELECT rowid FROM items_fts WHERE items_fts MATCH ?1
+                ORDER BY rowid DESC LIMIT \(Self.searchLimit)
+              )
+              UNION
+              SELECT items.rowid FROM item_titles JOIN items ON items.id = item_titles.item_id
+              WHERE item_titles.title LIKE ?2 ESCAPE '\\'
             ) f JOIN items i ON i.rowid = f.rowid ORDER BY f.rowid DESC
             """)
         deleteByIDStmt = prepare("DELETE FROM items WHERE id = ?")
@@ -920,7 +1086,10 @@ final class ClipboardStore {
         staleImagesStmt = prepare(
             """
             SELECT image_path FROM items
-            WHERE created_at < ? AND pinned_at IS NULL AND image_path IS NOT NULL
+            WHERE created_at < ?1 AND pinned_at IS NULL AND image_path IS NOT NULL
+            UNION ALL
+            SELECT f.path FROM item_formats f JOIN items i ON i.id = f.item_id
+            WHERE i.created_at < ?1 AND i.pinned_at IS NULL
             """)
         deleteStaleStmt = prepare("DELETE FROM items WHERE created_at < ? AND pinned_at IS NULL")
         return insertStmt != nil && loadStmt != nil && windowFloorStmt != nil && searchStmt != nil
@@ -973,6 +1142,11 @@ final class ClipboardStore {
             return 0
         }
         defer { sqlite3_finalize(stmt) }
+        var titleStmt: OpaquePointer?
+        sqlite3_prepare_v2(
+            db, "INSERT OR REPLACE INTO item_titles(item_id, title) VALUES(?, ?)", -1, &titleStmt,
+            nil)
+        defer { sqlite3_finalize(titleStmt) }
         var inserted = 0
         // One transaction for the batch: ~1 WAL commit rather than one per row.
         sqlite3_exec(db, "BEGIN", nil, nil, nil)
@@ -985,6 +1159,12 @@ final class ClipboardStore {
                 continue
             }
             bindAndInsert(stmt, item)
+            if let titleStmt, let title = item.title {
+                sqlite3_bind_text(titleStmt, 1, item.id.uuidString, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(titleStmt, 2, title, -1, SQLITE_TRANSIENT)
+                sqlite3_step(titleStmt)
+                sqlite3_reset(titleStmt)
+            }
             inserted += 1
         }
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
@@ -1010,7 +1190,7 @@ final class ClipboardStore {
         return ClipboardItem(
             id: item.id, kind: .image, text: nil,
             imagePath: directory.appendingPathComponent(name).path, createdAt: item.createdAt,
-            sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt)
+            sourceBundleID: item.sourceBundleID, pinnedAt: item.pinnedAt, title: item.title)
     }
 
     /// false leaves the row out, so none ever points into a staging tree about to be discarded.
@@ -1033,10 +1213,7 @@ final class ClipboardStore {
         }
         defer { sqlite3_close_v2(db) }
         var stmt: OpaquePointer?
-        let sql = """
-            SELECT id, kind, text, image_path, created_at, source_app, pinned_at
-            FROM items ORDER BY rowid
-            """
+        let sql = "SELECT \(columns("i")) FROM items i ORDER BY i.rowid"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -1052,7 +1229,23 @@ final class ClipboardStore {
         return ClipboardItem(
             id: id, kind: kind, text: columnString(stmt, 2), imagePath: columnString(stmt, 3),
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
-            sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6))
+            sourceBundleID: columnString(stmt, 5), pinnedAt: columnDate(stmt, 6),
+            title: columnString(stmt, 7), formats: formats(stmt, 8))
+    }
+
+    /// Unpacks the `group_concat` of `columns`: one `uti<TAB>path` per line.
+    nonisolated private static func formats(
+        _ stmt: OpaquePointer?, _ index: Int32
+    ) -> [ClipboardRichFormat: String] {
+        guard let packed = columnString(stmt, index) else { return [:] }
+        var formats: [ClipboardRichFormat: String] = [:]
+        for entry in packed.split(separator: "\n") {
+            let parts = entry.split(separator: "\t", maxSplits: 1)
+            guard parts.count == 2, let format = ClipboardRichFormat(rawValue: String(parts[0]))
+            else { continue }
+            formats[format] = String(parts[1])
+        }
+        return formats
     }
 
     nonisolated private static func columnDate(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {

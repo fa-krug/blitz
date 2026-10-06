@@ -135,6 +135,9 @@ enum SettingsSearchCatalog {
             .generalGeneral, "Auto-switch input source",
             keywords: ["keyboard", "layout", "language", "abc"]),
         .init(
+            .generalGeneral, "Welcome Tour",
+            keywords: ["onboarding", "tutorial", "tips", "introduction", "getting started"]),
+        .init(
             .generalAppearance, "Theme",
             keywords: ["dark", "light", "mode", "appearance"]),
         .init(
@@ -172,7 +175,13 @@ enum SettingsSearchCatalog {
             keywords: ["fuzzy", "strict", "loose", "matching", "typo", "root search"]),
         .init(
             .generalSearch, "Learned ranking",
-            keywords: ["reset", "history", "order", "privacy"])
+            keywords: ["reset", "history", "order", "privacy"]),
+        .init(
+            .generalSearch, "Remember search history",
+            keywords: ["recent", "queries", "recall", "up arrow", "persist", "privacy"]),
+        .init(
+            .generalSearch, "Search history",
+            keywords: ["clear", "recent", "queries", "recall", "privacy"])
     ]
 
     private static let applications: [SettingsSearchEntry] = [
@@ -238,6 +247,9 @@ enum SettingsSearchCatalog {
         .init(
             .quicklinksBehaviour, "Open in a new window",
             keywords: ["browser", "tab"]),
+        .init(
+            .quicklinksBehaviour, "Focus an open tab",
+            keywords: ["browser", "tab", "existing", "reuse", "automation", "safari", "chrome"]),
         .init(
             .quicklinksBehaviour, "When there's no selected text",
             keywords: ["selection", "fallback", "placeholder"]),
@@ -354,7 +366,13 @@ enum SettingsSearchCatalog {
             keywords: ["folders", "locations", "home", "add folder"]),
         .init(
             group: .fileSearchIgnorePatterns, "Ignore Patterns",
-            keywords: ["exclude", "glob", "node_modules", "skip"])
+            keywords: ["exclude", "glob", "node_modules", "skip"]),
+        .init(
+            .fileSearchScreenshots, "Enable Screenshot Search",
+            keywords: ["screenshots", "screen capture", "images", "spotlight"]),
+        .init(
+            .fileSearchScreenshots, "Search text in screenshots",
+            keywords: ["ocr", "recognize", "text recognition", "vision", "screen capture"])
     ]
 
     private static let notes: [SettingsSearchEntry] = [
@@ -510,7 +528,10 @@ enum SettingsSearchCatalog {
             keywords: ["colour", "color", "fitzpatrick", "default"]),
         .init(
             .emojiAppearance, "Column Count",
-            keywords: ["columns", "density", "zoom", "six", "eight", "ten"])
+            keywords: ["columns", "density", "zoom", "six", "eight", "ten"]),
+        .init(
+            .emojiSearch, "Custom Keywords",
+            keywords: ["reset", "search", "terms", "alias", "tags", "edit keywords"])
     ]
 
     private static let calendar: [SettingsSearchEntry] = [
@@ -621,6 +642,9 @@ enum SettingsSearchCatalog {
             keywords: [
                 "library", "uninstall", "update", "preferences", "appearance", "alias", "shortcut"
             ]),
+        .init(
+            .extensionsInstalled, "Update automatically",
+            keywords: ["auto update", "updates", "daily", "background", "store"]),
         .init(
             group: .extensionsCompatibility, "Compatibility",
             keywords: ["supported", "unsupported", "raycast api"]),

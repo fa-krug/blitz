@@ -5,6 +5,7 @@ import AppKit
 final class ExtensionCoordinator {
     private let extensions: ExtensionManager
     private let store: ExtensionStoreSession
+    private let updates: ExtensionUpdateScheduler
     private let appIndex: AppIndex
     private let palette: PaletteState
     private let paletteCoordinator: PaletteCoordinator
@@ -16,6 +17,7 @@ final class ExtensionCoordinator {
     init(
         extensions: ExtensionManager,
         store: ExtensionStoreSession,
+        updates: ExtensionUpdateScheduler,
         appIndex: AppIndex,
         palette: PaletteState,
         paletteCoordinator: PaletteCoordinator,
@@ -25,6 +27,7 @@ final class ExtensionCoordinator {
     ) {
         self.extensions = extensions
         self.store = store
+        self.updates = updates
         self.appIndex = appIndex
         self.palette = palette
         self.paletteCoordinator = paletteCoordinator
@@ -39,12 +42,14 @@ final class ExtensionCoordinator {
     func applyEnabled() {
         extensions.setShowsInLauncher(settings.extensionsShowInLauncher)
         applyStorePresence()
+        applyAutoUpdate()
         Task { await extensions.setEnabled(settings.extensionsEnabled) }
     }
 
     /// The Store installs what only an enabled runtime can run, so it goes with the switch.
     private func applyStorePresence() {
-        appIndex.setCommandsVisible([.extensionStore], settings.extensionsEnabled)
+        appIndex.setCommandsVisible(
+            [.extensionStore, .checkForExtensionUpdates], settings.extensionsEnabled)
         guard !settings.extensionsEnabled else { return }
         store.reset()
         if palette.mode == .extensionStore { palette.prepare(mode: .launcher) }
@@ -56,6 +61,7 @@ final class ExtensionCoordinator {
         guard enabled else {
             settings.extensionsEnabled = false
             applyStorePresence()
+            applyAutoUpdate()
             Task { await extensions.setEnabled(false) }
             return
         }
@@ -75,8 +81,40 @@ final class ExtensionCoordinator {
 
             settings.extensionsEnabled = true
             applyStorePresence()
+            applyAutoUpdate()
             await extensions.setEnabled(true)
         }
+    }
+
+    // MARK: - Updates
+
+    /// The daily pump runs only while extensions are on and automatic updates are asked for.
+    func applyAutoUpdate() {
+        guard settings.extensionsEnabled, settings.extensionsAutoUpdate else {
+            updates.stop()
+            return
+        }
+        updates.onReport = { [weak self] outcome in self?.report(outcome, installing: true) }
+        updates.start()
+    }
+
+    /// Always asks the store; installs only when updates are automatic, otherwise offers them.
+    func checkForUpdatesNow() {
+        guard settings.extensionsEnabled else {
+            core.showMessage("Extensions are disabled — enable them in Settings", tone: .danger)
+            return
+        }
+        let installing = settings.extensionsAutoUpdate
+        core.showProgress("Checking for extension updates…")
+        Task {
+            let outcome = await updates.checkNow(installing: installing)
+            report(outcome, installing: installing)
+        }
+    }
+
+    private func report(_ outcome: ExtensionUpdatePolicy.Outcome, installing: Bool) {
+        core.showMessage(
+            outcome.summary(installing: installing), tone: outcome.isFailure ? .danger : .success)
     }
 
     func applyExtensionsLauncherPresence() {
@@ -122,6 +160,19 @@ final class ExtensionCoordinator {
             return
         }
         paletteCoordinator.togglePalette(mode: .extensionStore, seeding: query.isEmpty ? nil : query)
+    }
+
+    /// Escape, backspace and the back chevron leave a store page for the row it was opened from.
+    func closeStoreDetail() -> Bool {
+        guard palette.mode == .extensionStore, !palette.menuOpen,
+            let selection = store.closeDetail()
+        else { return false }
+        palette.selection = selection
+        return true
+    }
+
+    var isShowingStoreDetail: Bool {
+        palette.mode == .extensionStore && store.detail != nil
     }
 
     /// The row reports progress and failure itself; the HUD says when the commands have arrived.
@@ -323,5 +374,16 @@ final class ExtensionCoordinator {
             tone: alert.isDestructive ? .danger : .neutral,
             confirmRole: alert.isDestructive ? .destructive : .standard,
             dismissTitle: alert.dismissTitle)
+    }
+
+    /// Nil when the user cancels; only the first four candidates get a button.
+    func chooseApplication(toOpen target: URL, from candidates: [URL]) async -> URL? {
+        let shown = Array(candidates.prefix(4))
+        let index = await core.choose(
+            title: "Open With", message: target.lastPathComponent, symbol: "arrow.up.forward.app",
+            options: shown.map { DialogAction(title: $0.deletingPathExtension().lastPathComponent) }
+                + [DialogAction(title: "Cancel", role: .cancel)],
+            defaultIndex: 0)
+        return shown.indices.contains(index) ? shown[index] : nil
     }
 }

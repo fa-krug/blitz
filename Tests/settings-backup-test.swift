@@ -52,6 +52,12 @@ struct SettingsBackupTest {
         check(
             "user ignore patterns ride the settings backup",
             mirrored["fileSearchIgnorePatterns"] == .fileSearchIgnorePatterns)
+        check(
+            "screenshot search rides the settings backup",
+            mirrored["screenshotSearchEnabled"] == .screenshotSearchEnabled)
+        check(
+            "screenshot text recognition never rides a backup",
+            excluded[AppSettingsKey.screenshotTextSearchEnabled.rawValue] != nil)
         check("notes enablement rides the settings backup", mirrored["notesEnabled"] == .notesEnabled)
         check(
             "Markdown rendering rides the settings backup",
@@ -70,7 +76,7 @@ struct SettingsBackupTest {
         for key: AppSettingsKey in [
             .snippetsEnabled, .extensionsEnabled, .calendarEnabled, .autoJoinMeetings,
             .cameraPreview, .quickActionsEnabled, .remindersEnabled, .contactsEnabled,
-            .aiCalendarAccess, .aiRemindersAccess
+            .aiCalendarAccess, .aiRemindersAccess, .quicklinkPrefersExistingTabs
         ] {
             check(
                 "\(key.rawValue) stays out of a backup",
@@ -103,6 +109,24 @@ struct SettingsBackupTest {
         check(
             naming("externally sourced fields have no AppSettings key", Array(notActuallyExternal)),
             notActuallyExternal.isEmpty)
+
+        // Custom emoji keywords ride a backup as content, so an import meets the same bounds.
+        let hostile: [String: [String]] = [
+            "": ["orphan"], "👍": [" yes ", "YES", "", String(repeating: "z", count: 500)],
+            "👎": [" ", ","]
+        ]
+        let restored = EmojiKeywords.normalized(hostile)
+        check(
+            "an imported keyword map drops blank glyphs and empty term lists",
+            Set(restored.keys) == ["👍"])
+        check(
+            "imported keywords are trimmed, deduplicated and length-capped",
+            restored["👍"] == ["yes", String(repeating: "z", count: EmojiKeywords.termLengthCap)])
+        let flood = Dictionary(
+            uniqueKeysWithValues: (0..<(EmojiKeywords.glyphCap + 10)).map { ("g\($0)", ["t"]) })
+        check(
+            "an imported keyword map is capped",
+            EmojiKeywords.normalized(flood).count == EmojiKeywords.glyphCap)
 
         print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
         exit(failures == 0 ? 0 : 1)

@@ -32,6 +32,12 @@ struct QuicklinkTests {
         archiveMerge()
         archiveAcceptsAHandWrittenFile()
         raycastImport()
+        tagNormalization()
+        tagSearch()
+        tagsPersist()
+        tagsTravelInArchives()
+        tabURLMatching()
+        handlerProbe()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -308,6 +314,7 @@ struct QuicklinkTests {
         expect(!row.isPinned, "a null pin stamp reads as unpinned")
         expect(row.isEnabled, "a table written before is_enabled loads its rows as enabled")
         expect(row.favicon == nil, "a table written before favicon loads its rows without one")
+        expect(row.tags.isEmpty, "a table written before tags loads its rows untagged")
 
         // A second open must find the column already there rather than adding it twice.
         let reopened = QuicklinkStore(directory: dir)
@@ -710,6 +717,119 @@ struct QuicklinkTests {
     }
 
     // MARK: - Helpers
+
+    // MARK: - Tags
+
+    static func tagNormalization() {
+        expect(
+            Quicklink.normalizedTags(["  Work ", "", "work", "Docs", "a\nb", "   "])
+                == ["Work", "Docs", "a b"],
+            "tags trim, drop blanks, fold duplicates by case and keep no line break")
+        expect(
+            Quicklink.tags(fromList: "work, docs,,  Work ,dev") == ["work", "docs", "dev"],
+            "the editor's comma list reads as tags, first spelling winning")
+        expect(Quicklink.tags(fromList: " , ").isEmpty, "a list of nothing is no tags")
+        let library = [
+            Quicklink(name: "A", link: "https://a.test", tags: ["zeta", "Alpha"]),
+            Quicklink(name: "B", link: "https://b.test", tags: ["alpha", "beta"])
+        ]
+        expect(
+            Quicklink.allTags(in: library) == ["Alpha", "beta", "zeta"],
+            "the filter lists each tag once, alphabetically and ignoring case")
+    }
+
+    static func tagSearch() {
+        let tagged = Quicklink(name: "Jira", link: "https://jira.test", tags: ["Work", "tickets"])
+        expect(tagged.matches("jir"), "the name still matches")
+        expect(tagged.matches("TICK"), "a tag matches, ignoring case")
+        expect(!tagged.matches("jira.test"), "the link stays unsearchable")
+        expect(tagged.hasTag("work") && !tagged.hasTag("wor"), "the tag filter is a whole tag")
+    }
+
+    static func tagsPersist() {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var stored: UUID?
+        do {
+            let store = QuicklinkStore(directory: dir)
+            var draft = link("Tagged")
+            draft.tags = [" work ", "Work", "docs"]
+            stored = try? store.add(draft).id
+            expect(
+                store.quicklinks.first?.tags == ["work", "docs"],
+                "the store keeps tags normalized")
+            let copy = try? store.duplicate(id: stored!)
+            expect(copy?.tags == ["work", "docs"], "a duplicate keeps the tags")
+        }
+        let reopened = QuicklinkStore(directory: dir)
+        reopened.load()
+        expect(
+            reopened.quicklink(id: stored!)?.tags == ["work", "docs"],
+            "tags survive a close and reopen, in order")
+        guard var untagged = reopened.quicklink(id: stored!) else { return fail("tagged row") }
+        untagged.tags = []
+        try? reopened.update(untagged)
+        let again = QuicklinkStore(directory: dir)
+        again.load()
+        expect(again.quicklink(id: stored!)?.tags == [], "clearing every tag persists")
+    }
+
+    static func tagsTravelInArchives() {
+        let stamp = Date(timeIntervalSince1970: 500)
+        let tagged = Quicklink(
+            name: "Tagged", link: "https://a.test", createdAt: stamp, tags: ["work", "docs"])
+        guard let data = try? QuicklinkArchive.encode([tagged]),
+            let decoded = try? QuicklinkArchive.decode(data)
+        else { return fail("a tagged archive decodes") }
+        expect(decoded.first?.tags == ["work", "docs"], "tags survive an export and import")
+        expect(
+            QuicklinkArchive.merge(decoded, into: []).additions.first?.tags == ["work", "docs"],
+            "an import keeps the tags of what it adds")
+        let legacy = Data(#"[{"name":"Old","link":"https://old.test"}]"#.utf8)
+        expect(
+            (try? QuicklinkArchive.decode(legacy))?.first?.tags == [],
+            "a file written before tags imports untagged")
+    }
+
+    static func tabURLMatching() {
+        let cases: [(String, String, Bool, String)] = [
+            ("https://GitHub.com/a", "https://github.com/a", true, "the host folds case"),
+            ("HTTPS://github.com/a", "https://github.com/a", true, "the scheme folds case"),
+            ("https://github.com/a/", "https://github.com/a", true, "a trailing slash is ignored"),
+            ("https://github.com/", "https://github.com", true, "a bare host matches its root"),
+            ("https://github.com/a#top", "https://github.com/a", true, "the fragment is ignored"),
+            ("https://github.com/A", "https://github.com/a", false, "the path keeps its case"),
+            ("https://github.com/a?q=1", "https://github.com/a?q=1", true, "an equal query matches"),
+            ("https://github.com/a?q=1", "https://github.com/a?q=2", false, "a query must match"),
+            ("https://github.com/a?q=1", "https://github.com/a", false, "a missing query differs"),
+            ("https://github.com/a?b=1&a=2", "https://github.com/a?a=2&b=1", false,
+                "query order is part of the query"),
+            ("http://github.com/a", "https://github.com/a", false, "the scheme still counts"),
+            ("https://github.com:8443/a", "https://github.com/a", false, "the port still counts")
+        ]
+        for (lhs, rhs, matches, label) in cases {
+            expect(BrowserTab.matches(lhs, rhs) == matches, label)
+        }
+    }
+
+    static func handlerProbe() {
+        expect(
+            QuicklinkDestination.handlerProbe("https://github.com/search?q={argument}")?.scheme
+                == "https",
+            "a templated web link still names a web handler")
+        expect(
+            QuicklinkDestination.handlerProbe("spotify:search:{argument}")?.scheme == "spotify",
+            "a deeplink names its scheme's handler")
+        expect(
+            QuicklinkDestination.handlerProbe("~/Notes", homeDirectory: "/Users/me")?.path
+                == "/Users/me/Notes",
+            "a plain path names its own file")
+        expect(
+            QuicklinkDestination.handlerProbe("~/Notes/{date}.md", homeDirectory: "/Users/me")
+                == nil,
+            "a templated path has no file to ask about yet")
+        expect(QuicklinkDestination.handlerProbe("{clipboard | raw}") == nil, "a bare token has none")
+    }
 
     static func detect(_ value: String) -> QuicklinkDestination? {
         QuicklinkDestination.detect(value, homeDirectory: home)

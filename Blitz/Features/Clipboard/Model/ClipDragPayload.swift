@@ -19,4 +19,18 @@ extension ClipboardItem {
         case .path, nil: return .text(copy)
         }
     }
+
+    /// What Open Link hands the system: the drag's own URL, or a `mailto:` for an address.
+    var openableURL: URL? {
+        switch textForm {
+        case .link:
+            guard case .link(let url, _) = dragPayload else { return nil }
+            return url
+        case .email:
+            let address = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return URL(string: "mailto:" + address)
+        case .plain, .color, nil:
+            return nil
+        }
+    }
 }

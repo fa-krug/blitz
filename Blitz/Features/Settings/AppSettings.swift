@@ -122,6 +122,14 @@ final class AppSettings {
         }
     }
 
+    /// Off keeps launcher searches in memory only, and deletes the ones already on disk.
+    var launcherSavesSearchHistory: Bool {
+        didSet {
+            defaults.set(
+                launcherSavesSearchHistory, forKey: Key.launcherSavesSearchHistory.rawValue)
+        }
+    }
+
     /// How loose a fuzzy root-search hit may be and still show.
     var rootSearchSensitivity: SearchSensitivity {
         didSet {
@@ -299,6 +307,17 @@ final class AppSettings {
         didSet { defaults.set(fileSearchScopes, forKey: Key.fileSearchScopes.rawValue) }
     }
 
+    var screenshotSearchEnabled: Bool {
+        didSet { defaults.set(screenshotSearchEnabled, forKey: Key.screenshotSearchEnabled.rawValue) }
+    }
+
+    /// Per machine and never carried by a backup: it starts background recognition on this Mac.
+    var screenshotTextSearchEnabled: Bool {
+        didSet {
+            defaults.set(screenshotTextSearchEnabled, forKey: Key.screenshotTextSearchEnabled.rawValue)
+        }
+    }
+
     /// Only what the user added; the shipped rules are compiled into `FileSearchIgnoreList`.
     var fileSearchIgnorePatterns: [String] {
         didSet {
@@ -400,6 +419,11 @@ final class AppSettings {
         didSet {
             defaults.set(extensionsShowInLauncher, forKey: Key.extensionsShowInLauncher.rawValue)
         }
+    }
+
+    /// Store installs only: a GitHub or folder install is the user's own copy and never updates.
+    var extensionsAutoUpdate: Bool {
+        didSet { defaults.set(extensionsAutoUpdate, forKey: Key.extensionsAutoUpdate.rawValue) }
     }
 
     /// Only an install from GitHub needs one — the store serves extensions already built.
@@ -570,6 +594,14 @@ final class AppSettings {
         }
     }
 
+    /// Focus a browser tab already showing the link; off by default, since it needs Automation.
+    var quicklinkPrefersExistingTabs: Bool {
+        didSet {
+            defaults.set(
+                quicklinkPrefersExistingTabs, forKey: Key.quicklinkPrefersExistingTabs.rawValue)
+        }
+    }
+
     /// What `{selection}` does when there is no readable selection to pass.
     var quicklinkSelectionFallback: QuicklinkSelectionFallback {
         didSet {
@@ -658,6 +690,9 @@ final class AppSettings {
         launcherShowsSuggestions =
             defaults.object(forKey: Key.launcherShowsSuggestions.rawValue) == nil
             || defaults.bool(forKey: Key.launcherShowsSuggestions.rawValue)
+        launcherSavesSearchHistory =
+            defaults.object(forKey: Key.launcherSavesSearchHistory.rawValue) == nil
+            || defaults.bool(forKey: Key.launcherSavesSearchHistory.rawValue)
         rootSearchSensitivity =
             defaults.string(forKey: Key.rootSearchSensitivity.rawValue)
             .flatMap(SearchSensitivity.init) ?? .default
@@ -678,6 +713,8 @@ final class AppSettings {
             ?? FileSearchScope.defaultScopes
         fileSearchIgnorePatterns =
             defaults.stringArray(forKey: Key.fileSearchIgnorePatterns.rawValue) ?? []
+        screenshotSearchEnabled = defaults.bool(forKey: Key.screenshotSearchEnabled.rawValue)
+        screenshotTextSearchEnabled = defaults.bool(forKey: Key.screenshotTextSearchEnabled.rawValue)
         notesEnabled = defaults.bool(forKey: Key.notesEnabled.rawValue)
         notesRendersMarkdown =
             defaults.object(forKey: Key.notesRendersMarkdown.rawValue) == nil
@@ -708,6 +745,9 @@ final class AppSettings {
         extensionsShowInLauncher =
             defaults.object(forKey: Key.extensionsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.extensionsShowInLauncher.rawValue)
+        extensionsAutoUpdate =
+            defaults.object(forKey: Key.extensionsAutoUpdate.rawValue) == nil
+            || defaults.bool(forKey: Key.extensionsAutoUpdate.rawValue)
         extensionPackageManager =
             defaults.string(forKey: Key.extensionPackageManager.rawValue)
             .flatMap(ExtensionPackageManager.init(rawValue:)) ?? .automatic
@@ -776,6 +816,8 @@ final class AppSettings {
             || defaults.bool(forKey: Key.quicklinksShowInLauncher.rawValue)
         appleShortcutsEnabled = defaults.bool(forKey: Key.appleShortcutsEnabled.rawValue)
         quicklinkOpensNewWindow = defaults.bool(forKey: Key.quicklinkOpensNewWindow.rawValue)
+        quicklinkPrefersExistingTabs =
+            defaults.bool(forKey: Key.quicklinkPrefersExistingTabs.rawValue)
         quicklinkSelectionFallback =
             defaults.string(forKey: Key.quicklinkSelectionFallback.rawValue)
             .flatMap(QuicklinkSelectionFallback.init) ?? .ask

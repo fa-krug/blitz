@@ -11,7 +11,6 @@ struct ExtensionsSettingsView: View {
     @State private var browsingStore = false
     @State private var installingFromGitHub = false
     @State private var error: String?
-    @State private var updateError: String?
     /// Extensions Raycast has built that aren't here yet, refreshed whenever the pane appears.
     @State private var pending: [RaycastImportCandidate] = []
     /// What a bulk import is doing, so a thirty-item batch reports rather than going quiet.
@@ -143,7 +142,12 @@ struct ExtensionsSettingsView: View {
     // MARK: - The library
 
     private var library: some View {
-        Section {
+        @Bindable var settings = core.settings
+        return Section {
+            Toggle(isOn: $settings.extensionsAutoUpdate) {
+                SettingsRowTitle(.extensionsInstalled, "Update automatically")
+                Text("Checks the Raycast Store daily. Store installs only.")
+            }
             if !core.extensions.updates.isEmpty {
                 updatesRow
             }
@@ -176,10 +180,13 @@ struct ExtensionsSettingsView: View {
                         ? "Installed" : "Installed (\(core.extensions.installed.count))")
             }
         } footer: {
-            if let updateError {
-                Label(updateError, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+            if !core.extensions.updateFailures.isEmpty {
+                Label(
+                    "Couldn't update \(listed(core.extensions.updateFailures.values.sorted())).",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
             }
         }
     }
@@ -201,11 +208,7 @@ struct ExtensionsSettingsView: View {
     }
 
     private func update(_ names: [String]) {
-        updateError = nil
-        Task {
-            let failed = await core.extensions.update(names)
-            if !failed.isEmpty { updateError = "Couldn't update \(failed.joined(separator: ", "))." }
-        }
+        Task { _ = await core.extensions.update(names) }
     }
 
     private var matching: [InstalledExtension] {

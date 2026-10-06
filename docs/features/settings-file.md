@@ -15,7 +15,7 @@ in `Features/WindowManagement/`.
   excluded from backups: a file or an import must never switch on something that reads a file.
 - **A capability grant never has a key.** Snippets, Extensions, Calendar, Reminders and Contacts
   access, Auto Join, Camera Preview, Quick Actions, MCP, chat access to the calendar and reminders,
-  and clipboard text recognition are switched on only in the app, which asks first.
+  and clipboard and screenshot text recognition are switched on only in the app, which asks first.
   `settings-file-test` checks those paths stay absent.
 - **`SettingsFileSchema`'s switch is exhaustive.** A new `SettingsFileKey` case fails to build until it
   is bound to a property.

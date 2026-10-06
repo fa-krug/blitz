@@ -266,6 +266,8 @@ enum Theme {
         /// Blitz's own control dialog: fixed width, height measured from its SwiftUI content.
         static let dialogWidth: CGFloat = 360
         static let dialogButtonHeight: CGFloat = menuButton - 2
+        /// A dialog's multi-line box; it scrolls rather than grows the panel.
+        static let dialogTextEditorHeight: CGFloat = 160
         /// Subject glyph and its fixed tile at the top of a dialog.
         static let dialogSymbol: CGFloat = 28
         static let dialogSymbolContainer: CGFloat = 52

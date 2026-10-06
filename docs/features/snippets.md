@@ -113,7 +113,8 @@ lines, CR/LF choices, Unicode, and later lines containing `---` are preserved ex
 The template engine is **shared with [Quicklinks](quicklinks.md#placeholders)**, which expands a bare
 string rather than a snippet record and asks for automatic percent-encoding. It is Foundation-only and
 receives one captured expansion context: clipboard
-history, selected text, clock, calendar, locale, time zone, and a UUID source. Everything the engine
+history, selected text, the front browser tab, clock, calendar, locale, time zone, a UUID source and
+a calculator closure. Everything the engine
 needs is injected, so the whole placeholder surface is covered by the standalone harness. If arguments
 require a prompt, the same context is reused afterward, so nothing can drift while the prompt is open.
 
@@ -136,6 +137,8 @@ so a migrated snippet keeps working.
 | `{argument default="Hi"}`                  | Optional argument — the default expands without prompting                                                                                                                                                          |
 | `{argument options="a, b, c"}`             | The prompt offers a picker instead of a text field                                                                                                                                                                 |
 | `{snippet:Name}` · `{snippet name="Name"}` | Another snippet resolved by name, then keyword                                                                                                                                                                     |
+| `{browser-tab format="title"}`             | The front browser tab's `url` (the default), `title`, or `markdown` link. See below                                                                                                                                |
+| `{calculator expression="2 * 21"}`         | The calculator's answer, as its card would copy it. See below                                                                                                                                                      |
 | `{cursor}`                                 | Final insertion point                                                                                                                                                                                              |
 
 The editor's **Insert…** menu lists every token above; parameters and modifiers are typed by hand. A
@@ -152,8 +155,31 @@ quicklink expanding into a URL percent-encodes every value, and `raw` is how a t
 
 A token Blitz cannot parse — an unknown name, an unknown modifier, a duplicated or unsupported
 parameter, an unterminated quote — is left in the text exactly as written rather than silently
-dropped. `{browser-tab}` and `{calculator}` are not supported: the first needs a browser extension,
-and the second has no defined input inside a snippet.
+dropped.
+
+**`{browser-tab}` reads the browser, not the page.** Raycast's token inserts the tab's *content*
+through its browser extension; Blitz has no extension in the browser, so it reads the front tab over
+AppleScript instead and offers what that can see: `format="url"` (the default), `"title"` and
+`"markdown"`, which is a `[title](url)` link — not Raycast's page-as-Markdown. Raycast's `"text"`,
+`"html"` and `selector=` forms need the page itself, so they stay literal. The browser is the target
+app when it is one, else the app the palette covered, else whichever running browser owns the
+frontmost window; Safari, Safari Technology Preview, Orion and the Chromium family (Chrome, Arc,
+Brave, Edge, Vivaldi, Chromium) are supported through `Platform/BrowserTabs.swift`, Firefox is not,
+and a browser that isn't running is never launched. The tab is read **only when the template, or a
+snippet it references, uses the token** (`usesBrowserTab`), off the main actor, before the context is
+captured. No browser or no window expands to nothing, like an unreadable selection; a refused Apple
+event (`-1743`) abandons the expansion and offers **Open System Settings…** for Automation. An
+automatic expansion stays cancellable while the read runs, so typing on makes it a no-op.
+
+**`{calculator expression="…"}` evaluates through the launcher's calculator.** Raycast's manual
+names the token but documents no parameter, so Blitz takes the expression in `expression=` (quoted, or
+bare to the end of the token). The answer is what the inline card would copy — localized to the
+calculator's number format, with the live currency rates — and modifiers apply to it. An argument
+named elsewhere in the template is substituted into the expression first, as a whole word, its typed
+value or its `default=`: `{argument name="net"} → {calculator expression="net * 1.19"}`. An expression
+the calculator rejects leaves the token visible. The evaluator reaches the engine as an injected
+`@Sendable` closure on the expansion context, built by `CalculatorCoordinator.placeholderEvaluator()`,
+so `snippets-test` never compiles `Calculator/Model/`.
 
 Arguments are unique and requested in first-appearance order, including arguments inside referenced
 snippets. Inserted clipboard, selection, and argument values are literal: token-shaped text inside a
@@ -237,6 +263,12 @@ through `AppCore.pendingSnippetEdit`, and **Show in Finder**.
 
 `Create Snippet` is a launcher command as well as a menu row because the palette swallows ⌘K when a
 screen has no rows: an empty library would otherwise open a browser with nothing to do.
+
+The clipboard history's **Save as Snippet** goes through the same handoff with a draft on
+`SnippetEditRequest`: `Snippet.draft(text:title:)` names it by the clip's title, else by its first
+non-blank line cut to 40 characters, and keeps the text verbatim. Unknown braces stay literal as
+above; when the text holds a token the engine would expand
+(`SnippetTemplateEngine.containsPlaceholders`), the editor says so in one line under the template.
 
 ## Shortcuts
 

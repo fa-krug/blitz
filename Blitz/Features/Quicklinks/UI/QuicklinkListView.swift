@@ -84,6 +84,8 @@ struct QuicklinkList: View {
 }
 
 private struct QuicklinkRow: View {
+    /// Past this a row is mostly chips; the preview pane lists every tag.
+    private static let visibleTagLimit = 3
 
     @Environment(\.metrics) private var metrics
     let quicklink: Quicklink
@@ -116,6 +118,9 @@ private struct QuicklinkRow: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: metrics.spacing.lg)
+            ForEach(quicklink.tags.prefix(Self.visibleTagLimit), id: \.self) { tag in
+                QuicklinkTagChip(text: tag)
+            }
             if !quicklink.showsInRootSearch {
                 Image(systemName: "eye.slash")
                     .font(.system(size: 10))
@@ -144,6 +149,26 @@ private struct QuicklinkRow: View {
             return IconCache.symbolIcon(named: quicklink.symbol)
         }
         return IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent)
+    }
+}
+
+/// A tag on a row: the lead card's badge shape, so it reads as a label rather than a key.
+private struct QuicklinkTagChip: View {
+    @Environment(\.metrics) private var metrics
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(metrics.typography.keyCap)
+            .lineLimit(1)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, metrics.spacing.sm)
+            .padding(.vertical, metrics.spacing.xxs)
+            .background(
+                RoundedRectangle(cornerRadius: metrics.radius.keyCap, style: .continuous)
+                    .fill(Theme.Colors.controlSurface)
+            )
+            .accessibilityLabel("Tag \(text)")
     }
 }
 
@@ -221,6 +246,9 @@ private struct QuicklinkInfoSection: View {
         }
         if let keycaps = hotKeys.binding(for: .quicklink(id: quicklink.id))?.keycaps {
             rows.append(InfoRow(label: "Shortcut", value: keycaps.joined()))
+        }
+        if !quicklink.tags.isEmpty {
+            rows.append(InfoRow(label: "Tags", value: quicklink.tags.joined(separator: ", ")))
         }
         rows.append(
             InfoRow(label: "Created", value: Self.createdFormatter.string(from: quicklink.createdAt)))

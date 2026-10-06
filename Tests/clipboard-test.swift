@@ -1,5 +1,6 @@
 // Standalone test for the clipboard store, compiling the real source rather than a copy.
 import Foundation
+import SQLite3
 
 @main
 @MainActor
@@ -34,6 +35,13 @@ struct ClipboardTests {
         defaultActionChords()
         plainTextSkipsTheFile()
         offersTextExtraction()
+        sideTablesNeedNoMigration()
+        renamedEntriesAreFoundByTitle()
+        titlesReachPastTheWindowAndThroughBackups()
+        editingKeepsTheRowAndItsDerivedText()
+        richFormatsArePersistedAndOwned()
+        richFormatsLeaveWithTheirRows()
+        linksAndAddressesOpen()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -733,7 +741,253 @@ struct ClipboardTests {
             "a PDF stays a background-indexing capability")
     }
 
+    // MARK: - Titles, edits and rich text
+
+    /// A file an older build left behind opens as it is and gains the side tables, never a wipe.
+    static func sideTablesNeedNoMigration() {
+        withStore { store, dir in
+            store.addText("kept", sourceBundleID: nil)
+            store.close()
+            expect(
+                execute(
+                    """
+                    DROP TRIGGER items_title_ad; DROP TRIGGER items_formats_ad;
+                    DROP TABLE item_titles; DROP TABLE item_formats;
+                    """, in: store),
+                "the fixture strips the side tables, as a file from before them")
+            let reopened = ClipboardStore(directory: dir)
+            reopened.load()
+            expect(texts(reopened) == ["kept"], "an older file opens without being wiped")
+            expect(
+                count(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master WHERE name IN
+                      ('item_titles', 'item_formats', 'items_title_ad', 'items_formats_ad')
+                    """, in: reopened) == 4,
+                "and gains both side tables and their cascades")
+        }
+    }
+
+    static func renamedEntriesAreFoundByTitle() {
+        withStore { store, dir in
+            store.addText("4111 2222 3333", sourceBundleID: nil)
+            store.addText("unrelated", sourceBundleID: nil)
+            store.setTitle("  Card number  ", for: item(store, "4111 2222 3333"))
+            expect(item(store, "4111 2222 3333").title == "Card number", "a rename is trimmed")
+            expect(texts(store) == ["unrelated", "4111 2222 3333"], "and moves nothing")
+            expect(matches(store, "card num") == ["4111 2222 3333"], "the title is searched")
+            expect(matches(store, "ca") == ["4111 2222 3333"], "below three characters too")
+            expect(matches(store, "2222") == ["4111 2222 3333"], "and the content still is")
+
+            store.addText("x1", sourceBundleID: nil)
+            store.setTitle("tag a_b", for: item(store, "x1"))
+            store.addText("x2", sourceBundleID: nil)
+            store.setTitle("tag axb", for: item(store, "x2"))
+            expect(matches(store, "a_b") == ["x1"], "a typed underscore is literal, not a wildcard")
+
+            let reopened = ClipboardStore(directory: dir)
+            reopened.load()
+            expect(item(reopened, "4111 2222 3333").title == "Card number", "a title is persisted")
+            reopened.setTitle("   ", for: item(reopened, "4111 2222 3333"))
+            expect(item(reopened, "4111 2222 3333").title == nil, "a blank rename clears it")
+            expect(
+                count("SELECT COUNT(*) FROM item_titles WHERE title = 'Card number'", in: store)
+                    == 0, "and drops its row")
+
+            let entry = item(reopened, "x1")
+            reopened.remove(entry)
+            expect(
+                count(
+                    "SELECT COUNT(*) FROM item_titles WHERE item_id = '\(entry.id.uuidString)'",
+                    in: store) == 0,
+                "deleting an entry takes its title with it")
+        }
+    }
+
+    static func titlesReachPastTheWindowAndThroughBackups() {
+        withStore { store, _ in
+            let total = 1_100
+            store.importEntries(
+                (0..<total).map {
+                    ClipboardItem(
+                        id: UUID(), kind: .text, text: "entry \($0)", imagePath: nil,
+                        createdAt: Date().addingTimeInterval(TimeInterval($0 - total)),
+                        sourceBundleID: nil)
+                })
+            var oldest: ClipboardItem?
+            ClipboardStore.forEachStoredItem(inDatabaseAt: store.dbURL) { stored in
+                if oldest == nil { oldest = stored }
+            }
+            guard let oldest else { return fail("the export yields no rows") }
+            expect(!store.items.contains { $0.id == oldest.id }, "the oldest entry is not resident")
+            store.setTitle("Zebra crossing", for: oldest)
+            expect(matches(store, "zebra") == ["entry 0"], "a title past the window is still found")
+
+            var exported: [String?] = []
+            ClipboardStore.forEachStoredItem(inDatabaseAt: store.dbURL) { stored in
+                if stored.text == "entry 0" { exported.append(stored.title) }
+            }
+            expect(exported == ["Zebra crossing"], "a backup reads the title with its row")
+        }
+        withStore { store, _ in
+            let restored = ClipboardItem(
+                id: UUID(), kind: .text, text: "restored", imagePath: nil, createdAt: Date(),
+                sourceBundleID: nil, title: "From backup")
+            _ = ClipboardStore.importStoredItems(inDatabaseAt: store.dbURL, [restored])
+            store.load()
+            expect(item(store, "restored").title == "From backup", "a restore brings the title back")
+        }
+    }
+
+    /// Edit Text rewrites the row in place, so nothing keyed to it is lost.
+    static func editingKeepsTheRowAndItsDerivedText() {
+        withStore { store, dir in
+            store.addText("first draft", sourceBundleID: nil)
+            store.addText("newest", sourceBundleID: nil)
+            let original = item(store, "first draft")
+            store.setTitle("Draft", for: original)
+            store.togglePinned(item(store, "first draft"))
+            expect(store.setTextSearchEnabled(true), "the extraction tables are created")
+            expect(
+                execute(
+                    "INSERT INTO item_text(item_id, text) VALUES('\(original.id.uuidString)', 'x')",
+                    in: store),
+                "the fixture keys derived text to the row")
+            store.setTextSearchEnabled(false)
+
+            store.updateText("second draft", of: item(store, "first draft"))
+            let edited = item(store, "second draft")
+            expect(edited.id == original.id, "an edit keeps the entry's identity")
+            expect(edited.isPinned && edited.title == "Draft", "and its pin and its title")
+            expect(texts(store) == ["second draft", "newest"], "and its place")
+            expect(matches(store, "second") == ["second draft"], "the index finds the new text")
+            expect(matches(store, "first").isEmpty, "and forgets the old")
+            expect(
+                count(
+                    "SELECT COUNT(*) FROM item_text WHERE item_id = '\(original.id.uuidString)'",
+                    in: store) == 1,
+                "the row's recognized text survives the edit")
+
+            let reopened = ClipboardStore(directory: dir)
+            reopened.load()
+            expect(texts(reopened) == ["second draft", "newest"], "the edit is persisted")
+        }
+    }
+
+    static func richFormatsArePersistedAndOwned() {
+        withStore { store, dir in
+            let flavours: [ClipboardRichFormat: Data] = [
+                .rtf: Data("{\\rtf1 bold}".utf8), .html: Data("<b>bold</b>".utf8)
+            ]
+            let written = ClipboardStore.writeFormats(flavours, into: store.formatsDirectory)
+            expect(Set(written.keys) == [.rtf, .html], "both flavours are written")
+            expect(
+                written.values.allSatisfy { $0.hasPrefix(store.imagesDir.path + "/") },
+                "inside the folder the store owns")
+            store.addText("bold", sourceBundleID: nil, formats: written)
+            expect(item(store, "bold").formats == written, "a rich entry carries its flavours")
+            expect(item(store, "bold").isRichText, "and reads as rich")
+            expect(
+                written[.rtf].flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }
+                    == flavours[.rtf],
+                "the bytes land as captured")
+
+            let reopened = ClipboardStore(directory: dir)
+            reopened.load()
+            expect(item(reopened, "bold").formats == written, "the flavours survive a relaunch")
+
+            let again = ClipboardStore.writeFormats(flavours, into: reopened.formatsDirectory)
+            reopened.addText("bold", sourceBundleID: nil, formats: again)
+            expect(reopened.items.count == 1, "a repeat copy adds no row")
+            expect(noneExist(again.values), "and leaves no stray flavour files")
+
+            reopened.updateText("plain now", of: item(reopened, "bold"))
+            expect(!item(reopened, "plain now").isRichText, "an edit drops the stale flavours")
+            expect(noneExist(written.values), "with their files")
+            expect(count("SELECT COUNT(*) FROM item_formats", in: store) == 0, "and their rows")
+        }
+    }
+
+    static func richFormatsLeaveWithTheirRows() {
+        withStore { store, _ in
+            @MainActor func addRich(_ text: String) -> [String] {
+                let paths = ClipboardStore.writeFormats(
+                    [.html: Data(text.utf8)], into: store.formatsDirectory)
+                store.addText(text, sourceBundleID: nil, formats: paths)
+                return Array(paths.values)
+            }
+            let removed = addRich("removed")
+            store.remove(item(store, "removed"))
+            expect(noneExist(removed), "deleting an entry deletes its flavours")
+            expect(count("SELECT COUNT(*) FROM item_formats", in: store) == 0, "and their rows")
+
+            let pinned = addRich("pinned")
+            store.togglePinned(item(store, "pinned"))
+            let cleared = addRich("cleared")
+            store.clearAll()
+            expect(eventually { noneExist(cleared) }, "Clear History deletes the flavours")
+            expect(pinned.allSatisfy(FileManager.default.fileExists), "but spares a pin's")
+
+            store.togglePinned(item(store, "pinned"))
+            store.maxAge = -1
+            store.enforceLimits()
+            expect(eventually { noneExist(pinned) }, "a retention cut deletes them too")
+            expect(count("SELECT COUNT(*) FROM item_formats", in: store) == 0, "rows included")
+        }
+    }
+
+    /// Open Link reads the drag payload's URL, and an address opens as a new message.
+    static func linksAndAddressesOpen() {
+        let link = ClipboardItem(text: "https://example.com/a", sourceBundleID: nil)
+        expect(link.openableURL?.absoluteString == "https://example.com/a", "a link opens itself")
+        let email = ClipboardItem(text: "me@example.com", sourceBundleID: nil)
+        expect(email.openableURL?.absoluteString == "mailto:me@example.com", "an address mails")
+        let prose = ClipboardItem(text: "just some prose", sourceBundleID: nil)
+        expect(prose.openableURL == nil, "prose has nothing to open")
+        let file = ClipboardItem(filePath: "/tmp/a.txt", sourceBundleID: nil)
+        expect(file.openableURL == nil, "a file opens as itself, not as a link")
+    }
+
     // MARK: - Harness
+
+    static func matches(_ store: ClipboardStore, _ query: String) -> [String] {
+        store.search(query, filter: .all).compactMap(\.text)
+    }
+
+    static func noneExist(_ paths: some Sequence<String>) -> Bool {
+        !paths.contains(where: FileManager.default.fileExists)
+    }
+
+    /// Clear History and retention delete off the main actor, so their files go a moment later.
+    static func eventually(_ condition: () -> Bool) -> Bool {
+        for _ in 0..<200 {
+            if condition() { return true }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return condition()
+    }
+
+    /// A second connection to the store's file, as a fixture or an inspection needs.
+    static func withConnection<T>(_ store: ClipboardStore, _ body: (OpaquePointer?) -> T) -> T? {
+        var db: OpaquePointer?
+        defer { sqlite3_close_v2(db) }
+        guard sqlite3_open_v2(store.dbURL.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK
+        else { return nil }
+        return body(db)
+    }
+
+    static func execute(_ sql: String, in store: ClipboardStore) -> Bool {
+        withConnection(store) { sqlite3_exec($0, sql, nil, nil, nil) == SQLITE_OK } ?? false
+    }
+
+    static func count(_ sql: String, in store: ClipboardStore) -> Int {
+        withConnection(store) { db in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return -1 }
+            defer { sqlite3_finalize(stmt) }
+            return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int64(stmt, 0)) : -1
+        } ?? -1
+    }
 
     /// Runs `body` against a store rooted in a fresh temp directory, torn down afterwards.
     static func withStore(_ body: (ClipboardStore, URL) -> Void) {

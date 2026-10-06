@@ -15,6 +15,7 @@ struct SettingsBackup: Codable {
     var hiddenLauncherKinds: [String]?
     var launcherAliases: [String: String]?
     var pinnedEmoji: [String]?
+    var emojiKeywords: [String: [String]]?
 
     /// Enums store by raw value, so an unknown one is ignored rather than failing.
     struct SettingsData: Codable {
@@ -40,6 +41,7 @@ struct SettingsBackup: Codable {
         var showFavoritesInCompactMode: Bool?
         var searchScopes: [String]?
         var launcherShowsSuggestions: Bool?
+        var launcherSavesSearchHistory: Bool?
         var rootSearchSensitivity: String?
         var openOnCursorScreen: Bool?
         // Safe to carry: it grants no permission class, just repositions the window.
@@ -47,6 +49,7 @@ struct SettingsBackup: Codable {
         var fileSearchEnabled: Bool?
         var fileSearchScopes: [String]?
         var fileSearchIgnorePatterns: [String]?
+        var screenshotSearchEnabled: Bool?
         var notesEnabled: Bool?
         var notesRendersMarkdown: Bool?
         var notesShowsFormattingBar: Bool?
@@ -68,6 +71,8 @@ struct SettingsBackup: Codable {
         var quicklinksEnabled: Bool?
         var quicklinksShowInLauncher: Bool?
         var extensionsShowInLauncher: Bool?
+        // Carried: it only refreshes extensions already here, so it grants nothing new.
+        var extensionsAutoUpdate: Bool?
         var quicklinkOpensNewWindow: Bool?
         var quicklinkSelectionFallback: String?
         var quicklinkConfirmsBeforeDelete: Bool?
@@ -117,6 +122,7 @@ struct SettingsBackup: Codable {
         var hiddenItems = 0
         var aliases = 0
         var pinnedEmoji = 0
+        var emojiKeywords = 0
         var customCommands = 0
         var quicklinks = 0
         var windowLayouts = 0
@@ -153,12 +159,14 @@ extension SettingsBackup {
             showFavoritesInCompactMode: s.showFavoritesInCompactMode,
             searchScopes: s.searchScopes,
             launcherShowsSuggestions: s.launcherShowsSuggestions,
+            launcherSavesSearchHistory: s.launcherSavesSearchHistory,
             rootSearchSensitivity: s.rootSearchSensitivity.rawValue,
             openOnCursorScreen: s.openOnCursorScreen,
             paletteDraggable: s.paletteDraggable,
             fileSearchEnabled: s.fileSearchEnabled,
             fileSearchScopes: s.fileSearchScopes,
             fileSearchIgnorePatterns: s.fileSearchIgnorePatterns,
+            screenshotSearchEnabled: s.screenshotSearchEnabled,
             notesEnabled: s.notesEnabled,
             notesRendersMarkdown: s.notesRendersMarkdown,
             notesShowsFormattingBar: s.notesShowsFormattingBar,
@@ -177,6 +185,7 @@ extension SettingsBackup {
             quicklinksEnabled: s.quicklinksEnabled,
             quicklinksShowInLauncher: s.quicklinksShowInLauncher,
             extensionsShowInLauncher: s.extensionsShowInLauncher,
+            extensionsAutoUpdate: s.extensionsAutoUpdate,
             quicklinkOpensNewWindow: s.quicklinkOpensNewWindow,
             quicklinkSelectionFallback: s.quicklinkSelectionFallback.rawValue,
             quicklinkConfirmsBeforeDelete: s.quicklinkConfirmsBeforeDelete,
@@ -250,6 +259,7 @@ extension SettingsBackup {
         backup.hiddenLauncherKinds = Array(core.visibility.disabledKinds)
         backup.launcherAliases = core.aliases.aliases
         backup.pinnedEmoji = core.pinnedEmoji.glyphs
+        backup.emojiKeywords = core.emojiKeywords.keywords
         return backup
     }
 
@@ -295,6 +305,10 @@ extension SettingsBackup {
         if let pinnedEmoji {
             core.pinnedEmoji.replace(pinnedEmoji)
             summary.pinnedEmoji = core.pinnedEmoji.glyphs.count
+        }
+        if let emojiKeywords {
+            core.emojiKeywords.replace(emojiKeywords)
+            summary.emojiKeywords = core.emojiKeywords.keywords.count
         }
         return summary
     }
@@ -382,6 +396,10 @@ extension SettingsBackup {
             settings.launcherShowsSuggestions = flag
             count += 1
         }
+        if let flag = s.launcherSavesSearchHistory {
+            settings.launcherSavesSearchHistory = flag
+            count += 1
+        }
         if let raw = s.rootSearchSensitivity, let sensitivity = SearchSensitivity(rawValue: raw) {
             settings.rootSearchSensitivity = sensitivity
             count += 1
@@ -405,6 +423,10 @@ extension SettingsBackup {
         }
         if let patterns = s.fileSearchIgnorePatterns {
             settings.fileSearchIgnorePatterns = patterns
+            count += 1
+        }
+        if let flag = s.screenshotSearchEnabled {
+            settings.screenshotSearchEnabled = flag
             count += 1
         }
         if let flag = s.notesEnabled {
@@ -473,6 +495,10 @@ extension SettingsBackup {
         }
         if let flag = s.extensionsShowInLauncher {
             settings.extensionsShowInLauncher = flag
+            count += 1
+        }
+        if let flag = s.extensionsAutoUpdate {
+            settings.extensionsAutoUpdate = flag
             count += 1
         }
         if let flag = s.quicklinksShowInLauncher {
