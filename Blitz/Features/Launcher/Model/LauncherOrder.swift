@@ -51,6 +51,19 @@ enum LauncherOrder {
             .map(\.0)
     }
 
+    /// What `ranked` would keep, uncapped and in the caller's order; an empty query keeps all.
+    static func matching<Item>(
+        _ items: [Item], query: Query, sensitivity: SearchSensitivity,
+        profile: (Item) -> SearchProfile, signals: (Item) -> Signals
+    ) -> [Item] {
+        guard !query.isEmpty else { return items }
+        return items.filter { item in
+            let facts = Facts(
+                profile: profile(item), signals: signals(item), query: query, sensitivity: sensitivity)
+            return facts != nil
+        }
+    }
+
     /// The empty list: most frecent first, then aliased entries, then by kind and name.
     static func byUsage<Item>(_ items: [Item], signals: (Item) -> Signals) -> [Item] {
         items.enumerated()

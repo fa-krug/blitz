@@ -736,6 +736,14 @@ final class AppIndex {
         }
     }
 
+    /// Index order, never score: a Settings list keeps the row being edited under the caret.
+    func entries(matching query: String, where include: (AppEntry) -> Bool) -> [AppEntry] {
+        let usage = ranking.snapshot()
+        return LauncherOrder.matching(
+            apps.filter(include), query: LauncherOrder.Query(query), sensitivity: sensitivity,
+            profile: \.search, signals: { signals(for: $0, usage: usage) })
+    }
+
     /// Slice order is section order, so filtering keeps sections and selection aligned.
     private func categoryListing(_ kind: AppEntry.Kind, query: String) -> [AppEntry] {
         let listed = apps.filter {

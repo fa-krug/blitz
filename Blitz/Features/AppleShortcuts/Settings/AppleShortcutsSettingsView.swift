@@ -7,12 +7,9 @@ struct AppleShortcutsSettingsView: View {
     @Environment(AppIndex.self) private var appIndex
     @State private var query = ""
 
+    /// The index's copy of the library, since only it carries the search profile a match reads.
     private var entries: [AppEntry] {
-        let entries = core.appleShortcutCoordinator.entries
-        guard !query.isEmpty else { return entries }
-        // Membership only: score order would move the row being edited out from under the caret.
-        let matched = Set(appIndex.matches(query).map(\.id))
-        return entries.filter { matched.contains($0.id) }
+        appIndex.entries(matching: query) { $0.kind == .appleShortcut }
     }
 
     var body: some View {

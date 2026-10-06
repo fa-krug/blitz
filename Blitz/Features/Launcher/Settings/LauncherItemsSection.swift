@@ -34,11 +34,7 @@ struct LauncherItemsSection: View {
     @State private var query = ""
 
     private var entries: [AppEntry] {
-        let scoped = appIndex.apps.filter { $0.kind == kind && $0.settingsOwner == nil }
-        guard !query.isEmpty else { return scoped }
-        // Membership only: score order would move the row being edited out from under the caret.
-        let matched = Set(appIndex.matches(query).map(\.id))
-        return scoped.filter { matched.contains($0.id) }
+        appIndex.entries(matching: query) { $0.kind == kind && $0.settingsOwner == nil }
     }
 
     var body: some View {
