@@ -72,6 +72,7 @@ fit the table.
 | `Monitor` | Watches an external stream and reports changes; owns no policy |
 | `Scanner` | Reads the filesystem to produce candidates |
 | `Runner` | Performs one effectful operation on request |
+| `Scheduler` | Wakes on its own clock to run recurring work, and owns that cadence |
 | `Launcher` | An `NSWorkspace.open` wrapper specifically |
 | `Center` | The Carbon registration layer specifically |
 | `Access` | One surface's raw platform reads, shared so its walkers cannot disagree |

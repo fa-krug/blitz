@@ -59,6 +59,8 @@ struct ExtensionScreen: Equatable {
     let screenActions: RenderNode?
     /// An `EmptyView` to show when there are no rows.
     let emptyView: RenderNode?
+    /// A List or Grid's `pagination`, which asks for more as its last rows come into view.
+    let pagination: ExtensionPagination?
 
     /// Selectable rows per section: what grid navigation needs to keep a column across a heading.
     var sectionCounts: [Int] {
@@ -80,7 +82,7 @@ struct ExtensionScreen: Equatable {
         kind: .unsupported(""), root: nil, rows: [], items: [], fields: [], isLoading: false,
         navigationTitle: nil, searchPlaceholder: nil, filtersLocally: false, searchTextHandler: nil,
         selectionHandler: nil, selectedItemID: nil, searchBarAccessory: nil, showsDetail: false,
-        screenActions: nil, emptyView: nil)
+        screenActions: nil, emptyView: nil, pagination: nil)
 
     /// Filters rows by `query` only when the extension hasn't taken the search text over.
     init(tree: RenderTree, query: String) {
@@ -148,6 +150,7 @@ struct ExtensionScreen: Equatable {
             self.rows = rows
             self.items = items
             fields = []
+            pagination = ExtensionPagination(root.object("pagination"))
 
         case .form:
             fields = root.children.filter { $0.type.hasPrefix("Form.") }
@@ -159,12 +162,14 @@ struct ExtensionScreen: Equatable {
             }
             items = fieldItems
             emptyView = nil
+            pagination = nil
 
         case .detail, .unsupported:
             rows = []
             items = []
             fields = []
             emptyView = nil
+            pagination = nil
         }
     }
 
@@ -173,7 +178,7 @@ struct ExtensionScreen: Equatable {
         isLoading: Bool, navigationTitle: String?, searchPlaceholder: String?, filtersLocally: Bool,
         searchTextHandler: String?, selectionHandler: String?, selectedItemID: String?,
         searchBarAccessory: RenderNode?, showsDetail: Bool, screenActions: RenderNode?,
-        emptyView: RenderNode?
+        emptyView: RenderNode?, pagination: ExtensionPagination?
     ) {
         self.kind = kind
         self.root = root
@@ -191,6 +196,7 @@ struct ExtensionScreen: Equatable {
         self.showsDetail = showsDetail
         self.screenActions = screenActions
         self.emptyView = emptyView
+        self.pagination = pagination
     }
 
     var selectedItemIndex: Int? {

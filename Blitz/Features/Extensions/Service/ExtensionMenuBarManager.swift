@@ -27,6 +27,10 @@ final class ExtensionMenuBarManager: ExtensionRuntimeDelegate {
 
     var isRunning: Bool { active != nil }
 
+    func isRunning(extensionName: String) -> Bool {
+        active?.owner.manifest.name == extensionName
+    }
+
     private struct Request {
         let reference: ExtensionCommandRef
         var type: ExtensionLaunchType = .background

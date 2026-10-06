@@ -175,6 +175,20 @@ struct ExtensionCommandScreen: PaletteScreen {
                 assetsPath: assetsPath, isOpen: isOpen, action: action))
     }
 
+    /// A refresh behind rows already shown; an empty list says "Loading…" in its body instead.
+    var loadingIndicator: AnyView? {
+        guard screen.isLoading else { return nil }
+        switch screen.kind {
+        case .list, .grid:
+            guard !rows.isEmpty else { return nil }
+        case .detail, .form:
+            break
+        case .unsupported:
+            return nil
+        }
+        return AnyView(ExtensionLoadingIndicator())
+    }
+
     /// Its choices as a palette menu, so the arrows, ↵, Escape and the click-away come free.
     func searchAccessoryMenu(
         searchQuery: ActionMenuSearchQuery, menuSelection: Binding<Int>,
@@ -231,8 +245,16 @@ struct ExtensionCommandScreen: PaletteScreen {
                 onFieldChange: { field, value in
                     guard let handler = field.handler("onBlitzChange") else { return }
                     extensions.dispatch(handler: handler, arguments: [value])
-                }
+                },
+                onReach: { reach($0) }
             ))
+    }
+
+    /// A row scrolled into view; the manager decides whether that is far enough to page.
+    func reach(_ index: Int?) {
+        guard let pagination = screen.pagination else { return }
+        extensions.loadMore(
+            pagination, reaching: index, itemCount: rows.count, isLoading: screen.isLoading)
     }
 
     /// Matched before the palette's own handling; true when an action fired.

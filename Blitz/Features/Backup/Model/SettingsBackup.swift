@@ -69,6 +69,8 @@ struct SettingsBackup: Codable {
         var quicklinksEnabled: Bool?
         var quicklinksShowInLauncher: Bool?
         var extensionsShowInLauncher: Bool?
+        // Carried: it only refreshes extensions already here, so it grants nothing new.
+        var extensionsAutoUpdate: Bool?
         var quicklinkOpensNewWindow: Bool?
         var quicklinkSelectionFallback: String?
         var quicklinkConfirmsBeforeDelete: Bool?
@@ -179,6 +181,7 @@ extension SettingsBackup {
             quicklinksEnabled: s.quicklinksEnabled,
             quicklinksShowInLauncher: s.quicklinksShowInLauncher,
             extensionsShowInLauncher: s.extensionsShowInLauncher,
+            extensionsAutoUpdate: s.extensionsAutoUpdate,
             quicklinkOpensNewWindow: s.quicklinkOpensNewWindow,
             quicklinkSelectionFallback: s.quicklinkSelectionFallback.rawValue,
             quicklinkConfirmsBeforeDelete: s.quicklinkConfirmsBeforeDelete,
@@ -479,6 +482,10 @@ extension SettingsBackup {
         }
         if let flag = s.extensionsShowInLauncher {
             settings.extensionsShowInLauncher = flag
+            count += 1
+        }
+        if let flag = s.extensionsAutoUpdate {
+            settings.extensionsAutoUpdate = flag
             count += 1
         }
         if let flag = s.quicklinksShowInLauncher {

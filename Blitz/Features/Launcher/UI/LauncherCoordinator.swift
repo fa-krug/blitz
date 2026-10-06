@@ -209,6 +209,9 @@ final class LauncherCoordinator {
             core.dictionaryCoordinator.show()
         case .extensionStore:
             extensionCoordinator.showStore()
+        case .checkForExtensionUpdates:
+            dismissPalette()
+            extensionCoordinator.checkForUpdatesNow()
         case .openInBrowser, .runShellCommand, .searchWeb:
             break  // Query-driven: each runs where the typed text is, never through this funnel.
         case .joinNextMeeting:

@@ -531,11 +531,15 @@ run ext-metadata-test      $E/Model/ExtensionCommandMetadata.swift \
                            $E/Model/ExtensionMenuBarSnapshot.swift \
                            $E/Service/ExtensionCommandMetadataStore.swift
 run ext-version-test       $E/Model/ExtensionListing.swift \
+                           $E/Model/ExtensionUpdatePolicy.swift \
                            $E/Service/ExtensionVersionStore.swift
 run ext-store-test         $E/Model/ExtensionGitHubSource.swift \
                            $E/Model/ExtensionListing.swift \
                            $E/Model/ExtensionPackageManager.swift \
-                           $E/Model/ExtensionStoreResponse.swift
+                           $E/Model/ExtensionStoreResponse.swift \
+                           $E/Model/ExtensionStoreReadme.swift \
+                           $E/Model/ExtensionPagination.swift \
+                           $E/Model/RenderNode.swift
 run ext-form-test          $E/Model/ExtensionFormMetrics.swift \
                            $E/Model/ExtensionFormField.swift \
                            $E/UI/ExtensionFormKey.swift \
@@ -587,6 +591,7 @@ run slow ext-test          -parse-as-library \
                            $E/UI/ExtensionAnimatedImage.swift \
                            $E/UI/ExtensionImage.swift \
                            $E/UI/ExtensionScreen.swift \
+                           $E/Model/ExtensionPagination.swift \
                            $L/SearchRelevance.swift \
                            Blitz/Platform/Compression/Zlib.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \

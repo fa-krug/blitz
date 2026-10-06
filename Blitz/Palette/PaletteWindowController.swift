@@ -381,7 +381,10 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         }
         // Backspace takes Escape's back step but never closes: a root screen falls to the launcher.
         panel.onBareBackspace = { [weak self] in
-            guard let core = self?.core, core.palette.query.isEmpty else { return false }
+            guard let core = self?.core else { return false }
+            // A store page keeps the query it was opened from, so it closes before any edit.
+            if core.extensionCoordinator.closeStoreDetail() { return true }
+            guard core.palette.query.isEmpty else { return false }
             // A form field owns the key: the text it deletes is the field's, not a query's.
             if core.palette.isEditingField { return false }
             if core.palette.mode == .extensionCommand {
@@ -399,7 +402,10 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         installPasteMonitor()
         // Handled at the panel: a focused preview answers Escape before the palette's own handler.
         panel.onEscape = { [weak self] in
-            guard let self, core.palette.fileSearchQuickLook else { return false }
+            guard let self else { return false }
+            // Ahead of clearing the query, which would drop the results the page was opened from.
+            if core.extensionCoordinator.closeStoreDetail() { return true }
+            guard core.palette.fileSearchQuickLook else { return false }
             core.palette.fileSearchQuickLook = false
             return true
         }

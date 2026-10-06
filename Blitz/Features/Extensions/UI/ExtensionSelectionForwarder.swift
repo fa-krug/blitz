@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Keeps the extension's item-id selection in sync with Blitz's flat palette index.
+/// Keeps the extension's item-id selection in step with the flat palette index, and pages on it.
 struct ExtensionSelectionForwarder: ViewModifier {
     let screen: ExtensionScreen
     let selection: Int
@@ -31,5 +31,14 @@ struct ExtensionSelectionForwarder: ViewModifier {
             let argument: Any = change.itemID.map { $0 as Any } ?? NSNull()
             extensions.dispatch(handler: change.handler, arguments: [argument])
         }
+        .onChange(of: selectedIndex) { _, index in reach(index) }
+        // A load that settles with its last rows already in view would otherwise never page again.
+        .onChange(of: screen.isLoading) { reach(nil) }
+    }
+
+    private func reach(_ index: Int?) {
+        guard let pagination = screen.pagination else { return }
+        extensions.loadMore(
+            pagination, reaching: index, itemCount: screen.items.count, isLoading: screen.isLoading)
     }
 }
