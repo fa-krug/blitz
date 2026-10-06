@@ -299,6 +299,7 @@ enum BackupActions {
         if s.hiddenItems > 0 { parts.append("\(s.hiddenItems) hidden items") }
         if s.aliases > 0 { parts.append("\(s.aliases) aliases") }
         if s.pinnedEmoji > 0 { parts.append("\(s.pinnedEmoji) pinned emoji and symbols") }
+        if s.emojiKeywords > 0 { parts.append("keywords for \(s.emojiKeywords) emoji") }
         if s.customCommands > 0 { parts.append("\(s.customCommands) custom commands") }
         if s.quicklinks > 0 { parts.append("\(s.quicklinks) quicklinks") }
         if s.windowLayouts > 0 { parts.append("\(s.windowLayouts) window layouts") }

@@ -63,7 +63,7 @@ A backup carries five independently selectable categories, ticked on export and 
 
 ```
 manifest.json              format, app version, createdAt, per-category counts
-settings.json              SettingsBackup, exactly as it encoded before
+settings.json              SettingsBackup: settings, shortcuts, emoji pins and custom keywords
 clipboard/items.jsonl      one clip per line
 clipboard/images/<uuid>.png
 snippets/<name>.md         copied verbatim

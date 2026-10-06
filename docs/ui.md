@@ -427,7 +427,7 @@ Glass is normally for floating controls. The dialog root is the one modal-surfac
 - **`PopoverMenu`** uses `glassEffect(.regular)` with `menuPanel 16` corners and **no hand-tuned shadow** — Tahoe glass carries its own elevation; adding a drop shadow reads heavy and non-native. A footer menu raises only its attached bottom corner to the controls' 18-point radius, so the two silhouettes meet exactly.
 - Its native search field is a row-height sibling of the scroller, above header menus or below footer menus. It uses an 18pt horizontal inset to align with the visible row glyphs. The top field stays vertically symmetric; the bottom field keeps its 1pt optical lift. Menus omit the adjacent edge dissolve and centre **No Results** in one row when their filtered rows are empty. The 8pt resting list inset belongs to the scroll content, so rows can reach the surface edges without shifting their initial position; hover fills keep the dedicated `menuRow 10` corner.
 - `PopoverMenuRow`: leading glyph, label, trailing shortcut glyph and `menuHover` fill on hover. Menus animate in with opacity and scale from the anchored corner, stretching briefly to 1.003 before settling; `Theme.MenuMotion` owns the entry, settle and exit timings.
-- The glyph is a `PopoverMenuIcon`: `.symbol` (SF Symbol, `monochrome`, `menuSymbol` — or **red** when `isDestructive`) `.file` (a real app icon via `IconCache`, used by the paste rows to show the paste target) or `.thumbnail` (a picture's own preview, cropped to the slot, used by the chat's staged-file rows). `PopoverMenuItem` keeps a `systemImage:` convenience init, so symbol rows read exactly as before.
+- The glyph is a `PopoverMenuIcon`: `.symbol` (SF Symbol, `monochrome`, `menuSymbol` — or **red** when `isDestructive`) `.file` (a real app icon via `IconCache`, used by the paste rows to show the paste target) or `.thumbnail` (a picture's own preview, cropped to the slot, used by the chat's staged-file rows) or `.glyph` (a character drawn in the slot, used by the emoji skin-tone rows). `PopoverMenuItem` keeps a `systemImage:` convenience init, so symbol rows read exactly as before.
 - **Every glyph kind shares one square `menuIcon` (20) slot**, which pins one row height. A native SF Symbol uses the dedicated 14pt Medium `menuSymbol` font; file and brand icons keep their own artwork sizing inside the same slot, and a thumbnail fills it.
 - Menu rows use the `md` icon→label gap; the fixed slot adds the remaining optical slack.
 - **A menu's rows are a `LazyVStack`**, so opening one builds only the rows in view: the model menu runs to hundreds, and laying all of them out took seconds. The viewport's height is worked out from the row count, never measured, so nothing needs the rest. The rows hold no AppKit control, which is what keeps a lazy stack safe here (see Settings lists below).
@@ -639,9 +639,9 @@ it would couple two unrelated surfaces.
 A dialog carries at most one control beyond its buttons, and `DialogAccessory` makes that structural
 rather than a convention — `.volume` for the Set Volume prompt, `.eventDraft` for New Event,
 `.snippetArguments` for a snippet's `{argument}` values, and `.text` / `.multilineText` for a
-rename or an edit through `DialogTextInput`. Text fields take `dialogTextField()`;
-New Event groups its fixed start and duration values into two local segmented bars, while a snippet's
-inline enumerated arguments remain `DialogChip`s. Two things follow from the enum:
+rename, an edit or an emoji's custom keywords through `DialogTextInput`. Text fields take
+`dialogTextField()`; New Event groups its fixed start and duration values into two local segmented
+bars, while a snippet's inline enumerated arguments remain `DialogChip`s. Two things follow from the enum:
 
 - **Arrow keys belong to the accessory, not the panel.** `DialogPanel.handlesArrowKeys` is set from
   `DialogAccessory.claimsArrowKeys`, so the slider still steps on ←/→ while the New Event title field

@@ -76,8 +76,12 @@ struct EmojiScreen: PaletteScreen {
     }
 
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
-        guard shortcut == .pin, let entry = entry(at: selection) else { return false }
-        togglePin(entry)
+        guard let entry = entry(at: selection) else { return false }
+        switch shortcut {
+        case .pin: togglePin(entry)
+        case .edit: core.emojiCoordinator.editKeywords(entry)
+        default: return false
+        }
         return true
     }
 
@@ -204,12 +208,24 @@ enum EmojiActionsMenu {
                 icon: .paste(target, fallback: "macwindow"), shortcut: "⌥↵"
             ) {
                 core.emojiCoordinator.pasteEmojiKeepingWindowOpen(entry)
-            },
+            }
+        ]
+        if entry.supportsSkinTone {
+            items += EmojiSkinTone.allCases.enumerated().map { offset, tone in
+                PopoverMenuItem(
+                    title: tone.title, icon: .glyph(entry.display(tone: tone)),
+                    sectionTitle: offset == 0 ? "Paste with Skin Tone" : nil,
+                    startsSection: offset == 0
+                ) {
+                    core.emojiCoordinator.pasteEmoji(entry, tone: tone)
+                }
+            }
+        }
+        items.append(
             PopoverMenuItem(
                 title: pinPosition == nil ? "Pin \(noun)" : "Unpin \(noun)",
                 systemImage: pinPosition == nil ? "pin" : "pin.slash",
-                startsSection: true, shortcut: "⌘.", action: togglePin)
-        ]
+                startsSection: true, shortcut: "⌘.", action: togglePin))
         if let pinPosition {
             items.append(
                 PopoverMenuItem(
@@ -222,6 +238,10 @@ enum EmojiActionsMenu {
                     isEnabled: pinPosition < pinCount - 1, shortcut: "⌥⌘↓"
                 ) { movePin(1) })
         }
+        items.append(
+            PopoverMenuItem(title: "Edit Keywords…", systemImage: "tag", shortcut: "⌘E") {
+                core.emojiCoordinator.editKeywords(entry)
+            })
         items.append(contentsOf: [
             PopoverMenuItem(
                 title: "Actual Size", systemImage: "magnifyingglass",

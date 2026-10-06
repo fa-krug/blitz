@@ -146,6 +146,61 @@ struct EmojiSearchTests {
             boundaries.search("red", frequent: frequent).map(\.glyph) == ["D", "A", "B", "C"],
             "full name, complete leading word, exact keyword, then partial leading word")
 
+        // Custom keywords: a store round trip, then the index ranks them above CLDR's.
+        let keywordsURL = directory.appendingPathComponent("keywords.json")
+        let keywordStore = EmojiKeywordStore(fileURL: keywordsURL)
+        var pushed: [String: [String]]?
+        keywordStore.onChange = { pushed = $0 }
+        keywordStore.setTerms(["lgtm", " LGTM ", "ship it"], for: "👍")
+        expect(keywordStore.terms(for: "👍") == ["lgtm", "ship it"], "stored terms are normalized")
+        expect(pushed == ["👍": ["lgtm", "ship it"]], "a change is pushed to the index's owner")
+        let revisionBeforeNoop = keywordStore.revision
+        keywordStore.setTerms(["lgtm", "ship it"], for: "👍")
+        expect(keywordStore.revision == revisionBeforeNoop, "an unedited save changes nothing")
+        expect(
+            EmojiKeywordStore(fileURL: keywordsURL).keywords == ["👍": ["lgtm", "ship it"]],
+            "keywords survive a store reload")
+        keywordStore.setTerms([], for: "👍")
+        expect(keywordStore.keywords.isEmpty, "emptying the field clears the glyph's terms")
+        keywordStore.replace(["👍": ["yes", "yes"], "": ["x"]])
+        expect(keywordStore.keywords == ["👍": ["yes"]], "a backup replacement is normalized")
+        keywordStore.removeAll()
+        expect(
+            EmojiKeywordStore(fileURL: keywordsURL).keywords.isEmpty,
+            "a reset survives a store reload")
+        var keywordFailure = false
+        let unwritableKeywords = EmojiKeywordStore(fileURL: directory)
+        unwritableKeywords.onPersistenceFailure = { keywordFailure = true }
+        unwritableKeywords.setTerms(["x"], for: "A")
+        expect(keywordFailure, "keyword persistence failures are reported")
+
+        let custom = EmojiIndex()
+        await custom.load("A|zebra|ob|0|red\nB|red balloon|ob|0|\nC|apple|ob|0|\nD|redwood|ob|0|")
+        expect(
+            custom.search("crimson", frequent: frequent).isEmpty,
+            "an unknown word finds nothing before it is added")
+        custom.setCustomKeywords(["C": ["crimson", "red"]])
+        expect(
+            custom.search("crimson", frequent: frequent).map(\.glyph) == ["C"],
+            "an edit reaches search without a reload")
+        expect(
+            custom.search("red", frequent: frequent).map(\.glyph) == ["C", "B", "A", "D"],
+            "an exact custom keyword outranks a leading name word and a catalog keyword")
+        custom.setCustomKeywords(["C": ["crimson tide"]])
+        expect(
+            custom.search("tide crimson", frequent: frequent).first?.glyph == "C",
+            "multiword terms may match inside a custom keyword")
+        custom.setCustomKeywords([:])
+        expect(
+            custom.search("crimson", frequent: frequent).isEmpty,
+            "clearing keywords invalidates the memo")
+        await custom.load("A|zebra|ob|0|red")
+        custom.setCustomKeywords(["A": ["blue"]])
+        await custom.load("A|zebra|ob|0|red")
+        expect(
+            custom.search("blue", frequent: frequent).first?.glyph == "A",
+            "custom keywords outlive a catalog reload")
+
         frequent.record("🙏")
         expect(index.search("pray", frequent: frequent).first?.glyph == "🙏", "usage reranks a tie")
 
