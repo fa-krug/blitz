@@ -798,10 +798,15 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   (`Features/Settings/`), an `NSTableView` filling one Form row, generic over the item and the
   SwiftUI row it hosts; the shorter launcher-item lists use native Form rows. The table keeps a
   screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
-  row's controls update in place — while the IDs are unchanged, even the visible cells are refreshed
-  rather than reloaded, so a focused alias keeps its editor. A hosted row inherits nothing from the
-  pane, so **the caller's row closure injects every store its row reads** (a missed one traps at
-  runtime), and the `Form`'s `.disabled` doesn't reach it either, so the caller passes `isEnabled`.
+  row's controls update in place. An update never reloads the table once it is in a window: it notes
+  a new row count and re-renders only the visible cells whose item differs from the one they show, so
+  a filter keystroke or a toggle costs the rows that changed and a focused alias keeps its editor.
+  Before the table has a window it reloads instead — nothing clips it there, so noting a count would
+  build a cell for every row. Items are therefore `Equatable`, and **a row reads everything besides
+  its item through its environment**, never a captured value, or an unchanged item would show stale
+  state. A hosted row inherits nothing from the pane, so **the caller's row closure injects every
+  store its row reads** (a missed one traps at runtime), and the `Form`'s `.disabled` doesn't reach
+  it either, so the caller passes `isEnabled`; a change to it re-renders every visible cell.
   The window's key view loop can't reach a row the table hasn't built, so the table moves Tab and
   ⇧Tab between rows' alias fields itself: each cell sets `\.aliasTabHandler`, which `AliasField`
   asks before falling back to the loop, and the walk scrolls each row in and skips a disabled alias.

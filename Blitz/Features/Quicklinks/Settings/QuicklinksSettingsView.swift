@@ -6,15 +6,8 @@ struct QuicklinksSettingsView: View {
     @Environment(QuicklinkStore.self) private var store
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
-    @Environment(AliasStore.self) private var aliases
-    @Environment(HotKeyManager.self) private var hotKeys
-    @Environment(SettingsNavigationState.self) private var navigation
-    @State private var query = ""
     @State private var editor: QuicklinkEditRequest?
     @State private var pendingDeletion: Quicklink?
-
-    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
-    private static let libraryRowHeight: CGFloat = 52
 
     var body: some View {
         @Bindable var settings = settings
@@ -31,9 +24,9 @@ struct QuicklinksSettingsView: View {
             Group {
                 if !store.isAvailable { storageNotice }
                 FeatureCommandsSection(owner: .quicklinks, anchor: .quicklinksCommands)
-                library
+                QuicklinkLibrarySection(editor: $editor, pendingDeletion: $pendingDeletion)
                 behaviour
-                transfer
+                QuicklinkTransferSection()
             }
             .settingsEnabled(settings.quicklinksEnabled)
         }
@@ -72,8 +65,53 @@ struct QuicklinksSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private var library: some View {
+    private var behaviour: some View {
+        @Bindable var settings = settings
+        return Section {
+            Toggle(isOn: $settings.quicklinkOpensNewWindow) {
+                SettingsRowTitle(.quicklinksBehaviour, "Open in a new window")
+                Text("Where the app supports it.")
+            }
+            Toggle(isOn: $settings.quicklinkPrefersExistingTabs) {
+                SettingsRowTitle(.quicklinksBehaviour, "Focus an open tab")
+                Text("Switch to a tab already showing the link. Safari and Chromium browsers.")
+            }
+            Picker(selection: $settings.quicklinkSelectionFallback) {
+                ForEach(QuicklinkSelectionFallback.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            } label: {
+                SettingsRowTitle(.quicklinksBehaviour, "When there's no selected text")
+                Text("For links that use {selection}.")
+            }
+            Toggle(isOn: $settings.quicklinkConfirmsBeforeDelete) {
+                SettingsRowTitle(.quicklinksBehaviour, "Confirm before deleting")
+                Text("From the launcher's Actions menu.")
+            }
+        } header: {
+            SettingsSectionHeader(.quicklinksBehaviour)
+        }
+    }
+}
+
+/// Its own view, so a keystroke in the filter re-renders this section rather than the whole pane.
+private struct QuicklinkLibrarySection: View {
+    @Environment(QuicklinkStore.self) private var store
+    @Environment(AppCore.self) private var core
+    @Environment(AppSettings.self) private var settings
+    @Environment(AliasStore.self) private var aliases
+    @Environment(HotKeyManager.self) private var hotKeys
+    @Environment(SettingsNavigationState.self) private var navigation
+    @Binding var editor: QuicklinkEditRequest?
+    @Binding var pendingDeletion: Quicklink?
+    @State private var query = ""
+
+    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
+    private static let rowHeight: CGFloat = 52
+
+    var body: some View {
+        // Once per render: a large library makes each pass over it cost a frame.
+        let results = matches
         Section {
             if !store.quicklinks.isEmpty {
                 SettingsFilterField(prompt: "Search quicklinks…", query: $query)
@@ -88,7 +126,7 @@ struct QuicklinksSettingsView: View {
             } else {
                 // One row holding the table: a `Form` realizes every row it is handed.
                 SettingsRowsTable(
-                    items: results, rowHeight: Self.libraryRowHeight,
+                    items: results, rowHeight: Self.rowHeight,
                     isEnabled: settings.quicklinksEnabled
                 ) { quicklink in
                     QuicklinkSettingsRow(
@@ -119,35 +157,23 @@ struct QuicklinksSettingsView: View {
         }
     }
 
-    private var behaviour: some View {
-        @Bindable var settings = settings
-        return Section {
-            Toggle(isOn: $settings.quicklinkOpensNewWindow) {
-                SettingsRowTitle(.quicklinksBehaviour, "Open in a new window")
-                Text("Where the app supports it.")
-            }
-            Toggle(isOn: $settings.quicklinkPrefersExistingTabs) {
-                SettingsRowTitle(.quicklinksBehaviour, "Focus an open tab")
-                Text("Switch to a tab already showing the link. Safari and Chromium browsers.")
-            }
-            Picker(selection: $settings.quicklinkSelectionFallback) {
-                ForEach(QuicklinkSelectionFallback.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            } label: {
-                SettingsRowTitle(.quicklinksBehaviour, "When there's no selected text")
-                Text("For links that use {selection}.")
-            }
-            Toggle(isOn: $settings.quicklinkConfirmsBeforeDelete) {
-                SettingsRowTitle(.quicklinksBehaviour, "Confirm before deleting")
-                Text("From the launcher's Actions menu.")
-            }
-        } header: {
-            SettingsSectionHeader(.quicklinksBehaviour)
+    /// The store already publishes display order, so filtering keeps pins at the top.
+    private var matches: [Quicklink] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return store.quicklinks }
+        return store.quicklinks.filter {
+            $0.name.localizedCaseInsensitiveContains(trimmed)
+                || $0.link.localizedCaseInsensitiveContains(trimmed)
         }
     }
+}
 
-    private var transfer: some View {
+/// Apart from the pane, which would otherwise re-render on every edit just to grey out Export.
+private struct QuicklinkTransferSection: View {
+    @Environment(QuicklinkStore.self) private var store
+    @Environment(AppCore.self) private var core
+
+    var body: some View {
         Section {
             LabeledContent {
                 Button("Import…") { Task { await core.quicklinkCoordinator.importQuicklinks() } }
@@ -164,16 +190,6 @@ struct QuicklinksSettingsView: View {
             }
         } header: {
             SettingsSectionHeader(.quicklinksImportExport)
-        }
-    }
-
-    /// The store already publishes display order, so filtering keeps pins at the top.
-    private var results: [Quicklink] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return store.quicklinks }
-        return store.quicklinks.filter {
-            $0.name.localizedCaseInsensitiveContains(trimmed)
-                || $0.link.localizedCaseInsensitiveContains(trimmed)
         }
     }
 }

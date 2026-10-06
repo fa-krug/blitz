@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 
 /// A long Settings list as a table in one `Form` row, reusing a screenful of hosted rows.
-struct SettingsRowsTable<Item: Identifiable, Row: View>: View {
+struct SettingsRowsTable<Item: Identifiable & Equatable, Row: View>: View {
     let items: [Item]
     /// Fixed for every row; match the native `Form` row the list stands in for.
     let rowHeight: CGFloat
     var isEnabled = true
-    /// A hosted row inherits nothing from the pane, so this injects the environment it reads.
+    /// Injects all a row reads besides its item: an unchanged item's row is never re-rendered.
     @ViewBuilder let row: @MainActor (Item) -> Row
 
     /// The open recorder's bounds in the table's space; nil while nothing is recording.
@@ -41,7 +41,7 @@ private enum HostedRowsMetrics {
     static let reuseID = NSUserInterfaceItemIdentifier("hostedRow")
 }
 
-private struct HostedRowsTable<Item: Identifiable, Row: View>: NSViewRepresentable {
+private struct HostedRowsTable<Item: Identifiable & Equatable, Row: View>: NSViewRepresentable {
     let items: [Item]
     let rowHeight: CGFloat
     let isEnabled: Bool
@@ -91,22 +91,26 @@ private struct HostedRowsTable<Item: Identifiable, Row: View>: NSViewRepresentab
         fileprivate weak var table: NSTableView?
         fileprivate weak var container: NSView?
         private var list: HostedRowsTable?
-        private var shownIDs: [Item.ID] = []
+        private var shownIsEnabled = true
         private weak var recorderOwner: Cell?
 
         fileprivate func show(_ list: HostedRowsTable) {
             self.list = list
             guard let table else { return }
             if table.rowHeight != list.rowHeight { table.rowHeight = list.rowHeight }
-            let ids = list.items.map(\.id)
-            guard ids == shownIDs else {
-                shownIDs = ids
-                table.reloadData()
-                return
+            let refreshesAll = list.isEnabled != shownIsEnabled
+            shownIsEnabled = list.isEnabled
+            if table.numberOfRows != list.items.count {
+                // Unclipped outside a window, where noting a new count builds every row.
+                guard table.window != nil else { return table.reloadData() }
+                table.noteNumberOfRowsChanged()
             }
-            // Same rows: refresh the cells in place, so a focused alias keeps its editor.
+            // Not `reloadData`: a filter keystroke re-renders only the rows whose item moved.
             table.enumerateAvailableRowViews { rowView, row in
-                (rowView.view(atColumn: 0) as? Cell)?.show(content(for: row, of: list))
+                guard row < list.items.count, let cell = rowView.view(atColumn: 0) as? Cell,
+                    refreshesAll || cell.shownItem != list.items[row]
+                else { return }
+                cell.show(content(for: row, of: list), item: list.items[row])
             }
         }
 
@@ -120,7 +124,7 @@ private struct HostedRowsTable<Item: Identifiable, Row: View>: NSViewRepresentab
             let reused = tableView.makeView(withIdentifier: HostedRowsMetrics.reuseID, owner: nil)
             let cell = reused as? Cell ?? Cell(content)
             cell.coordinator = self
-            cell.show(content)
+            cell.show(content, item: list.items[row])
             return cell
         }
 
@@ -165,6 +169,7 @@ private struct HostedRowsTable<Item: Identifiable, Row: View>: NSViewRepresentab
     /// A reused row: its hosted controls survive, and only the item changes hands.
     final class Cell: NSTableCellView {
         weak var coordinator: Coordinator?
+        private(set) var shownItem: Item?
         private let host: NSHostingView<CellContent>
 
         init(_ content: CellContent) {
@@ -186,7 +191,8 @@ private struct HostedRowsTable<Item: Identifiable, Row: View>: NSViewRepresentab
         @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError() }
 
-        func show(_ content: CellContent) {
+        func show(_ content: CellContent, item: Item) {
+            shownItem = item
             var content = content
             content.onRecorderFrame = { [weak self] frame in self?.recorderMoved(to: frame) }
             content.onAliasTab = { [weak self] backward in
