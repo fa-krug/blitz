@@ -60,6 +60,7 @@ enum AppSettingsKey: String, CaseIterable {
     case appleShortcutsEnabled = "appleShortcutsEnabled"
     case extensionsEnabled = "extensionsEnabled"
     case extensionsShowInLauncher = "extensionsShowInLauncher"
+    case extensionsAutoUpdate = "extensionsAutoUpdate"
     case extensionPackageManager = "extensionPackageManager"
     case extensionCustomSearchPaths = "extensionCustomSearchPaths"
     case calendarEnabled = "calendarEnabled"

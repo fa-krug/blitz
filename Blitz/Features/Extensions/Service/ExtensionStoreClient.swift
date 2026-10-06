@@ -16,10 +16,25 @@ struct ExtensionStoreClient: Sendable {
     }
 
     func search(_ query: String) async throws -> [ExtensionListing] {
-        guard let url = ExtensionStoreResponse.searchURL(query: query, page: 1) else {
-            throw ExtensionStoreError.malformedResponse
-        }
-        return try ExtensionStoreResponse.parseStore(try await get(url))
+        try await page(ExtensionStoreResponse.searchURL(query: query, page: 1)).listings
+    }
+
+    /// An empty query browses the store's popular order; anything else searches it.
+    func listings(matching query: String, page number: Int) async throws -> ExtensionStoreResponse.Page {
+        try await page(
+            query.isEmpty
+                ? ExtensionStoreResponse.popularURL(page: number)
+                : ExtensionStoreResponse.searchURL(query: query, page: number))
+    }
+
+    private func page(_ url: URL?) async throws -> ExtensionStoreResponse.Page {
+        guard let url else { throw ExtensionStoreError.malformedResponse }
+        return try ExtensionStoreResponse.parsePage(try await get(url))
+    }
+
+    /// Nil when the bytes aren't UTF-8, which the detail page treats as having no README.
+    func readme(_ url: URL) async throws -> String? {
+        String(data: try await get(url), encoding: .utf8)
     }
 
     /// Nil when the store has it but can't serve it, such as a de-listed extension.

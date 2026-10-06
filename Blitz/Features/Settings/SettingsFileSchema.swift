@@ -110,6 +110,7 @@ enum SettingsFileSchema {
         case .calendarMenuBarHidesWhenEmpty: return bind(settings, \.calendarMenuBarHidesWhenEmpty)
         case .hideCurrentEvent: return bind(settings, \.hideCurrentEvent)
         case .extensionsShowInLauncher: return bind(settings, \.extensionsShowInLauncher)
+        case .extensionsAutoUpdate: return bind(settings, \.extensionsAutoUpdate)
         }
     }
 

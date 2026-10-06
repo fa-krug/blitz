@@ -19,6 +19,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     /// The store's newer version of each installed extension that has one, keyed by manifest name.
     private(set) var updates: [String: ExtensionListing] = [:]
     private(set) var updating: Set<String> = []
+    /// Titles of the updates that last failed, by manifest name, until one succeeds or it goes.
+    private(set) var updateFailures: [String: String] = [:]
     private(set) var menuBars: ExtensionMenuBarManager?
     private(set) var state: ExtensionSessionState = .idle
     /// The command whose session is live, if any.
@@ -59,6 +61,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     @ObservationIgnored private var backgroundFailure: String?
     @ObservationIgnored private var backgroundTask: Task<Void, Never>?
     @ObservationIgnored private var nextToastID = 1
+    @ObservationIgnored private var paginationLatch = ExtensionPagination.Latch()
     @ObservationIgnored private var lastOAuthExtensionName: String?
 
     init(clipboardStore: ClipboardStore) {
@@ -283,29 +286,51 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
 
     // MARK: - Updates
 
-    /// Asked when Settings opens; a lookup that fails is skipped rather than reported.
-    func checkForUpdates() async {
-        guard isEnabled else { return }
+    /// A lookup that fails is skipped rather than reported; false only when none answered at all.
+    @discardableResult
+    func checkForUpdates() async -> Bool {
+        guard isEnabled else { return false }
         let tracked = storeVersions.tracked
         let lookups = installed.map(\.manifest).filter { tracked.contains($0.name) }
+        guard !lookups.isEmpty else {
+            updates = [:]
+            return true
+        }
         let client = ExtensionStoreClient()
-        let latest = await withTaskGroup(of: ExtensionListing?.self) { group in
+        let (latest, answered) = await withTaskGroup(of: ExtensionListing??.self) { group in
             for manifest in lookups {
                 let (handle, name) = (manifest.storeHandle, manifest.name)
-                group.addTask { try? await client.lookup(handle: handle, name: name) }
+                // Nil is a failed lookup; `.some(nil)` is an extension the store de-listed.
+                group.addTask { () -> ExtensionListing?? in
+                    do {
+                        return .some(try await client.lookup(handle: handle, name: name))
+                    } catch {
+                        return .none
+                    }
+                }
             }
             var found: [ExtensionListing] = []
-            for await listing in group {
-                if let listing { found.append(listing) }
+            var answered = 0
+            for await reply in group {
+                guard let reply else { continue }
+                answered += 1
+                if let listing = reply { found.append(listing) }
             }
-            return found
+            return (found, answered)
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return false }
         updates = Dictionary(
             storeVersions.reconcile(with: latest).map { ($0.name, $0) }, uniquingKeysWith: { $1 })
+        return answered > 0
     }
 
-    /// One at a time, like an import; returns the titles that failed so the pane can name them.
+    /// Running in the palette, refreshing in the background, or serving its menu-bar item.
+    func isBusy(_ name: String) -> Bool {
+        running?.extensionName == name || backgroundRef?.extensionName == name
+            || menuBars?.isRunning(extensionName: name) == true
+    }
+
+    /// One at a time, like an import; returns the titles that failed, which Settings also lists.
     func update(_ names: [String]) async -> [String] {
         updating.formUnion(names)
         var failed: [String] = []
@@ -314,8 +339,10 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             guard let listing = updates[name] else { continue }
             do {
                 try await installFromStore(listing, onProgress: { _ in })
+                updateFailures[name] = nil
             } catch {
                 failed.append(listing.title)
+                updateFailures[name] = listing.title
             }
         }
         await refresh()
@@ -336,6 +363,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     private func untrack(_ name: String) {
         storeVersions.forget(name)
         updates[name] = nil
+        updateFailures[name] = nil
     }
 
     /// Takes everything keyed to it: files, storage, icon, and its shortcuts.
@@ -511,6 +539,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         toasts = []
         navigationDepth = 1
         accessoryValues = [:]
+        paginationLatch = ExtensionPagination.Latch()
     }
 
     // MARK: - Background refresh
@@ -774,6 +803,18 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         guard let sessionID else { return }
         let payload = ExtensionRuntime.jsonString(from: arguments)
         Task { await runtime.dispatch(session: sessionID, handler: handler, payload: payload) }
+    }
+
+    /// Once per item count, never mid-load: a page that adds nothing must not ask again by itself.
+    func loadMore(
+        _ pagination: ExtensionPagination, reaching index: Int?, itemCount: Int, isLoading: Bool
+    ) {
+        guard
+            paginationLatch.shouldLoad(
+                pagination, reaching: index, itemCount: itemCount, isLoading: isLoading),
+            let handler = pagination.handler
+        else { return }
+        dispatch(handler: handler)
     }
 
     // MARK: - Search-bar dropdowns

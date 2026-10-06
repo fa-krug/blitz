@@ -11,6 +11,9 @@ struct ExtensionStoreList: View {
 
     @Environment(\.metrics) private var metrics
     let listings: [ExtensionListing]
+    /// A heading above the rows, for the popular listing an empty query browses.
+    let title: String?
+    let isLoadingMore: Bool
     let selection: Int
     /// Changes only when the list should scroll, so mouse selection never yanks it.
     let scroll: ScrollIntent
@@ -18,11 +21,23 @@ struct ExtensionStoreList: View {
     let onSelect: (Int) -> Void
     let onActivate: (Int) -> Void
     let onActions: (Int) -> Void
+    /// A row came into view or under the keyboard, which is what pages the listing further.
+    let onReach: (Int) -> Void
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if let title {
+                        Text(title)
+                            .font(metrics.typography.sectionHeader)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, metrics.spacing.md)
+                            .padding(.top, metrics.spacing.xs)
+                            .padding(.bottom, metrics.spacing.sectionHeaderBottom)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     ForEach(Array(listings.enumerated()), id: \.element.id) { index, listing in
                         ExtensionStoreRow(
                             listing: listing, state: state(listing), selected: index == selection
@@ -34,6 +49,12 @@ struct ExtensionStoreList: View {
                         }
                         .onRightClick { onActions(index) }
                         .selectionFrame(index == selection)
+                        .onAppear { onReach(index) }
+                    }
+                    if isLoadingMore {
+                        ExtensionLoadingIndicator(label: "Loading more extensions")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, metrics.spacing.sm)
                     }
                 }
                 .padding(.horizontal, metrics.spacing.md)
@@ -47,6 +68,7 @@ struct ExtensionStoreList: View {
             .scrollFollowsSelection(
                 scroll, row: listings.indices.contains(selection) ? listings[selection].id : nil,
                 atOrigin: selection == 0, proxy: proxy)
+            .onChange(of: selection) { onReach(selection) }
         }
     }
 }

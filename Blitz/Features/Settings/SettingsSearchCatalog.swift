@@ -622,6 +622,9 @@ enum SettingsSearchCatalog {
                 "library", "uninstall", "update", "preferences", "appearance", "alias", "shortcut"
             ]),
         .init(
+            .extensionsInstalled, "Update automatically",
+            keywords: ["auto update", "updates", "daily", "background", "store"]),
+        .init(
             group: .extensionsCompatibility, "Compatibility",
             keywords: ["supported", "unsupported", "raycast api"]),
         .init(

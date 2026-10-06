@@ -63,6 +63,7 @@ final class AppCore {
     let uninstall = UninstallSession()
     let notesStore: NotesStore
     let extensions: ExtensionManager
+    let extensionUpdates: ExtensionUpdateScheduler
     let chatHistory: ChatHistoryStore
     let aiChats: AIChatSurfacesState
     let aiSettings = AISettingsStore(
@@ -114,9 +115,9 @@ final class AppCore {
         appIndex: appIndex, runningApps: runningApps, hotKeys: hotKeys, favorites: favorites,
         visibility: visibility, ranking: launcherRanking, aliases: aliases, core: self)
     @ObservationIgnored private(set) lazy var extensionCoordinator = ExtensionCoordinator(
-        extensions: extensions, store: extensionStore, appIndex: appIndex, palette: palette,
-        paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
-        settings: settings, core: self)
+        extensions: extensions, store: extensionStore, updates: extensionUpdates,
+        appIndex: appIndex, palette: palette, paletteCoordinator: paletteCoordinator,
+        settingsCoordinator: settingsCoordinator, settings: settings, core: self)
     @ObservationIgnored private(set) lazy var windowCommandCoordinator = WindowCommandCoordinator(
         settings: settings, paletteCoordinator: paletteCoordinator, windowMover: windowMover,
         spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes)
@@ -253,6 +254,7 @@ final class AppCore {
         let clipboardManager = ClipboardManager(store: clipboardStore, settings: settings)
         self.clipboardManager = clipboardManager
         extensions = ExtensionManager(clipboardStore: clipboardStore)
+        extensionUpdates = ExtensionUpdateScheduler(extensions: extensions)
         snippetsStore = SnippetsStore(repository: Self.snippetsRepository(for: settings))
         textInjector = TextInjector(
             clipboardManager: clipboardManager,
@@ -719,6 +721,9 @@ final class AppCore {
         track(
             { _ = $0.extensionsShowInLauncher },
             reproject: { $0.extensionCoordinator.applyExtensionsLauncherPresence() })
+        track(
+            { _ = $0.extensionsAutoUpdate },
+            reproject: { $0.extensionCoordinator.applyAutoUpdate() })
         track({ _ = $0.snippetsFolder }, reproject: { $0.applySnippetsFolder() })
         track({ _ = $0.notesFolder }, reproject: { $0.applyNotesFolder() })
         trackChatRoute()

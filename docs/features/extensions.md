@@ -131,6 +131,11 @@ Two host-call flavours:
 | `Service/ExtensionCatalog.swift` | discovery on disk, install, uninstall, import-from-Raycast |
 | `Service/ExtensionCleanup.swift` | the build workspace's name, the launch sweep, and reclaiming orphans |
 | `Service/ExtensionManager.swift` | the single owner: installed set, foreground session, no-view refreshes, menu-bar manager, launcher entries |
+| `Service/ExtensionUpdateScheduler.swift` | the daily store check and the automatic updates it installs |
+| `Service/ExtensionStoreSession.swift` | the palette Store's listing, paging, detail page and installs |
+| `Model/ExtensionPagination.swift` | a `pagination` prop, its trigger row, and the once-per-count latch |
+| `Model/ExtensionUpdatePolicy.swift` | when the update check is due, what it defers, and what its HUD says |
+| `Model/ExtensionStoreReadme.swift` | README and asset URLs rewritten to raw files, relative images resolved |
 | `Service/ExtensionMenuBarManager.swift` | serialized refreshes, short-lived menu sessions and their deadlines |
 | `Service/ExtensionMenuBarHost.swift` | immutable per-session namespace and menu-specific host behavior |
 | `UI/ExtensionMenuBarController.swift` | native `NSStatusItem` and `NSMenu` rendering and dispatch |
@@ -247,6 +252,16 @@ screens hold (see [palette.md](palette.md)).
   `onSelectionChange` is reported with that visible item's string id. The observer keys on the id,
   not just the numeric index, because local filtering can replace row zero without changing the
   palette selection; an empty result reports `null`, matching the API contract.
+- **Pagination and loading** — a `List`/`Grid` `pagination` prop arrives as an object whose
+  `onLoadMore` is a handle like any other function prop. `ExtensionScreen` reads it into
+  `ExtensionPagination`; a row coming into view (`.onAppear`) or under the keyboard
+  (`ExtensionSelectionForwarder`) at or past `count - max(1, pageSize / 2)` dispatches it through
+  `ExtensionManager.loadMore`. Its `ExtensionPagination.Latch` asks once per item count, never while
+  `isLoading` or once `hasMore` is false, and remembers how far the user reached, so a load that
+  settles with the last rows already on screen asks again without a scroll. While `isLoading` is set
+  over rows already shown — and on any Detail or Form — a `progress.indicator` sits in the header
+  beside the search accessory (`ExtensionCommandScreen.loadingIndicator`); an empty list keeps its
+  "Loading…" body instead.
 - **Search-bar dropdown** — `List.Dropdown` and `Grid.Dropdown` draw as
   `ExtensionSearchAccessoryButton` at the header's trailing edge and drop `ExtensionPickerList` as one
   of the palette's `OpenMenu` cases, so the arrows, ↵, Escape and the click-away come from the one menu
@@ -493,10 +508,30 @@ the jump came from. Leaving a page for the list scrolls it back to that extensio
 ## The Store screen
 
 **Extension Store** is the same store search in the palette, so an extension installs without
-leaving it. Typing searches; ↵ on a result installs it, or opens its Settings page once it is here;
-⌘K adds Reinstall. `ExtensionStoreSession` (`Service/`, on `AppCore`) holds one debounced search
-and the progress of every install it started, through the same `ExtensionStoreClient` — a private
-`.ephemeral` session — and `ExtensionManager.install(_:onProgress:)` the Settings panel uses.
+leaving it. With nothing typed it lists **Popular**; typing searches; ↵ on a result installs it, or
+opens its Settings page once it is here; ⌘K adds Reinstall and Show Details. `ExtensionStoreSession`
+(`Service/`, on `AppCore`) holds one debounced listing and the progress of every install it started,
+through the same `ExtensionStoreClient` — a private `.ephemeral` session — and
+`ExtensionManager.install(_:onProgress:)` the Settings panel uses.
+
+**Popular is the store's own front page, not a sort.** The search endpoint
+(`frontend_api/extensions/search`) ignores every `sort`/`order`/`order_by` spelling tried and returns
+its 3,300-odd results in no useful order; only its `per_page` is honoured. The listing endpoint
+without a query, `frontend_api/extensions?page=N&platform=macOS`, is already ordered by popularity
+(Kill Process, Color Picker, Google Chrome, …), so the empty query reads that — no client-side
+ranking, no cache. Both endpoints serve ten a page and report `total_results`, so scrolling to half a
+page from the end fetches the next one, by the same trigger rule a command's `pagination` uses. The
+order is live, so a later page can repeat an entry and is de-duplicated by id.
+
+**⌘↵ (or Show Details) opens an extension's store page** as a sub-state of the same screen: icon,
+author, installs, commands, categories, a downsampled screenshot strip, the README and the newest
+changelog entry. A search result carries neither screenshots nor a changelog, so the page also asks
+`api/v1/extensions/<handle>/<name>`, alongside the README. The store links the README as GitHub's HTML
+tree view; `ExtensionStoreReadme` rewrites it to `raw.githubusercontent.com` and resolves its relative
+images against `readme_assets_path` (whose doubled trailing slash it drops), then
+`ExtensionMarkdownView` renders it. ↵ installs from the page; Escape, a bare backspace and the back
+chevron return to the row it was opened from, with the query that found it intact — they are
+handled at the panel, ahead of Escape clearing the query. Typing a new query closes the page.
 An install outlives the screen: leaving drops the search, never a download, and a HUD says when
 the commands have arrived. A progress step that lands after its install ended is dropped, or it
 would bring the row's spinner back for good.
@@ -574,7 +609,21 @@ toolchain layout.
 ## Updates
 
 Only store extensions update; a GitHub or folder install is the user's own copy, and reinstalling it
-is how it changes. **The check runs when Settings › Extensions opens, and at no other time.**
+is how it changes. **The check runs daily in the background, when Settings › Extensions opens, and
+from the Check for Extension Updates command.**
+
+`ExtensionUpdateScheduler` (`Service/`, on `AppCore`) is the background half, the same pump shape as
+`UpdateCheckStore`: a minute after launch, then every 24 hours from the last answered check, which is
+stamped in `Caches/extension-update-check.json` so relaunching never re-asks; a check nobody answered
+retries after two hours. It runs only while extensions are on and **Update automatically**
+(`extensionsAutoUpdate`, default on, carried by settings backups and `settings.json`) is set, and
+installs every pending update — except one whose extension is running in the palette, refreshing in
+the background or serving a menu-bar item, which waits for the two-hour retry rather than having its
+folder replaced under it. A run that installed or failed something says so in a HUD ("Updated 2
+extensions"); failures stay listed under Settings › Extensions › Installed until an update succeeds.
+The command always asks the store, installs when updates are automatic, and otherwise only says how
+many are available. `ExtensionUpdatePolicy` (`Model/`) holds the cadence, the deferral split and the
+HUD line, so `ext-version-test` drives them without a clock.
 
 `ExtensionVersionStore` records the store's `commit_sha` for each store-sourced extension in
 `extension-versions.json`, because nothing installed carries a version: neither the store's zip nor

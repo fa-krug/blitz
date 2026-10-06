@@ -402,6 +402,11 @@ final class AppSettings {
         }
     }
 
+    /// Store installs only: a GitHub or folder install is the user's own copy and never updates.
+    var extensionsAutoUpdate: Bool {
+        didSet { defaults.set(extensionsAutoUpdate, forKey: Key.extensionsAutoUpdate.rawValue) }
+    }
+
     /// Only an install from GitHub needs one — the store serves extensions already built.
     var extensionPackageManager: ExtensionPackageManager {
         didSet {
@@ -708,6 +713,9 @@ final class AppSettings {
         extensionsShowInLauncher =
             defaults.object(forKey: Key.extensionsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.extensionsShowInLauncher.rawValue)
+        extensionsAutoUpdate =
+            defaults.object(forKey: Key.extensionsAutoUpdate.rawValue) == nil
+            || defaults.bool(forKey: Key.extensionsAutoUpdate.rawValue)
         extensionPackageManager =
             defaults.string(forKey: Key.extensionPackageManager.rawValue)
             .flatMap(ExtensionPackageManager.init(rawValue:)) ?? .automatic

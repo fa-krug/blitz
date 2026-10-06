@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Raycast Store, searched from the palette: ↵ installs a result, or opens one already here.
+/// The Raycast Store in the palette: popular until a query, ↵ installs, ⌘↵ shows details.
 struct ExtensionStoreScreen: PaletteScreen {
     let session: ExtensionStoreSession
     let extensions: ExtensionManager
@@ -10,7 +10,11 @@ struct ExtensionStoreScreen: PaletteScreen {
 
     private var term: String { vm.query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    var rows: [ExtensionListing] { term.isEmpty ? [] : session.results }
+    /// An open detail page is one row, so ↵ and ⌘K act on the extension it shows.
+    var rows: [ExtensionListing] {
+        if let detail = session.detail { return [detail.shown] }
+        return session.results
+    }
 
     var primaryActionTitle: String {
         listing(at: vm.selection).flatMap(installed) == nil ? "Install Extension" : "Configure Extension"
@@ -53,6 +57,12 @@ struct ExtensionStoreScreen: PaletteScreen {
                     core.extensionCoordinator.installFromStore(listing)
                 })
         }
+        if session.detail == nil {
+            items.append(
+                PopoverMenuItem(title: "Show Details", systemImage: "info.circle", shortcut: "⌘↵") {
+                    showDetail(at: selection)
+                })
+        }
         return items.isEmpty ? nil : PopoverMenuContent(header: listing.title, items: items)
     }
 
@@ -65,27 +75,46 @@ struct ExtensionStoreScreen: PaletteScreen {
         }
     }
 
-    func secondary(at selection: Int) -> Bool { false }
+    /// ⌘↵ opens the extension's store page; on that page there is nothing further to open.
+    func secondary(at selection: Int) -> Bool {
+        guard session.detail == nil, listing(at: selection) != nil else { return false }
+        showDetail(at: selection)
+        return true
+    }
+
+    private func showDetail(at selection: Int) {
+        guard let listing = listing(at: selection) else { return }
+        session.showDetail(listing, returning: selection)
+        vm.selection = 0
+    }
 
     func body(selection: Int, scroll: ScrollIntent) -> AnyView {
-        if term.isEmpty { return AnyView(EmptyResults(text: "Search the Raycast Store")) }
+        if let detail = session.detail {
+            return AnyView(
+                ExtensionStoreDetailView(detail: detail, state: state(for: detail.shown)))
+        }
         if case .failed(let message) = session.status { return AnyView(EmptyResults(text: message)) }
         let rows = rows
         if rows.isEmpty {
-            let answered = session.status == .answered
-            let text = answered ? "No extensions match “\(term)”" : "Searching…"
-            return AnyView(EmptyResults(text: text))
+            return AnyView(EmptyResults(text: emptyText))
         }
         return AnyView(
             ExtensionStoreList(
-                listings: rows, selection: selection, scroll: scroll,
+                listings: rows, title: term.isEmpty ? "Popular" : nil,
+                isLoadingMore: session.isLoadingMore, selection: selection, scroll: scroll,
                 state: { state(for: $0) },
                 onSelect: { vm.selection = $0 },
                 onActivate: activate(at:),
                 onActions: { index in
                     vm.selection = index
                     openActions()
-                }))
+                },
+                onReach: { session.loadMore(reaching: $0) }))
+    }
+
+    private var emptyText: String {
+        guard session.status == .answered else { return term.isEmpty ? "Loading…" : "Searching…" }
+        return term.isEmpty ? "The Raycast Store listed nothing" : "No extensions match “\(term)”"
     }
 
     private func state(for listing: ExtensionListing) -> ExtensionStoreList.RowState {

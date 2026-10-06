@@ -757,6 +757,10 @@ struct RootPaletteView: View {
                     accessory, isOpen: openMenu == .extensionAccessory,
                     action: toggleExtensionSearchAccessory)
             }
+            if !isCollapsed, let indicator = extensionCommandScreen?.loadingIndicator {
+                headerGutter(width: metrics.spacing.md)
+                indicator
+            }
             headerGutter(width: metrics.spacing.md * 2)
         }
         // Identical metrics in both states, so typing can't move the search bar.
@@ -1452,6 +1456,7 @@ struct RootPaletteView: View {
     /// An extension keeps its own stack, so it can have a step back the palette cannot see.
     private var hasBackStep: Bool {
         vm.canGoBack || (vm.mode == .extensionCommand && extensions.navigationDepth > 1)
+            || core.extensionCoordinator.isShowingStoreDetail
     }
 
     /// Never promises a step the click does not take: a root screen closes rather than backs.
@@ -1461,6 +1466,7 @@ struct RootPaletteView: View {
     }
 
     private func goBack() {
+        if core.extensionCoordinator.closeStoreDetail() { return }
         if vm.mode == .extensionCommand {
             core.extensionCoordinator.exitExtensionScreen()
             return
