@@ -3,11 +3,13 @@ import SwiftUI
 /// The pane column: whichever pane the history currently points at.
 struct SettingsDetailView: View {
     @Environment(SettingsNavigationState.self) private var navigation
+    /// Trails `navigation.tab` by a frame, so the sidebar's highlight moves before a pane builds.
+    @State private var shown: SettingsTab?
 
     var body: some View {
         // Not a `TabView`: `NSTabView` re-hosts on selection and breaks the recorder.
         Group {
-            switch navigation.tab {
+            switch shown ?? navigation.tab {
             case .general: GeneralSettingsView()
             case .applications: ApplicationsSettingsView()
             case .systemSettings: SystemSettingsSettingsView()
@@ -37,6 +39,11 @@ struct SettingsDetailView: View {
         // A reopened window keeps its shell, not the pane: appear hooks refresh what a pane shows.
         .id(navigation.session)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Past the task's first suspension, so the frame with the new highlight commits first.
+        .task(id: navigation.tab) {
+            await Task.yield()
+            shown = navigation.tab
+        }
         // One host for every pane, above their scroll views so a callout is never clipped.
         .shortcutRecorderPopoverHost()
     }
