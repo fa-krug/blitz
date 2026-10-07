@@ -1,160 +1,184 @@
 import Darwin
 import Foundation
+import Synchronization
 
 /// libc block-buffers a pipe, so a pty is what makes output live and correctly ordered.
-final class PseudoTerminal: @unchecked Sendable {
-    /// Where the child finds `controlEnd`'s pipe: beside the terminal, never its standard input.
-    static let controlDescriptor: Int32 = 3
-
+final class PseudoTerminal: Sendable {
     /// Everything the command writes to any of its three descriptors arrives here.
     let parentEnd: Int32
+    /// Leads the child's session and its first process group, so `-processID` names both.
     let processID: pid_t
-    private let controlEnd: Int32
-    /// A write blocks while nothing reads, so neither end may wait behind the other.
+    /// A write blocks while nothing reads, so it never waits on the caller's thread.
     private let typingQueue = DispatchQueue(label: "de.fa-krug.blitz.pty.typing")
-    private let controlQueue = DispatchQueue(label: "de.fa-krug.blitz.pty.control")
-    /// Each flag is touched only on its own end's queue, which is what makes this class Sendable.
-    private var isTerminalOpen = true
-    private var isControlOpen = true
+    private let lifecycle: Mutex<Lifecycle>
 
-    private init(parentEnd: Int32, controlEnd: Int32, processID: pid_t) {
-        self.parentEnd = parentEnd
-        self.controlEnd = controlEnd
-        self.processID = processID
+    private struct Lifecycle {
+        var isTerminalOpen = true
+        /// Set once the child is reaped, after which its pid may name a stranger.
+        var exitStatus: Int32?
     }
 
+    private init(parentEnd: Int32, processID: pid_t) {
+        self.parentEnd = parentEnd
+        self.processID = processID
+        lifecycle = Mutex(Lifecycle())
+    }
+
+    /// The child gets the terminal as its controlling one, which `posix_spawn` cannot give it.
     static func spawn(
         executable: String, arguments: [String], environment: [String: String],
-        workingDirectory: String
+        workingDirectory: String, columns: Int, rows: Int
     ) -> PseudoTerminal? {
-        // POSIX names these the master and slave ends; these are the same two descriptors.
-        var parentEnd: Int32 = 0
-        var childEnd: Int32 = 0
-        var settings = terminalSettings()
-        guard openpty(&parentEnd, &childEnd, nil, &settings, nil) == 0 else { return nil }
-        var control: [Int32] = [0, 0]
-        guard pipe(&control) == 0 else {
-            Darwin.close(parentEnd)
-            Darwin.close(childEnd)
-            return nil
-        }
-        // Blitz spawns other children, and one holding the pipe would keep the shell from its EOF.
-        for descriptor in [parentEnd, control[1]] { _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC) }
-        // A shell that has exited must fail the write, not raise SIGPIPE and take Blitz with it.
-        _ = fcntl(control[1], F_SETNOSIGPIPE, 1)
-
-        var attributes: posix_spawnattr_t?
-        posix_spawnattr_init(&attributes)
-        // A worker thread blocks SIGINT, and zsh hands the mask it inherits to every command.
-        var noSignals = sigset_t()
-        sigemptyset(&noSignals)
-        posix_spawnattr_setsigmask(&attributes, &noSignals)
-        var catchableSignals = sigset_t()
-        sigfillset(&catchableSignals)
-        sigdelset(&catchableSignals, SIGKILL)
-        sigdelset(&catchableSignals, SIGSTOP)
-        posix_spawnattr_setsigdefault(&attributes, &catchableSignals)
-        // The child leads its session, so `kill(-pid)` reaches it all; only dup2 targets survive.
-        let flags =
-            POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK
-            | POSIX_SPAWN_SETSIGDEF
-        posix_spawnattr_setflags(&attributes, Int16(flags))
-
-        var actions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&actions)
-        posix_spawn_file_actions_addchdir(&actions, workingDirectory)
-        for descriptor in Int32(0)...Int32(2) {
-            posix_spawn_file_actions_adddup2(&actions, childEnd, descriptor)
-        }
-        posix_spawn_file_actions_adddup2(&actions, control[0], controlDescriptor)
-
-        defer {
-            posix_spawnattr_destroy(&attributes)
-            posix_spawn_file_actions_destroy(&actions)
-        }
-
-        var processID: pid_t = 0
         let argv = CStringArray([executable] + arguments)
         let envp = CStringArray(environment.map { "\($0.key)=\($0.value)" })
-        let status = posix_spawn(
-            &processID, executable, &actions, &attributes, argv.pointers, envp.pointers)
-        Darwin.close(childEnd)
-        Darwin.close(control[0])
-        guard status == 0, processID > 0 else {
-            Darwin.close(parentEnd)
-            Darwin.close(control[1])
-            return nil
+        let paths = CStringArray([executable, workingDirectory])
+
+        // A worker thread blocks or ignores signals, and both would survive the exec.
+        var defaultAction = sigaction()
+        defaultAction.__sigaction_u.__sa_handler = SIG_DFL
+        sigemptyset(&defaultAction.sa_mask)
+        var noSignals = sigset_t()
+        sigemptyset(&noSignals)
+        let descriptorLimit = getdtablesize()
+        guard var settings = terminalDefaults() else { return nil }
+        var size = windowSize(columns: columns, rows: rows)
+
+        var parentEnd: Int32 = -1
+        // The child must never run a deinit, which would call `free` after a threaded fork.
+        let processID = withExtendedLifetime((argv, envp, paths)) { () -> pid_t in
+            let (arguments, variables) = (argv.pointers, envp.pointers)
+            let (path, directory) = (paths.pointers[0], paths.pointers[1])
+            let processID = forkpty(&parentEnd, nil, &settings, &size)
+            guard processID == 0 else { return processID }
+            var number: Int32 = 1
+            while number < NSIG {
+                if number != SIGKILL && number != SIGSTOP { sigaction(number, &defaultAction, nil) }
+                number += 1
+            }
+            sigprocmask(SIG_SETMASK, &noSignals, nil)
+            var descriptor: Int32 = 3
+            while descriptor < descriptorLimit {
+                Darwin.close(descriptor)
+                descriptor += 1
+            }
+            if chdir(directory) == 0 { execve(path, arguments, variables) }
+            _exit(127)
         }
-        return PseudoTerminal(parentEnd: parentEnd, controlEnd: control[1], processID: processID)
+        guard processID > 0 else { return nil }
+        // Blitz spawns other children, and one holding the master would keep the pty from closing.
+        _ = fcntl(parentEnd, F_SETFD, FD_CLOEXEC)
+        return PseudoTerminal(parentEnd: parentEnd, processID: processID)
     }
 
     /// What a keyboard would deliver to whatever is reading the terminal.
-    func type(_ bytes: [UInt8]) {
+    func write(_ bytes: [UInt8]) {
         typingQueue.async { [self] in
-            guard isTerminalOpen else { return }
+            guard lifecycle.withLock({ $0.isTerminalOpen }) else { return }
             Self.writeAll(bytes, to: parentEnd)
         }
     }
 
-    func sendControl(_ bytes: [UInt8]) {
-        controlQueue.async { [self] in
-            guard isControlOpen else { return }
-            Self.writeAll(bytes, to: controlEnd)
+    /// The kernel follows with SIGWINCH to the foreground group, which is what redraws a screen.
+    func resize(columns: Int, rows: Int) {
+        lifecycle.withLock { state in
+            guard state.isTerminalOpen else { return }
+            var size = Self.windowSize(columns: columns, rows: rows)
+            _ = ioctl(parentEnd, TIOCSWINSZ, &size)
         }
     }
 
-    /// The child reads EOF on `controlDescriptor` once anything already sent has been read.
-    func closeControl() {
-        controlQueue.async { [self] in
-            guard isControlOpen else { return }
-            isControlOpen = false
-            Darwin.close(controlEnd)
+    /// The group the terminal's ⌃C would reach: the running job, or the shell when it is idle.
+    var foregroundProcessGroup: pid_t? {
+        lifecycle.withLock { foregroundGroup($0) }
+    }
+
+    /// What the terminal's own ⌃C does, sent without one having to be typed.
+    func signalForeground(_ signal: Int32) {
+        lifecycle.withLock { state in
+            guard let group = foregroundGroup(state) else { return }
+            kill(-group, signal)
         }
     }
 
-    /// Whether output is waiting within `timeout`; an error counts, so the read can report it.
-    func awaitOutput(timeout: Duration) -> Bool {
-        // `select` because `poll` has long refused character devices on macOS.
-        guard parentEnd < FD_SETSIZE else { return true }
-        var descriptors = fd_set()
-        withUnsafeMutableBytes(of: &descriptors.fds_bits) { bits in
-            let words = bits.bindMemory(to: Int32.self)
-            words[Int(parentEnd) / 32] |= Int32(bitPattern: 1 << UInt32(parentEnd % 32))
+    /// Like closing a terminal tab: the shell's group and the running job both get SIGHUP.
+    func hangUp() {
+        lifecycle.withLock { state in
+            if state.exitStatus == nil { kill(-processID, SIGHUP) }
+            if let group = foregroundGroup(state), group != processID { kill(-group, SIGHUP) }
         }
-        let microseconds = timeout.components.attoseconds / 1_000_000_000_000
-        var limit = timeval(
-            tv_sec: Int(timeout.components.seconds), tv_usec: Int32(microseconds))
-        return select(parentEnd + 1, &descriptors, nil, nil, &limit) != 0
     }
 
-    /// Signals the session rather than the process — the negative pid is what reaches the children.
-    func signalSession(_ signal: Int32) {
-        guard processID > 0 else { return }
-        kill(-processID, signal)
+    /// The backstop for a command that ignores ⌃C; the session leader lives on to report it.
+    func killAllButLeader() {
+        lifecycle.withLock { state in
+            guard state.exitStatus == nil else { return }
+            let groups = Set([processID, foregroundGroup(state)].compactMap(\.self))
+            // A process forked between the listing and the kill only shows up on a later pass.
+            for _ in 0..<3 {
+                let victims = groups.flatMap(Self.members(of:)).filter { $0 != processID }
+                guard !victims.isEmpty else { return }
+                for victim in victims { kill(victim, SIGKILL) }
+            }
+        }
+    }
+
+    /// The working folder of the foreground group's leader, which is the shell while it is idle.
+    func foregroundDirectory() -> String? {
+        guard let group = foregroundProcessGroup else { return nil }
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(group, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { bytes in
+            String(bytes: bytes.prefix { $0 != 0 }, encoding: .utf8)
+        }
+        return path?.isEmpty == false ? path : nil
     }
 
     /// Blocks until the command exits. A signalled death reports the signal, the way a shell does.
     func wait() -> Int32 {
-        var status: Int32 = 0
-        while waitpid(processID, &status, 0) < 0 && errno == EINTR {}
-        if status & 0x7F != 0 { return 128 + (status & 0x7F) }
-        return (status >> 8) & 0xFF
+        if let status = lifecycle.withLock({ $0.exitStatus }) { return status }
+        // Waiting without reaping keeps the pid ours, so no signal sent meanwhile hits a stranger.
+        var info = siginfo_t()
+        while waitid(P_PID, id_t(processID), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR {}
+        return lifecycle.withLock { state in
+            if let status = state.exitStatus { return status }
+            var status: Int32 = 0
+            while waitpid(processID, &status, 0) < 0 && errno == EINTR {}
+            let reported = status & 0x7F != 0 ? 128 + (status & 0x7F) : (status >> 8) & 0xFF
+            state.exitStatus = reported
+            return reported
+        }
     }
 
     /// Queued behind any pending typing, so no write can land on a descriptor number reused since.
     func close() {
-        closeControl()
         typingQueue.async { [self] in
-            isTerminalOpen = false
-            Darwin.close(parentEnd)
+            lifecycle.withLock { state in
+                guard state.isTerminalOpen else { return }
+                state.isTerminalOpen = false
+                Darwin.close(parentEnd)
+            }
         }
+    }
+
+    private func foregroundGroup(_ state: Lifecycle) -> pid_t? {
+        guard state.isTerminalOpen else { return nil }
+        let group = tcgetpgrp(parentEnd)
+        return group > 1 && group != getpgrp() ? group : nil
+    }
+
+    private static func members(of group: pid_t) -> [pid_t] {
+        var buffer = [pid_t](repeating: 0, count: 256)
+        let count = proc_listpgrppids(
+            group, &buffer, Int32(buffer.count * MemoryLayout<pid_t>.size))
+        return Array(buffer.prefix(Int(max(count, 0))))
     }
 
     private static func writeAll(_ bytes: [UInt8], to descriptor: Int32) {
         var offset = 0
         while offset < bytes.count {
             let written = bytes[offset...].withUnsafeBytes {
-                write(descriptor, $0.baseAddress, $0.count)
+                Darwin.write(descriptor, $0.baseAddress, $0.count)
             }
             if written < 0 && errno == EINTR { continue }
             guard written > 0 else { return }
@@ -162,19 +186,29 @@ final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
-    /// Canonical for whole lines; echo on, so what is typed shows up unless a prompt hides it.
-    private static func terminalSettings() -> termios {
+    private static func windowSize(columns: Int, rows: Int) -> winsize {
+        winsize(
+            ws_row: UInt16(clamping: max(rows, 1)), ws_col: UInt16(clamping: max(columns, 1)),
+            ws_xpixel: 0, ws_ypixel: 0)
+    }
+
+    /// The kernel's own defaults, plus UTF-8 so a canonical backspace erases a whole character.
+    private static func terminalDefaults() -> termios? {
+        var parentEnd: Int32 = -1
+        var childEnd: Int32 = -1
+        guard openpty(&parentEnd, &childEnd, nil, nil, nil) == 0 else { return nil }
+        defer {
+            Darwin.close(parentEnd)
+            Darwin.close(childEnd)
+        }
         var settings = termios()
-        cfmakeraw(&settings)
-        settings.c_lflag = tcflag_t(ICANON | ISIG | ECHO)
-        settings.c_oflag = tcflag_t(OPOST | ONLCR)
-        // A zeroed `termios` makes NUL the end-of-file character, so ⌃D would arrive as text.
-        withUnsafeMutableBytes(of: &settings.c_cc) { $0[Int(VEOF)] = 0x04 }
+        guard tcgetattr(childEnd, &settings) == 0 else { return nil }
+        settings.c_iflag |= tcflag_t(IUTF8)
         return settings
     }
 }
 
-/// The argv/envp arrays must outlive `posix_spawn`, so this is a real allocation.
+/// The argv/envp arrays must outlive the spawn, so this is a real allocation.
 private final class CStringArray {
     let pointers: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
     private let count: Int

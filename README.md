@@ -16,7 +16,8 @@ RAM.**
          src="https://img.shields.io/badge/Support-Tip%20the%20dev-EA4AAA?style=flat&logo=polar&logoColor=white"></a>
 </p>
 
-SwiftUI and AppKit, **zero third-party dependencies**, no Electron and no telemetry.
+SwiftUI and AppKit, **one third-party dependency** (SwiftTerm, for the built-in terminal), no Electron
+and no telemetry.
 It also **runs real Raycast extensions**, rendered as native SwiftUI.
 
 Blitz is a fork of [Tinycast](https://github.com/abue-ammar/tinycast) by Abue Ammar, renamed and

@@ -165,6 +165,12 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
   height its content measured. Every route into it — the palette's menu circle, Settings → About, the
   menu bar, the launcher, and the 30-day reminder — lands on `showSupport()`, which is what moves the
   reminder's anchor. See [features/support.md](features/support.md).
+- **Terminal windows** — one titled `AppWindowController` window per custom-command terminal run,
+  each owned by its own `CommandTerminalPresenter` together with the SwiftTerm view and the pty
+  session behind it. `CustomCommandCoordinator` keeps the open presenters as a list, oldest first;
+  a new window cascades off the newest, a Dock click raises it, and closing one hangs up its shell
+  and drops it from the list. See
+  [features/custom-commands.md](features/custom-commands.md#open-in-terminal).
 - **The camera surfaces** — a borderless, non-activating `CameraPanel` at `.floating`, in two
   shapes over one `CameraSession`: `CameraPreviewController`, owned by `CalendarCoordinator`, gates a
   join and doubles as auto join's confirmation; `CameraCoordinator`, owned by `AppCore`, is the

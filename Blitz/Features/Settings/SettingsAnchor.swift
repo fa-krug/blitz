@@ -35,7 +35,6 @@ extension SettingsAnchor {
 
     static let fallbacksFallbacks = Self(tab: .fallbacks, title: "Fallbacks")
     static let fallbacksWebSearch = Self(tab: .fallbacks, title: "Search the Web")
-    static let fallbacksShellCommand = Self(tab: .fallbacks, title: "Run Shell Command")
 
     static let aiAI = Self(tab: .ai, title: "AI")
     static let aiProviders = Self(tab: .ai, title: "Providers")

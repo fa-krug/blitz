@@ -37,7 +37,7 @@ enum RaycastScriptImport {
             command: "\(interpreter) \(shellQuoted(url.path)) \"$@\"",
             requiresConfirmation: directives["needsConfirmation"] == "true",
             arguments: arguments(in: directives),
-            showsOutput: showsOutput(mode: directives["mode"]),
+            opensTerminal: opensTerminal(mode: directives["mode"]),
             workingDirectory: workingDirectory(directives["currentDirectoryPath"], script: url))
     }
 
@@ -73,7 +73,7 @@ enum RaycastScriptImport {
     }
 
     /// `silent` and `inline` have nothing to show; the two output modes open the window.
-    private static func showsOutput(mode: String?) -> Bool {
+    private static func opensTerminal(mode: String?) -> Bool {
         mode == "compact" || mode == "fullOutput"
     }
 

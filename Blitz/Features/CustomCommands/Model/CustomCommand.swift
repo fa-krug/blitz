@@ -45,10 +45,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     var showsConfirmation: Bool
     /// Filled in the launcher row's inline fields; empty for the commands that take no input.
     var arguments: [CustomCommandArgument]
-    /// Captures what the command prints and opens the output window once it exits.
-    var showsOutput: Bool
-    /// Hands the command to the user's terminal app, where neither output option applies.
-    var runsInTerminal: Bool
+    /// Runs in a Blitz terminal window that stays open as a shell once the command exits.
+    var opensTerminal: Bool
     /// Kept abbreviated, so a `~` path survives a home directory that moves.
     var workingDirectory: String?
     /// The launcher glyph; nil falls back to the shared terminal symbol.
@@ -58,7 +56,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         id: UUID = UUID(), name: String, command: String, isEnabled: Bool = true,
         loadsShellEnvironment: Bool = false, requiresConfirmation: Bool = false,
         showsConfirmation: Bool = false, arguments: [CustomCommandArgument] = [],
-        showsOutput: Bool = false, runsInTerminal: Bool = false, workingDirectory: String? = nil,
+        opensTerminal: Bool = false, workingDirectory: String? = nil,
         iconSymbol: String? = nil
     ) {
         self.id = id
@@ -69,8 +67,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         self.requiresConfirmation = requiresConfirmation
         self.showsConfirmation = showsConfirmation
         self.arguments = arguments
-        self.showsOutput = showsOutput
-        self.runsInTerminal = runsInTerminal
+        self.opensTerminal = opensTerminal
         self.workingDirectory = workingDirectory
         self.iconSymbol = iconSymbol
     }
@@ -105,8 +102,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     // Hand-written, so an added field keeps stored commands and older backups readable.
     private enum CodingKeys: String, CodingKey {
         case id, name, command, isEnabled, loadsShellEnvironment, requiresConfirmation
-        case showsConfirmation, arguments, showsOutput, runsInTerminal, workingDirectory
-        case iconSymbol
+        case showsConfirmation, arguments, workingDirectory, iconSymbol
+        case opensTerminal = "showsOutput"
     }
 
     init(from decoder: Decoder) throws {
@@ -123,9 +120,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
             try container.decodeIfPresent(Bool.self, forKey: .showsConfirmation) ?? false
         arguments =
             try container.decodeIfPresent([CustomCommandArgument].self, forKey: .arguments) ?? []
-        showsOutput = try container.decodeIfPresent(Bool.self, forKey: .showsOutput) ?? false
-        runsInTerminal =
-            try container.decodeIfPresent(Bool.self, forKey: .runsInTerminal) ?? false
+        opensTerminal = try container.decodeIfPresent(Bool.self, forKey: .opensTerminal) ?? false
         workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
         iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
     }

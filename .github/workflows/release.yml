@@ -70,8 +70,9 @@ jobs:
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
+          # SwiftTerm's build-info plugin needs the validation skip, or a headless build refuses it.
           xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -skipPackagePluginValidation -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM=HS26J3YA63 OTHER_CODE_SIGN_FLAGS="--timestamp" \

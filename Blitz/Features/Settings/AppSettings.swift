@@ -362,14 +362,6 @@ final class AppSettings {
         }
     }
 
-    /// The Run Shell Command fallback opens in the user's terminal app, not the output window.
-    var shellCommandRunsInTerminal: Bool {
-        didSet {
-            defaults.set(
-                shellCommandRunsInTerminal, forKey: Key.shellCommandRunsInTerminal.rawValue)
-        }
-    }
-
     /// Where the Search the Web fallback sends the typed query.
     var webSearchEngine: WebSearchEngine {
         didSet { defaults.set(webSearchEngine.rawValue, forKey: Key.webSearchEngine.rawValue) }
@@ -730,7 +722,6 @@ final class AppSettings {
         customCommandsShowInLauncher =
             defaults.object(forKey: Key.customCommandsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.customCommandsShowInLauncher.rawValue)
-        shellCommandRunsInTerminal = defaults.bool(forKey: Key.shellCommandRunsInTerminal.rawValue)
         webSearchEngine =
             defaults.string(forKey: Key.webSearchEngine.rawValue).flatMap(WebSearchEngine.init)
             ?? .google

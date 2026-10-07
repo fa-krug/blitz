@@ -12,7 +12,7 @@ The mechanical bar, in one place so it cannot drift. All five pass before a chan
 | The harnesses | `./Scripts/run-tests.sh` |
 | Lint | `./Scripts/lint.sh` |
 | Pure-layer purity | `grep -rln 'import AppKit\|import SwiftUI\|import Cocoa' Blitz/Features/*/Model/` |
-| A clean build | `xcodebuild … -configuration Debug CODE_SIGNING_ALLOWED=NO`, zero **new** warnings |
+| A clean build | `xcodebuild … -configuration Debug -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO`, zero **new** warnings |
 | Docs still true | any doc your change made wrong, fixed in the same commit |
 
 There is no CI: every item is on you, run locally. CodeRabbit reviews each PR, but it is a reviewer,
@@ -117,7 +117,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `window-command-test` | `WindowManagement/WindowCommand.swift`, `WindowPlacementEngine.swift`, `WindowActionMemory.swift` |
 | `window-layout-test` | `WindowManagement/Model/WindowLayout*.swift` and `CustomWindowSize*.swift` — the layout record, its geometry and its inverse, the plan and the store; custom sizes' units, frames and store |
 | `window-room-test` | `WindowManagement/Model/Room*.swift` — every room layout and its minimum sizes, the grid, arrangement reading, window matching, parking, the plan, Tab's choices and the three stores |
-| `custom-command-test` | `CustomCommands/Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` — sessions, Stop, typed input and the terminal handoff — plus `Platform/PseudoTerminal.swift` |
+| `custom-command-test` | `CustomCommands/Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` — background runs and terminal sessions: the status marker, ⌃C, Stop and its backstop, hang-up, the controlling tty, positional values, resize, inherited descriptors — plus `Platform/PseudoTerminal.swift` |
 | `uninstall-test` | all five pure files in `Uninstall/Model/` |
 | `quicklink-test` | all of `Quicklinks/Model/` — tags included — plus `Platform/BrowserTab.swift`'s tab URL matching |
 | `apple-shortcut-test` | all of `AppleShortcuts/Model/` — the `shortcuts list` parser and entry ids |
@@ -192,12 +192,14 @@ A clean build is part of the bar; nothing builds the app for you, so this is on 
 ```sh
 xcodegen generate                 # only after editing project.yml
 xcodebuild build -project Blitz.xcodeproj -scheme Blitz -configuration Debug \
-  CODE_SIGNING_ALLOWED=NO
+  -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project Blitz.xcodeproj -scheme Blitz -configuration Release \
-  CODE_SIGNING_ALLOWED=NO
+  -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO
 find ~/Library/Developer/Xcode/DerivedData -name "Blitz*.app" -maxdepth 6 -print -quit
 ```
 
+- `-skipPackagePluginValidation` is not optional: without it a command-line build refuses SwiftTerm's
+  build plugin ([development.md](development.md#build--run)).
 - Zero **new** warnings. Pre-existing ones are not your problem; new ones are.
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `assumeIsolated` added without a stated reason.
 - The type-checker did not time out. `LauncherList.rows` already carries an explicit annotation for

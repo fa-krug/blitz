@@ -298,7 +298,7 @@ order name a live row across a rename or a reinstall.
 | Quick AI | a fresh Quick AI chat, question already sent (`QuickAICoordinator.ask`) | `aiEnabled` |
 | Search the Web | the default browser, on the engine chosen in Settings › Fallbacks | always |
 | Search Files | the file-search screen, already narrowed | `fileSearchEnabled` |
-| Run Shell Command | `/bin/zsh`, streamed into the Command Output window, or the terminal app under **Open in Terminal** | always |
+| Run Shell Command | `/bin/zsh`, in a Blitz terminal window of its own (see [custom-commands.md](custom-commands.md#the-ad-hoc-run)) | always |
 | Define Word | the dictionary screen, already showing the entry (see [dictionary.md](dictionary.md)) | the Define Word command is visible in Settings › Commands |
 | Search Contacts | the contacts screen, already narrowed (see [contacts.md](contacts.md)) | `contactsEnabled` |
 | Search Extension Store | the Store screen, already searching (see [extensions.md](extensions.md#the-store-screen)) | `extensionsEnabled` |
@@ -315,13 +315,12 @@ would silently do nothing.
 **Run Shell Command carries its own switch, not the custom-command library's.** Turning off Custom
 Commands hides a library of saved commands; it says nothing about a shell line someone types
 deliberately. The fallback's checkbox is the switch. The run is an ad-hoc `CustomCommand` that is
-never stored — same streaming window, same Stop button — so `CustomCommandCoordinator` keeps
-`lastShellCommand` for the window's Rerun, which has no library entry to look up. It sources the
-shell config (`ll` should mean the reader's own alias) and takes the runner's default home directory.
-Settings › Fallbacks has a **Run Shell Command** section under the list whose **Open in Terminal**
-sends the line to the user's terminal app instead, through the same handoff a custom command's Run
-in Terminal uses — see [custom-commands.md](custom-commands.md#run-in-terminal). It is the
-fallback's alone: saved custom commands never read it.
+never stored, and it always opens a terminal window — the same window and Stop button a command with
+**Open in terminal** gets — whose Run Again re-runs the same line, since there is no library entry to
+look up. It sources the shell config (`ll` should mean the reader's own alias) and takes the
+runner's default home directory. It has no setting beyond its checkbox: nothing sends a typed line
+to an external terminal app any more. See
+[custom-commands.md](custom-commands.md#the-ad-hoc-run).
 
 **Search the Web is offered on every install**, so a query no entry matched has somewhere to go
 the way Raycast's Search Google gives it. It is query-driven like Run
@@ -457,9 +456,8 @@ query expands the bar like any typed one.
 A search is recorded when `LauncherScreen` acts on a row with ↵ or a click: a result, a fallback or
 a card. That is wider than a visit, because a fallback and a copied calculation are exactly the
 searches worth typing again. A row a shortcut opened root search onto records nothing, because its
-name was never typed. **A query run through the Run Shell Command fallback is never recorded**, in
-either variant — the output window or the terminal — because a shell line is where a token or a
-password ends up. `LauncherScreen` passes the row's `LauncherQueryHistory.Origin`, and the pure model
+name was never typed. **A query run through the Run Shell Command fallback is never recorded**,
+because a shell line is where a token or a password ends up. `LauncherScreen` passes the row's `LauncherQueryHistory.Origin`, and the pure model
 drops a `.shellCommand` search before it touches the list.
 
 `LauncherQueryHistory` is the pure half: newest first, a repeat moved to the front, trimmed, at most

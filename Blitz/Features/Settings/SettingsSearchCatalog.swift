@@ -280,10 +280,7 @@ enum SettingsSearchCatalog {
             keywords: ["no results", "empty", "search web", "order"]),
         .init(
             .fallbacksWebSearch, "Search engine",
-            keywords: ["google", "duckduckgo", "bing", "brave", "ecosia", "kagi", "startpage"]),
-        .init(
-            .fallbacksShellCommand, "Open in Terminal",
-            keywords: ["terminal", "iterm", "shell", "zsh", "output window", "interactive"])
+            keywords: ["google", "duckduckgo", "bing", "brave", "ecosia", "kagi", "startpage"])
     ]
 
     private static let ai: [SettingsSearchEntry] = [
