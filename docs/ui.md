@@ -813,11 +813,11 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   search result naming a row narrows the filter onto it; the row's title then carries the pulse.
   `SettingsListMetrics` keeps row icons at one size, and `SettingsScopeRow` renders folder and
   application scope icons consistently across pages.
-- **A pane taller than a screenful may hold its lower sections back a frame.** General mounts Hyper
-  Key, Calculator and Search from a `.task` after `await Task.yield()` — a task body runs
-  synchronously up to its first suspension, so without the yield they land in the first frame
-  anyway — which brings its first paint from ~170 ms to ~110. A pending search reveal into the pane
-  mounts them at once, so the jump has its row to scroll to.
+- **A pane taller than a screenful may hold its lower sections back a frame.** General mounts
+  Calculator and Search from a `.task` after `await Task.yield()` — a task body runs synchronously up
+  to its first suspension, so without the yield they land in the first frame anyway. Measured while
+  General still held Appearance and Hyper Key, it brought the first paint from ~170 ms to ~110. A
+  pending search reveal into the pane mounts them at once, so the jump has its row to scroll to.
 
 ### The window-layout editor
 

@@ -10,10 +10,12 @@ struct SettingsAnchor: Hashable, Sendable {
 extension SettingsAnchor {
     static let generalGlobalShortcuts = Self(tab: .general, title: "Global Shortcuts")
     static let generalSearch = Self(tab: .general, title: "Search")
-    static let generalHyperKey = Self(tab: .general, title: "Hyper Key")
-    static let generalAppearance = Self(tab: .general, title: "Appearance")
     static let generalCalculator = Self(tab: .general, title: "Calculator")
     static let generalGeneral = Self(tab: .general, title: "General")
+
+    static let appearanceAppearance = Self(tab: .appearance, title: "Appearance")
+
+    static let hyperKeyHyperKey = Self(tab: .hyperKey, title: "Hyper Key")
 
     static let applicationsSearchScopes = Self(tab: .applications, title: "Search Scopes")
     static let applicationsApplications = Self(tab: .applications, title: "Applications")
@@ -142,8 +144,8 @@ extension SettingsAnchor {
         case .reminders: return .remindersCommands
         case .contacts: return .contactsCommands
         case .extensions: return .extensionsCommands
-        case .general, .applications, .systemSettings, .systemActions, .commands, .appleShortcuts,
-            .fallbacks, .permissions, .backup, .about:
+        case .general, .appearance, .hyperKey, .applications, .systemSettings, .systemActions,
+            .commands, .appleShortcuts, .fallbacks, .permissions, .backup, .about:
             return nil
         }
     }

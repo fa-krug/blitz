@@ -38,7 +38,7 @@ struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
 
     var id: String { "\(tab.title)/\(anchor?.title ?? "")/\(title)" }
 
-    /// The result row's second line — "General", or "General › Hyper Key".
+    /// The result row's second line — "General", or "General › Search".
     var breadcrumb: String {
         guard let anchor, anchor.title != tab.title else { return tab.title }
         return "\(tab.title) › \(anchor.title)"
@@ -108,11 +108,10 @@ enum SettingsSearchCatalog {
     // Pane order, then section order within a pane, so this reads as a table of contents.
 
     static let entries: [SettingsSearchEntry] =
-        general + applications + systemSettings + systemActions + commands + quicklinks
-        + appleShortcuts + fallbacks + clipboard + snippets + fileSearch + windowManagement
-        + navigation + notes + calendar + reminders + contacts + emoji + ai + quickActions
-        + extensions
-        + permissions + backup + about
+        general + appearance + hyperKey + applications + systemSettings + systemActions + commands
+        + quicklinks + appleShortcuts + fallbacks + clipboard + snippets + fileSearch
+        + windowManagement + navigation + notes + calendar + reminders + contacts + emoji + ai
+        + quickActions + extensions + permissions + backup + about
 
     private static let general: [SettingsSearchEntry] = [
         .init(pane: .general, keywords: ["preferences", "settings"]),
@@ -138,33 +137,6 @@ enum SettingsSearchCatalog {
             .generalGeneral, "Welcome Tour",
             keywords: ["onboarding", "tutorial", "tips", "introduction", "getting started"]),
         .init(
-            .generalAppearance, "Theme",
-            keywords: ["dark", "light", "mode", "appearance"]),
-        .init(
-            .generalAppearance, "Interface size",
-            keywords: ["text size", "font size", "scale", "zoom", "bigger", "larger", "legible"]),
-        .init(
-            .generalAppearance, "Window mode",
-            keywords: ["compact", "expanded", "slim", "search bar", "small"]),
-        .init(
-            .generalAppearance, "Show favorites in compact mode",
-            keywords: ["pinned", "apps", "compact"]),
-        .init(
-            .generalAppearance, "Follow the cursor across displays",
-            keywords: ["monitor", "screen", "pointer", "multi display"]),
-        .init(
-            .generalAppearance, "Drag to reposition",
-            keywords: ["move", "position", "window"]),
-        .init(
-            .generalHyperKey, "Hyper Key",
-            keywords: ["modifier", "remap", "caps lock", "capslock"]),
-        .init(
-            .generalHyperKey, "Quick Press",
-            keywords: ["tap", "escape", "single press"]),
-        .init(
-            .generalHyperKey, "Include Shift (⇧)",
-            keywords: ["modifier", "chord"]),
-        .init(
             .generalCalculator, "Number format",
             keywords: ["decimal", "comma", "separator", "locale", "region", "thousands"]),
         .init(
@@ -182,6 +154,41 @@ enum SettingsSearchCatalog {
         .init(
             .generalSearch, "Search history",
             keywords: ["clear", "recent", "queries", "recall", "privacy"])
+    ]
+
+    private static let appearance: [SettingsSearchEntry] = [
+        .init(pane: .appearance),
+        .init(
+            .appearanceAppearance, "Theme",
+            keywords: ["dark", "light", "mode", "appearance"]),
+        .init(
+            .appearanceAppearance, "Interface size",
+            keywords: ["text size", "font size", "scale", "zoom", "bigger", "larger", "legible"]),
+        .init(
+            .appearanceAppearance, "Window mode",
+            keywords: ["compact", "expanded", "slim", "search bar", "small"]),
+        .init(
+            .appearanceAppearance, "Show favorites in compact mode",
+            keywords: ["pinned", "apps", "compact"]),
+        .init(
+            .appearanceAppearance, "Follow the cursor across displays",
+            keywords: ["monitor", "screen", "pointer", "multi display"]),
+        .init(
+            .appearanceAppearance, "Drag to reposition",
+            keywords: ["move", "position", "window"])
+    ]
+
+    private static let hyperKey: [SettingsSearchEntry] = [
+        .init(pane: .hyperKey),
+        .init(
+            .hyperKeyHyperKey, "Hyper Key",
+            keywords: ["modifier", "remap", "caps lock", "capslock"]),
+        .init(
+            .hyperKeyHyperKey, "Quick Press",
+            keywords: ["tap", "escape", "single press"]),
+        .init(
+            .hyperKeyHyperKey, "Include Shift (⇧)",
+            keywords: ["modifier", "chord"])
     ]
 
     private static let applications: [SettingsSearchEntry] = [

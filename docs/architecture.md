@@ -253,21 +253,21 @@ Blitz/
         Settings/   the feature's own panes
     Settings/       the Settings shell only: SettingsCoordinator, the root/sidebar/detail views, the chrome,
                     navigation types, SettingsTab, AppSettings, AppSettingsKey, the settings file
-                    (Model/, Service/, SettingsFileSchema), and Panes/ for the two panes no feature
+                    (Model/, Service/, SettingsFileSchema), and Panes/ for the panes no feature
                     owns
 Tests/              the standalone harnesses, one Swift file each
 Scripts/            run-tests.sh, the two data generators, packaging, formatting, editor setup
 ```
 
 A feature splits into the sub-folders it has something for; a small one may stay flat until the flat
-folder stops being scannable. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the
-Settings shell rather than the feature, and `Onboarding/` has none because its tour is its own window.
+folder stops being scannable. `Onboarding/` has no `Settings/` because its tour is its own window.
 
 Every `SettingsTab` maps to one `…SettingsView`, and each is a stock `Form` with
 `.formStyle(.grouped)` — see [ui.md](ui.md#settings). A pane lives with its feature; only a pane no
-feature owns (General, Permissions) lives in `Settings/Panes/`. The four launcher-category panes —
-Applications, System Settings, System Actions, Commands — are thin wrappers over the shared
-`LauncherItemsSection`; Apple Shortcuts pairs its feature switch with the same `LauncherItemsList`.
+feature owns (General, Appearance, Navigation, Permissions) lives in `Settings/Panes/`. The four
+launcher-category panes — Applications, System Settings, System Actions, Commands — are thin wrappers
+over the shared `LauncherItemsSection`; Apple Shortcuts pairs its feature switch with the same
+`LauncherItemsList`.
 
 `SettingsTab` and `SettingsSection` both identify by the case itself, never by an index. A selectable
 `List` flattens section and row IDs into one namespace, so overlapping `Int` IDs make SwiftUI drop

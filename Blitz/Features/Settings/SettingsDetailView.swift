@@ -11,6 +11,8 @@ struct SettingsDetailView: View {
         Group {
             switch shown ?? navigation.tab {
             case .general: GeneralSettingsView()
+            case .appearance: AppearanceSettingsView()
+            case .hyperKey: HyperKeySettingsView()
             case .applications: ApplicationsSettingsView()
             case .systemSettings: SystemSettingsSettingsView()
             case .systemActions: SystemActionsSettingsView()

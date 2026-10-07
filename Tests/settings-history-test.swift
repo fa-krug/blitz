@@ -189,8 +189,9 @@ struct SettingsHistoryTests {
 
     static func catalogFindsKnownRows() {
         let cases: [(String, SettingsTab)] = [
-            ("hyper", .general),
-            ("caps lock", .general),
+            ("hyper", .hyperKey),
+            ("caps lock", .hyperKey),
+            ("theme", .appearance),
             ("launch at login", .general),
             ("paste history", .clipboard),
             ("window manage", .windowManagement),
@@ -232,12 +233,12 @@ struct SettingsHistoryTests {
         navigation.select(.clipboard)
         expect(navigation.scrollRequest == nil, "and a plain pane selection asks for no scroll")
 
-        navigation.select(.general, revealing: .section(.generalHyperKey))
+        navigation.select(.hyperKey, revealing: .section(.hyperKeyHyperKey))
         let first = navigation.scrollRequest
-        expect(first?.target == .section(.generalHyperKey), "a result records what it wants revealed")
-        expect(navigation.tab == .general, "and navigates to that section's pane")
+        expect(first?.target == .section(.hyperKeyHyperKey), "a result records what it wants revealed")
+        expect(navigation.tab == .hyperKey, "and navigates to that section's pane")
 
-        navigation.select(.general, revealing: .section(.generalHyperKey))
+        navigation.select(.hyperKey, revealing: .section(.hyperKeyHyperKey))
         expect(navigation.scrollRequest != first, "asking twice is two distinct requests")
 
         // A stale request must not clear the one that replaced it.
@@ -254,7 +255,7 @@ struct SettingsHistoryTests {
         navigation.beginFlash(.row(.clipboardHistory, "Keep history for"))
         expect(navigation.flashing == .row(.clipboardHistory, "Keep history for"), "the revealed row is lit")
 
-        navigation.endFlash(.section(.generalHyperKey))
+        navigation.endFlash(.section(.hyperKeyHyperKey))
         expect(navigation.flashing != nil, "another target can't put it out")
         navigation.endFlash(.row(.clipboardHistory, "Keep history for"))
         expect(navigation.flashing == nil, "its own owner can")
