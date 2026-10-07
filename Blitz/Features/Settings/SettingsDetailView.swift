@@ -34,6 +34,8 @@ struct SettingsDetailView: View {
             case .about: AboutView()
             }
         }
+        // A reopened window keeps its shell, not the pane: appear hooks refresh what a pane shows.
+        .id(navigation.session)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // One host for every pane, above their scroll views so a callout is never clipped.
         .shortcutRecorderPopoverHost()

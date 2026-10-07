@@ -145,6 +145,11 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
   palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
   Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
+  Settings is the one window **hidden rather than torn down on close** (`keepsContentWhenClosed`):
+  rebuilding its split, sidebar and toolbar cost ~200 ms per open, so a reopen keeps them and only
+  restarts the session — `SettingsNavigationState.restart` empties history, clears the sidebar's
+  search and bumps `session`, which remounts the pane so its appear-time refreshes still run. Editor
+  panels are dismissed on close, and Quit from the Dock still closes it outright.
 - **Notes** — a persistent, titled, non-activating `NotesPanel` managed by `NotesWindowController`.
   The user owns its size and AppKit autosaves the frame; its TextKit 2 editor renders Markdown over the
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed

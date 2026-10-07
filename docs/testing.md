@@ -754,6 +754,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Settings and backup
 
 - Every pane renders and the sidebar switches without flicker
+- Closing and reopening Settings lands on General with Back disabled and the sidebar search empty;
+  an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)
+  shows the new state; General's Hyper Key, Calculator and Search sections appear a frame later, and
+  a search result into one of them still scrolls to and lights its row
 - A feature switch takes effect in the launcher immediately; every setting survives relaunch
 - Export produces a `.blitz`; import applies it and reports a per-category summary
 - Untick a category on export, and the import picker greys that row out rather than offering it

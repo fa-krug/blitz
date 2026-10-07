@@ -19,6 +19,10 @@ struct SettingsSidebarView: View {
         }
         .searchable(text: $query, isPresented: $searching, placement: .sidebar, prompt: "Search")
         .onExitCommand { query = "" }
+        .onChange(of: navigation.session) {
+            query = ""
+            searching = false
+        }
         .background(focusShortcut)
     }
 

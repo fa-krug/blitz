@@ -8,7 +8,10 @@ struct GeneralSettingsView: View {
     private var queryHistory: LauncherQueryHistoryStore { core.launcherQueryHistory }
     @State private var confirmingRankingReset = false
     @State private var confirmingHistoryClear = false
+    @Environment(SettingsNavigationState.self) private var navigation
     @State private var inputSources: [InputSourceSwitcher.Option] = []
+    /// Below the fold, held back a frame; a search result revealing one mounts them at once.
+    @State private var mountsLowerSections = false
 
     /// The Hyper modifier chord as prose glyphs, tracking the Include Shift toggle.
     private var hyperGlyphs: String { settings.hyperKeyIncludesShift ? "⌃⌥⇧⌘" : "⌃⌥⌘" }
@@ -113,101 +116,8 @@ struct GeneralSettingsView: View {
                 SettingsSectionHeader(.generalAppearance)
             }
 
-            Section {
-                Picker(selection: hyperKeySelection) {
-                    ForEach(HyperKeyPhysicalKey.allCases) { key in
-                        Text(key.title).tag(key)
-                    }
-                } label: {
-                    SettingsRowTitle(.generalHyperKey, "Hyper Key")
-                    Text(hyperSubtitle)
-                }
-
-                if hyperTap.status == .needsAccessibility {
-                    HStack(alignment: .center, spacing: Theme.Spacing.lg) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
-                            .frame(width: Theme.Size.settingsRowIcon)
-                        Text("Remapping needs Accessibility access.")
-                            .foregroundStyle(.orange)
-                        Spacer(minLength: Theme.Spacing.lg)
-                        Button("Grant Access…") { Permissions.openAccessibilitySettings() }
-                    }
-                }
-
-                if settings.hyperKey.hasOriginalFunction {
-                    Picker(selection: $settings.hyperKeyQuickPress) {
-                        Text("Does Nothing").tag(HyperKeyQuickPress.none)
-                        if let original = settings.hyperKey.quickPressOriginalTitle {
-                            Text(original).tag(HyperKeyQuickPress.originalKey)
-                        }
-                        Text("Trigger Escape").tag(HyperKeyQuickPress.escape)
-                    } label: {
-                        SettingsRowTitle(.generalHyperKey, "Quick Press")
-                        Text("When \(settings.hyperKey.title) is pressed alone.")
-                    }
-                }
-
-                Toggle(isOn: $settings.hyperKeyIncludesShift) {
-                    SettingsRowTitle(.generalHyperKey, "Include Shift (⇧)")
-                }
-                // Flipping it re-points recorded chords, so it needs a chord to mean.
-                .settingsEnabled(settings.hyperKey != .none)
-            } header: {
-                SettingsSectionHeader(.generalHyperKey)
-            }
-
-            Section {
-                Picker(selection: $settings.calcNumberStyle) {
-                    ForEach(CalcNumberStyle.allCases) { style in
-                        let sample = core.regionNumberFormat.format(for: style).localized("1,234,567.89")
-                        Text("\(style.title) (\(sample))").tag(style)
-                    }
-                } label: {
-                    SettingsRowTitle(.generalCalculator, "Number format")
-                    Text("With a decimal comma, ; separates arguments.")
-                }
-            } header: {
-                SettingsSectionHeader(.generalCalculator)
-            }
-
-            Section {
-                Toggle(isOn: $settings.launcherShowsSuggestions) {
-                    SettingsRowTitle(.generalSearch, "Show suggestions")
-                    Text("What you open most, while the search field is empty.")
-                }
-                Picker(selection: $settings.rootSearchSensitivity) {
-                    ForEach(SearchSensitivity.allCases) { sensitivity in
-                        Text(sensitivity.title).tag(sensitivity)
-                    }
-                } label: {
-                    SettingsRowTitle(.generalSearch, "Search sensitivity")
-                    Text("Lower finds names from scattered letters.")
-                }
-                LabeledContent {
-                    Button("Reset…", role: .destructive) {
-                        confirmingRankingReset = true
-                    }
-                    .disabled(launcherRanking.isEmpty)
-                } label: {
-                    SettingsRowTitle(.generalSearch, "Learned ranking")
-                    Text("Learned privately from the results you pick.")
-                }
-                Toggle(isOn: $settings.launcherSavesSearchHistory) {
-                    SettingsRowTitle(.generalSearch, "Remember search history")
-                    Text("↑ recalls searches after a restart. Shell commands are never kept.")
-                }
-                LabeledContent {
-                    Button("Clear…", role: .destructive) {
-                        confirmingHistoryClear = true
-                    }
-                    .disabled(queryHistory.isEmpty)
-                } label: {
-                    SettingsRowTitle(.generalSearch, "Search history")
-                    Text("The searches ↑ walks back through.")
-                }
-            } header: {
-                SettingsSectionHeader(.generalSearch)
+            if mountsLowerSections || navigation.scrollRequest?.target.tab == .general {
+                lowerSections
             }
         }
         .formStyle(.grouped)
@@ -237,11 +147,118 @@ struct GeneralSettingsView: View {
             Text("↑ will start again from the next search you run.")
         }
         .onAppear(perform: refreshInputSources)
+        // Past the task's first suspension, so the sections above the fold paint a frame first.
+        .task {
+            await Task.yield()
+            mountsLowerSections = true
+        }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: InputSourceSwitcher.sourcesDidChange)
         ) { _ in
             refreshInputSources()
+        }
+    }
+
+    /// Hyper Key, Calculator and Search: what the pane holds below its first screenful.
+    @ViewBuilder
+    private var lowerSections: some View {
+        @Bindable var settings = settings
+        Section {
+            Picker(selection: hyperKeySelection) {
+                ForEach(HyperKeyPhysicalKey.allCases) { key in
+                    Text(key.title).tag(key)
+                }
+            } label: {
+                SettingsRowTitle(.generalHyperKey, "Hyper Key")
+                Text(hyperSubtitle)
+            }
+
+            if hyperTap.status == .needsAccessibility {
+                HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .frame(width: Theme.Size.settingsRowIcon)
+                    Text("Remapping needs Accessibility access.")
+                        .foregroundStyle(.orange)
+                    Spacer(minLength: Theme.Spacing.lg)
+                    Button("Grant Access…") { Permissions.openAccessibilitySettings() }
+                }
+            }
+
+            if settings.hyperKey.hasOriginalFunction {
+                Picker(selection: $settings.hyperKeyQuickPress) {
+                    Text("Does Nothing").tag(HyperKeyQuickPress.none)
+                    if let original = settings.hyperKey.quickPressOriginalTitle {
+                        Text(original).tag(HyperKeyQuickPress.originalKey)
+                    }
+                    Text("Trigger Escape").tag(HyperKeyQuickPress.escape)
+                } label: {
+                    SettingsRowTitle(.generalHyperKey, "Quick Press")
+                    Text("When \(settings.hyperKey.title) is pressed alone.")
+                }
+            }
+
+            Toggle(isOn: $settings.hyperKeyIncludesShift) {
+                SettingsRowTitle(.generalHyperKey, "Include Shift (⇧)")
+            }
+            // Flipping it re-points recorded chords, so it needs a chord to mean.
+            .settingsEnabled(settings.hyperKey != .none)
+        } header: {
+            SettingsSectionHeader(.generalHyperKey)
+        }
+
+        Section {
+            Picker(selection: $settings.calcNumberStyle) {
+                ForEach(CalcNumberStyle.allCases) { style in
+                    let sample = core.regionNumberFormat.format(for: style).localized("1,234,567.89")
+                    Text("\(style.title) (\(sample))").tag(style)
+                }
+            } label: {
+                SettingsRowTitle(.generalCalculator, "Number format")
+                Text("With a decimal comma, ; separates arguments.")
+            }
+        } header: {
+            SettingsSectionHeader(.generalCalculator)
+        }
+
+        Section {
+            Toggle(isOn: $settings.launcherShowsSuggestions) {
+                SettingsRowTitle(.generalSearch, "Show suggestions")
+                Text("What you open most, while the search field is empty.")
+            }
+            Picker(selection: $settings.rootSearchSensitivity) {
+                ForEach(SearchSensitivity.allCases) { sensitivity in
+                    Text(sensitivity.title).tag(sensitivity)
+                }
+            } label: {
+                SettingsRowTitle(.generalSearch, "Search sensitivity")
+                Text("Lower finds names from scattered letters.")
+            }
+            LabeledContent {
+                Button("Reset…", role: .destructive) {
+                    confirmingRankingReset = true
+                }
+                .disabled(launcherRanking.isEmpty)
+            } label: {
+                SettingsRowTitle(.generalSearch, "Learned ranking")
+                Text("Learned privately from the results you pick.")
+            }
+            Toggle(isOn: $settings.launcherSavesSearchHistory) {
+                SettingsRowTitle(.generalSearch, "Remember search history")
+                Text("↑ recalls searches after a restart. Shell commands are never kept.")
+            }
+            LabeledContent {
+                Button("Clear…", role: .destructive) {
+                    confirmingHistoryClear = true
+                }
+                .disabled(queryHistory.isEmpty)
+            } label: {
+                SettingsRowTitle(.generalSearch, "Search history")
+                Text("The searches ↑ walks back through.")
+            }
+        } header: {
+            SettingsSectionHeader(.generalSearch)
         }
     }
 
