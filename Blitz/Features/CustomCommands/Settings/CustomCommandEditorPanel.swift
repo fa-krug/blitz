@@ -260,7 +260,7 @@ struct CustomCommandEditorPanel: View {
         // Editing keeps the UUID, and with it every reference the command owns.
         let draft = CustomCommand(
             id: command?.id ?? UUID(), name: name, command: shellCommand,
-            // The pane's row owns the checkbox; an edit carries the flag rather than resetting it.
+            // Its page owns the Enabled switch; an edit carries the flag rather than resetting it.
             isEnabled: command?.isEnabled ?? true,
             loadsShellEnvironment: loadsShellEnvironment,
             requiresConfirmation: requiresConfirmation,

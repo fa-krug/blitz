@@ -16,9 +16,9 @@ badges for what used to be controls: a pin, an eye-slash when hidden from root s
 chip, the shortcut as key caps, and a dimmed label when disabled. The page holds the live controls —
 the Enabled switch, the alias field and the shortcut recorder — beside Edit… (the editor sheet,
 which still owns pin and root-search visibility) and Delete…; Back returns to the row. A row with no
-AppKit control is cheap, so the library is a `LazyVStack` in one `Form` row rather than a
-`SettingsRowsTable`: the pane opens in ~125 ms instead of ~200 and scrolls inside a frame at any size
-— see [ui.md](../ui.md#settings). A lazy row may not be built yet, so a search result naming a
+AppKit control is cheap, so the library is a `LazyVStack` in one `Form` row (`SettingsPageRows`):
+the pane opens in ~125 ms instead of ~200 and scrolls inside a frame at any size — see
+[ui.md](../ui.md#settings). A lazy row may not be built yet, so a search result naming a
 quicklink narrows the pane's filter onto it rather than scrolling to it. The library is its own view
 holding the filter's state, so a keystroke re-renders that section rather than the whole `Form`, and
 it filters once per render.

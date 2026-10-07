@@ -218,7 +218,20 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         }
     }
 
-    /// The Settings row holding this entry's alias, shortcut and switches: Configure Command's goal.
+    /// The page its pane opens for it, holding its alias, shortcut and switches; nil keeps a row.
+    var settingsPage: String? {
+        guard settingsOwner == nil, settingsTarget != nil else { return nil }
+        switch kind {
+        case .application, .systemSettings, .systemAction, .command, .appleShortcut, .quicklink,
+            .customCommand:
+            return id
+        case .quickAction, .snippet, .windowCommand, .windowLayout, .windowRoom, .extensionCommand,
+            .meeting, .contact:
+            return nil
+        }
+    }
+
+    /// The Settings row that lists this entry: where Configure Command lands without a page.
     var settingsTarget: SettingsTarget? {
         // Built per query and never indexed, so no pane lists one.
         guard !CommandCatalog.isQueryDriven(self) else { return nil }

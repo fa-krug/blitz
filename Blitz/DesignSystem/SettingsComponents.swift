@@ -357,23 +357,6 @@ struct SettingsFilterField: View {
     }
 }
 
-/// Tab off an alias, for rows the key view loop can't reach; true when it moved focus itself.
-struct AliasTabAction {
-    private let action: @MainActor (_ backward: Bool) -> Bool
-
-    init(_ action: @escaping @MainActor (_ backward: Bool) -> Bool = { _ in false }) {
-        self.action = action
-    }
-
-    @MainActor func callAsFunction(backward: Bool) -> Bool {
-        action(backward)
-    }
-}
-
-extension EnvironmentValues {
-    @Entry var aliasTabHandler = AliasTabAction()
-}
-
 /// Reports first responder rather than editing, so a field Tab lands in counts as focused at once.
 private final class AliasTextView: NSTextView {
     var onFocusChange: @MainActor (Bool) -> Void = { _ in }
@@ -396,7 +379,6 @@ private struct AliasTextField: NSViewRepresentable {
     @Binding var focused: Bool
     let onCancel: () -> Void
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.aliasTabHandler) private var tabHandler
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -469,12 +451,10 @@ private struct AliasTextField: NSViewRepresentable {
                 textView.window?.makeFirstResponder(nil)
                 return true
             case #selector(NSResponder.insertTab(_:)):
-                if field.tabHandler(backward: false) { return true }
                 textView.window?.recalculateKeyViewLoop()
                 textView.window?.selectNextKeyView(textView)
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
-                if field.tabHandler(backward: true) { return true }
                 textView.window?.recalculateKeyViewLoop()
                 textView.window?.selectPreviousKeyView(textView)
                 return true
@@ -531,7 +511,7 @@ struct AliasField: View {
         .onChange(of: aliases.revision) { _, _ in
             if !focused { draft = aliases.alias(for: key) ?? "" }
         }
-        // A reused table row hands the field another entry; unsaved text belongs to the old one.
+        // Moving between pages hands the field another entry; unsaved text belongs to the old one.
         .onChange(of: key) { old, new in
             if focused {
                 aliases.setAlias(draft, for: old)

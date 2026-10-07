@@ -9,21 +9,19 @@ struct QuicklinksSettingsView: View {
     @Environment(SettingsNavigationState.self) private var navigation
     @State private var editor: QuicklinkEditRequest?
     @State private var pendingDeletion: Quicklink?
-    /// The row the library scrolls back to once a page closes, so a long list keeps its place.
-    @State private var returning: Quicklink.ID?
 
     var body: some View {
-        Group {
+        let shown = navigation.page.flatMap(store.quicklink(entryID:))
+        SettingsPagedPane(showsPage: shown != nil) {
             if let shown {
                 QuicklinkDetailForm(
                     quicklink: shown,
                     onEdit: { editor = QuicklinkEditRequest(quicklink: shown) },
                     onDelete: { pendingDeletion = shown })
-            } else {
-                libraryForm
             }
+        } library: {
+            libraryForm
         }
-        .settingsScrollTarget(.quicklinks)
         .settingsEditorPanel(item: $editor) { request in
             QuicklinkEditorPanel(quicklink: request.quicklink, browserTab: request.browserTab)
         }
@@ -31,9 +29,6 @@ struct QuicklinksSettingsView: View {
             guard let request = core.pendingQuicklinkEdit else { return }
             editor = request
             core.pendingQuicklinkEdit = nil
-        }
-        .onChange(of: navigation.page) { previous, page in
-            if page == nil { returning = previous.flatMap(UUID.init(uuidString:)) }
         }
         .alert(item: $pendingDeletion) { quicklink in
             Alert(
@@ -48,46 +43,29 @@ struct QuicklinksSettingsView: View {
         }
     }
 
-    /// Nil on the library, and for a page whose quicklink is gone: Back may still reach one.
-    private var shown: Quicklink? {
-        guard navigation.tab == .quicklinks, let page = navigation.page,
-            let id = UUID(uuidString: page)
-        else { return nil }
-        return store.quicklink(id: id)
-    }
-
     private var libraryForm: some View {
         @Bindable var settings = settings
-        return ScrollViewReader { proxy in
-            Form {
-                FeatureSwitchSection(
-                    anchor: .quicklinksQuicklinks,
-                    enableTitle: "Enable quicklinks",
-                    enableSubtitle: "Open saved links and searches from the launcher.",
-                    isEnabled: $settings.quicklinksEnabled,
-                    showsInLauncher: $settings.quicklinksShowInLauncher,
-                    showsIcon: true,
-                    showsHeader: false)
+        return Form {
+            FeatureSwitchSection(
+                anchor: .quicklinksQuicklinks,
+                enableTitle: "Enable quicklinks",
+                enableSubtitle: "Open saved links and searches from the launcher.",
+                isEnabled: $settings.quicklinksEnabled,
+                showsInLauncher: $settings.quicklinksShowInLauncher,
+                showsIcon: true,
+                showsHeader: false)
 
-                Group {
-                    if !store.isAvailable { storageNotice }
-                    FeatureCommandsSection(owner: .quicklinks, anchor: .quicklinksCommands)
-                    QuicklinkLibrarySection(editor: $editor)
-                    behaviour
-                    QuicklinkTransferSection()
-                }
-                .settingsEnabled(settings.quicklinksEnabled)
+            Group {
+                if !store.isAvailable { storageNotice }
+                FeatureCommandsSection(owner: .quicklinks, anchor: .quicklinksCommands)
+                QuicklinkLibrarySection(editor: $editor)
+                behaviour
+                QuicklinkTransferSection()
             }
-            .formStyle(.grouped)
-            // Keyed: Back can close a page before or after the library mounts again.
-            .task(id: returning) {
-                guard let returning else { return }
-                // The Form has just mounted, so let it lay the row out before scrolling to it.
-                await Task.yield()
-                proxy.scrollTo(returning, anchor: .center)
-                self.returning = nil
-            }
+            .settingsEnabled(settings.quicklinksEnabled)
         }
+        .formStyle(.grouped)
+        .settingsScrollTarget(.quicklinks)
     }
 
     // MARK: - Sections
@@ -134,9 +112,11 @@ struct QuicklinksSettingsView: View {
 /// Its own view, so a keystroke in the filter re-renders this section rather than the whole pane.
 private struct QuicklinkLibrarySection: View {
     @Environment(QuicklinkStore.self) private var store
-    @Environment(SettingsNavigationState.self) private var navigation
     @Binding var editor: QuicklinkEditRequest?
     @State private var query = ""
+
+    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
+    private static let rowHeight: CGFloat = 52
 
     var body: some View {
         // Once per render: a large library makes each pass over it cost a frame.
@@ -153,20 +133,12 @@ private struct QuicklinkLibrarySection: View {
                 )
                 .foregroundStyle(.secondary)
             } else {
-                // One row holding a lazy stack: a `Form` realizes every row it is handed.
-                LazyVStack(spacing: 0) {
-                    ForEach(results) { quicklink in
-                        QuicklinkLibraryRow(
-                            quicklink: quicklink, showsDivider: quicklink.id != results.first?.id
-                        ) {
-                            navigation.select(.quicklinks, page: quicklink.id.uuidString)
-                        }
-                        .id(quicklink.id)
-                    }
+                SettingsPageRows(
+                    items: results, rowHeight: Self.rowHeight, page: \.entryID,
+                    accessibilityName: \.name
+                ) { quicklink in
+                    QuicklinkLibraryRow(quicklink: quicklink)
                 }
-                // Into the Form row's own padding, so the rows sit where native ones would.
-                .padding(.top, -QuicklinkLibraryRow.overhang - 1)
-                .padding(.bottom, -QuicklinkLibraryRow.overhang)
             }
             Button {
                 editor = QuicklinkEditRequest(quicklink: nil)
@@ -219,73 +191,25 @@ private struct QuicklinkTransferSection: View {
 
 /// Read-only, so it holds no AppKit control: every edit happens on the quicklink's own page.
 private struct QuicklinkLibraryRow: View {
-    @Environment(AliasStore.self) private var aliases
-    @Environment(HotKeyManager.self) private var hotKeys
     let quicklink: Quicklink
-    let showsDivider: Bool
-    let onOpen: () -> Void
-
-    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
-    private static let height: CGFloat = 52
-    /// How far a `Form` row pads its content above and below.
-    static let overhang: CGFloat = 10
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider().opacity(showsDivider ? 1 : 0)
-            Button(action: onOpen) {
-                SettingsRow(
-                    title: quicklink.name, subtitle: quicklink.link,
-                    labelOpacity: quicklink.isEnabled ? 1 : 0.45, anchor: .quicklinksQuicklinks
-                ) {
-                    QuicklinkSettingsIcon(quicklink: quicklink)
-                } trailing: {
-                    badges
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                }
-                .frame(maxHeight: .infinity)
-                .contentShape(.rect)
+        SettingsRow(
+            title: quicklink.name, subtitle: quicklink.link,
+            labelOpacity: quicklink.isEnabled ? 1 : 0.45, anchor: .quicklinksQuicklinks
+        ) {
+            QuicklinkSettingsIcon(quicklink: quicklink)
+        } trailing: {
+            if quicklink.isPinned {
+                Image(systemName: "pin.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Pinned to the top")
+                    .accessibilityLabel("Pinned")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Configure \(quicklink.name)")
-        }
-        .frame(height: Self.height)
-    }
-
-    @ViewBuilder
-    private var badges: some View {
-        if quicklink.isPinned {
-            Image(systemName: "pin.fill")
-                .foregroundStyle(.secondary)
-                .help("Pinned to the top")
-                .accessibilityLabel("Pinned")
-        }
-        if !quicklink.showsInRootSearch {
-            Image(systemName: "eye.slash")
-                .foregroundStyle(.secondary)
-                .help("Hidden from root search")
-                .accessibilityLabel("Hidden from root search")
-        }
-        if let alias = aliases.alias(for: quicklink.entryID) {
-            Text(alias)
-                .font(Theme.Typography.keyCap)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, Theme.Spacing.sm)
-                .padding(.vertical, Theme.Spacing.xxs)
-                .background(Capsule().fill(Color.primary.opacity(0.08)))
-                .accessibilityLabel("Alias \(alias)")
-        }
-        if let keycaps = hotKeys.binding(for: .quicklink(id: quicklink.id))?.keycaps {
-            HStack(spacing: Theme.Spacing.xxs) {
-                ForEach(Array(keycaps.enumerated()), id: \.offset) { _, cap in
-                    KeyCapChip(text: cap, style: .outline, scale: .compact)
-                }
+            if !quicklink.showsInRootSearch {
+                SettingsHiddenBadge(help: "Hidden from root search")
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Shortcut")
+            SettingsEntryBadges(aliasKey: quicklink.entryID, action: .quicklink(id: quicklink.id))
         }
     }
 }

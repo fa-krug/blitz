@@ -68,9 +68,11 @@ lines in Blitz's own dialog.
 rather than a symbol tile: every row's `url` is Shortcuts.app, so each draws that app's icon from one
 cached bitmap. Reveal in Finder is refused, because the file is the app, not the shortcut.
 
-The pane lists rows through `LauncherItemsList`, the same table the launcher-category panes use: icon,
-name, alias, shortcut recorder and the checkbox that hides one row from launcher search while its
-shortcut keeps working. Its filter is membership in `AppIndex.matches`, so it answers to aliases.
+The pane lists rows through `LauncherItemsList`, as the launcher-category panes do: read-only rows
+of icon, name and badges, each opening the shortcut's page with its "Show in launcher" switch (which
+hides one row from launcher search while its shortcut keeps working), alias field and shortcut
+recorder. Its filter is `AppIndex.entries(matching:where:)` over the shortcuts alone, so it answers
+to aliases.
 
 `HotKeyAction.appleShortcut(id:)` persists under `hotkey.appleShortcut.<uuid>` with a
 `boundAppleShortcutIDs` index. `appleShortcutsEnabled` rides in settings backups like the quicklink

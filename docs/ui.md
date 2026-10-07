@@ -794,43 +794,25 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   fixed that, but tears a row's `TextField` and checkbox — both `NSView`s — down when the row scrolls
   off and builds them again when one scrolls on, about 7 ms and 4 ms on macOS 27. A fast scrollbar
   drag replaces a screenful of rows per update, so the list froze for 100–400 ms at a time.
-  Every launcher-item list (`LauncherItemsList`) and custom commands therefore switch to
-  `SettingsRowsTable` (`Features/Settings/`), an `NSTableView` filling one Form row, generic over
-  the item and the SwiftUI row it hosts, once they hold more than about a screenful.
-  `SettingsRowsTablePolicy` makes that call on the **unfiltered** count, so typing in a filter never
-  swaps one for the other. Below it native rows win: a hosted row costs about twice a Form row (each
-  is its own hosting view), and a short table would build every row anyway — 11 commands opened in
-  140 ms as Form rows and 215 ms as a table, while 51 System Settings rows took 340 ms and 200 ms.
-  Native rows also scroll without building anything. **The cheapest row holds no control at all**:
-  Quicklinks lists read-only rows with badges in a `LazyVStack`, and edits each on its own page,
-  which opened the pane in 125 ms against the table's 200 and kept every scroll step inside a frame.
-  The table keeps a
-  screenful of cells and hands each a new item, and each cell hosts the caller's row, so a reused
-  row's controls update in place. An update never reloads the table once it is in a window: it notes
-  a new row count and re-renders only the visible cells whose item differs from the one they show, so
-  a filter keystroke or a toggle costs the rows that changed and a focused alias keeps its editor.
-  Before the table has a window it reloads instead — nothing clips it there, so noting a count would
-  build a cell for every row. Items are therefore `Equatable`, and **a row reads everything besides
-  its item through its environment**, never a captured value, or an unchanged item would show stale
-  state. A hosted row inherits nothing from the pane, so **the caller's row closure injects every
-  store its row reads** (a missed one traps at runtime), and the `Form`'s `.disabled` doesn't reach
-  it either, so the caller passes `isEnabled`; a change to it re-renders every visible cell.
-  The window's key view loop can't reach a row the table hasn't built, so the table moves Tab and
-  ⇧Tab between rows' alias fields itself: each cell sets `\.aliasTabHandler`, which `AliasField`
-  asks before falling back to the loop, and the walk scrolls each row in and skips a disabled alias.
-  Past either end it declines, and the loop carries focus out of the table. `AliasField` counts as
-  focused from becoming first responder, not from its first keystroke, so a field Tab lands in
-  isn't resigned by the next update. The row height is the caller's, fixed
-  to match the native Form row it stands in for: 45 pt for a one-line launcher row, 52 pt for a
-  custom command's title over its `.caption` subtitle. A negative `.padding` doesn't
-  move an AppKit view, so the table hangs 11 pt into the Form row's padding at the top (including
-  the search divider) and 10 pt at the bottom, matching native row origins without adding space
-  after the last row.
-  A table row carries no scroll id, so a pane that lists one marks its section with
-  `.settingsFilterSeed`, and a search result naming a row narrows the filter onto it instead.
+  So **a long Settings list holds no AppKit control.** Every launcher-item list
+  (`LauncherItemsList`, which Apple Shortcuts shares), Quicklinks and custom commands list read-only
+  rows through `SettingsPageRows` (`Features/Settings/SettingsPages.swift`) — a `LazyVStack` in one
+  Form row — and a row opens the item's own page, where its alias field, shortcut recorder and
+  switches live, as an extension's row does. `navigation.page` names the item by its entry ID, and
+  `SettingsPagedPane` shows the pane's list or that page and scrolls the list back to the row on
+  Back; Configure Command opens the page directly (`AppEntry.settingsPage`). A row shows what its
+  page sets as badges (`SettingsEntryBadges`): the alias as a chip, the shortcut as key caps, an
+  eye-slash when hidden, a dimmed label when off, then a chevron. An `NSTableView` reusing hosted
+  rows with their controls came first and lost: each hosted row is its own hosting view, about twice
+  a Form row's cost, so 51 System Settings rows still took 200 ms to open and a scroll step missed
+  frames. Read-only lazy rows open that pane in about 85 ms, and Quicklinks in 125 against 200.
+  Rows are a fixed height, matching the native Form row they stand in for: 45 pt for a one-line
+  launcher row, 52 pt for a title over a `.caption` subtitle; the stack hangs 11 pt into the Form
+  row's padding at the top (including the filter's divider) and 10 pt at the bottom. A lazy row may
+  not be built yet, so a pane that lists one marks its section with `.settingsFilterSeed`, and a
+  search result naming a row narrows the filter onto it; the row's title then carries the pulse.
   `SettingsListMetrics` keeps row icons at one size, and `SettingsScopeRow` renders folder and
   application scope icons consistently across pages.
-  A long list whose rows hold no AppKit control can stay a `LazyVStack`.
 
 ### The window-layout editor
 
@@ -874,10 +856,7 @@ shortcut"), live held keys, a pending second Globe tap, or a conflict (rejected 
 
 - **An ancestor draws it.** The open recorder publishes its bounds via `ShortcutRecorderAnchorKey`;
   `.shortcutRecorderPopoverHost()` sits on `SettingsDetailView` — one host above every pane's
-  `Form`, and on `OnboardingView`. An overlay on the row would be clipped by the scroll view. A
-  recorder in a `SettingsRowsTable` cell sits in its own hosting view, where the preference stops,
-  so the cell reports the recorder's frame and the table republishes it as the anchor from a
-  stand-in overlay.
+  `Form`, and on `OnboardingView`. An overlay on the row would be clipped by the scroll view.
 - **`shortcutPopover.width` is load-bearing.** The callout centres on the recorder only while it
   fits either side of it; wider than that and the clamp kicks in and skews the caret.
   `Tests/callout-test.swift` pins this.

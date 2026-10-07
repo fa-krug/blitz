@@ -41,10 +41,11 @@ goes through `AppCore`, which unregisters the hotkey and clears those references
 command. Native settings backups include both commands and bindings; import warns before accepting
 executable content.
 
-The Settings list is sorted by name and filtered by name or command text. Past a screenful it is a
-`SettingsRowsTable` (see `SettingsRowsTablePolicy`), since each row carries an alias field and a
-shortcut recorder. Its rows read `AppSettings` from the environment rather than a captured value,
-so "Show in launcher" dims every visible alias at once.
+The Settings list is sorted by name and filtered by name or command text. Its rows are read-only
+(`SettingsPageRows`, see [ui.md](../ui.md#settings)): the name, the command line, the alias and
+shortcut as badges, and a dimmed label when disabled. A row opens the command's own page — Edit…
+and Delete…, then the Enabled switch, the alias field and the shortcut recorder, acting at once —
+and the editor sheet carries the enabled flag through an edit rather than resetting it.
 
 ## Launcher integration
 

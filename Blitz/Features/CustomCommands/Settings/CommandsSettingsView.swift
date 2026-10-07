@@ -4,10 +4,43 @@ import SwiftUI
 struct CommandsSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
+    @Environment(AppIndex.self) private var appIndex
+    @Environment(CustomCommandStore.self) private var store
+    @Environment(SettingsNavigationState.self) private var navigation
     @State private var editor: EditorTarget?
     @State private var pendingDeletion: CustomCommand?
 
     var body: some View {
+        let builtIn = LauncherItemPage.entry(
+            named: navigation.page, in: appIndex, where: LauncherItemsSection.lists(.command))
+        let custom = store.commands.first { $0.entryID == navigation.page }
+        SettingsPagedPane(showsPage: builtIn != nil || custom != nil) {
+            if let custom {
+                CustomCommandPage(
+                    command: custom,
+                    onEdit: { editor = EditorTarget(command: custom) },
+                    onDelete: { pendingDeletion = custom })
+            } else if let builtIn {
+                LauncherItemPage(entry: builtIn)
+            }
+        } library: {
+            library
+        }
+        .settingsEditorPanel(item: $editor) { target in
+            CustomCommandEditorPanel(command: target.command)
+        }
+        .alert(item: $pendingDeletion) { command in
+            Alert(
+                title: Text("Delete “\(command.name)”?"),
+                message: Text("Its global shortcut and launcher references will also be removed."),
+                primaryButton: .destructive(Text("Delete")) {
+                    core.customCommandCoordinator.deleteCustomCommand(id: command.id)
+                },
+                secondaryButton: .cancel())
+        }
+    }
+
+    private var library: some View {
         @Bindable var settings = settings
         return Form {
             LauncherCategorySwitchSection(kind: .command, anchor: .commandsCommands)
@@ -24,23 +57,11 @@ struct CommandsSettingsView: View {
                 isEnabled: $settings.customCommandsEnabled,
                 showsInLauncher: $settings.customCommandsShowInLauncher)
 
-            CustomCommandsSection(editor: $editor, pendingDeletion: $pendingDeletion)
+            CustomCommandsSection(editor: $editor)
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.commands)
         .releasesFocusOnOutsideClick()
-        .settingsEditorPanel(item: $editor) { target in
-            CustomCommandEditorPanel(command: target.command)
-        }
-        .alert(item: $pendingDeletion) { command in
-            Alert(
-                title: Text("Delete “\(command.name)”?"),
-                message: Text("Its global shortcut and launcher references will also be removed."),
-                primaryButton: .destructive(Text("Delete")) {
-                    core.customCommandCoordinator.deleteCustomCommand(id: command.id)
-                },
-                secondaryButton: .cancel())
-        }
     }
 }
 
@@ -49,10 +70,7 @@ private struct CustomCommandsSection: View {
     @Environment(CustomCommandStore.self) private var store
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
-    @Environment(AliasStore.self) private var aliases
-    @Environment(HotKeyManager.self) private var hotKeys
     @Binding var editor: EditorTarget?
-    @Binding var pendingDeletion: CustomCommand?
     @State private var query = ""
 
     /// A title over a `.caption` command line, as a native grouped `Form` row lays it out.
@@ -72,18 +90,12 @@ private struct CustomCommandsSection: View {
                         : "No custom command matches “\(query)”."
                 )
                 .foregroundStyle(.secondary)
-            } else if !SettingsRowsTablePolicy.hosts(rowCount: store.commands.count) {
-                ForEach(results) { command in row(for: command, anchor: .commandsCustomCommands) }
             } else {
-                // One row holding the table: a `Form` realizes every row it is handed.
-                SettingsRowsTable(
-                    items: results, rowHeight: Self.rowHeight,
-                    isEnabled: settings.customCommandsEnabled
+                SettingsPageRows(
+                    items: results, rowHeight: Self.rowHeight, page: \.entryID,
+                    accessibilityName: \.name
                 ) { command in
-                    row(for: command, anchor: nil)
-                        .environment(settings)
-                        .environment(aliases)
-                        .environment(hotKeys)
+                    CustomCommandRow(command: command)
                 }
             }
             Button {
@@ -102,22 +114,10 @@ private struct CustomCommandsSection: View {
                 .foregroundStyle(.secondary)
         }
         .settingsEnabled(settings.customCommandsEnabled)
-        // A table row has no id to scroll to, so a jump to one narrows the list onto it instead.
+        // A lazy row may not be built yet, so a jump to one narrows the list onto it instead.
         .settingsFilterSeed(.commandsCustomCommands, query: $query) { title in
             store.commands.contains { $0.name == title }
         }
-    }
-
-    private func row(
-        for command: CustomCommand, anchor: SettingsAnchor?
-    ) -> CustomCommandSettingsRow {
-        CustomCommandSettingsRow(
-            command: command, anchor: anchor,
-            isEnabled: Binding(
-                get: { command.isEnabled },
-                set: { core.customCommandCoordinator.setCustomCommandEnabled($0, id: command.id) }),
-            onEdit: { editor = EditorTarget(command: command) },
-            onDelete: { pendingDeletion = command })
     }
 
     private var matches: [CustomCommand] {
@@ -140,47 +140,83 @@ private struct EditorTarget: Identifiable {
     let command: CustomCommand?
 }
 
-private struct CustomCommandSettingsRow: View {
+/// Read-only, so it holds no AppKit control: every edit happens on the command's own page.
+private struct CustomCommandRow: View {
+    let command: CustomCommand
+
+    var body: some View {
+        SettingsRow(
+            title: command.name, subtitle: command.command,
+            labelOpacity: command.isEnabled ? 1 : 0.45, anchor: .commandsCustomCommands
+        ) {
+            CustomCommandIcon(command: command)
+        } trailing: {
+            SettingsEntryBadges(
+                aliasKey: command.entryID, action: .customCommand(id: command.id))
+        }
+    }
+}
+
+/// One custom command's own page: what it runs, then the controls that act on it at once.
+private struct CustomCommandPage: View {
+    @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
     let command: CustomCommand
-    /// Only a native `Form` row can carry the reveal pulse.
-    let anchor: SettingsAnchor?
-    @Binding var isEnabled: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        SettingsRow(title: command.name, subtitle: command.command, anchor: anchor) {
-            Image(systemName: command.symbol)
-        } trailing: {
-            // An alias only reaches the ranker through the launcher slice, so it dims with it.
-            AliasField(key: command.entryID, name: command.name)
-                .settingsEnabled(command.isEnabled && settings.customCommandsShowInLauncher)
-
-            // A disabled command's shortcut fires into the funnel's refusal, so it dims too.
-            ShortcutRecorder(action: .customCommand(id: command.id))
-                .settingsEnabled(command.isEnabled)
-
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
+        Form {
+            // The window's Back chevron leaves the page, as on an extension's.
+            Section {
+                SettingsRow(title: command.name, subtitle: command.command) {
+                    CustomCommandIcon(command: command)
+                } trailing: {
+                    Button("Edit…", action: onEdit)
+                    Button("Delete…", role: .destructive, action: onDelete)
+                }
             }
-            .buttonStyle(.plain)
-            .help("Edit Command")
-            .accessibilityLabel("Edit \(command.name)")
 
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red)
+            Section {
+                Toggle(isOn: isEnabled) {
+                    Text("Enabled")
+                    Text("Off offers it nowhere and leaves its shortcut doing nothing.")
+                }
+                LabeledContent {
+                    // It reaches the ranker only through the launcher slice, so it dims with it.
+                    AliasField(key: command.entryID, name: command.name)
+                        .settingsEnabled(command.isEnabled && settings.customCommandsShowInLauncher)
+                } label: {
+                    Text("Alias")
+                    Text("Type it in the launcher to put this command first.")
+                }
+                LabeledContent {
+                    // A disabled command's shortcut fires into the funnel's refusal, so it dims.
+                    ShortcutRecorder(action: .customCommand(id: command.id))
+                        .settingsEnabled(command.isEnabled)
+                } label: {
+                    Text("Shortcut")
+                    Text("Runs it from anywhere.")
+                }
             }
-            .buttonStyle(.plain)
-            .help("Delete Command")
-            .accessibilityLabel("Delete \(command.name)")
-
-            Toggle("", isOn: $isEnabled)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .help("Enabled")
-                .accessibilityLabel("Enable \(command.name)")
+            .settingsEnabled(settings.customCommandsEnabled)
         }
+        .formStyle(.grouped)
+        .releasesFocusOnOutsideClick()
+    }
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { command.isEnabled },
+            set: { core.customCommandCoordinator.setCustomCommandEnabled($0, id: command.id) })
+    }
+}
+
+private struct CustomCommandIcon: View {
+    let command: CustomCommand
+
+    var body: some View {
+        Image(systemName: command.symbol)
+            .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
     }
 }

@@ -43,7 +43,7 @@ struct ShortcutRecorder: View {
             }
             // Rows are lazy: a recording row scrolled away must release the session.
             .onDisappear { if isRecording { hotKeys.recordingAction = nil } }
-            // A reused table row can hand this field another action while the old one records.
+            // Moving between pages can hand this field another action while the old one records.
             .onChange(of: action) { old, _ in
                 if hotKeys.recordingAction == old { hotKeys.recordingAction = nil }
             }

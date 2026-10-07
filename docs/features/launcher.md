@@ -13,9 +13,9 @@ earliest scope wins).
   `orderedResults` *and* `HotKeyManager.perform`, so `Enable Applications` off stops the per-app chords
   as well as the rows. Its Settings switch stays available while the application
   list disables beneath it — the guard sits in the one dispatch funnel, the way each feature switch
-  already guards its own. The per-item checkbox beside it is the narrow tool: it hides one row and
-  leaves that row's shortcut firing, and **Hide from Search** in the ⌘K menu ticks that checkbox off for the
-  kinds whose pane can tick it back on. A new category must be wired into
+  already guards its own. The per-item "Show in launcher" switch on the item's page is the narrow
+  tool: it hides one row and leaves that row's shortcut firing, and **Hide from Search** in the ⌘K
+  menu turns it off for the kinds whose pane can turn it back on. A new category must be wired into
   `VisibilityStore.allowsHotKey`, or its chords keep running while its pane reads off.
 - **One command, one pane, one switch.** `SettingsTab.ownedCommands` is the whole table of which pane
   lists a command's shortcut, alias and launcher checkbox. A feature that names its commands there
@@ -822,9 +822,10 @@ passes none. Copy Deeplink hands out the bare link, since the row has no values 
 
 ## Configure Command
 
-**Configure Command** (⇧⌘,) closes the palette and opens Settings on the row that holds the entry's
-alias, shortcut and launcher checkbox, scrolled into view and pulsed the way a Settings search
-result is. `AppEntry.settingsTarget` is the whole mapping: a pane-owned command lands in that pane's
+**Configure Command** (⇧⌘,) closes the palette and opens Settings on the entry's own page, which
+holds its alias, shortcut and launcher switch (`AppEntry.settingsPage`), for every kind a pane lists
+as read-only rows. Any other entry lands on its row instead, scrolled into view and pulsed the way a
+Settings search result is. `AppEntry.settingsTarget` is the whole mapping: a pane-owned command lands in that pane's
 command section (`SettingsAnchor.commands(ownedBy:)`, exhaustive over `SettingsTab`), every other
 kind in its category's list, and window commands in their catalog group's section. An extension
 command answers with **Configure Extension** instead, onto its own page. Meetings and contacts have no
@@ -835,12 +836,11 @@ its filter field through `settingsFilterSeed`, so a long list shows the row rath
 That field filters through `AppIndex.entries(matching:where:)`: the launcher's own match test
 (`LauncherOrder.matching`) over the pane's slice alone, in list order, with neither the ranked
 pass's 200-row cap nor its category words.
-Past a screenful that is the only way in: such a list draws its rows in a hosted table
-whose cells sit outside the `Form`, with no id to scroll to and no window session for the pulse to
-read, so the reveal lands on the section — it always tries the section first, and a row it can find
-still wins. A shorter list keeps native rows, which carry the pulse themselves. The seed checks that the list really holds the name, so a search result for the
-category switch, which shares the section's anchor, never filters it. Quicklinks and custom
-commands seed their own tables the same way, filtering by name and link or command text.
+A lazy row may not be built yet, so that is the only sure way in: the reveal lands on the section
+first, and the row's title, once the filter has narrowed the list onto it, carries the pulse. The
+seed checks that the list really holds the name, so a search result for the category switch, which
+shares the section's anchor, never filters it. Quicklinks and custom commands seed their own lists
+the same way, filtering by name and link or command text.
 
 ## Dragging an application out
 

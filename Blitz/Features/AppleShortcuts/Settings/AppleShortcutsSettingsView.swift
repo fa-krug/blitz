@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The shortcuts found in the Shortcuts app, each with the launcher controls any item carries.
+/// The shortcuts found in the Shortcuts app, each opening the page any launcher item has.
 struct AppleShortcutsSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
@@ -14,24 +14,26 @@ struct AppleShortcutsSettingsView: View {
 
     var body: some View {
         @Bindable var settings = settings
-        return Form {
-            Section {
-                Toggle(isOn: $settings.appleShortcutsEnabled) {
-                    SettingsFeatureToggleLabel(
-                        anchor: .appleShortcutsAppleShortcuts,
-                        title: "Enable Apple Shortcuts",
-                        subtitle: "Run your shortcuts from the launcher.")
+        return LauncherItemsPane(lists: { $0.kind == .appleShortcut }) {
+            Form {
+                Section {
+                    Toggle(isOn: $settings.appleShortcutsEnabled) {
+                        SettingsFeatureToggleLabel(
+                            anchor: .appleShortcutsAppleShortcuts,
+                            title: "Enable Apple Shortcuts",
+                            subtitle: "Run your shortcuts from the launcher.")
+                    }
+                }
+                .settingsAnchor(.appleShortcutsAppleShortcuts)
+
+                if settings.appleShortcutsEnabled {
+                    library
                 }
             }
-            .settingsAnchor(.appleShortcutsAppleShortcuts)
-
-            if settings.appleShortcutsEnabled {
-                library
-            }
+            .formStyle(.grouped)
+            .settingsScrollTarget(.appleShortcuts)
+            .releasesFocusOnOutsideClick()
         }
-        .formStyle(.grouped)
-        .settingsScrollTarget(.appleShortcuts)
-        .releasesFocusOnOutsideClick()
         // Shortcuts can change while Settings sits closed, so the pane reads them fresh.
         .task(id: settings.appleShortcutsEnabled) { core.appleShortcutCoordinator.refresh() }
     }
@@ -39,11 +41,7 @@ struct AppleShortcutsSettingsView: View {
     private var library: some View {
         Section {
             SettingsFilterField(prompt: "Search shortcuts…", query: $query)
-            LauncherItemsList(
-                entries: entries, query: query, isEnabled: true,
-                hostsRows: SettingsRowsTablePolicy.hosts(
-                    rowCount: core.appleShortcutCoordinator.entries.count),
-                anchor: .appleShortcutsShortcuts)
+            LauncherItemsList(entries: entries, query: query, anchor: .appleShortcutsShortcuts)
             Button("Open Shortcuts") { core.appleShortcutCoordinator.openShortcutsApp() }
         } header: {
             SettingsSectionHeader(.appleShortcutsShortcuts)
