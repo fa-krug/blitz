@@ -32,6 +32,12 @@ press. `InputSourceSwitcher` uses HIToolbox's TIS APIs because they remain the p
 enumerating and selecting keyboard input sources. Neither use is inertia, and every raw C pointer is
 decoded to plain values before it crosses into actor code.
 
+SwiftTerm is the one third-party dependency, on the same footing. A terminal window that runs `vim`,
+`htop` or a `sudo` prompt needs a VT emulator, and macOS ships none to embed; a hand-rolled one is
+the size of a feature of its own. It comes in as a SwiftPM package through XcodeGen's `packages:`,
+used unmodified, with its licence in `NOTICE.md`, and only `Features/CustomCommands/UI/` imports it.
+Nothing else earns a package without a gap of that kind: a convenience is never one.
+
 ## Architecture and feature organization
 
 Full detail in [architecture.md](architecture.md); the rules a new feature has to satisfy:

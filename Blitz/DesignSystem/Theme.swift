@@ -512,7 +512,7 @@ enum Theme {
         static let dropTarget = Color.accentColor
         /// Progress tint: the message pill's spinner while the work behind it is still running.
         static let progress = Color.blue
-        /// The command output window's page: a flat surface the log sits directly on.
+        /// A terminal window's page: a flat surface the terminal sits directly on.
         static let terminalSurface = adaptive(
             dark: .srgbInk(0.07, alpha: 1), light: .srgbInk(0.99, alpha: 1))
     }

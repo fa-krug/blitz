@@ -17,7 +17,9 @@ the signing identities are in [signing.md](signing.md).
    a secure timestamp. Team `HS26J3YA63` is what keeps the Accessibility grant alive and what the
    updater trusts.
 3. **Build** a universal (`arm64 x86_64`) Release `Blitz.app`, and assert both slices on the app and
-   on `Contents/Helpers/ClipboardTextHelper`.
+   on `Contents/Helpers/ClipboardTextHelper`. The build resolves SwiftTerm from the committed
+   `Package.resolved` and passes `-skipPackagePluginValidation`, since nobody is there to trust its
+   build plugin.
 4. **`Scripts/verify-signature.sh`** asserts the hardened runtime on both binaries, an intact seal,
    no `get-task-allow`, and an entitlement for every usage string. The app is then checked against
    the requirement in `BundleSignature`, read from the source, so a release the updater would refuse

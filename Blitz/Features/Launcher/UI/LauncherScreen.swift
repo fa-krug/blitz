@@ -298,7 +298,6 @@ struct LauncherScreen: PaletteScreen {
         core.launcherCoordinator.recordQuery(vm.query, from: origin)
     }
 
-    /// Both shell variants, the output window and the terminal, run through this one fallback.
     private static func origin(of row: Row) -> LauncherQueryHistory.Origin {
         guard case .fallback(.builtin(.runShellCommand), _) = row else { return .result }
         return .shellCommand

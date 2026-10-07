@@ -13,25 +13,27 @@ enum ShellCommandTermination: Sendable, Equatable {
     var succeeded: Bool { self == .exited(status: 0) }
 }
 
-enum ShellCommandEvent: Sendable {
-    case output(String)
-    /// One command line has finished; the folder is where the next one starts.
-    case finished(ShellCommandResult, directory: String?)
-    /// The shell itself has gone, so the session runs nothing more.
+/// What a terminal run reports; `ended` always comes last, and nothing follows it.
+enum TerminalEvent: Sendable {
+    /// Raw bytes for the emulator, the status marker already cut out.
+    case output([UInt8])
+    /// The opening command's outcome; the shell it leaves behind carries on.
+    case commandFinished(ShellCommandResult)
+    /// The folder of whatever runs in the foreground, reported only when it changes.
+    case directoryChanged(String)
     case ended
 }
 
-/// A shell kept open between commands, so a `cd`, an export or a prompt's answer carries over.
-struct ShellCommandSession: Sendable {
-    let events: AsyncStream<ShellCommandEvent>
-    /// Starts one command line; the caller waits for its `finished` before sending another.
-    let run: @Sendable (String) -> Void
-    /// Text for whatever the running command reads from standard input.
-    let type: @Sendable (String) -> Void
-    /// ⌃C for the running command; one that will not stop takes the session down with it.
+/// A command run under its own terminal, which then stays open as the user's login shell.
+struct TerminalSession: Sendable {
+    let events: AsyncStream<TerminalEvent>
+    /// Keyboard bytes; the terminal turns a ⌃C among them into SIGINT itself.
+    let send: @Sendable ([UInt8]) -> Void
+    let resize: @Sendable (_ columns: Int, _ rows: Int) -> Void
+    /// Does nothing once the opening command has finished: the shell is the user's from then on.
     let stop: @Sendable () -> Void
-    /// Not the stream's cancellation: the shell leaves once its current command is done.
-    let end: @Sendable () -> Void
+    /// Closing a terminal tab: everything in it is hung up at once, unread output dropped.
+    let hangUp: @Sendable () -> Void
 }
 
 /// Both tails are filled only by the non-streaming path; a streamed run reports events.
@@ -69,10 +71,10 @@ enum ShellCommandRunner {
     private static let shell = "/bin/zsh"
     /// Big enough that a chatty command needs few reads, small enough to stay live.
     private static let readSize = 16 * 1024
-    /// Coalesces bursts so a flood cannot drive a redraw per line.
-    private static let flushInterval: Duration = .milliseconds(40)
-    /// A prompt or a progress bar never ends a line; past this it is shown anyway.
-    private static let unlinedLimit = 4 * 1024
+    /// Undelivered output a terminal may hold; past it the command blocks, as in any terminal.
+    static let pendingOutputLimit = 256 * 1024
+    /// How often a terminal's folder is looked up; a `cd` shows its prompt well within it.
+    private static let directoryInterval: Duration = .milliseconds(500)
     /// How long a stopped command is given to leave politely before it is killed.
     private static let stopGrace: DispatchTimeInterval = .seconds(2)
     /// The private OSC number the shell marks a finished line with, nonce first.
@@ -81,7 +83,7 @@ enum ShellCommandRunner {
     private static let queue = DispatchQueue(
         label: "de.fa-krug.blitz.shell-command", qos: .userInitiated, attributes: .concurrent)
 
-    /// Fire-and-forget, keeping only the error tail; shown output goes through `stream`.
+    /// Fire-and-forget, keeping only the error tail; shown output goes through `openTerminal`.
     nonisolated static func run(
         _ command: String, arguments: [String] = [], loadingShellEnvironment: Bool = false,
         workingDirectory: String? = nil
@@ -138,287 +140,324 @@ enum ShellCommandRunner {
             standardError: errors?.readSuffix(limit: standardErrorLimit))
     }
 
-    // MARK: - Sessions
+    // MARK: - Terminals
 
-    /// Runs under a pseudo-terminal; see `PseudoTerminal` for why a pipe cannot do this.
-    nonisolated static func openSession(
-        arguments: [String] = [], loadingShellEnvironment: Bool = false,
-        workingDirectory: String? = nil
-    ) -> ShellCommandSession {
-        var environment = ProcessInfo.processInfo.environment
-        environment["BLITZ"] = "1"
-        // A terminal makes tools colour output, so ask for colour the window can draw.
-        environment["TERM"] = "xterm-256color"
-
+    /// The command's exit status arrives as a marker in the output; see `terminalScript`.
+    nonisolated static func openTerminal(
+        command: String, arguments: [String] = [], loadingShellEnvironment: Bool = false,
+        workingDirectory: String? = nil, columns: Int = 80, rows: Int = 24
+    ) -> TerminalSession {
         let nonce = UUID().uuidString
         let directory = resolvedWorkingDirectory(workingDirectory)
         let terminal = directory.flatMap {
             PseudoTerminal.spawn(
                 executable: shell,
-                arguments: shellArguments(
-                    command: sessionScript(nonce: nonce), arguments: arguments,
-                    loadingShellEnvironment: loadingShellEnvironment),
-                environment: environment, workingDirectory: $0)
+                arguments: [
+                    "-fc",
+                    terminalScript(nonce: nonce, loadingShellEnvironment: loadingShellEnvironment),
+                    "blitz", command,
+                ] + arguments,
+                environment: terminalEnvironment(
+                    inheriting: ProcessInfo.processInfo.environment, locale: .current),
+                workingDirectory: $0, columns: columns, rows: rows)
         }
 
         guard let terminal else {
             let reason =
                 directory == nil
                 ? missingDirectory(workingDirectory) : "The shell could not be started."
-            return ShellCommandSession(
+            return TerminalSession(
                 events: AsyncStream { continuation in
                     continuation.yield(
-                        .finished(
-                            ShellCommandResult(termination: .launchFailed(reason)), directory: nil))
+                        .commandFinished(ShellCommandResult(termination: .launchFailed(reason))))
                     continuation.yield(.ended)
                     continuation.finish()
                 },
-                run: { _ in }, type: { _ in }, stop: {}, end: {})
+                send: { _ in }, resize: { _, _ in }, stop: {}, hangUp: {})
         }
 
-        let state = SessionState()
-        let marker = Array("\u{1B}]\(markerCode);\(nonce);".utf8)
-        let events = AsyncStream<ShellCommandEvent> { continuation in
-            queue.async {
-                drain(terminal, marker: marker, state: state, into: continuation)
-            }
+        let state = TerminalState()
+        let outbox = TerminalOutbox()
+        let hangUp: @Sendable () -> Void = {
+            outbox.discardOutput()
+            terminal.hangUp()
         }
-        return ShellCommandSession(
-            events: events,
-            run: { line in
-                state.begin()
-                // The shell reads up to a NUL, so one inside the line would split it in two.
-                terminal.sendControl(Array(line.utf8).filter { $0 != 0 } + [0])
-            },
-            type: { terminal.type(Array($0.utf8)) },
+        queue.async {
+            drain(terminal, nonce: nonce, directory: directory ?? "", state: state, into: outbox)
+        }
+        return TerminalSession(
+            // A cancelled reader leaves nobody to show the shell, so it goes like a closed tab.
+            events: AsyncStream(
+                unfolding: { await outbox.next() },
+                onCancel: {
+                    outbox.abandon()
+                    hangUp()
+                }),
+            send: { terminal.write($0) },
+            resize: { terminal.resize(columns: $0, rows: $1) },
             stop: {
-                guard let generation = state.requestStop() else { return }
-                terminal.signalSession(SIGINT)
-                // The backstop, for a command that ignores a polite ask.
+                guard state.requestStop() else { return }
+                terminal.signalForeground(SIGINT)
                 queue.asyncAfter(deadline: .now() + stopGrace) {
-                    if state.isRunning(generation) { terminal.signalSession(SIGKILL) }
+                    if state.isCommandRunning { terminal.killAllButLeader() }
                 }
             },
-            end: { terminal.closeControl() })
+            hangUp: hangUp)
     }
 
-    /// Reads NUL-ended lines from the control descriptor; ⌃C ends a line but never the loop.
-    nonisolated private static func sessionScript(nonce: String) -> String {
-        let control = PseudoTerminal.controlDescriptor
-        // Job control gives each command its own group, out of reach of the session's signal.
+    /// `trap :` and not `trap ''`: a handler resets on exec, so ⌃C still reaches the command.
+    nonisolated static func terminalScript(nonce: String, loadingShellEnvironment: Bool) -> String {
+        // Without `+m` an interactive zsh takes the terminal's foreground and leaves it stopped.
+        let flags = loadingShellEnvironment ? "-i +m -lc" : "-lc"
         return """
-            builtin unsetopt monitor
-            TRAPINT() { __blitz_interrupted=1; return $(( 128 + $1 )) }
-            __blitz_next() {
-              { IFS= builtin read -r -d '' -u \(control) __blitz_line } \\
-                always { TRY_BLOCK_INTERRUPT=0 }
-            }
-            __blitz_run() {
-              { builtin eval "$__blitz_line" \(control)<&- } always { TRY_BLOCK_INTERRUPT=0 }
-            }
-            while :; do
-              __blitz_interrupted= __blitz_line=
-              __blitz_next
-              __blitz_read=$?
-              [[ -n $__blitz_interrupted ]] && continue
-              (( __blitz_read == 0 )) || break
-              __blitz_run "$@"
-              builtin printf '\\e]\(markerCode);\(nonce);%d;%s\\a' $? "$PWD"
-            done
+            __blitz_command=$1; shift
+            trap : INT
+            BLITZ=1 /bin/zsh \(flags) "$__blitz_command" blitz "$@"
+            __blitz_status=$?
+            trap - INT
+            printf '\\e]\(markerCode);\(nonce);%d\\a' $__blitz_status
+            exec "${SHELL:-/bin/zsh}" -l
             """
     }
 
-    /// One queue, one reader: the decode buffer is touched from here alone, so it needs no lock.
-    nonisolated private static func drain(
-        _ terminal: PseudoTerminal, marker: [UInt8], state: SessionState,
-        into continuation: AsyncStream<ShellCommandEvent>.Continuation
-    ) {
-        var scanner = LineEndScanner(marker: marker)
-        var decoder = TerminalTextDecoder()
-        var buffer = [UInt8](repeating: 0, count: readSize)
-        var lastYield = ContinuousClock().now
+    /// `BLITZ` is left for the script to set on the command alone, never on the user's shell.
+    nonisolated static func terminalEnvironment(
+        inheriting inherited: [String: String], locale: Locale
+    ) -> [String: String] {
+        var environment = inherited
+        environment["BLITZ"] = nil
+        environment["TERM"] = "xterm-256color"
+        environment["COLORTERM"] = "truecolor"
+        // launchd gives an app no LANG, and zsh's line editor needs UTF-8 to draw an umlaut.
+        if environment["LANG"] == nil { environment["LANG"] = utf8LocaleName(locale) }
+        return environment
+    }
 
-        func flush(force: Bool) {
-            guard let text = decoder.take(force: force) else { return }
-            continuation.yield(.output(text))
-            lastYield = ContinuousClock().now
+    nonisolated private static func utf8LocaleName(_ locale: Locale) -> String {
+        let fallback = "en_US.UTF-8"
+        guard let language = locale.language.languageCode?.identifier,
+            let region = locale.region?.identifier
+        else { return fallback }
+        let name = "\(language)_\(region).UTF-8"
+        // English in Germany is a fine preference and no installed locale, which means ASCII.
+        return FileManager.default.fileExists(atPath: "/usr/share/locale/\(name)") ? name : fallback
+    }
+
+    /// The one reader of the terminal, so the scanner needs no lock.
+    nonisolated private static func drain(
+        _ terminal: PseudoTerminal, nonce: String, directory: String, state: TerminalState,
+        into outbox: TerminalOutbox
+    ) {
+        // The kernel's spelling, or the first lookup reports `/tmp` moving to `/private/tmp`.
+        let resolved = realpath(directory, nil).map { path in
+            defer { free(path) }
+            return String(cString: path)
+        }
+        state.report(directory: resolved ?? directory, into: outbox)
+        // Never looked up at once: until its `chdir` the child still sits in Blitz's own folder.
+        let watch = Task.detached {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: directoryInterval)
+                if let directory = terminal.foregroundDirectory() {
+                    state.report(directory: directory, into: outbox)
+                }
+            }
+        }
+        var scanner: ShellMarkerScanner? = ShellMarkerScanner(code: markerCode, nonce: nonce)
+        var buffer = [UInt8](repeating: 0, count: readSize)
+
+        func finishCommand(status: Int32) {
+            guard let termination = state.finishCommand(status: status) else { return }
+            outbox.post(.commandFinished(ShellCommandResult(termination: termination)))
         }
 
         while true {
-            // A prompt never ends its line, so a pause in the output is what shows it.
-            if decoder.isHolding, !terminal.awaitOutput(timeout: flushInterval) {
-                flush(force: true)
+            outbox.waitForRoom(readSize)
+            let count = read(terminal.parentEnd, &buffer, readSize)
+            if count < 0 && errno == EINTR { continue }
+            // Zero is EOF; -1 with EIO is what a pty master returns once its child is gone.
+            guard count > 0 else { break }
+            guard var active = scanner else {
+                outbox.post(.output(Array(buffer[0..<count])))
                 continue
             }
-            // Zero is EOF; -1 with EIO is what a pty master returns once its child is gone.
-            let count = read(terminal.parentEnd, &buffer, readSize)
-            guard count > 0 else { break }
-            for piece in scanner.scan(buffer[0..<count]) {
+            var text: [UInt8] = []
+            for piece in active.scan(buffer[0..<count]) {
                 switch piece {
                 case .text(let bytes):
-                    decoder.append(bytes)
-                case .lineEnd(let status, let directory):
-                    flush(force: true)
-                    let termination: ShellCommandTermination =
-                        state.finish() ? .stopped : .exited(status: status)
-                    continuation.yield(
-                        .finished(
-                            ShellCommandResult(termination: termination), directory: directory))
+                    text += bytes
+                case .marker(let body):
+                    if !text.isEmpty { outbox.post(.output(text)) }
+                    text = []
+                    finishCommand(status: Int32(body) ?? 1)
+                    scanner = nil
                 }
             }
-            flush(force: ContinuousClock().now - lastYield >= flushInterval)
+            // The marker comes once; what follows is the user's shell and passes straight through.
+            if scanner == nil {
+                text += active.remainder
+            } else {
+                scanner = active
+            }
+            if !text.isEmpty { outbox.post(.output(text)) }
         }
-        decoder.append(scanner.remainder)
-        flush(force: true)
+        if let remainder = scanner?.remainder, !remainder.isEmpty {
+            outbox.post(.output(remainder))
+        }
 
+        watch.cancel()
         let status = terminal.wait()
         terminal.close()
-        // A shell that dies mid-line never marks its end, so the line is reported here instead.
-        if state.isRunning {
-            let termination: ShellCommandTermination =
-                state.finish() ? .stopped : .exited(status: status)
-            continuation.yield(
-                .finished(ShellCommandResult(termination: termination), directory: nil))
-        }
-        continuation.yield(.ended)
-        continuation.finish()
+        // A script killed before its marker, say by a hang-up, reports its own death instead.
+        finishCommand(status: status)
+        outbox.post(.ended)
     }
 
-    /// Written from the main actor and read on the drain queue, so it carries its own lock.
-    private final class SessionState: Sendable {
+    /// Shared by the drain, the folder watch and the main actor, so it carries its own lock.
+    private final class TerminalState: Sendable {
         private struct Phase {
-            /// Which line a delayed kill was meant for, so it can never land on the next one.
-            var generation = 0
-            var isRunning = false
+            var isCommandRunning = true
             var isStopping = false
+            var directory: String?
         }
 
         private let phase = Mutex(Phase())
 
-        var isRunning: Bool { phase.withLock { $0.isRunning } }
+        var isCommandRunning: Bool { phase.withLock { $0.isCommandRunning } }
 
-        func begin() {
-            phase.withLock {
-                $0.generation += 1
-                $0.isRunning = true
-                $0.isStopping = false
-            }
-        }
-
-        /// The line to stop, or nil when none is running and a signal would reach the shell.
-        func requestStop() -> Int? {
-            phase.withLock { current -> Int? in
-                guard current.isRunning else { return nil }
-                current.isStopping = true
-                return current.generation
-            }
-        }
-
-        func isRunning(_ generation: Int) -> Bool {
-            phase.withLock { $0.isRunning && $0.generation == generation }
-        }
-
-        /// Whether the line that just ended was stopped.
-        func finish() -> Bool {
+        /// False once the command has finished, when a signal would reach the user's shell.
+        func requestStop() -> Bool {
             phase.withLock { current -> Bool in
-                current.isRunning = false
-                return current.isStopping
+                guard current.isCommandRunning else { return false }
+                current.isStopping = true
+                return true
+            }
+        }
+
+        /// Nil once the command has been reported, so it is reported exactly once.
+        func finishCommand(status: Int32) -> ShellCommandTermination? {
+            phase.withLock { current -> ShellCommandTermination? in
+                guard current.isCommandRunning else { return nil }
+                current.isCommandRunning = false
+                return current.isStopping ? .stopped : .exited(status: status)
+            }
+        }
+
+        func report(directory: String, into outbox: TerminalOutbox) {
+            phase.withLock { current in
+                guard current.directory != directory else { return }
+                current.directory = directory
+                outbox.post(.directoryChanged(directory))
             }
         }
     }
 
-    /// Splits the shell's end-of-line markers out of the output they arrive inside.
-    private struct LineEndScanner {
-        enum Piece {
-            case text([UInt8])
-            case lineEnd(status: Int32, directory: String)
-        }
+    /// Events not yet taken, output merged; the reader stops reading while too much of it waits.
+    private final class TerminalOutbox: Sendable {
+        private typealias Consumer = CheckedContinuation<TerminalEvent?, Never>
 
-        let marker: [UInt8]
-        private var held: [UInt8] = []
+        private struct Mailbox {
+            var events: [TerminalEvent] = []
+            var pendingBytes = 0
+            var isEnded = false
+            /// Set by a hang-up: nobody is left to read output, so holding it only costs memory.
+            var isDiscardingOutput = false
+            var isAbandoned = false
+            var isReaderWaiting = false
+            var consumer: Consumer?
 
-        init(marker: [UInt8]) {
-            self.marker = marker
-        }
-
-        /// Bytes kept back as a possible marker that never finished.
-        var remainder: [UInt8] { held }
-
-        mutating func scan(_ bytes: ArraySlice<UInt8>) -> [Piece] {
-            held.append(contentsOf: bytes)
-            var pieces: [Piece] = []
-            while let start = held.firstRange(of: marker)?.lowerBound {
-                if start > 0 { pieces.append(.text(Array(held[..<start]))) }
-                let bodyStart = start + marker.count
-                guard let bell = held[bodyStart...].firstIndex(of: 0x07) else {
-                    held.removeFirst(start)
-                    return pieces
+            /// Output joins output already waiting, so a slow consumer takes it in one piece.
+            mutating func append(_ event: TerminalEvent) {
+                guard case .output(let more) = event, case .output(var bytes)? = events.last else {
+                    events.append(event)
+                    return
                 }
-                pieces.append(Self.lineEnd(held[bodyStart..<bell]))
-                held.removeFirst(bell + 1)
+                events.removeLast()
+                bytes += more
+                events.append(.output(bytes))
             }
-            // A marker split across reads keeps its opening bytes back until the rest arrives.
-            let kept = partialMarkerLength()
-            if held.count > kept { pieces.append(.text(Array(held.dropLast(kept)))) }
-            held = Array(held.suffix(kept))
-            return pieces
-        }
 
-        private func partialMarkerLength() -> Int {
-            var length = min(held.count, marker.count - 1)
-            while length > 0, !held.suffix(length).elementsEqual(marker.prefix(length)) {
-                length -= 1
+            /// True when the reader was waiting, for the caller to signal once the lock is let go.
+            mutating func releaseReader() -> Bool {
+                defer { isReaderWaiting = false }
+                return isReaderWaiting
             }
-            return length
         }
 
-        /// The body is `status;folder`, and only the status can never hold a semicolon.
-        private static func lineEnd(_ body: ArraySlice<UInt8>) -> Piece {
-            let separator = body.firstIndex(of: UInt8(ascii: ";")) ?? body.endIndex
-            let status = Int32(String(decoding: body[..<separator], as: UTF8.self)) ?? 1
-            let directory = String(decoding: body[separator...].dropFirst(), as: UTF8.self)
-            return .lineEnd(status: status, directory: directory)
-        }
-    }
+        private let mailbox = Mutex(Mailbox())
+        /// The reader waits on its own thread, never on the cooperative pool.
+        private let room = DispatchSemaphore(value: 0)
 
-    /// Whole lines only: a newline is a scalar boundary, so no read decodes mid-character.
-    private struct TerminalTextDecoder {
-        private var pending: [UInt8] = []
-
-        var isHolding: Bool { !pending.isEmpty }
-
-        mutating func append(_ bytes: [UInt8]) {
-            pending.append(contentsOf: bytes)
-        }
-
-        /// `force` flushes at exit and for a prompt that never ends a line, still on a boundary.
-        mutating func take(force: Bool) -> String? {
-            guard !pending.isEmpty else { return nil }
-            var end = pending.lastIndex(of: 0x0A).map { $0 + 1 }
-            if end == nil {
-                guard force || pending.count >= unlinedLimit else { return nil }
-                end = scalarBoundary(before: pending.count)
+        /// Ignored after `ended`, so nothing can follow it.
+        func post(_ event: TerminalEvent) {
+            let consumer = mailbox.withLock { box -> Consumer? in
+                guard !box.isEnded else { return nil }
+                if case .ended = event { box.isEnded = true }
+                if case .output = event, box.isDiscardingOutput { return nil }
+                if let consumer = box.consumer {
+                    box.consumer = nil
+                    return consumer
+                }
+                if case .output(let bytes) = event { box.pendingBytes += bytes.count }
+                box.append(event)
+                return nil
             }
-            guard let end, end > 0 else { return nil }
-            // Latin-1 cannot fail, so other encodings still reach the reader.
-            let bytes = Array(pending[0..<end])
-            pending.removeFirst(end)
-            return String(bytes: bytes, encoding: .utf8) ?? String(bytes: bytes, encoding: .isoLatin1)
+            consumer?.resume(returning: event)
         }
 
-        /// Walks back over at most three continuation bytes to the start of a whole character.
-        private func scalarBoundary(before index: Int) -> Int {
-            var boundary = index
-            var stepped = 0
-            while boundary > 0, stepped < 4, pending[boundary - 1] & 0xC0 == 0x80 {
-                boundary -= 1
-                stepped += 1
+        /// All the output waiting, unless a status sits inside it; then up to the status.
+        func next() async -> TerminalEvent? {
+            await withCheckedContinuation { (consumer: Consumer) in
+                let taken = mailbox.withLock { box -> (event: TerminalEvent?, wakeReader: Bool)? in
+                    let isOver = box.isAbandoned || (box.events.isEmpty && box.isEnded)
+                    if isOver { return (nil, false) }
+                    guard !box.events.isEmpty else {
+                        box.consumer = consumer
+                        return nil
+                    }
+                    let event = box.events.removeFirst()
+                    if case .output(let bytes) = event { box.pendingBytes -= bytes.count }
+                    return (event, box.releaseReader())
+                }
+                guard let taken else { return }
+                if taken.wakeReader { room.signal() }
+                consumer.resume(returning: taken.event)
             }
-            // A lead byte only holds back when its own sequence is still incomplete.
-            guard boundary > 0 else { return index }
-            let lead = pending[boundary - 1]
-            let width = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1
-            return index - boundary + 1 >= width ? index : boundary - 1
+        }
+
+        /// Blocks the reader until `size` more bytes would still fit under the limit.
+        func waitForRoom(_ size: Int) {
+            while true {
+                let isFull = mailbox.withLock { box -> Bool in
+                    guard !box.isDiscardingOutput,
+                        box.pendingBytes + size > ShellCommandRunner.pendingOutputLimit
+                    else { return false }
+                    box.isReaderWaiting = true
+                    return true
+                }
+                guard isFull else { return }
+                room.wait()
+            }
+        }
+
+        func discardOutput() {
+            let wakeReader = mailbox.withLock { box -> Bool in
+                box.isDiscardingOutput = true
+                box.events.removeAll { if case .output = $0 { true } else { false } }
+                box.pendingBytes = 0
+                return box.releaseReader()
+            }
+            if wakeReader { room.signal() }
+        }
+
+        /// The consumer has gone: a `next` still waiting returns nil, as does every later one.
+        func abandon() {
+            let consumer = mailbox.withLock { box -> Consumer? in
+                box.isAbandoned = true
+                defer { box.consumer = nil }
+                return box.consumer
+            }
+            consumer?.resume(returning: nil)
         }
     }
 
@@ -492,46 +531,53 @@ enum ShellCommandRunner {
     }
 }
 
-extension String {
-    fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+/// Cuts a nonce-keyed OSC marker out of the output it arrives inside, wherever reads split it.
+struct ShellMarkerScanner {
+    enum Piece: Equatable {
+        case text([UInt8])
+        /// Whatever stood between the nonce and the bell.
+        case marker(String)
+    }
+
+    let marker: [UInt8]
+    private var held: [UInt8] = []
+
+    init(code: Int, nonce: String) {
+        marker = Array("\u{1B}]\(code);\(nonce);".utf8)
+    }
+
+    /// Bytes kept back as a possible marker that never finished.
+    var remainder: [UInt8] { held }
+
+    mutating func scan(_ bytes: some Sequence<UInt8>) -> [Piece] {
+        held.append(contentsOf: bytes)
+        var pieces: [Piece] = []
+        while let start = held.firstRange(of: marker)?.lowerBound {
+            if start > 0 { pieces.append(.text(Array(held[..<start]))) }
+            let bodyStart = start + marker.count
+            guard let bell = held[bodyStart...].firstIndex(of: 0x07) else {
+                held.removeFirst(start)
+                return pieces
+            }
+            pieces.append(.marker(String(bytes: held[bodyStart..<bell], encoding: .utf8) ?? ""))
+            held.removeFirst(bell + 1)
+        }
+        // A marker split across reads keeps its opening bytes back until the rest arrives.
+        let kept = partialMarkerLength()
+        if held.count > kept { pieces.append(.text(Array(held.dropLast(kept)))) }
+        held = Array(held.suffix(kept))
+        return pieces
+    }
+
+    private func partialMarkerLength() -> Int {
+        var length = min(held.count, marker.count - 1)
+        while length > 0, !held.suffix(length).elementsEqual(marker.prefix(length)) {
+            length -= 1
+        }
+        return length
+    }
 }
 
-/// A shell in the user's own terminal, for what a log cannot draw: `vim`, `htop`, `ssh`.
-enum TerminalHandoff {
-    /// Removes itself first, then leaves a login shell open in the folder once the command is done.
-    static func script(
-        directory: String, command: String?, arguments: [String], loadingShellEnvironment: Bool
-    ) -> String {
-        var lines = ["#!/bin/zsh", "rm -f -- \"$0\"", "cd -- \(quoted(directory)) || exit"]
-        if let command, !command.isEmpty {
-            // The run contract, word for word: values stay positional, quoted, never spliced in.
-            let flags = loadingShellEnvironment ? "-ilc" : "-lc"
-            let words = [quoted(command), "blitz"] + arguments.map(quoted)
-            lines.append("BLITZ=1 /bin/zsh \(flags) " + words.joined(separator: " "))
-        }
-        lines.append("exec \"${SHELL:-/bin/zsh}\" -l")
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    /// A `.command` file, which opens in Terminal unless the user picked another app for it.
-    static func writeScript(
-        directory: String, command: String?, arguments: [String], loadingShellEnvironment: Bool
-    ) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Blitz-\(UUID().uuidString).command")
-        let contents = script(
-            directory: directory, command: command, arguments: arguments,
-            loadingShellEnvironment: loadingShellEnvironment)
-        guard
-            FileManager.default.createFile(
-                atPath: url.path, contents: Data(contents.utf8),
-                attributes: [.posixPermissions: 0o700])
-        else { throw CocoaError(.fileWriteUnknown) }
-        return url
-    }
-
-    /// Single quotes make every other character literal, so only a single quote needs escaping.
-    static func quoted(_ text: String) -> String {
-        "'" + text.replacing("'", with: "'\\''") + "'"
-    }
+extension String {
+    fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }

@@ -6,7 +6,8 @@ verifying a change is [testing.md](testing.md).
 ## Requirements
 
 - macOS 26 or later (Liquid Glass).
-- Xcode 26 — it provides the SwiftUI macro plugin and the SDK.
+- Xcode 26 — it provides the SwiftUI macro plugin and the SDK. The first build needs the network
+  once, to fetch SwiftTerm.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen), and for linting:
   `brew install swiftlint`.
 - Node, for the generators and for the two stub servers `run-tests.sh` drives. It is the only
@@ -30,8 +31,14 @@ open Blitz.xcodeproj    # then ⌘R
 Or from the command line:
 
 ```sh
-xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Debug build
+xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Debug \
+    -skipPackagePluginValidation build
 ```
+
+**`-skipPackagePluginValidation` goes on every `xcodebuild`.** SwiftTerm applies a build-tool plugin,
+which Xcode runs only once someone has trusted it; the IDE asks once to **Trust & Enable** it, and a
+command-line build has nobody to ask, so it refuses the build without the flag. No Metal Toolchain
+is needed.
 
 `xcodebuild` uses whatever `xcode-select` points at; if that's the Command Line Tools rather than
 Xcode, prefix with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (the SwiftUI
@@ -39,7 +46,18 @@ Xcode, prefix with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (t
 
 `Blitz.xcodeproj` is committed and generated from `project.yml` via XcodeGen — after changing
 project settings in `project.yml`, run `xcodegen generate` and commit the result. There is no
-`Package.swift`, and `Bundle.module` must never be used.
+`Package.swift`, and `Bundle.module` must never be used in Blitz's own code.
+
+**SwiftTerm is the one SwiftPM package**, declared under `packages:` in `project.yml`, and
+`Blitz.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is committed so every
+build resolves the same source. It is pinned to a revision on SwiftTerm's `main`
+(`15fed4fd7ca7b0a8c77dd380412b18a5ce8600b5`, 2026-10-05) rather than a tag: the first version that
+compiles its Metal shader from Swift source at run time — instead of needing Xcode's optional Metal
+Toolchain at build time — is not tagged yet. Move to the next tagged release once there is one.
+`Package.resolved` also pins the packages SwiftTerm's own manifest names (`swift-argument-parser`,
+`swift-png`, `h`) for its tools and other platforms; the app target links only the `SwiftTerm`
+product.
+Why it is allowed at all is in [standards.md](standards.md#posture).
 
 The app target builds and embeds `ClipboardTextHelper` under `Contents/Helpers`, signing it on copy.
 Build the app scheme to include it; copying only the main executable omits OCR support. The helper's
@@ -82,7 +100,8 @@ and the flag database:
 ```sh
 brew install xcode-build-server
 xcodebuild -project Blitz.xcodeproj -scheme Blitz -configuration Debug \
-    -derivedDataPath build/DerivedData build 2>&1 | tee /tmp/blitz-build.log
+    -skipPackagePluginValidation -derivedDataPath build/DerivedData build 2>&1 \
+    | tee /tmp/blitz-build.log
 ./Scripts/sync-lsp.sh /tmp/blitz-build.log
 ```
 

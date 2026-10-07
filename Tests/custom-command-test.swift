@@ -80,21 +80,28 @@ struct CustomCommandTests {
                 name: "Imported", command: "/usr/bin/true", loadsShellEnvironment: true,
                 requiresConfirmation: true, showsConfirmation: true,
                 arguments: [CustomCommandArgument(name: "  Query  ", isOptional: true)],
-                showsOutput: true, runsInTerminal: true)
+                opensTerminal: true)
         ])
         check(
             "import preserves every flag",
             store.commands.first?.loadsShellEnvironment == true
                 && store.commands.first?.requiresConfirmation == true
                 && store.commands.first?.showsConfirmation == true
-                && store.commands.first?.showsOutput == true
-                && store.commands.first?.runsInTerminal == true)
-        let beforeTerminal = Data(
-            #"[{"id":"\#(UUID().uuidString)","name":"Old","command":"/usr/bin/true"}]"#.utf8)
+                && store.commands.first?.opensTerminal == true)
+        let storedFlags = Data(
+            #"[{"id":"\#(UUID().uuidString)","name":"Old","command":"/usr/bin/true","#
+                .appending(#""showsOutput":true,"runsInTerminal":true}]"#).utf8)
+        let decoded = try? JSONDecoder().decode([CustomCommand].self, from: storedFlags)
         check(
-            "a command stored before Run in Terminal existed reads as off",
-            (try? JSONDecoder().decode([CustomCommand].self, from: beforeTerminal))?.first?
-                .runsInTerminal == false)
+            "a stored runsInTerminal key is ignored and showsOutput reads as opensTerminal",
+            decoded?.first?.opensTerminal == true)
+        let encoded = (try? JSONEncoder().encode(decoded ?? []))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] }
+        check(
+            "opensTerminal is written under the showsOutput key",
+            encoded?.first?["showsOutput"] as? Bool == true
+                && encoded?.first?["opensTerminal"] == nil
+                && encoded?.first?["runsInTerminal"] == nil)
         check(
             "import trims an argument name and keeps its optionality",
             store.commands.first?.arguments == [
@@ -165,7 +172,7 @@ struct CustomCommandTests {
         check(
             "the shebang names the interpreter and the path is one quoted word",
             shellScript?.command == #"/bin/bash '/Users/me/scripts/chrome cdp.sh' "$@""#)
-        check("silent mode opens no output window", shellScript?.showsOutput == false)
+        check("silent mode opens no terminal", shellScript?.opensTerminal == false)
         check("needsConfirmation false stays off", shellScript?.requiresConfirmation == false)
         check(
             "a script runs in its own folder",
@@ -189,7 +196,7 @@ struct CustomCommandTests {
         check(
             "osascript comes from the shebang",
             appleScript?.command == #"/usr/bin/osascript '/tmp/facebook.applescript' "$@""#)
-        check("an output mode opens the window", appleScript?.showsOutput == true)
+        check("an output mode opens the terminal", appleScript?.opensTerminal == true)
         check("needsConfirmation true is carried over", appleScript?.requiresConfirmation == true)
         check(
             "a declared directory wins over the script's folder",
@@ -269,181 +276,24 @@ struct CustomCommandTests {
             "a non-zero exit reports its status and stderr",
             failed.termination == .exited(status: 7) && failed.standardError == "expected failure")
 
-        // MARK: Streaming output
-
-        /// Drains a session until it ends, returning what it printed and how its first line ended.
-        func drain(
-            _ session: ShellCommandSession
-        ) async -> (log: String, result: ShellCommandResult?) {
-            var log = ""
-            var result: ShellCommandResult?
-            for await event in session.events {
-                switch event {
-                case .output(let text): log += text
-                case .finished(let value, _): result = result ?? value
-                case .ended: break
-                }
-            }
-            return (plain(log), result)
-        }
-
-        /// One line in a fresh session that is let go at once, as a window closed straight away.
-        func collect(
-            _ command: String, arguments: [String] = [], workingDirectory: String? = nil
-        ) async -> (log: String, result: ShellCommandResult?) {
-            let session = ShellCommandRunner.openSession(
-                arguments: arguments, workingDirectory: workingDirectory)
-            session.run(command)
-            session.end()
-            return await drain(session)
-        }
-
-        let simple = await collect("echo captured")
-        check("a streamed run reports what it printed", simple.log.contains("captured"))
-        check("a streamed run reports a clean exit", simple.result?.succeeded == true)
-
-        // The reported bug: brew writes `==>` to stderr, which must not reorder.
-        let ordered = await collect("printf 'one\\n'; printf 'two\\n' >&2; printf 'three\\n'")
-        let places = ["one", "two", "three"].map { ordered.log.range(of: $0)?.lowerBound }
-        check(
-            "both streams keep the order they were written in",
-            places.allSatisfy { $0 != nil } && places[0]! < places[1]! && places[1]! < places[2]!)
-
-        // A pipe would block-buffer this and deliver it all at exit; a pty must not.
-        let live = ShellCommandRunner.openSession()
-        live.run("echo first; sleep 1; echo second")
-        live.end()
-        let began = Date()
-        var firstOutputAt: TimeInterval?
-        for await event in live.events {
-            if case .output = event, firstOutputAt == nil {
-                firstOutputAt = Date().timeIntervalSince(began)
-            }
-        }
-        check(
-            "output arrives while the command is still running",
-            (firstOutputAt ?? .greatestFiniteMagnitude) < 0.5)
-
-        let statused = await collect("(exit 7)")
-        check(
-            "a streamed run reports its exit status",
-            statused.result?.termination == .exited(status: 7))
-
-        let multibyte = await collect(
-            "printf 'h\u{e9}llo w\u{f6}rld \u{2014} \u{fc}n\u{ef}code\\n'")
-        check(
-            "a multi-byte character is never split into a replacement character",
-            multibyte.log.contains("h\u{e9}llo w\u{f6}rld \u{2014} \u{fc}n\u{ef}code")
-                && !multibyte.log.contains("\u{FFFD}"))
-
-        // MARK: Sessions
-
-        let session = ShellCommandRunner.openSession(arguments: ["alpha"])
-        var events = session.events.makeAsyncIterator()
-
-        session.run("cd /usr/lib && export BLITZ_PROBE=kept")
-        let moved = await nextLine(&events)
-        check(
-            "a finished line reports the folder it left the shell in",
-            moved.directory == "/usr/lib")
-
-        session.run("pwd; echo \"$BLITZ_PROBE $1\"")
-        let followUp = await nextLine(&events)
-        check(
-            "a follow-up line keeps the folder, the exports and the arguments",
-            followUp.log.contains("/usr/lib") && followUp.log.contains("kept alpha"))
-
-        // ⌃C ends the whole line, the way a terminal's does, and leaves the shell standing.
-        session.run("sleep 30; echo should-not-print")
-        try? await Task.sleep(for: .milliseconds(400))
-        let stoppedAt = Date()
-        session.stop()
-        let interrupted = await nextLine(&events)
-        check(
-            "a stopped line says so rather than reporting a signal",
-            interrupted.result == .stopped)
-        check(
-            "stopping ends the rest of the line, not just its first command",
-            !interrupted.log.contains("should-not-print"))
-        check(
-            "an interrupt stops a line without waiting for the kill",
-            Date().timeIntervalSince(stoppedAt) < 1.5)
-
-        session.stop()
-        session.run("echo still-here")
-        let survived = await nextLine(&events)
-        check(
-            "the shell outlives a stopped line, and a stop with nothing running",
-            survived.log.contains("still-here") && survived.result == .exited(status: 0))
-
-        session.run("read -r answer; echo \"got:$answer\"")
-        try? await Task.sleep(for: .milliseconds(300))
-        session.type("yes please\n")
-        let answered = await nextLine(&events)
-        check("typed input reaches a command reading it", answered.log.contains("got:yes please"))
-        check(
-            "what is typed is echoed once, like a terminal",
-            answered.log.components(separatedBy: "yes please").count == 3)
-
-        session.run("printf 'Continue? '; read -r reply; echo \"[$reply]\"")
-        var prompt = ""
-        let promptedAt = Date()
-        while !prompt.contains("Continue?"), Date().timeIntervalSince(promptedAt) < 2,
-            case .output(let text)? = await events.next()
-        {
-            prompt += text
-        }
-        check(
-            "a prompt that never ends its line is shown while it waits",
-            prompt.contains("Continue?") && Date().timeIntervalSince(promptedAt) < 1)
-        session.type("\u{4}")
-        let declined = await nextLine(&events)
-        check("⌃D gives a reading command its end of input", declined.log.contains("[]"))
-
-        session.run("exit 3")
-        let exited = await nextLine(&events)
-        check("exit ends the line with its status", exited.result == .exited(status: 3))
-        check("and ends the session with it", exited.ended)
-
-        // Closing the window must never cut a command short: the shell leaves once it is done.
-        let closing = ShellCommandRunner.openSession()
-        closing.run("sleep 1; echo finished-after-end")
-        closing.end()
-        let closed = await drain(closing)
-        check(
-            "ending a session lets its running line finish first",
-            closed.log.contains("finished-after-end") && closed.result?.succeeded == true)
-
-        // The backstop: a line that ignores ⌃C is killed, and the shell goes with it.
-        let stubborn = ShellCommandRunner.openSession()
-        var stubbornEvents = stubborn.events.makeAsyncIterator()
-        stubborn.run("trap '' INT; sleep 43")
-        try? await Task.sleep(for: .milliseconds(400))
-        stubborn.stop()
-        let killed = await nextLine(&stubbornEvents)
-        check("a line that ignores ⌃C is still stopped", killed.result == .stopped && killed.ended)
-        try? await Task.sleep(for: .milliseconds(400))
-        let survivors = await collect("pgrep -f 'sleep 4[3]' | wc -l")
-        check(
-            "stopping kills the whole command tree, not just the shell",
-            survivors.log.trimmingCharacters(in: .whitespacesAndNewlines) == "0")
-
         // MARK: Working directory
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let atHome = await collect("pwd")
-        check("a command with no folder starts at home", atHome.log.hasSuffix(home))
+        let atHome = await ShellCommandRunner.run("pwd")
+        check(
+            "a command with no folder starts at home",
+            atHome.lastOutputLine?.hasSuffix(home) == true)
 
-        let elsewhere = await collect("pwd", workingDirectory: "/usr/lib")
-        check("a command runs in the folder it names", elsewhere.log.hasSuffix("/usr/lib"))
+        let elsewhere = await ShellCommandRunner.run("pwd", workingDirectory: "/usr/lib")
+        check("a command runs in the folder it names", elsewhere.lastOutputLine == "/usr/lib")
 
-        let tilde = await collect("pwd", workingDirectory: "~/")
-        check("a tilde path is expanded", tilde.log.hasSuffix(home))
+        let tilde = await ShellCommandRunner.run("pwd", workingDirectory: "~/")
+        check("a tilde path is expanded", tilde.lastOutputLine?.hasSuffix(home) == true)
 
         // Silently running somewhere else would be worse than not running at all.
-        let gone = await collect("pwd", workingDirectory: "/nope/does/not/exist")
+        let gone = await ShellCommandRunner.run("pwd", workingDirectory: "/nope/does/not/exist")
         var reportedMissing = false
-        if case .launchFailed(let reason) = gone.result?.termination {
+        if case .launchFailed(let reason) = gone.termination {
             reportedMissing = reason.contains("no longer exists")
         }
         check("a folder that has gone is reported, not ignored", reportedMissing)
@@ -488,16 +338,16 @@ struct CustomCommandTests {
 
         // MARK: Arguments
 
-        let positional = await collect(
+        let positional = await ShellCommandRunner.run(
             "test \"$1\" = alpha && test \"$2\" = beta", arguments: ["alpha", "beta"])
-        check("values arrive as positional parameters", positional.result?.succeeded == true)
+        check("values arrive as positional parameters", positional.succeeded)
 
         // The whole reason values are passed positionally: shell syntax in one is inert.
-        let injected = await collect(
+        let injected = await ShellCommandRunner.run(
             "printf '%s\\n' \"$1\"", arguments: ["; touch /tmp/blitz-should-not-exist"])
         check(
             "a value carrying shell syntax is data, not code",
-            injected.log.contains("; touch /tmp/blitz-should-not-exist")
+            injected.lastOutputLine == "; touch /tmp/blitz-should-not-exist"
                 && !FileManager.default.fileExists(atPath: "/tmp/blitz-should-not-exist"))
 
         // MARK: Inline argument values
@@ -530,44 +380,6 @@ struct CustomCommandTests {
             "arguments are capped at three, counted after blanks drop",
             capped.map(\.name) == ["a", "b", "c"])
 
-        // MARK: Terminal handoff
-
-        // A quote in the folder is the case a naive `cd "$dir"` gets wrong.
-        let handoffFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blitz it's \(UUID().uuidString)")
-        try? FileManager.default.createDirectory(
-            at: handoffFolder, withIntermediateDirectories: true)
-        // A value carrying a quote and shell syntax must still arrive as one inert word.
-        let handedValue = "it's; touch /tmp/blitz-handoff-should-not-exist"
-        let handoff = try? TerminalHandoff.writeScript(
-            directory: handoffFolder.path,
-            command: "pwd > landed; printf '%s\\n' \"$1\" \"$BLITZ\" >> landed",
-            arguments: [handedValue], loadingShellEnvironment: false)
-        let mode = handoff.flatMap {
-            try? FileManager.default.attributesOfItem(atPath: $0.path)[.posixPermissions] as? Int
-        }
-        check("a handoff script is executable by its owner alone", mode == 0o700)
-        if let handoff {
-            // The script ends by opening the user's shell; `true` stands in for it here.
-            _ = await ShellCommandRunner.run(
-                "SHELL=/usr/bin/true /bin/zsh \(TerminalHandoff.quoted(handoff.path))")
-            let landed = (try? String(
-                contentsOf: handoffFolder.appendingPathComponent("landed"), encoding: .utf8))?
-                .split(separator: "\n").map(String.init) ?? []
-            check(
-                "a handoff runs its command in the session's folder",
-                landed.first?.hasSuffix(handoffFolder.lastPathComponent) == true)
-            check(
-                "a handed-off value reaches the command as data, with BLITZ set",
-                Array(landed.dropFirst()) == [handedValue, "1"]
-                    && !FileManager.default.fileExists(
-                        atPath: "/tmp/blitz-handoff-should-not-exist"))
-            check(
-                "a handoff script deletes itself once it starts",
-                !FileManager.default.fileExists(atPath: handoff.path))
-        }
-        try? FileManager.default.removeItem(at: handoffFolder)
-
         // MARK: Shell environment
 
         // A throwaway ZDOTDIR proves interactive mode sources an rc file.
@@ -597,22 +409,305 @@ struct CustomCommandTests {
             "read -r answer", loadingShellEnvironment: true)
         check("a command reading stdin fails instead of hanging", !prompted.succeeded)
 
-        // Interactive zsh turns job control on, which would put a line out of the stop's reach.
-        let interactive = ShellCommandRunner.openSession(loadingShellEnvironment: true)
-        var interactiveEvents = interactive.events.makeAsyncIterator()
-        interactive.run("blitz_probe")
-        let aliased = await nextLine(&interactiveEvents)
+        // MARK: Terminals
+
+        // Stands in for the user's shell, so a run ends once it shows the shell opened.
+        let fakeShell = zdotdir.appendingPathComponent("fake-shell")
+        FileManager.default.createFile(
+            atPath: fakeShell.path,
+            contents: Data(
+                "#!/bin/sh\nprintf 'shell-opened:%s:%s\\n' \"${BLITZ-unset}\" \"$1\"\n".utf8),
+            attributes: [.posixPermissions: 0o755])
+        setenv("SHELL", fakeShell.path, 1)
+
+        let liveTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "echo first; sleep 1; echo second"))
         check(
-            "a session loading the environment resolves an rc-file alias",
-            aliased.result == .exited(status: 0))
-        interactive.run("sleep 30; echo should-not-print")
-        try? await Task.sleep(for: .milliseconds(400))
-        interactive.stop()
-        let interruptedInteractive = await nextLine(&interactiveEvents)
+            "terminal output arrives while the command is still running",
+            (liveTerminal.firstOutputAt ?? .seconds(9)) < .milliseconds(500)
+                && liveTerminal.output.contains("first\nsecond"))
         check(
-            "a stop reaches a line in a session loading the environment",
-            interruptedInteractive.result == .stopped && !interruptedInteractive.ended)
-        interactive.end()
+            "the user's shell opens as a login shell once the command is done",
+            liveTerminal.outputAfterCommand.contains("shell-opened:unset:-l") && liveTerminal.ended)
+
+        let exitedTerminal = await record(ShellCommandRunner.openTerminal(command: "exit 7"))
+        check(
+            "the command's status arrives through the marker, which never reaches the view",
+            exitedTerminal.result == .exited(status: 7) && !exitedTerminal.output.contains("6973"))
+
+        var markerScanner = ShellMarkerScanner(code: 6973, nonce: "N")
+        let markedBytes = Array("before\u{1B}]6973;N;7\u{07}after".utf8)
+        let splitPieces = markedBytes.flatMap { markerScanner.scan([$0]) }
+        let splitText = splitPieces.flatMap { piece -> [UInt8] in
+            if case .text(let bytes) = piece { return bytes }
+            return []
+        }
+        check(
+            "a marker split across reads is still found and cut out",
+            String(decoding: splitText, as: UTF8.self) == "beforeafter"
+                && splitPieces.filter { $0 == .marker("7") }.count == 1
+                && markerScanner.remainder.isEmpty)
+        var lookalike = ShellMarkerScanner(code: 6973, nonce: "N")
+        let heldBack = lookalike.scan(Array("x\u{1B}]69".utf8))
+        let released = lookalike.scan(Array("q".utf8))
+        check(
+            "bytes held back as a possible marker are released once they are not one",
+            heldBack == [.text(Array("x".utf8))] && released == [.text(Array("\u{1B}]69q".utf8))])
+
+        let spoofed = await record(
+            ShellCommandRunner.openTerminal(
+                command: "printf '\\e]6973;not-the-nonce;0\\a'; printf 'after\\n'; exit 5"))
+        check(
+            "a marker without the nonce is ignored and passed through to the view",
+            spoofed.result == .exited(status: 5)
+                && spoofed.output.contains("\u{1B}]6973;not-the-nonce;0\u{07}after"))
+
+        for loadsEnvironment in [false, true] {
+            let mode = loadsEnvironment ? " (loading the environment)" : ""
+            var interrupted = false
+            // Interactive zsh shrugs off a ⌃C between commands, so `ready` comes from the child.
+            let typedInterrupt = await record(
+                ShellCommandRunner.openTerminal(
+                    command: "/bin/sh -c 'echo ready; exec sleep 30'; echo nope",
+                    loadingShellEnvironment: loadsEnvironment)
+            ) { session, run in
+                if !interrupted, run.output.contains("ready") {
+                    interrupted = true
+                    session.send([0x03])
+                }
+            }
+            check(
+                "a typed ⌃C interrupts the command with 130 and abandons its line\(mode)",
+                typedInterrupt.result == .exited(status: 130)
+                    && !typedInterrupt.output.contains("nope")
+                    && (typedInterrupt.finishedAt ?? .seconds(9)) < .seconds(2))
+            check(
+                "the shell still opens after a typed ⌃C\(mode)",
+                typedInterrupt.outputAfterCommand.contains("shell-opened"))
+        }
+
+        var stopSent = false
+        let stoppedTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "echo ready; sleep 30; echo nope")
+        ) { session, run in
+            if !stopSent, run.output.contains("ready") {
+                stopSent = true
+                session.stop()
+            }
+        }
+        check(
+            "Stop reports a stopped command, without waiting for the kill",
+            stoppedTerminal.result == .stopped && !stoppedTerminal.output.contains("nope")
+                && (stoppedTerminal.finishedAt ?? .seconds(9)) < .milliseconds(1500))
+        check(
+            "the shell still opens after Stop",
+            stoppedTerminal.outputAfterCommand.contains("shell-opened"))
+
+        var stubbornStopSent = false
+        let stubbornTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "trap '' INT; echo ready; sleep 45")
+        ) { session, run in
+            if !stubbornStopSent, run.output.contains("ready") {
+                stubbornStopSent = true
+                session.stop()
+            }
+        }
+        let stubbornSurvivors = await ShellCommandRunner.run("pgrep -f 'sleep 4[5]' | wc -l")
+        check(
+            "a command ignoring ⌃C is killed after the grace, with no survivor",
+            stubbornTerminal.result == .stopped && stubbornSurvivors.lastOutputLine == "0")
+        check(
+            "the shell still opens after the backstop kill",
+            stubbornTerminal.outputAfterCommand.contains("shell-opened"))
+
+        // A slow rc file is where a Stop lands between commands, which interactive zsh shrugs off.
+        var startupStopSent = false
+        let startupStopped = await record(
+            ShellCommandRunner.openTerminal(
+                command: "echo ready; sleep 46", loadingShellEnvironment: true)
+        ) { session, run in
+            if !startupStopSent, run.output.contains("ready") {
+                startupStopSent = true
+                session.stop()
+            }
+        }
+        check(
+            "Stop still ends an interactive command that shrugged off its ⌃C",
+            startupStopped.result == .stopped
+                && startupStopped.outputAfterCommand.contains("shell-opened"))
+
+        let abandoned = ShellCommandRunner.openTerminal(command: "sleep 47")
+        let abandonedReader = Task { for await _ in abandoned.events {} }
+        try? await Task.sleep(for: .milliseconds(300))
+        abandonedReader.cancel()
+        try? await Task.sleep(for: .milliseconds(300))
+        let abandonedSurvivors = await ShellCommandRunner.run("pgrep -f 'sleep 4[7]' | wc -l")
+        check(
+            "a terminal whose events are dropped is hung up",
+            abandonedSurvivors.lastOutputLine == "0")
+
+        let controlling = await record(
+            ShellCommandRunner.openTerminal(
+                command: ": </dev/tty && echo tty-ok; [[ -t 0 ]] && echo stdin-is-tty; stty -a"))
+        check(
+            "the command has a controlling terminal",
+            controlling.output.contains("tty-ok") && controlling.output.contains("stdin-is-tty"))
+        check(
+            "the terminal keeps the kernel's ⌃D and ⌃C and adds UTF-8 erasing",
+            controlling.output.contains(" iutf8") && controlling.output.contains("eof = ^D")
+                && controlling.output.contains("intr = ^C"))
+
+        let injection = "/tmp/blitz-terminal-should-not-exist"
+        let terminalValues = ["it's", "a; touch \(injection)", "$(touch \(injection))"]
+        let positionalTerminal = await record(
+            ShellCommandRunner.openTerminal(
+                command: "printf '[%s]\\n' \"$@\"", arguments: terminalValues))
+        check(
+            "terminal values arrive positionally, shell syntax in them inert",
+            terminalValues.allSatisfy { positionalTerminal.output.contains("[\($0)]") }
+                && !FileManager.default.fileExists(atPath: injection))
+
+        var resized = false
+        let sizedTerminal = await record(
+            ShellCommandRunner.openTerminal(
+                command: "stty size; read -r _; stty size", columns: 100, rows: 30)
+        ) { session, run in
+            if !resized, run.output.contains("30 100") {
+                resized = true
+                session.resize(120, 40)
+                session.send(Array("\n".utf8))
+            }
+        }
+        check(
+            "the terminal starts at the size asked for and follows a resize",
+            sizedTerminal.output.contains("30 100") && sizedTerminal.output.contains("40 120"))
+
+        var hungUp = false
+        let hangUpTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "echo ready; sleep 44")
+        ) { session, run in
+            if !hungUp, run.output.contains("ready") {
+                hungUp = true
+                session.hangUp()
+            }
+        }
+        let hangUpSurvivors = await ShellCommandRunner.run("pgrep -f 'sleep 4[4]' | wc -l")
+        check(
+            "hanging up ends the session at once and kills the running command",
+            hangUpTerminal.ended && (hangUpTerminal.endedAt ?? .seconds(9)) < .seconds(2)
+                && hangUpSurvivors.lastOutputLine == "0")
+
+        let limit = ShellCommandRunner.pendingOutputLimit
+        let flood = await record(
+            ShellCommandRunner.openTerminal(
+                command: "yes blitz-flood | head -n 100000; echo done-marker"),
+            pausingOnFirstOutput: .milliseconds(500))
+        check(
+            "a flood the consumer is too slow for backs up only to the limit, then arrives whole",
+            flood.largestOutput <= limit && flood.largestOutput > limit / 2
+                && flood.output.hasPrefix(
+                    String(repeating: "blitz-flood\n", count: 100_000) + "done-marker\n")
+                && flood.result == .exited(status: 0) && flood.ended)
+
+        let pausedHangUp = ShellCommandRunner.openTerminal(command: "yes blitz-hang-up")
+        let hangUpDuringPause = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            pausedHangUp.hangUp()
+        }
+        let hungUpFlood = await record(pausedHangUp, pausingOnFirstOutput: .milliseconds(500))
+        hangUpDuringPause.cancel()
+        let pausedSurvivors = await ShellCommandRunner.run("pgrep -f 'yes blitz-hang-u[p]' | wc -l")
+        check(
+            "hanging up a flood nobody is reading drops its output and ends it at once",
+            hungUpFlood.ended && (hungUpFlood.endedAt ?? .seconds(9)) < .milliseconds(1200)
+                && hungUpFlood.output.utf8.count <= limit
+                && pausedSurvivors.lastOutputLine == "0")
+
+        let missingTerminal = await record(
+            ShellCommandRunner.openTerminal(
+                command: "pwd", workingDirectory: "/nope/does/not/exist"))
+        var terminalMissingReported = false
+        if case .launchFailed(let reason) = missingTerminal.result {
+            terminalMissingReported = reason.contains("no longer exists")
+        }
+        check(
+            "a terminal in a folder that has gone reports a launch failure",
+            terminalMissingReported && missingTerminal.ended)
+
+        // Not close-on-exec, the way a library might leave them; the child must still not see them.
+        let strayDescriptor = open("/dev/null", O_RDONLY)
+        let highStrayDescriptor = fcntl(strayDescriptor, F_DUPFD, 60)
+        let descriptorTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "/bin/ls /dev/fd | /usr/bin/paste -sd , -"))
+        Darwin.close(strayDescriptor)
+        Darwin.close(highStrayDescriptor)
+        // `ls` holds 3 and 4 itself while it lists the folder.
+        check(
+            "the command inherits only the terminal's three descriptors",
+            descriptorTerminal.output.hasPrefix("0,1,2,3,4\n"))
+
+        let blitzMarked = await record(
+            ShellCommandRunner.openTerminal(command: "echo \"command:${BLITZ-unset}\""))
+        check(
+            "BLITZ is set for the command and not for the user's shell",
+            blitzMarked.output.contains("command:1")
+                && blitzMarked.outputAfterCommand.contains("shell-opened:unset"))
+
+        let folderTerminal = await record(
+            ShellCommandRunner.openTerminal(command: "sleep 0.6", workingDirectory: "/usr/lib"))
+        check(
+            "the terminal reports the folder it starts in",
+            folderTerminal.directories.first == "/usr/lib")
+
+        let blankEnvironment = ShellCommandRunner.terminalEnvironment(
+            inheriting: ["BLITZ": "1", "TERM": "dumb"], locale: Locale(identifier: "de_DE"))
+        check(
+            "a terminal asks for colour, drops an inherited BLITZ and fills a missing LANG",
+            blankEnvironment["TERM"] == "xterm-256color"
+                && blankEnvironment["COLORTERM"] == "truecolor"
+                && blankEnvironment["BLITZ"] == nil && blankEnvironment["LANG"] == "de_DE.UTF-8")
+        check(
+            "an uninstalled language and region falls back to a UTF-8 locale that exists",
+            ShellCommandRunner.terminalEnvironment(
+                inheriting: [:], locale: Locale(identifier: "en_DE"))["LANG"] == "en_US.UTF-8")
+        check(
+            "a LANG the user already has is kept",
+            ShellCommandRunner.terminalEnvironment(
+                inheriting: ["LANG": "C"], locale: Locale(identifier: "de_DE"))["LANG"] == "C")
+
+        // The "suspended (tty output)" regression: the shell after an interactive command must run.
+        try? Data("alias blitz_probe=true\nPS1='blitz-prompt> '\n".utf8).write(
+            to: zdotdir.appendingPathComponent(".zshrc"))
+        setenv("SHELL", "/bin/zsh", 1)
+        var shellStep = 0
+        let interactiveTerminal = await record(
+            ShellCommandRunner.openTerminal(
+                command: "blitz_probe && echo alias-ok", loadingShellEnvironment: true)
+        ) { session, run in
+            switch shellStep {
+            case 0 where run.outputAfterCommand.contains("blitz-prompt> "):
+                shellStep = 1
+                session.send(Array("cd /usr/lib\n".utf8))
+            case 1 where run.directories.last == "/usr/lib":
+                shellStep = 2
+                session.send(Array("echo typed-$((6*7)); exit\n".utf8))
+            default:
+                break
+            }
+        }
+        check(
+            "loading the environment resolves an rc-file alias in a terminal",
+            interactiveTerminal.result == .exited(status: 0)
+                && interactiveTerminal.output.contains("alias-ok"))
+        check(
+            "a cd in the user's shell is reported as the terminal's folder",
+            shellStep == 2)
+        check(
+            "the user's shell runs a typed line after an interactive command, then exits",
+            interactiveTerminal.outputAfterCommand.contains("typed-42")
+                && interactiveTerminal.ended
+                && (interactiveTerminal.endedAt ?? .seconds(9)) < .seconds(8))
+        unsetenv("SHELL")
 
         unsetenv("ZDOTDIR")
 
@@ -640,33 +735,56 @@ private func isolatedDefaults(_ name: String) -> UserDefaults {
     return defaults
 }
 
-/// Collects events until the line in flight finishes, leaving the session open behind it.
-private func nextLine(
-    _ events: inout AsyncStream<ShellCommandEvent>.Iterator
-) async -> (log: String, result: ShellCommandTermination?, directory: String?, ended: Bool) {
-    var log = ""
+/// What a terminal reported, with times measured from when recording began.
+private struct TerminalRecord {
+    var output = ""
+    var outputAfterCommand = ""
     var result: ShellCommandTermination?
-    var directory: String?
-    while let event = await events.next() {
-        switch event {
-        case .output(let text):
-            log += text
-        case .finished(let value, let folder):
-            result = value.termination
-            directory = folder
-        case .ended:
-            return (plain(log), result, directory, true)
-        }
-        if result != nil { break }
-    }
-    // Only a shell that has gone reports no folder, and its `ended` is already on the way.
-    guard result != nil, directory == nil, case .ended? = await events.next() else {
-        return (plain(log), result, directory, false)
-    }
-    return (plain(log), result, directory, true)
+    var directories: [String] = []
+    var ended = false
+    /// The most output any one event carried.
+    var largestOutput = 0
+    var firstOutputAt: Duration?
+    var finishedAt: Duration?
+    var endedAt: Duration?
 }
 
-/// A pty ends every line with CR LF, never part of the thing under test.
-private func plain(_ log: String) -> String {
-    log.replacingOccurrences(of: "\r", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+/// Records until the session ends; one still open at `limit` is hung up, which fails its checks.
+@MainActor
+private func record(
+    _ session: TerminalSession, limit: Duration = .seconds(8),
+    pausingOnFirstOutput pause: Duration? = nil,
+    react: (TerminalSession, TerminalRecord) -> Void = { _, _ in }
+) async -> TerminalRecord {
+    let watchdog = Task {
+        try? await Task.sleep(for: limit)
+        if !Task.isCancelled { session.hangUp() }
+    }
+    defer { watchdog.cancel() }
+    let clock = ContinuousClock()
+    let began = clock.now
+    var run = TerminalRecord()
+    for await event in session.events {
+        switch event {
+        case .output(let bytes):
+            let text = String(decoding: bytes, as: UTF8.self)
+                .replacingOccurrences(of: "\r", with: "")
+            let isFirstOutput = run.firstOutputAt == nil
+            run.firstOutputAt = run.firstOutputAt ?? clock.now - began
+            run.output += text
+            run.largestOutput = max(run.largestOutput, bytes.count)
+            if run.result != nil { run.outputAfterCommand += text }
+            if isFirstOutput, let pause { try? await Task.sleep(for: pause) }
+        case .commandFinished(let result):
+            run.result = result.termination
+            run.finishedAt = clock.now - began
+        case .directoryChanged(let directory):
+            run.directories.append(directory)
+        case .ended:
+            run.ended = true
+            run.endedAt = clock.now - began
+        }
+        react(session, run)
+    }
+    return run
 }

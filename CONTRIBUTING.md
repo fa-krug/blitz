@@ -21,7 +21,8 @@ Check existing [issues](https://github.com/fa-krug/blitz/issues) and
 - macOS 26+, Xcode 26. Do the one-time signing setup
   ([`docs/signing.md`](docs/signing.md) §1).
 - `open Blitz.xcodeproj` → ⌘R. Debug builds are their own channel (`Blitz Dev.app`).
-- After editing `project.yml`: `xcodegen generate`, commit the result. No SwiftPM.
+- After editing `project.yml`: `xcodegen generate`, commit the result. SwiftTerm is the one SwiftPM
+  package; Xcode asks once to **Trust & Enable** its build plugin.
 - Details: [`docs/development.md`](docs/development.md). Architecture:
   [`docs/architecture.md`](docs/architecture.md). Start at [`docs/`](docs/README.md).
 

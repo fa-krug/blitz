@@ -3,8 +3,8 @@
 A native macOS menu-bar launcher: fuzzy app launcher, global and per-app hotkeys, a text/image
 clipboard history, an inline calculator, a floating note, snippets, quicklinks, window management
 and an emoji picker. It also **runs Raycast extensions** natively, in JavaScriptCore.
-SwiftUI + AppKit, running as an accessory with no Dock icon (`LSUIElement`). Zero third-party
-dependencies. A fork of [Tinycast](https://github.com/abue-ammar/tinycast).
+SwiftUI + AppKit, running as an accessory with no Dock icon (`LSUIElement`). One third-party
+dependency, SwiftTerm. A fork of [Tinycast](https://github.com/abue-ammar/tinycast).
 
 ## Posture: latest-only, always
 
@@ -28,7 +28,9 @@ Write code as if the platform released yesterday:
   one needs an explicit task saying so.
 
 Carbon is a deliberate capability-gap dependency rather than inertia: nothing modern registers a
-system-wide chord, and HIToolbox's TIS APIs remain the public input-source mechanism. Full reasoning in
+system-wide chord, and HIToolbox's TIS APIs remain the public input-source mechanism. SwiftTerm is the
+one third-party exception on the same terms: the system has no terminal emulator to embed. No other
+dependency comes in without a gap of that kind. Full reasoning in
 [standards.md](docs/standards.md#posture).
 
 ## Where things are
@@ -122,7 +124,9 @@ feature's doc, under its own `## Invariants`.
   never shares prefs, caches, TCC grants or the login item with an installed copy. Anything newly
   persisted must stay keyed by `Bundle.main.bundleIdentifier`.
 - **XcodeGen owns the project.** `Blitz.xcodeproj` is committed but generated from `project.yml`;
-  after editing it, run `xcodegen generate` and commit both. No SwiftPM, and never `Bundle.module`.
+  after editing it, run `xcodegen generate` and commit both. SwiftTerm is the one SwiftPM package,
+  declared under `packages:` with `Package.resolved` committed; Blitz's own code never uses
+  `Bundle.module`, and every `xcodebuild` needs `-skipPackagePluginValidation`.
 
 ## Before you finish
 

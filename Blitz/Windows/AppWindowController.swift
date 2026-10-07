@@ -17,6 +17,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     private let minimumSize: CGSize
     private let isResizable: Bool
     private let autosaveName: String?
+    /// A sibling's frame to open cascaded from, keeping its size, instead of centred or restored.
+    private let cascadeAnchor: NSRect?
     private let activation: ActivationPolicy
     private let closesOnEscape: Bool
     /// For an owner holding something that should end with the window, not just hide behind it.
@@ -28,14 +30,15 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     /// The opening size is also the resize floor unless a smaller `minimumSize` is named.
     init(
         title: String, contentSize: CGSize, minimumSize: CGSize? = nil, resizable: Bool = false,
-        autosaveName: String? = nil, activation: ActivationPolicy, closesOnEscape: Bool = false,
-        onClose: (() -> Void)? = nil
+        autosaveName: String? = nil, cascadingFrom cascadeAnchor: NSRect? = nil,
+        activation: ActivationPolicy, closesOnEscape: Bool = false, onClose: (() -> Void)? = nil
     ) {
         self.title = title
         self.contentSize = contentSize
         self.minimumSize = minimumSize ?? contentSize
         self.isResizable = resizable
         self.autosaveName = autosaveName
+        self.cascadeAnchor = cascadeAnchor
         self.activation = activation
         self.closesOnEscape = closesOnEscape
         self.onClose = onClose
@@ -81,6 +84,9 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     func close() {
         window?.close()
     }
+
+    /// Nil while closed; what a sibling window cascades from.
+    var frame: NSRect? { window?.frame }
 
     /// The title bar sits inside the frame but outside the layout area, so it is added back.
     func fitContent(width: CGFloat, height: CGFloat) {
@@ -135,7 +141,12 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         // `contentViewController` resets the frame to the controller's fitting size.
         window.setContentSize(contentSize)
 
-        if let autosaveName {
+        if let cascadeAnchor {
+            window.setFrame(cascadeAnchor, display: false)
+            window.cascadeTopLeft(from: window.cascadeTopLeft(from: .zero))
+            // Claims the name only once no sibling holds it, so two windows never share one frame.
+            if let autosaveName { window.setFrameAutosaveName(autosaveName) }
+        } else if let autosaveName {
             window.setFrameAutosaveName(autosaveName)
             if !window.setFrameUsingName(autosaveName) { window.center() }
         } else {
