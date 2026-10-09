@@ -8,7 +8,6 @@ struct QuicklinksSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SettingsNavigationState.self) private var navigation
     @State private var editor: QuicklinkEditRequest?
-    @State private var pendingDeletion: Quicklink?
 
     var body: some View {
         let shown = navigation.page.flatMap(store.quicklink(entryID:))
@@ -17,7 +16,7 @@ struct QuicklinksSettingsView: View {
                 QuicklinkDetailForm(
                     quicklink: shown,
                     onEdit: { editor = QuicklinkEditRequest(quicklink: shown) },
-                    onDelete: { pendingDeletion = shown })
+                    onDelete: { delete(shown) })
             }
         } library: {
             libraryForm
@@ -30,16 +29,18 @@ struct QuicklinksSettingsView: View {
             editor = request
             core.pendingQuicklinkEdit = nil
         }
-        .alert(item: $pendingDeletion) { quicklink in
-            Alert(
-                title: Text("Delete “\(quicklink.name)”?"),
-                message: Text("Its global shortcut and launcher references will also be removed."),
-                primaryButton: .destructive(Text("Delete")) {
-                    Task {
-                        await core.quicklinkCoordinator.deleteQuicklink(id: quicklink.id, confirming: false)
-                    }
-                },
-                secondaryButton: .cancel())
+    }
+
+    private func delete(_ quicklink: Quicklink) {
+        Task {
+            guard
+                await core.confirm(
+                    title: "Delete “\(quicklink.name)”?",
+                    message: "Its global shortcut and launcher references will also be removed.",
+                    symbol: quicklink.symbol, artwork: store.faviconPaths[quicklink.id],
+                    confirmTitle: "Delete")
+            else { return }
+            await core.quicklinkCoordinator.deleteQuicklink(id: quicklink.id, confirming: false)
         }
     }
 

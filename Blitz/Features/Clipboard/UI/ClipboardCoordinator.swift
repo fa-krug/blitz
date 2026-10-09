@@ -164,10 +164,23 @@ final class ClipboardCoordinator {
         guard
             await core.confirm(
                 title: "Delete All Entries",
-                message: "Are you sure you want to proceed with deleting all clipboard history entries?",
+                message: "Every entry goes except pinned ones. This can't be undone.",
                 symbol: PaletteMode.clipboard.systemImage, confirmTitle: "Delete All")
         else { return }
         clearHistory()
+    }
+
+    /// Pinning is how an entry is kept, so only a pinned one asks before it goes.
+    func deleteClip(_ item: ClipboardItem) async {
+        if item.isPinned {
+            guard
+                await core.confirm(
+                    title: "Delete Pinned Entry?",
+                    message: "Pinned entries outlive Delete All; this one goes for good.",
+                    symbol: "pin", confirmTitle: "Delete")
+            else { return }
+        }
+        clipboardStore.remove(item)
     }
 
     /// Reachable with the feature off, so what was kept before can still be erased afterwards.
@@ -190,6 +203,7 @@ final class ClipboardCoordinator {
     func copyColor(_ color: ColorValue, as format: ColorFormat) {
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(format.string(for: color))
+        core.showMessage("Copied color")
     }
 
     func revealClip(_ item: ClipboardItem) {
@@ -208,14 +222,14 @@ final class ClipboardCoordinator {
     func openClip(_ item: ClipboardItem) {
         guard let url = clipURL(for: item) else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
-        AppLauncher.open(url)
+        if !AppLauncher.open(url) { core.reportOpenFailure(url.lastPathComponent, symbol: "doc") }
     }
 
     /// ⌘O on a link or an address: the default browser or mail app takes it.
     func openLink(_ item: ClipboardItem) {
         guard let url = item.openableURL else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
-        AppLauncher.open(url)
+        if !AppLauncher.open(url) { core.reportOpenFailure(url.absoluteString, symbol: "link") }
     }
 
     /// The palette stays up under the sheet, as File Search's Share does.

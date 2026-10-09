@@ -62,7 +62,9 @@ final class FallbackCoordinator {
     private func searchWeb(_ query: String) {
         guard let url = settings.webSearchEngine.url(searching: query) else { return }
         core.paletteCoordinator.hidePalette(restoreFocus: false)
-        AppLauncher.open(url)
+        if !AppLauncher.open(url) {
+            core.reportOpenFailure(url.host() ?? url.absoluteString, symbol: "magnifyingglass")
+        }
     }
 
     /// The section's gear and the row's own action; the palette closes behind the pane.

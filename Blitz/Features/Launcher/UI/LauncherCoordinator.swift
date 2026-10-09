@@ -83,7 +83,9 @@ final class LauncherCoordinator {
             // Query-driven: only this row knows the URL the typed text resolved to.
             if id == .openInBrowser {
                 paletteCoordinator.hidePalette(restoreFocus: false)
-                AppLauncher.open(app.url)
+                if !AppLauncher.open(app.url) {
+                    core.reportOpenFailure(app.url.host() ?? app.url.absoluteString, symbol: "safari")
+                }
                 return
             }
             runCommand(id, arguments: arguments)
@@ -159,10 +161,19 @@ final class LauncherCoordinator {
         paletteCoordinator.hidePalette(restoreFocus: false)
         switch app.kind {
         case .application:
-            AppLauncher.launch(app.url)
+            Task {
+                do {
+                    try await AppLauncher.launch(app.url)
+                } catch {
+                    core.reportOpenFailure(
+                        app.name, symbol: "app.dashed", reason: error.localizedDescription)
+                }
+            }
         case .systemSettings:
             guard let bundleID = app.bundleID else { return }
-            AppLauncher.openSettingsPane(bundleID: bundleID)
+            if !AppLauncher.openSettingsPane(bundleID: bundleID) {
+                core.reportOpenFailure(app.name, symbol: "gearshape")
+            }
         case .snippet:
             guard let snippetID = StoredSnippet.id(fromEntryID: app.id) else { return }
             snippetCoordinator.expandSnippet(id: snippetID, target: previous)

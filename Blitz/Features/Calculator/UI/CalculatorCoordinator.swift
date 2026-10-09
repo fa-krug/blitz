@@ -5,7 +5,7 @@ import AppKit
 final class CalculatorCoordinator {
     private let calcHistory: CalculatorHistoryStore
     private let paletteCoordinator: PaletteCoordinator
-    /// Dialogs, for the one action here that can't be undone.
+    /// Dialogs and the copy pill: the palette closes on a copy, so nothing else shows it landed.
     private unowned let core: AppCore
 
     init(
@@ -52,6 +52,7 @@ final class CalculatorCoordinator {
         calcHistory.record(expression: result.expression, result: display)
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(format.localized(copyText))
+        core.showMessage("Copied result")
     }
 
     /// `⇧⌘↵` on the card: the whole calculation, for pasting into a note or a message.
@@ -62,16 +63,19 @@ final class CalculatorCoordinator {
         let format = format
         Paster.copyPlainText(
             "\(format.localizedExpression(result.expression)) = \(format.localized(copyText))")
+        core.showMessage("Copied calculation")
     }
 
     /// Enter on a Calculator History row: re-copy the stored answer (no re-record).
     func copyHistoryEntry(_ entry: CalcHistoryEntry) {
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(format.localized(entry.result.replacingOccurrences(of: ",", with: "")))
+        core.showMessage("Copied result")
     }
 
     func copyHistoryExpression(_ entry: CalcHistoryEntry) {
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(format.localizedExpression(entry.expression))
+        core.showMessage("Copied expression")
     }
 }

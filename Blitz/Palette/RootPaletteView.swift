@@ -65,7 +65,8 @@ struct RootPaletteView: View {
                 appIndex: appIndex, favorites: favorites, visibility: visibility,
                 currencyRates: currencyRates, core: core, vm: vm, running: selectionIsRunning,
                 meeting: core.calendarCoordinator.cardedMeeting, now: meetingClock.now,
-                openActions: openActions, openArgumentOptions: openArgumentOptions,
+                openActions: openActions, activateSelection: activateSelection,
+                openArgumentOptions: openArgumentOptions,
                 scrollToFollow: { scroll = ScrollIntent(kind: .follow) })
         case .uninstall:
             return UninstallScreen(
@@ -875,7 +876,7 @@ struct RootPaletteView: View {
                 KeyCapChip(text: "⇥", style: .outline)
             }
         }
-        .help("Ask Quick AI what you typed  ⇥")
+        .tooltip("Ask Quick AI what you typed  ⇥", alignment: .trailing, edge: .bottom)
     }
 
     /// Resolved through `PaletteTabAction`, so the hint cannot promise the wrong destination.
@@ -1687,6 +1688,7 @@ private struct MenuCircleButton: View {
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Blitz Menu")
         .onHover { hovered = $0 }
         .frosted(in: Circle())
     }
@@ -1711,7 +1713,8 @@ private struct HeaderBackButton: View {
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
         .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
-        .help(help)
+        .tooltip(help, alignment: .leading, edge: .bottom)
+        .accessibilityLabel("Back")
     }
 }
 

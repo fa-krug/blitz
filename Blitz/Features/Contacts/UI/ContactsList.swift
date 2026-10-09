@@ -103,7 +103,8 @@ private struct ContactRow: View {
                 if searchable {
                     SymbolImage(name: "magnifyingglass", size: metrics.size.resultRowIcon * 0.5)
                         .foregroundStyle(.tertiary)
-                        .help("Shown in launcher search")
+                        .tooltip("Shown in launcher search", alignment: .trailing)
+                        .accessibilityLabel("Shown in launcher search")
                 }
             }
             .font(metrics.typography.rowTrailing)

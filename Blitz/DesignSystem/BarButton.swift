@@ -131,6 +131,7 @@ struct HeaderMenuButton: View {
             }
             .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .help(help)
+        // Silent while open, so the label never hangs over the menu it just opened.
+        .tooltip(isOpen ? nil : help, alignment: .trailing, edge: .bottom)
     }
 }

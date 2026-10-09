@@ -2,14 +2,17 @@ import AppKit
 
 enum AppLauncher {
 
+    /// Throws what Launch Services refused, so a caller whose palette already hid can say why.
     @MainActor
-    static func launch(_ url: URL) {
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    static func launch(_ url: URL) async throws {
+        _ = try await NSWorkspace.shared.openApplication(
+            at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     /// Hands the URL to whatever the system registers for its scheme — the default browser, for web.
     @MainActor
-    static func open(_ url: URL) {
+    @discardableResult
+    static func open(_ url: URL) -> Bool {
         NSWorkspace.shared.open(url)
     }
 
@@ -36,9 +39,10 @@ enum AppLauncher {
 
     /// Opens System Settings at the pane backed by the given extension bundle ID.
     @MainActor
-    static func openSettingsPane(bundleID: String) {
-        guard let url = URL(string: "x-apple.systempreferences:" + bundleID) else { return }
-        NSWorkspace.shared.open(url)
+    @discardableResult
+    static func openSettingsPane(bundleID: String) -> Bool {
+        guard let url = URL(string: "x-apple.systempreferences:" + bundleID) else { return false }
+        return NSWorkspace.shared.open(url)
     }
 
     /// Focus the app if it isn't frontmost, hide it if it is, launch it if it isn't running.
@@ -82,7 +86,7 @@ enum AppLauncher {
     static func restart(bundleID: String, url: URL) async {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
         guard !running.isEmpty, await quitAwaitingExit(running) else { return }
-        launch(url)
+        try? await launch(url)
     }
 
     /// Observes before it terminates, so an instance that exits at once can't outrun the wait.

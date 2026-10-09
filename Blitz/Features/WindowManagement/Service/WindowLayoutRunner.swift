@@ -152,7 +152,7 @@ enum WindowLayoutRunner {
                 continue
             }
             guard let argument = placement.argument else {
-                AppLauncher.launch(url)
+                Task { try? await AppLauncher.launch(url) }
                 outcome.opened += 1
                 continue
             }

@@ -8,16 +8,18 @@ final class WindowCommandCoordinator {
     private let windowMover: WindowMover
     private let spaceSwitcher: SpaceSwitcher
     private let customSizes: CustomWindowSizeStore
+    private unowned let core: AppCore
 
     init(
         settings: AppSettings, paletteCoordinator: PaletteCoordinator, windowMover: WindowMover,
-        spaceSwitcher: SpaceSwitcher, customSizes: CustomWindowSizeStore
+        spaceSwitcher: SpaceSwitcher, customSizes: CustomWindowSizeStore, core: AppCore
     ) {
         self.settings = settings
         self.paletteCoordinator = paletteCoordinator
         self.windowMover = windowMover
         self.spaceSwitcher = spaceSwitcher
         self.customSizes = customSizes
+        self.core = core
     }
 
     /// The one funnel for palette and hotkey alike. See docs/features/window-management.md#wiring.
@@ -29,15 +31,29 @@ final class WindowCommandCoordinator {
             spaceSwitcher.perform(direction)
             return
         }
-        windowMover.perform(
-            id, target: handOffTarget(), gap: CGFloat(settings.windowGap),
-            cycle: settings.windowCycle)
+        report(
+            windowMover.perform(
+                id, target: handOffTarget(), gap: CGFloat(settings.windowGap),
+                cycle: settings.windowCycle))
     }
 
     /// The same funnel for a custom size, so the feature switch gates it identically.
     func runCustomWindowSize(id: UUID) {
         guard settings.windowManagementEnabled, let size = customSizes.size(id: id) else { return }
-        windowMover.perform(size, target: handOffTarget(), gap: CGFloat(settings.windowGap))
+        report(windowMover.perform(size, target: handOffTarget(), gap: CGFloat(settings.windowGap)))
+    }
+
+    /// A refused press would otherwise read as a dead shortcut; an unchanged one reads right.
+    private func report(_ outcome: WindowMover.Outcome) {
+        let message: String
+        switch outcome {
+        case .changed, .unchanged, .needsAccessibility: return
+        case .noWindow: message = "No window to move"
+        case .notMovable: message = "This window can't be moved"
+        case .fullScreen: message = "Exit full screen to move this window"
+        case .fullScreenRefused: message = "This window can't go full screen"
+        }
+        core.showMessage(message, tone: .neutral)
     }
 
     /// The window to place, read before the palette hides and hands focus back to it.

@@ -14,11 +14,11 @@ enum AppActionsMenu {
     }
 
     static func content(
-        app: AppEntry, searchQuery: String, core: AppCore, running: Bool,
+        app: AppEntry, core: AppCore, running: Bool, primary: @escaping () -> Void,
         favorites: FavoriteActions, onResetRanking: @escaping () -> Void,
         onHideFromSearch: @escaping () -> Void
     ) -> PopoverMenuContent {
-        var items = leadingItems(app: app, searchQuery: searchQuery, core: core)
+        var items = leadingItems(app: app, core: core, primary: primary)
         // A query-driven row lives only for its query, so no preference could outlive it.
         let isPersistent = !CommandCatalog.isQueryDriven(app)
         if isPersistent {
@@ -141,7 +141,7 @@ enum AppActionsMenu {
 
     /// A meeting row leads with the same actions as the meeting's card, a contact with its own.
     private static func leadingItems(
-        app: AppEntry, searchQuery: String, core: AppCore
+        app: AppEntry, core: AppCore, primary: @escaping () -> Void
     ) -> [PopoverMenuItem] {
         if app.kind == .meeting, let meeting = core.calendarCoordinator.meeting(entryID: app.id) {
             return MeetingActionsMenu.content(meeting: meeting, core: core).items
@@ -157,8 +157,7 @@ enum AppActionsMenu {
         var items = [
             PopoverMenuItem(
                 title: app.kind.descriptor.openVerb, systemImage: primarySymbol,
-                shortcut: "↵"
-            ) { core.launcherCoordinator.launch(app, searchQuery: searchQuery) }
+                shortcut: "↵", action: primary)
         ]
         if app.canRevealInFinder {
             items.append(
