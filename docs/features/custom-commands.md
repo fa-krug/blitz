@@ -42,9 +42,9 @@ bundle-scoped `UserDefaults`. Each command has a stable UUID. Its launcher entry
 `custom-command:<uuid>`, and its hotkey uses
 `hotkey.customCommand.<uuid>` plus the `boundCustomCommandIDs` index.
 
-Editing preserves the UUID and therefore its alias, favorite, visibility, and hotkey references. The row's
-**Enabled** checkbox is the only writer of `isEnabled`, so the editor panel carries the flag through a
-save rather than offering a second control for it. Deleting
+Editing preserves the UUID and therefore its alias, favorite, visibility, and hotkey references. The
+command's Settings page's **Enabled** switch is the only writer of `isEnabled`, so the editor panel
+carries the flag through a save rather than offering a second control for it. Deleting
 goes through `AppCore`, which unregisters the hotkey and clears those references before removing the
 command. Native settings backups include both commands and bindings; import warns before accepting
 executable content.
@@ -52,8 +52,7 @@ executable content.
 The Settings list is sorted by name and filtered by name or command text. Its rows are read-only
 (`SettingsPageRows`, see [ui.md](../ui.md#settings)): the name, the command line, the alias and
 shortcut as badges, and a dimmed label when disabled. A row opens the command's own page — Edit…
-and Delete…, then the Enabled switch, the alias field and the shortcut recorder, acting at once —
-and the editor sheet carries the enabled flag through an edit rather than resetting it.
+and Delete…, then the Enabled switch, the alias field and the shortcut recorder, acting at once.
 
 ## Launcher integration
 
