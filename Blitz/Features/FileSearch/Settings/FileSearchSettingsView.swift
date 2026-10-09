@@ -87,7 +87,7 @@ private struct FileSearchScopesSection: View {
         panel.prompt = "Add"
         panel.message = "Choose folders to include when searching for files."
         // Blitz is an accessory app, so the panel opens behind the frontmost app without this.
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return }
         settings.fileSearchScopes = FileSearchScope.normalize(
             settings.fileSearchScopes + panel.urls.map(\.path), homeDirectory: home)

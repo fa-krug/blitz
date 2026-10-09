@@ -93,7 +93,7 @@ enum ExtensionAsyncProcess {
             ]
         }
 
-        /// Signals the pid rather than the `Process`, which a `@Sendable` timer handler cannot capture.
+        /// Signals the pid, not the `Process`, which a `@Sendable` timer handler cannot capture.
         fileprivate func terminationWatchdog(after seconds: Double) -> DispatchSourceTimer {
             let pid = task.processIdentifier
             let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))

@@ -202,7 +202,7 @@ enum Theme {
         /// The narrowest the pane column may get before a grouped row's control starts colliding.
         static let settingsDetailMinimum: CGFloat = 420
         static let settingsRowIcon: CGFloat = 20
-        /// A sidebar glyph inside its tinted tile; the tile's inset brings it to the row icon's size.
+        /// A sidebar glyph in its tinted tile; the tile's inset brings it to the row icon's size.
         static let settingsSidebarGlyph: CGFloat = 14
         /// AI Chat's opening size; the user owns it from there, autosaved.
         static let aiChatWindow = CGSize(width: 960, height: 660)
@@ -468,7 +468,6 @@ enum Theme {
         /// The Settings card: a faint surface whose border doubles as the row divider.
         static let cardFill = ramp(dark: 0.05, light: 0.04)
         static let cardStroke = ramp(dark: 0.10, light: 0.10)
-        /// White in both: the frost brightens glass, and light glass needs more to read at all.
         /// A window on the preview's plate. White in both, since the plate is always dark.
         static let layoutPreviewWindow = adaptive(
             dark: .srgbInk(1, alpha: 0.22), light: .srgbInk(1, alpha: 0.28))

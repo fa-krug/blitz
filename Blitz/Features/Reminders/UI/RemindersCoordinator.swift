@@ -41,7 +41,7 @@ final class RemindersCoordinator {
         // Asking again is the only way back: Settings cannot add an app TCC has no record of.
         store.refreshAccess()
         guard !settings.remindersEnabled || store.access != .granted else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(
@@ -94,7 +94,7 @@ final class RemindersCoordinator {
     func createReminder() {
         paletteCoordinator.hidePalette(restoreFocus: false)
         guard isReady() else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task { await create(startingFrom: ReminderDraft()) }
     }
 

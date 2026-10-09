@@ -462,7 +462,7 @@
 		8B68EB9C74DFE47ED7982BEF /* AppIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11698B2F9EDF6720D631ABEE /* AppIndex.swift */; };
 		8B7926EE0DC2889654F04457 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7399E09009C2EFB83712CDA8 /* Assets.xcassets */; };
 		8BD531E0C3A6D600F3FF3025 /* MenuSearchItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE06E73E4F9AD589051C647B /* MenuSearchItem.swift */; };
-		8C1515593BCCB68E9F859CB6 /* ChatGPTSubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD155BC18A07B6184BBE27C9 /* ChatGPTSubscriptionManager.swift */; };
+		8C1515593BCCB68E9F859CB6 /* CodexSubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD155BC18A07B6184BBE27C9 /* CodexSubscriptionManager.swift */; };
 		8CA6A33EDF91BAFD2D563F23 /* AIModelChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B99F6F218BD1450E75ACC /* AIModelChecklist.swift */; };
 		8CE1791940427F3A63A54CF5 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361B96B074A1A1A2E70B0053 /* Signposts.swift */; };
 		8CF319134586B3E21313E148 /* PalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EFCDF2C2471D35562C8261C /* PalettePanel.swift */; };
@@ -1589,7 +1589,7 @@
 		DC8F2FC8DA7A017E0AE792EC /* HTTPAIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPAIProvider.swift; sourceTree = "<group>"; };
 		DCB0CA2F2F8E7AD910827266 /* HUDPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDPanel.swift; sourceTree = "<group>"; };
 		DD00D6D39DC0D50E268A8431 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
-		DD155BC18A07B6184BBE27C9 /* ChatGPTSubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatGPTSubscriptionManager.swift; sourceTree = "<group>"; };
+		DD155BC18A07B6184BBE27C9 /* CodexSubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSubscriptionManager.swift; sourceTree = "<group>"; };
 		DD2CEB2A233CD2FFD680BE95 /* EventDraftFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDraftFields.swift; sourceTree = "<group>"; };
 		DD5004E7A3EAAAEDEE2BBB8A /* ClipboardTextIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTextIndexer.swift; sourceTree = "<group>"; };
 		DD8004799805CA45756CE00F /* EmojiSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSettingsView.swift; sourceTree = "<group>"; };
@@ -2289,9 +2289,9 @@
 				98BD1146273498CDB2C04EF8 /* AIProviderFactory.swift */,
 				7E4C1DF8C037A32B814A1A88 /* AIToolLoopProvider.swift */,
 				15375AF671490CBFF8F6D72F /* AppleIntelligenceProvider.swift */,
-				DD155BC18A07B6184BBE27C9 /* ChatGPTSubscriptionManager.swift */,
 				7DA3D7EC512F8D7CE90300F4 /* ChatHistoryStore.swift */,
 				DAA111C17D1D5C899B9BF2DE /* CodexAppServerClient.swift */,
+				DD155BC18A07B6184BBE27C9 /* CodexSubscriptionManager.swift */,
 				FA636E9F2503852999623A0C /* CodexTurnRunner.swift */,
 				DC8F2FC8DA7A017E0AE792EC /* HTTPAIProvider.swift */,
 				26B0D6761DE65401ADE55053 /* InstalledAIEnvironmentKeychain.swift */,
@@ -4111,7 +4111,6 @@
 				0981DFCE77FC82C7DE7AB43B /* ChatFind.swift in Sources */,
 				40970BE34913A5CCFB0E5B6D /* ChatFindState.swift in Sources */,
 				93ACC6945471A282C96E3155 /* ChatGPTSubscription.swift in Sources */,
-				8C1515593BCCB68E9F859CB6 /* ChatGPTSubscriptionManager.swift in Sources */,
 				7DD1A9B2365B58CDE93616B0 /* ChatHistoryScreen.swift in Sources */,
 				B217AE31B396983DF9343917 /* ChatHistoryStore.swift in Sources */,
 				9F0FA2630254D2A84617F985 /* ChatHistoryView.swift in Sources */,
@@ -4144,6 +4143,7 @@
 				79E14CF3AE7E0914252568B1 /* CodexAppServerClient.swift in Sources */,
 				AC684FD11CFE024201588E8C /* CodexAppServerProtocol.swift in Sources */,
 				6FE2970139F9EDF14EB1D360 /* CodexMCPLaunch.swift in Sources */,
+				8C1515593BCCB68E9F859CB6 /* CodexSubscriptionManager.swift in Sources */,
 				934B57470E3DE6FE6EA8F772 /* CodexTurnRunner.swift in Sources */,
 				1991E8B4E6C2CADCD106F522 /* ColorCard.swift in Sources */,
 				BA45CB1E7A3BF091F9332DE1 /* ColorDot.swift in Sources */,

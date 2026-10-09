@@ -686,8 +686,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         }
     }
 
-    /// Starts the loop once, and only when a command wants it: with nothing enabled there is
-    /// no task at all, so an unused schedule costs nothing.
+    /// Starts the loop once, only when a command wants it, so an unused schedule costs nothing.
     private func ensureBackgroundLoop() {
         guard isEnabled, backgroundTask == nil, hasEnabledBackgroundCommands else { return }
         backgroundTask = Task { [weak self] in await self?.backgroundLoop() }
@@ -774,7 +773,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         return delay
     }
 
-    /// A headless `no-view` run: the palette never moves and no feedback fires, only the subtitle can.
+    /// A headless `no-view` run: the palette never moves and no feedback fires but the subtitle.
     private func runInBackground(_ owner: InstalledExtension, command: ExtensionCommand) async {
         guard backgroundSessionID == nil, running == nil, let interval = command.interval else {
             return
@@ -827,8 +826,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             session: session, code: code, file: bundle, mode: command.mode, context: context)
         succeeded = await waitForBackgroundResult(
             timeout: ExtensionRefreshPolicy.timeout(interval: interval))
-        // An abort already tore the session down; touching the runtime here would take the
-        // manual run's fresh context with it.
+        // An abort tore the session down; touching the runtime would take a manual run's context.
         guard backgroundSessionID == session else { return }
         await runtime.stop(session: session)
         runtime.shutdown()
@@ -853,7 +851,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         }
     }
 
-    /// Suspends until the run settles, times out, or is preempted; `resumeBackground` is every exit.
+    /// Suspends until the run settles, times out or is preempted; `resumeBackground` is every exit.
     private func backgroundSettled() async -> Bool {
         await withCheckedContinuation { continuation in backgroundContinuation = continuation }
     }
@@ -912,8 +910,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         dispatch(handler: handler, arguments: [value])
     }
 
-    /// Raycast reports a dropdown's opening choice through `onChange`, and an extension that
-    /// filters its rows by that value draws nothing until it arrives. A controlled one needs none.
+    /// Raycast reports a dropdown's opening choice via `onChange`; a filter on it waits for that.
     private func seedSearchBarAccessory(in tree: RenderTree) {
         guard
             let accessory = ExtensionSearchAccessory(

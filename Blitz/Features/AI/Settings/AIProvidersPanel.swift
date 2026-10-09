@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// One entry of the Providers list: the on-device model, an installed command, or an API connection.
+/// One Providers entry: the on-device model, an installed command, or an API connection.
 enum AIProviderRoute: Hashable {
     case appleIntelligence
     case installed(InstalledAIKind)
@@ -45,7 +45,7 @@ enum AIProviderTab: String, CaseIterable, Identifiable {
 struct AIProvidersPanel: View {
     @Environment(AppCore.self) private var core
     @Environment(AISettingsStore.self) private var settings
-    @Environment(ChatGPTSubscriptionManager.self) private var subscription
+    @Environment(CodexSubscriptionManager.self) private var subscription
     @Environment(InstalledAIManager.self) private var installedAI
 
     let onDone: () -> Void
@@ -707,7 +707,7 @@ struct AIProvidersPanel: View {
         case .installed(.cursor): return AIModelOption.cursorIcon
         case .api(let id):
             guard let connection = settings.connection(id: id) else { return .symbol("sparkles") }
-            // OpenRouter is its own brand; resolving by model would show whichever vendor came first.
+            // OpenRouter is its own brand; by model, it would show whichever vendor came first.
             if connection.provider == .openRouter { return .asset(AIBrand.openRouter.assetName) }
             return AIModelOption.icon(
                 AIBrand.resolve(provider: connection.provider, model: connection.models.first ?? ""))
@@ -884,7 +884,7 @@ private struct AIProviderTile: View {
 
 extension AISettingsStore {
     /// Moves the default model off any route that just went away, or onto its current catalogue.
-    func reconcile(subscription: ChatGPTSubscriptionManager, installedAI: InstalledAIManager) {
+    func reconcile(subscription: CodexSubscriptionManager, installedAI: InstalledAIManager) {
         let enabled = enabledInstalledProviders
         reconcile(
             codexModels: enabled.contains(.codex) ? subscription.models : [],

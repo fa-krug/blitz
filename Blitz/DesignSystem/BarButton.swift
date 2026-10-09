@@ -123,7 +123,7 @@ struct HeaderMenuButton: View {
                     .font(metrics.typography.bar)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                // One glyph rotates rather than swapping, so opening the menu cannot shift the layout.
+                // One glyph rotates rather than swapping, so opening cannot shift the layout.
                 Image(systemName: "chevron.down")
                     .font(metrics.typography.disclosure)
                     .rotationEffect(.degrees(isOpen ? 180 : 0))

@@ -97,7 +97,7 @@ struct ExtensionsSettingsView: View {
                 }
                 .settingsEnabled(settings.extensionsEnabled)
 
-                // Outside the enabled group: leftovers are on disk whether or not extensions are on.
+                // Outside the enabled group: leftovers are on disk even with extensions off.
                 storage
             }
             .formStyle(.grouped)
@@ -629,7 +629,7 @@ private struct CommandRows: View {
             title: command.title, detail: command.description, badge: badge, controlWidth: nil
         ) {
             HStack(spacing: Theme.Spacing.lg) {
-                // Hidden or unpublished commands never reach rank, so typing here would match nothing.
+                // Hidden or unpublished commands never reach rank, so an alias would match nothing.
                 AliasField(entry: entry)
                     .settingsEnabled(settings.extensionsShowInLauncher && isVisible)
                 // Per command, not per extension: a shortcut has to land on one thing to run.

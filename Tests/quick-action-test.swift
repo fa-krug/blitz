@@ -495,8 +495,7 @@ struct QuickActionTests {
             (try? Data(contentsOf: fileURL)) == corrupt,
             "and the file it could not read is left exactly as it was")
 
-        // A save the reader was told landed has to be on disk, so a failed write is never reported
-        // as a success. A directory in the file's place is the only write failure a test can force.
+        // A failed write is never reported saved; a directory in the file's place forces one.
         let blocked = FileManager.default.temporaryDirectory
             .appendingPathComponent("QuickActionTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: blocked) }

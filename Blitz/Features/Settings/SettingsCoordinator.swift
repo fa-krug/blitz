@@ -20,8 +20,7 @@ final class SettingsCoordinator {
         self.core = core
     }
 
-    /// A fresh window mounts on `tab`; an open one navigates to it, recording the jump in history.
-    /// A nil `tab` keeps the pane the window was on, whether it was minimised or closed.
+    /// Mounts or navigates to `tab`, into history; nil keeps the last pane, even after a close.
     func showSettings(
         tab: SettingsTab? = nil, page: String? = nil, revealing target: SettingsTarget? = nil
     ) {

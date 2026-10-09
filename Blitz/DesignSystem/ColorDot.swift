@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A small filled circle that colour-codes the label beside it; decorative, so hidden from VoiceOver.
+/// A filled circle colour-coding the label beside it; decorative, so hidden from VoiceOver.
 struct ColorDot: View {
     @Environment(\.metrics) private var metrics
     let color: Color

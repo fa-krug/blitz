@@ -31,8 +31,7 @@ enum JoinWindow: Int, CaseIterable, Identifiable, Sendable {
     var title: String { rawValue == 1 ? "1 minute" : "\(rawValue) minutes" }
 }
 
-/// How early the calendar item picks the next event up. Zero, which `integer(forKey:)` also
-/// returns unset, keeps it for the rest of today.
+/// How early the calendar item shows the next event; zero, also unset, means all of today.
 enum MenuBarEvents: Int, CaseIterable, Identifiable, Sendable {
     case today = 0
     case two = 2

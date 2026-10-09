@@ -28,7 +28,7 @@ struct ExtensionLinkAccessory: View {
             }
             .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .help(target.absoluteString)
+        .tooltip(target.absoluteString, alignment: .trailing, edge: .bottom)
         .accessibilityAddTraits(.isLink)
     }
 }

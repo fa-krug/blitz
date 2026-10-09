@@ -90,7 +90,9 @@ private struct ArgumentField: View {
                 .strokeBorder(stroke, lineWidth: 1)
         )
         .onHover { hovered = $0 }
-        .help(argument.required ? "\(argument.placeholder) — required" : argument.placeholder)
+        .tooltip(
+            argument.required ? "\(argument.placeholder) — required" : argument.placeholder,
+            edge: .bottom)
     }
 
     private var fill: Color {

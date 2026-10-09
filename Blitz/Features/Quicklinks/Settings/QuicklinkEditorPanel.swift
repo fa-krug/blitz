@@ -376,5 +376,3 @@ struct QuicklinkEditorPanel: View {
         }
     }
 }
-
-/// A small fixed grid, not a symbol browser; "Automatic" is first, being the better default.

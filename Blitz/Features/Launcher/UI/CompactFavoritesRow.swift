@@ -55,7 +55,7 @@ private struct CompactFavoriteButton<Content: View>: View {
                 .contentShape(RoundedRectangle(cornerRadius: metrics.radius.row, style: .continuous))
         }
         .buttonStyle(.plain)
-        // No hover label: the compact panel is the header's height, so any tooltip would be clipped.
+        // No hover label: the compact panel is the header's height, so a tooltip would be clipped.
         .accessibilityLabel(help)
     }
 }

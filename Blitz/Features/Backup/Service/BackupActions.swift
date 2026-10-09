@@ -33,7 +33,7 @@ enum BackupActions {
         let ext = type.preferredFilenameExtension ?? "json"
         panel.nameFieldStringValue = "\(base)-\(dateStamp()).\(ext)"
         panel.canCreateDirectories = true
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -46,7 +46,7 @@ enum BackupActions {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [type]
         panel.allowsMultipleSelection = false
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -72,7 +72,7 @@ enum BackupActions {
         }.value
     }
 
-    /// Opens the archive and reads its manifest, leaving staging for the caller to apply and discard.
+    /// Opens the archive and reads its manifest; the caller applies and discards the staging.
     static func openBackup(at file: URL) async throws -> (BackupStaging, BackupManifest) {
         try await Task.detached(priority: .userInitiated) {
             let staging = try BackupStaging()
@@ -167,7 +167,7 @@ enum BackupActions {
             if core.quicklinks.isAvailable {
                 quicklinksImported =
                     core.quicklinkCoordinator.addImportedQuicklinks(result.quicklinks).count
-                // Opening a link grants no permission class, so landing a library turns the switch on.
+                // A link grants no permission class, so landing a library turns the switch on.
                 if quicklinksImported > 0 { core.settings.quicklinksEnabled = true }
             } else {
                 quicklinksError = QuicklinkError.storageUnavailable.errorDescription
@@ -215,7 +215,7 @@ enum BackupActions {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         return panel.runModal() == .OK ? panel.url : nil
     }
 

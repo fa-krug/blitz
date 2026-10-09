@@ -34,7 +34,7 @@ struct WindowLayoutEntry: Codable, Hashable, Identifiable, Sendable {
         self.offset = offset
     }
 
-    // Hand-written, so an added field keeps stored layouts and older backups readable.
+    // Hand-written, so a minimal payload carrying only the required keys decodes.
     private enum CodingKeys: String, CodingKey {
         case id, bundleID, argument, display, widthFraction, heightFraction, anchor, offset
     }
@@ -145,7 +145,7 @@ struct WindowLayout: Codable, Hashable, Identifiable, Sendable {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    // Hand-written, so an added field keeps stored layouts and older backups readable.
+    // Hand-written, so a minimal payload carrying only the required keys decodes.
     private enum CodingKeys: String, CodingKey {
         case id, name, iconSymbol, usesPreferredGap, entries, frontmostEntryID
     }

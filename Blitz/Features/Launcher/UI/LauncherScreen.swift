@@ -61,7 +61,7 @@ struct LauncherScreen: PaletteScreen {
         self.openArgumentOptions = openArgumentOptions
         self.scrollToFollow = scrollToFollow
 
-        // Listed even when hidden from search: the shortcut that opened it still has to be answered.
+        // Listed even when hidden from search: the shortcut that opened it must be answered.
         let pinned = vm.argumentEntryID.flatMap { id in
             core.customCommands.command(entryID: id).map(AppEntry.init)
                 ?? CommandCatalog.all.first { $0.id == id }

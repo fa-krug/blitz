@@ -4,7 +4,7 @@ struct AISettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(AISettingsStore.self) private var settings
     @Environment(AppSettings.self) private var appSettings
-    @Environment(ChatGPTSubscriptionManager.self) private var subscription
+    @Environment(CodexSubscriptionManager.self) private var subscription
     @Environment(InstalledAIManager.self) private var installedAI
 
     @State private var providersPresented = false

@@ -8,7 +8,7 @@ enum ExecutableLocator {
         extraHomePaths: [String] = [],
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) async -> URL? {
-        // The shell's answer wins: a stale install in a well-known prefix can shadow the working one.
+        // The shell's answer wins: a stale install in a known prefix can shadow the working one.
         if let path = await shellLookup(command, shell: loginShell()) {
             let url = URL(fileURLWithPath: path)
             if isExecutable(url) { return url }

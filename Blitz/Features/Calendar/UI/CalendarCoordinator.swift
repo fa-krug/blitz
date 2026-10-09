@@ -21,7 +21,7 @@ final class CalendarCoordinator {
     /// Auto joined this launch, so a meeting opens itself at most once.
     @ObservationIgnored private var autoJoined: Set<MeetingEvent.ID> = []
 
-    /// Stored and written only on a flip: the menu-bar scene reads it, and must not re-run per tick.
+    /// Written only on a flip: the menu-bar scene reads it, and must not re-run per tick.
     private(set) var hasMenuBarEvent = false
     /// Dismissed from the menu bar this launch, the way `autoJoined` remembers what it opened.
     private var dismissedFromMenuBar: Set<MeetingEvent.ID> = []
@@ -54,8 +54,7 @@ final class CalendarCoordinator {
     /// Live rather than clock-driven: a chord reads this with nothing ticking.
     var agenda: [MeetingEvent] { UpcomingWindow.agenda(from: store.events, now: Date()) }
 
-    /// The calendar label keeps its plain icon until today's events are exhausted, with a small
-    /// grace across midnight for a meeting that starts imminently.
+    /// Plain icon until today's events are done, with a grace across midnight for an imminent one.
     var hasUpcomingMenuBarEvent: Bool {
         MenuBarSummary.hasUpcomingEvent(from: store.events, now: clock.now)
     }
@@ -100,7 +99,7 @@ final class CalendarCoordinator {
         // Asking again is the only way back: Settings cannot add an app TCC has no record of.
         store.refreshAccess()
         guard !settings.calendarEnabled || store.access != .granted else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(
@@ -284,7 +283,7 @@ final class CalendarCoordinator {
             Task { await reportAccessDenied() }
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard let draft = await core.createEvent() else { return }
             guard store.createEvent(draft, now: Date()) else {
@@ -400,7 +399,7 @@ final class CalendarCoordinator {
         if settings.cameraPreview {
             guard await cameraPreview.present(meeting: meeting, now: Date()) else { return }
         } else if uninvited, settings.autoJoinConfirms {
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             guard
                 await core.confirm(
                     title: "Join \(meeting.title)?",

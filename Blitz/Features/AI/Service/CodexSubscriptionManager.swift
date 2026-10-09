@@ -4,7 +4,7 @@ import Observation
 /// Owns the app-server, reusing the account already configured in the user's Codex installation.
 @MainActor
 @Observable
-final class ChatGPTSubscriptionManager {
+final class CodexSubscriptionManager {
     /// Long enough to span a conversation; a relaunch costs a second, a resident server ~20 MB.
     private static let idleShutdown: Duration = .seconds(600)
 

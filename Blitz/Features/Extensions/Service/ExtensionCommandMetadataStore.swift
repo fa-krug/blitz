@@ -1,7 +1,6 @@
 import Foundation
 
-/// Every command's row metadata in one small file, deliberately not in `extension-data`: drawing a
-/// launcher row must never fault in an extension's whole `LocalStorage` and `Cache`.
+/// Row metadata in its own small file, so a launcher row never faults in a whole extension store.
 @MainActor
 @Observable
 final class ExtensionCommandMetadataStore {
@@ -113,7 +112,7 @@ final class ExtensionCommandMetadataStore {
         scheduleFlush()
     }
 
-    /// Ticks write on a timer, so the file is coalesced the way `ExtensionStorage` coalesces its own.
+    /// Ticks write on a timer, so the file is coalesced as `ExtensionStorage` coalesces its own.
     private func scheduleFlush() {
         isDirty = true
         guard flushTask == nil else { return }

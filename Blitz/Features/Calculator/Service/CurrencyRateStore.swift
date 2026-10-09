@@ -29,8 +29,7 @@ final class CurrencyRateStore {
             let cached = try? JSONDecoder().decode(CurrencyRates.self, from: data)
         else { return }
         rates = cached
-        // A cache from before coins existed still prices fiat, but has to be replaced at once.
-        if CurrencyFeed.pricesCoins(cached) { completedAt = cached.fetchedAt }
+        completedAt = cached.fetchedAt
     }
 
     func start() {
@@ -53,7 +52,7 @@ final class CurrencyRateStore {
     private func fetchAndStore() async -> Bool {
         guard let result = await Self.fetch() else { return false }
         rates = result.rates
-        // Never persist a coin-less run: `pricesCoins` reads the cache as whole by definition.
+        // Never persist a coin-less run: a cache on disk is read back as whole by definition.
         guard result.complete, let data = try? JSONEncoder().encode(result.rates) else { return false }
         completedAt = result.rates.fetchedAt
         try? data.write(to: fileURL, options: .atomic)

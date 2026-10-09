@@ -136,7 +136,7 @@ private struct EmojiGridDots: Shape {
     let columns: Int
 
     private static let pointsPerCell = 4
-    /// Match the outline's raster weight; subpixel circles render visibly fainter at the same alpha.
+    /// The outline's raster weight; a subpixel circle renders fainter at the same alpha.
     private static let dotDiameter = Theme.Size.hairline
 
     func path(in rect: CGRect) -> Path {

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AIModelSelectionRows<ModelLabel: View, EffortLabel: View>: View {
     @Environment(AISettingsStore.self) private var settings
-    @Environment(ChatGPTSubscriptionManager.self) private var subscription
+    @Environment(CodexSubscriptionManager.self) private var subscription
     @Environment(InstalledAIManager.self) private var installedAI
 
     let selection: AIModelSelection?

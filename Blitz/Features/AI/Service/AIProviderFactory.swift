@@ -7,7 +7,7 @@ enum AIProviderFactory {
     static func make(
         selection: AIModelSelection,
         settings: AISettingsStore,
-        subscription: ChatGPTSubscriptionManager,
+        subscription: CodexSubscriptionManager,
         installedAI: InstalledAIManager,
         keyStore: KeychainSecretStore = .aiAPIKeys,
         guardrails: SystemLanguageModel.Guardrails = .default,

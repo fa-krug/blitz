@@ -1,4 +1,3 @@
-import Combine
 import SwiftUI
 
 /// A peer of the AI pane, not a section in it: it only borrows the provider layer.
@@ -14,7 +13,6 @@ struct QuickActionsSettingsView: View {
     @State private var isTrusted = Permissions.isAccessibilityTrusted()
     @State private var editingAction: BuiltInQuickAction?
     @State private var customEditing: CustomQuickActionEditRequest?
-    private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Form {
@@ -54,7 +52,12 @@ struct QuickActionsSettingsView: View {
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.quickActions)
-        .onReceive(refreshTimer) { _ in isTrusted = Permissions.isAccessibilityTrusted() }
+        .task {
+            while !Task.isCancelled {
+                isTrusted = Permissions.isAccessibilityTrusted()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
         .settingsEditorPanel(item: $editingAction) { action in
             InstructionsEditorPanel(
                 action: action,
@@ -83,8 +86,8 @@ struct QuickActionsSettingsView: View {
             core.applyInstalledAILifecycle()
             repairInstalledModel()
         }
-        .onChange(of: core.chatGPTSubscription.models) { repairInstalledModel() }
-        .onChange(of: core.chatGPTSubscription.phase) { repairInstalledModel() }
+        .onChange(of: core.codexSubscription.models) { repairInstalledModel() }
+        .onChange(of: core.codexSubscription.phase) { repairInstalledModel() }
         .onChange(of: core.installedAI.statuses) { repairInstalledModel() }
     }
 
@@ -256,7 +259,7 @@ struct QuickActionsSettingsView: View {
 
     private var modelChoices: [AIModelOption] {
         AIModelOption.availableGroups(
-            settings: aiSettings, subscription: core.chatGPTSubscription,
+            settings: aiSettings, subscription: core.codexSubscription,
             installedAI: core.installedAI
         )
         .flatMap(\.options)
@@ -266,13 +269,13 @@ struct QuickActionsSettingsView: View {
         // Catalog rows name a route without an effort; a repaired selection must carry the default.
         let options = modelChoices.map {
             AIModelOption.withDefaultEffort(
-                $0.selection, settings: aiSettings, subscription: core.chatGPTSubscription,
+                $0.selection, settings: aiSettings, subscription: core.codexSubscription,
                 installedAI: core.installedAI)
         }
         var unavailable = Set<AIModelSource>()
         if !aiSettings.enabledInstalledProviders.contains(.codex)
-            || core.chatGPTSubscription.phase == .signedOut
-            || core.chatGPTSubscription.phase.isUnavailable
+            || core.codexSubscription.phase == .signedOut
+            || core.codexSubscription.phase.isUnavailable
         {
             unavailable.insert(.codex)
         }

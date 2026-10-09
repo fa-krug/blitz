@@ -1,6 +1,6 @@
 import Foundation
 
-/// Taking ⌘Space from Spotlight: the user frees it in System Settings, and Blitz binds it on return.
+/// Taking ⌘Space from Spotlight: the user frees it in System Settings; Blitz binds it on return.
 @MainActor
 @Observable
 final class SpotlightHandoffSession {

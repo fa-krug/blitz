@@ -261,7 +261,9 @@ struct ExtensionAccessoriesView: View {
                     .lineLimit(1)
             }
         }
-        .help(fields["tooltip"]?.stringValue ?? "")
+        .tooltip(
+            (fields["tooltip"]?.stringValue).flatMap { $0.isEmpty ? nil : $0 },
+            alignment: .trailing)
     }
 
     /// A tag is `{value, color}` or a bare string/date.
@@ -369,7 +371,7 @@ private struct ExtensionGridCell: View {
             }
     }
 
-    /// Filling content shares the tile's corner; inset artwork is small enough to need a tighter one.
+    /// Filling content shares the tile's corner; inset artwork is small enough for a tighter one.
     private var contentRadius: Double {
         layout.inset == .zero ? ExtensionGridLayout.tileRadius : metrics.radius.thumbnail
     }
@@ -407,7 +409,7 @@ private struct ExtensionGridContentView: View {
     private var content: some View {
         switch resolved?.source {
         case .symbol(let name):
-            // A symbol has no artwork to scale, so it takes a share of the tile rather than all of it.
+            // A symbol has no artwork to scale, so it takes a share of the tile, not all of it.
             Image(systemName: name)
                 .resizable()
                 .scaledToFit()
@@ -447,7 +449,7 @@ private struct ExtensionGridContentView: View {
         }
     }
 
-    /// `NSImageView` only ever fits proportionally, so `Grid.Fit.Fill` scales that draw up to cover.
+    /// `NSImageView` only fits proportionally, so `Grid.Fit.Fill` scales that draw up to cover.
     private func coverScale(_ image: NSImage) -> Double {
         let scales = [size.width / image.size.width, size.height / image.size.height]
         guard let low = scales.min(), let high = scales.max(), low > 0, high.isFinite else { return 1 }

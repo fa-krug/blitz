@@ -52,7 +52,7 @@ final class ScreenshotCoordinator {
         textTask?.cancel()
         textTask = Task {
             do {
-                // A stat on an unmounted or network volume can stall, so it stays off the main actor.
+                // A stat on an unmounted or network volume can stall, so it stays off main.
                 let lookup = await Task.detached { () -> (exists: Bool, text: String?) in
                     let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: [
                         .contentModificationDateKey

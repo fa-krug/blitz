@@ -126,7 +126,7 @@ final class CustomCommandCoordinator {
         panel.allowsMultipleSelection = false
         panel.prompt = "Import"
         panel.message = "Choose a folder of Raycast script commands."
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -174,8 +174,7 @@ final class CustomCommandCoordinator {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
-        // Its shell config is sourced: someone typing `ll` in the launcher means their own alias.
-        // No working directory, which the runner reads as home — the only sane cwd for a launcher.
+        // Shell config sourced, so `ll` is the user's alias; no working directory means home.
         let command = CustomCommand(
             name: CommandID.runShellCommand.name, command: text, loadsShellEnvironment: true,
             opensTerminal: true)

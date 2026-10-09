@@ -116,9 +116,7 @@ private final class SystemSnippetKeywordTapController: SnippetKeywordTapControll
 @MainActor
 @Observable
 final class SnippetKeywordListener: HealthCheckable {
-    typealias Status = SnippetKeywordListenerStatus
-
-    private(set) var status: Status = .off
+    private(set) var status: SnippetKeywordListenerStatus = .off
 
     @ObservationIgnored weak var healthTicker: HealthTicker?
 

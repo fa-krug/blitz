@@ -47,11 +47,6 @@ enum CurrencyFeed {
         return (CurrencyRates(base: base, rates: rates, fetchedAt: now), coins > 0)
     }
 
-    /// Only whole snapshots are persisted, so a cached one pricing no coin predates them entirely.
-    static func pricesCoins(_ snapshot: CurrencyRates) -> Bool {
-        CalcCurrency.cryptoCodes.contains { snapshot.rates[$0] != nil }
-    }
-
     private static func usable(_ rate: Double) -> Bool {
         rate > 0 && rate.isFinite
     }

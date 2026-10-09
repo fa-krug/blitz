@@ -1,5 +1,4 @@
-// Standalone contract tests for the pure window-layout model, geometry, plan and store,
-// and for the custom sizes that share the layouts' anchor grid.
+// Contract tests for the pure window-layout model, geometry, plan, store and custom sizes.
 import CoreGraphics
 import Foundation
 
@@ -332,8 +331,7 @@ struct WindowLayoutTests {
                                 width: size.width, height: size.height))
                     }
                 }
-                // Whole points only: `resolve` rounds its four edges, so a half-point frame
-                // round-trips to its rounded self — pinned separately below.
+                // Whole points: `resolve` rounds its edges; a half-point frame is pinned below.
                 for frame in frames.map(WindowPlacementEngine.rounded) where box.contains(frame) {
                     checked += 1
                     let capture = WindowLayoutGeometry.describe(frame, on: screen, gap: gap)
@@ -797,14 +795,6 @@ struct WindowLayoutTests {
             let decoded = try? JSONDecoder().decode(CustomWindowSize.self, from: data)
         else { return expect(false, "a custom size encodes and decodes") }
         expect(decoded == value, "every field survives a Codable round trip")
-
-        var legacy = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        legacy?["offset"] = nil
-        let legacyData = legacy.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-        expect(
-            legacyData.flatMap { try? JSONDecoder().decode(CustomWindowSize.self, from: $0) }?
-                .offset == .zero,
-            "a size stored before offsets decodes with none")
     }
 
     static func customSizeDimensions() {

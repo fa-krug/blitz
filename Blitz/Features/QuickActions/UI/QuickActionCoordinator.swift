@@ -85,7 +85,7 @@ final class QuickActionCoordinator {
             settings.quickActionsEnabled = false
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(
@@ -110,7 +110,7 @@ final class QuickActionCoordinator {
 
     // MARK: - The reader's own actions
 
-    /// The route is stored only once the record is on disk, so a refused save leaves neither behind.
+    /// The route is stored only once the record is on disk, so a refused save leaves neither.
     func addCustomQuickAction(
         _ draft: CustomQuickAction, model: AIModelSelection?
     ) throws(CustomQuickActionError) {
@@ -245,7 +245,7 @@ final class QuickActionCoordinator {
             core.showMessage(failure.localizedDescription, tone: .danger)
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.reportFailure(

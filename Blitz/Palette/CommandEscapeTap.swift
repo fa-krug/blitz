@@ -22,11 +22,7 @@ private func commandEscapeTapCallback(
     return claimed ? nil : Unmanaged.passUnretained(event)
 }
 
-/// ⌘⎋ is claimed upstream of every app, so the palette takes it where it enters the system.
-///
-/// The window server binds the chord itself, so it never reaches `onCommandShortcut` the way ⌘.
-/// and ⌘w do: no keystroke is left by the time the responder chain runs, and a head-inserted HID
-/// tap is the one place earlier than that. See docs/features/palette.md.
+/// The window server binds ⌘⎋ upstream of every app, so only a head-inserted HID tap sees it.
 @MainActor
 final class CommandEscapeTap {
     /// Claims the chord and returns true, or declines it so the rest of the system still gets it.

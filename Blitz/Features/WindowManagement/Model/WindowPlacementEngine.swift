@@ -348,7 +348,7 @@ enum WindowPlacementEngine {
             return tilePlacement(half.fractions(sizeCycle[step]), on: host, gap: input.gap)
         }
         let strip = ordered(input.screens)
-        // Mid-chain the window already sits on another display, so counting from it would overshoot.
+        // Mid-chain the window is already on another display, so counting from it would overshoot.
         guard strip.count > 1,
             let originIndex = strip.firstIndex(where: { $0.id == input.originScreenID })
                 ?? strip.firstIndex(where: { $0.id == host.id })

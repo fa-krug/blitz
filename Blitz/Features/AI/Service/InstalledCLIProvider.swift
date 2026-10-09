@@ -313,7 +313,7 @@ private final class InstalledCLITurnRunner {
                 "--no-session-persistence",
                 "--disable-slash-commands",
                 "--tools", "",
-                // `--bare` is not among these: it refuses the OAuth sign-in this whole route reuses.
+                // Never `--bare`: it refuses the OAuth sign-in this whole route reuses.
                 "--no-chrome",
                 "--system-prompt",
                 mcpConfig == nil ? Self.safetyInstructions : Self.toolSafetyInstructions

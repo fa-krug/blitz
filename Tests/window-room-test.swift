@@ -1,5 +1,4 @@
 // Adapted from Rooms (MIT): https://github.com/saragordic/rooms/blob/main/LICENSE
-// Standalone contract tests for the pure room model, its plan and its three stores.
 import CoreGraphics
 import Foundation
 

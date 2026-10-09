@@ -24,7 +24,7 @@ enum AccessibilityReplacement: Equatable {
     case unavailable
     case rejected
 
-    /// `.rejected` means the document is not the one we measured, so events would edit the wrong text.
+    /// `.rejected`: the document is not the one we measured, so events would edit the wrong text.
     var fallsBackToEvents: Bool { self == .unavailable }
 }
 
@@ -36,7 +36,7 @@ enum TextReplacementPolicy {
         case rejected
     }
 
-    /// Too little text yet is a renderer still catching up; enough text but wrong is a real mismatch.
+    /// Too little text is a renderer catching up; enough text but wrong is a real mismatch.
     static func keywordState(
         value: String, selectedRange: NSRange, keyword: String
     ) -> KeywordState {
@@ -50,7 +50,7 @@ enum TextReplacementPolicy {
         return .matched(NSRange(start..<beforeCursor.endIndex, in: value))
     }
 
-    /// Chromium answers `.success` and applies nothing, so the value has to read back as we wrote it.
+    /// Chromium answers `.success` and applies nothing, so the value must read back as written.
     static func confirmsReplacement(
         originalValue: String,
         replacementRange: NSRange,
@@ -317,7 +317,7 @@ final class TextInjector {
     ) async {
         defer { completion.settle() }
         for _ in 0..<Self.convergenceAttempts {
-            // The tap runs ahead of AppKit, so looking before the wait reads a stale view as a miss.
+            // The tap runs ahead of AppKit, so looking before the wait reads a stale view.
             if keywordLength > 0 {
                 guard await wait(for: Self.convergenceInterval) else { return }
             }
@@ -666,7 +666,7 @@ final class TextInjector {
                 observedValue: observed)
         else {
             _ = setSelectedRange(target.originalRange, in: target.element)
-            // An untouched value is a tier that did nothing; anything else moved text we cannot name.
+            // An untouched value is a tier that did nothing; else it moved text we cannot name.
             return observed == target.value ? .unavailable : .rejected
         }
 
@@ -677,7 +677,7 @@ final class TextInjector {
         return .delivered
     }
 
-    /// Rule 2: a renderer applies the keystroke before it says so, so a short lag is not a mismatch.
+    /// Rule 2: a renderer applies a keystroke before it says so; a short lag is not a mismatch.
     private func accessibilityTarget(
         in targetApp: NSRunningApplication,
         expectedKeyword: String?,
@@ -969,11 +969,11 @@ final class TextInjector {
     }
 }
 
-/// Blink keeps one key event's text in a fixed four-unit array, so Chromium drops everything past it.
+/// Blink keeps a key event's text in a four-unit array, so Chromium drops everything past it.
 enum UnicodeTypingChunk {
     static let maxUTF16Units = 4
 
-    /// Split on scalar boundaries: a lone surrogate half is not text, and a scalar always fits four.
+    /// Split on scalar boundaries: a lone surrogate half is not text, and a scalar fits in four.
     static func split(_ text: String) -> [[UniChar]] {
         var chunks: [[UniChar]] = []
         var current: [UniChar] = []

@@ -46,8 +46,7 @@ struct PaletteFilterTests {
             resolve(mode: .extensionCommand, accessory: true), .extensionAccessory,
             "a running command's own dropdown answers ⌘P on its own screen")
 
-        // The regression this guards: a command's dropdown must not let the clipboard's filter
-        // open over it, and must not swallow ⌘P on a command that declared none.
+        // A command's dropdown keeps the clipboard filter shut, and leaves ⌘P alone if it has none.
         expect(
             resolve(mode: .extensionCommand, accessory: false), .ignored,
             "a command with no dropdown leaves ⌘P alone rather than opening nothing")

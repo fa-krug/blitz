@@ -347,7 +347,7 @@ struct AIChatTests {
         expect(events.last == .finished, "and finishes on the model's answer instead of failing")
     }
 
-    /// Every round resends the turn, so Unlimited still ends before its history grows without bound.
+    /// Every round resends the turn, so Unlimited still ends before its history grows unbounded.
     static func anUnlimitedToolLoopStopsWhenItsHistoryIsFull() async {
         let arguments = String(repeating: "x", count: AIToolLoopProvider.maxTurnHistoryBytes / 16)
         let round: [AIStreamEvent] = [
@@ -1669,7 +1669,7 @@ final class StalledProvider: AIProvider, @unchecked Sendable {
     }
 }
 
-/// A base route that replays one scripted round per request, so the loop's driving is what is tested.
+/// A base route replaying one scripted round per request, so the loop's driving is tested.
 final class ScriptedProvider: AIProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var rounds: [[AIStreamEvent]]

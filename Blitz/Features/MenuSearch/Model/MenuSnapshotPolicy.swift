@@ -4,7 +4,7 @@ enum MenuSnapshotPolicy {
     static let maxDepth = 20
     // Sized from live menus: Safari holds ~2,800 leaves, so this keeps giant bars whole.
     static let itemLimit = 4_000
-    // One History-like submenu must not eat the snapshot: each submenu contributes this many at most.
+    // One History-like submenu must not eat the snapshot: each contributes this many at most.
     static let perSubmenuLimit = 200
 
     // The Apple menu is always the bar's first item, which beats matching a title that localises.

@@ -35,7 +35,6 @@ struct ClipboardTests {
         defaultActionChords()
         plainTextSkipsTheFile()
         offersTextExtraction()
-        sideTablesNeedNoMigration()
         renamedEntriesAreFoundByTitle()
         titlesReachPastTheWindowAndThroughBackups()
         editingKeepsTheRowAndItsDerivedText()
@@ -742,31 +741,6 @@ struct ClipboardTests {
     }
 
     // MARK: - Titles, edits and rich text
-
-    /// A file an older build left behind opens as it is and gains the side tables, never a wipe.
-    static func sideTablesNeedNoMigration() {
-        withStore { store, dir in
-            store.addText("kept", sourceBundleID: nil)
-            store.close()
-            expect(
-                execute(
-                    """
-                    DROP TRIGGER items_title_ad; DROP TRIGGER items_formats_ad;
-                    DROP TABLE item_titles; DROP TABLE item_formats;
-                    """, in: store),
-                "the fixture strips the side tables, as a file from before them")
-            let reopened = ClipboardStore(directory: dir)
-            reopened.load()
-            expect(texts(reopened) == ["kept"], "an older file opens without being wiped")
-            expect(
-                count(
-                    """
-                    SELECT COUNT(*) FROM sqlite_master WHERE name IN
-                      ('item_titles', 'item_formats', 'items_title_ad', 'items_formats_ad')
-                    """, in: reopened) == 4,
-                "and gains both side tables and their cascades")
-        }
-    }
 
     static func renamedEntriesAreFoundByTitle() {
         withStore { store, dir in

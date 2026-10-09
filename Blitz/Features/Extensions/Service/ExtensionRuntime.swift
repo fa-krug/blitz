@@ -383,7 +383,7 @@ final class ExtensionRuntime: @unchecked Sendable {
     }
 }
 
-/// GCD workers get 512 KB of stack, which JavaScriptCore's parser overflows on sql.js-sized bundles.
+/// GCD workers get 512 KB of stack, which JavaScriptCore's parser overflows on sql.js bundles.
 final class ExtensionJSThread: @unchecked Sendable {
     /// The main thread's size, which every bundle the runtime has met parses within.
     private static let stackSize = 8 << 20

@@ -380,7 +380,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
 
         switch method {
         case "run":
-            // This runs on the JS thread, so a child that never exits would freeze the whole runtime.
+            // This runs on the JS thread, so a child that never exits would freeze the runtime.
             return try launch(spec).collect(timeout: timeout)
         case "start":
             let child = try launch(spec)

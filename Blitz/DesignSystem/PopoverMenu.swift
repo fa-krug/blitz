@@ -221,12 +221,12 @@ struct PopoverMenu: View {
         let extent = listExtent
         return ScrollViewReader { proxy in
             ScrollView {
-                // Lazy: a model menu runs to hundreds of rows, and only the viewport's are ever seen.
+                // Lazy: a model menu runs to hundreds of rows, and only the viewport's are seen.
                 LazyVStack(alignment: .leading, spacing: 0) {
                     // Index-as-id is stable: a menu's rows never reorder while it is open.
                     ForEach(items.indices, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 0) {
-                            // Inside the first row's target, so revealing that row brings the title.
+                            // Inside the first row's target, so revealing it brings the title.
                             if index == 0, let header {
                                 headerLabel(header)
                                 Color.clear.frame(height: metrics.size.menuRowSpacing)
@@ -250,7 +250,7 @@ struct PopoverMenu: View {
                 }
                 .padding(.horizontal, listInset)
             }
-            // A margin, not padding: a revealed end row keeps its inset instead of meeting the edge.
+            // A margin, not padding: a revealed end row keeps its inset off the edge.
             .contentMargins(.vertical, listInset, for: .scrollContent)
             .frame(height: extent.viewport + listInset * 2)
             // `never`, not `hidden`: hidden still lets AppKit claim the scroller's gutter.

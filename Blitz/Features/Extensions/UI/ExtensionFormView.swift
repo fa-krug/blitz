@@ -196,7 +196,7 @@ struct ExtensionFormView: View {
                     Image(systemName: "info.circle")
                         .font(metrics.typography.disclosure)
                         .foregroundStyle(Theme.Colors.textTertiary)
-                        .help(info)
+                        .tooltip(info)
                         // The control carries this text as its hint, so the glyph is decoration.
                         .accessibilityHidden(true)
                 }
@@ -462,7 +462,7 @@ private struct ExtensionFilePicker: View {
         panel.canChooseDirectories = node.bool("canChooseDirectories") ?? false
         panel.canChooseFiles = node.bool("canChooseFiles") ?? true
         // An accessory app's panel opens behind the frontmost app without this.
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return }
         onChange(node, panel.urls.map(\.path))
     }

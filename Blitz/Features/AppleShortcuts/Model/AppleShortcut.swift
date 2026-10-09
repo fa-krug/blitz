@@ -30,7 +30,7 @@ struct AppleShortcut: Hashable, Identifiable, Sendable {
     static func staleIDs(
         referencedBy keys: some Sequence<String>, bound: some Sequence<UUID>, live: [AppleShortcut]
     ) -> Set<UUID> {
-        // An empty library can't be told apart from one the tool read as empty, so it frees nothing.
+        // An empty library is indistinguishable from a misread one, so it frees nothing.
         guard !live.isEmpty else { return [] }
         let referenced = Set(keys.lazy.compactMap(id(fromEntryID:))).union(bound)
         return referenced.subtracting(live.map(\.id))

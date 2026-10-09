@@ -129,7 +129,7 @@ final class SettingsEditorPresenter: NSObject {
         override var canBecomeKey: Bool { true }
         override var canBecomeMain: Bool { false }
 
-        /// A child window drags alone, so the drag goes to the window it sits on, as a sheet's does.
+        /// A child window drags alone, so the drag goes to the window it sits on, as a sheet's.
         override func performDrag(with event: NSEvent) {
             parent?.performDrag(with: event)
         }
@@ -430,7 +430,7 @@ extension View {
             .environment(core.mcpCoordinator)
             .environment(core.quickActionSettings)
             .environment(core.customQuickActions)
-            .environment(core.chatGPTSubscription)
+            .environment(core.codexSubscription)
             .environment(core.installedAI)
             .scrollContentBackground(.hidden)
     }

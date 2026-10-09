@@ -103,7 +103,7 @@ private struct WarningRow<Trailing: View>: View {
 
 private struct SmartReminderModelSection: View {
     @Environment(AISettingsStore.self) private var aiSettings
-    @Environment(ChatGPTSubscriptionManager.self) private var subscription
+    @Environment(CodexSubscriptionManager.self) private var subscription
     @Environment(InstalledAIManager.self) private var installedAI
 
     var body: some View {

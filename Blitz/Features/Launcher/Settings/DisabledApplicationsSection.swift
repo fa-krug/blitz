@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The excluded-apps control: one row per exclusion, then the picker that adds another. The caller
-/// owns the label above it, so a pane can seat the list beside the command the exclusions belong to.
+/// Excluded apps, then a picker; the caller owns the label so a pane can seat it by its command.
 struct DisabledApplicationsList: View {
     @Binding var bundleIDs: [String]
 
