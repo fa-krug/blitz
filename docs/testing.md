@@ -15,9 +15,11 @@ The mechanical bar, in one place so it cannot drift. All five pass before a chan
 | A clean build | `xcodebuild … -configuration Debug -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO`, zero **new** warnings |
 | Docs still true | any doc your change made wrong, fixed in the same commit |
 
-There is no CI: every item is on you, run locally. CodeRabbit reviews each PR, but it is a reviewer,
-not a gate. Each is expanded below; the manual sweep at the end of this file is the sixth, judged by
-what you touched.
+Every item is on you, run locally. The repository's one workflow, `.github/workflows/release.yml`,
+builds, signs, notarizes and publishes each push to `main` ([release.md](release.md)); it runs
+neither the harnesses nor lint. CodeRabbit reviews each PR, but it is a reviewer, not a gate. Each
+item is expanded below; the manual sweep at the end of this file is the sixth, judged by what you
+touched.
 
 ## The harnesses
 
@@ -26,17 +28,16 @@ what you touched.
 ./Scripts/run-tests.sh calc-test    # just one, while iterating
 ```
 
-The suite runs in parallel, `hw.ncpu` harnesses at a time, which is what takes it from about 140
-seconds to about 15. `BLITZ_TEST_JOBS=1` forces it back to one at a time. Each result is numbered
-against the total and shows its run and compile time, a quiet stretch names the harnesses still running, and a harness that runs longer
-than `BLITZ_TEST_TIMEOUT` seconds (default 300) is killed and reported as timed out. Parallelism is safe
+The suite runs in parallel, `hw.ncpu` harnesses at a time; `BLITZ_TEST_JOBS=1` runs them one at a
+time. Each result is numbered against the total and shows its run and compile time, a quiet stretch
+names the harnesses still running, and a harness that runs longer than `BLITZ_TEST_TIMEOUT` seconds
+(default 300) is killed and reported as timed out. Parallelism is safe
 because each harness already roots its scratch state somewhere of its own — a UUID-suffixed
 `temporaryDirectory`, a `UserDefaults(suiteName:)`, or `NSPasteboard.withUniqueName()` — and a new
 harness must keep doing that rather than reach for a fixed path.
 
 The binaries, logs and pass/fail markers land in the checkout's own `.build/harness/` (gitignored),
 so worktrees running the suite at the same time never overwrite each other's builds or results.
-A shared `$TMPDIR/blitz-harness` used to make one worktree's run fail another's.
 
 Two consequences worth knowing. Status lines arrive in **completion order**, not the order the `run`
 lines are written; and a failing harness's compiler diagnostics or assertion output are replayed
@@ -60,9 +61,9 @@ assertion, and it is the more important one.
 A harness also runs in your own login session against the real system, with no sandbox and no fixture
 world, so it must never mutate state the machine shares with the apps you use. `NSPasteboard.general`
 is the trap: a running Blitz records every write to it as a genuine copy, so a fixture left there
-lands in clipboard history looking like something the user copied. `notes-editor-test` seeded one on
-every run from #232 onward by calling the native `copy:`/`cut:`/`paste:` actions; it now drives the
-`writeSelection(to:types:)` and `readSelection(from:)` primitives those actions delegate to, against
+lands in clipboard history looking like something the user copied. So `notes-editor-test` never
+calls the native `copy:`/`cut:`/`paste:` actions; it drives the `writeSelection(to:types:)` and
+`readSelection(from:)` primitives those actions delegate to, against
 `NSPasteboard.withUniqueName()`. Same AppKit path, no shared side effect. `pasteboard-test` is the
 second case, and it is why `ClipboardManager.fileURLs(on:volatileRoots:)` and `Paster.write(_:store:to:)`
 each take the thing they act on as a parameter: a seam that exists so the harness never has to reach
@@ -76,85 +77,43 @@ legacy fixture still exercises the modern representation and the fallback branch
 
 Never join a compile to its run with `&&` in a `set -e` script. `set -e` is specified to ignore a
 failing command in a non-final AND-OR list member, so `swiftc … && /tmp/x` swallows a compile error and
-the script sails on. CI reported success over a harness that had not compiled for twenty-five phases
-because of exactly this; `run-tests.sh` keeps the two steps separate and records both kinds of failure.
+the script sails on, reporting success over a harness that never compiled. `run-tests.sh` keeps the
+two steps separate and records both kinds of failure.
 
 ### What to run when
 
-If a change touches anything in the right column, the harness on the left is mandatory.
+`./Scripts/run-tests.sh <name>` runs one harness by its exact name. The `run` lines in
+`Scripts/run-tests.sh` are the only list of harnesses and of the shipped sources each one compiles,
+so the line itself says what a harness guards. A few test files are compiled into another harness
+rather than run on their own: `ext-fetch-test` and `ext-menu-bar-test` run inside `ext-test`, and
+`ext-list-key-test` inside `ext-form-test`.
 
-| Harness | Guards |
+While iterating, run the harnesses for the area you touched; the full suite still runs before a PR.
+
+| Touching | Run |
 | --- | --- |
-| `fuzz-test` | `Launcher/Model/LauncherMatch.swift`, `LauncherOrder.swift`, `LauncherSuggestions.swift`, `EntryNaming.swift`, `ScriptRomanization.swift`, `SearchRelevance.swift`, `LauncherRankingStore.swift` — **a new ranking complaint is a new case in its `denseIndex`** |
-| `file-search-test` | `FileSearch/Model/`, plus the shared `FuzzyMatch` scorer |
-| `file-search-session-test` | serialized query execution, debounce coalescing and cancellation |
-| `screenshot-test` | all of `Screenshots/Model/` — the `date:` prefix, the Spotlight expression, scopes and eligibility, match selection, what still needs reading, and the text store's round trip, search and prune on a scratch database |
-| `menu-search-test` | `MenuSearch/Model/` decisions, `MenuSearch/Service/` session filtering, the shared `FuzzyMatch` scorer |
-| `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
-| `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |
-| `scopes-test` | `Launcher/Model/SearchScopes.swift` |
-| `query-history-test` | `Launcher/Model/LauncherQueryHistory.swift`, `LauncherQueryHistoryStore.swift` — what ↑ and ↓ recall, when they leave the key to the list, that a shell line is never kept, and the file's round trip and deletion |
-| `app-name-test` | `Platform/AppDisplayName.swift` — every path that names a scanned bundle |
-| `calc-test` | all of `Calculator/Model/` |
-| `calendar-test` | all of `Calendar/Model/` — link detection, the join window, the day buckets, the chat tools |
-| `reminders-test` | all of `Reminders/Model/` — due dates, ordering and sections, reading a Smart Reminder reply, the chat tools |
-| `contacts-test` | all of `Contacts/Model/` — titles and entry ids, order and letter runs, name and number search, drafts, the call and email links |
-| `clipboard-search-test` | Ordinary and OCR result ordering, opt-in lifecycle, cancellation, pins and type filters |
-| `clipboard-text-test` | Apple Vision/PDF extraction, scheduling, retry backoff and recovery |
-| `paste-sequence-test` | `Clipboard/Model/PasteSequence.swift` — the walk's order, its end, and what starts it over |
-| `clipboard-test` | `Clipboard/Model/ClipboardStore.swift` — side tables, titles, edits, rich-text flavours — `ClipboardFilter.swift`, `ClipboardFileKind.swift`, `ClipDragPayload.swift`'s Open Link URL, the colour trio |
-| `pasteboard-test` | `Clipboard/Service/ClipboardManager.swift` capture and `Paster.write` — what a Finder copy reads as, what a file entry writes back, and a rich entry's RTF/HTML capture, cap and write-back |
-| `emoji-test` | `Emoji/Model/EmojiCatalog.swift`, `EmojiGridGeometry.swift`, `EmojiKeywords.swift`, the generated data and keyword packs |
-| `emoji-search-test` | `Emoji/Service/EmojiIndex.swift`, `FrequentEmojiStore.swift`, `PinnedEmojiStore.swift`, `EmojiKeywordStore.swift`, `Scripts/gen-emoji.js`'s keyword format, multilingual search, custom keyword ranking |
-| `palette-navigation-test` | `Palette/PaletteState.swift`'s screen motions — `prepare`, `replace`, `push`, `pop` |
-| `palette-selection-test` | `Features/PaletteRowIndex.swift` — the flat index, section starts, ⌘↑/↓ jumps and ⌥↑/↓ pages |
-| `interface-size-test` | `DesignSystem/InterfaceMetrics.swift`, `Features/Settings/InterfaceSize.swift`, `Extensions/Model/ExtensionFormMetrics.swift` |
-| `palette-placement-test` | `DesignSystem/Theme.swift`, `Palette/PalettePlacement.swift` |
-| `hotkey-test` | `HotKeys/Model/DoubleTapModifier.swift`, `DoubleTapDetector.swift`, `GlobeTapDetector.swift`, `HotKeyBinding.swift`, `HotKeySpelling.swift`, `HyperKey.swift`, `HotKeyAction.swift`, `SpotlightShortcut.swift` (enabled, disabled, missing, remapped and cleared entries), `Service/KeyShortcut.swift`, and the command→action mapping in `Launcher/Model/CommandID.swift` |
-| `fallback-test` | `Launcher/Model/Fallback.swift` and `WebSearchEngine.swift`, plus the `CommandID` and `Quicklink` ids it is built from |
-| `deeplink-test` | `HotKeys/Model/HotKeyActionDeepLink.swift` — every action's `blitz://run/` link round-trips, what no chord runs no link runs, and a link's `arguments` reach a custom command's fields — plus `Extensions/Model/ExtensionDeepLink.swift`'s Copy Deeplink form |
-| `palette-shortcut-test` | `Palette/PaletteShortcut.swift` — which row chord each key resolves to, and where it acts |
-| `dictionary-test` | `Dictionary/Model/DictionaryEntry.swift`, `DictionaryMarkup.swift` — a real XHTML record and the plain-text fallback, read into page blocks |
-| `callout-test` | `DesignSystem/Theme.swift`, `HotKeys/UI/CalloutPlacement.swift` |
-| `system-action-test` | `SystemActions/Model/SystemAction.swift` |
-| `volume-test` | `SystemActions/Model/VolumeLevel.swift` |
-| `dialog-draft-test` | `Windows/Dialog/FormDraftMemory.swift` — what a click-away keeps, what a deliberate ending drops, and that a kept edit only reopens on its own subject |
-| `window-command-test` | `WindowManagement/WindowCommand.swift`, `WindowPlacementEngine.swift`, `WindowActionMemory.swift` |
-| `window-layout-test` | `WindowManagement/Model/WindowLayout*.swift` and `CustomWindowSize*.swift` — the layout record, its geometry and its inverse, the plan and the store; custom sizes' units, frames and store |
-| `window-room-test` | `WindowManagement/Model/Room*.swift` — every room layout and its minimum sizes, the grid, arrangement reading, window matching, parking, the plan, Tab's choices and the three stores |
-| `custom-command-test` | `CustomCommands/Model/CustomCommand.swift`, `Service/ShellCommandRunner.swift` — background runs and terminal sessions: the status marker, ⌃C, Stop and its backstop, hang-up, the controlling tty, positional values, resize, inherited descriptors — plus `Platform/PseudoTerminal.swift` |
-| `uninstall-test` | all five pure files in `Uninstall/Model/` |
-| `quicklink-test` | all of `Quicklinks/Model/` — tags included — plus `Platform/BrowserTab.swift`'s tab URL matching |
-| `apple-shortcut-test` | all of `AppleShortcuts/Model/` — the `shortcuts list` parser and entry ids |
-| `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/` — `{browser-tab}` and `{calculator}` against an injected tab and evaluator — plus `Platform/HealthTicker.swift` and `BrowserTab.swift` |
-| `notes-test` | all of `Notes/Model/` and `Notes/Service/`, including the Markdown parser, edit plans and reveal policy, plus the real fuzzy matcher and signposts |
-| `notes-editor-test` | the Notes editor, rendered and literal, with real TextKit 2 and AppKit editing objects: styling, reveal, layout fragments, keys, chords, checkboxes and links |
-| `raycast-test` | `Backup/Service/RaycastDecoder.swift`, `Scrypt.swift`, `Platform/Compression/Zlib.swift` |
-| `symbols-test` | `Extensions/Service/SymbolCatalog.swift`, against this machine's CoreGlyphs |
-| `ext-store-test` | `Extensions/Model/` — GitHub source parsing and URLs, the store and Git tree parsers, store paging and detail fields, README URL rewriting, and the `pagination` latch |
-| `ext-refresh-test` | `Extensions/Model/ExtensionRefreshPolicy.swift` — interval parsing, due dates, backoff, subtitle fallback, indicator state |
-| `ext-version-test` | `Extensions/Service/ExtensionVersionStore.swift` — what an update check reports, adopts and forgets; `ExtensionUpdatePolicy`'s cadence, deferral and HUD line |
-| `ext-metadata-test` | `Extensions/Service/ExtensionCommandMetadataStore.swift` — round-trip, failure runs, uninstall |
-| `ext-test` | the extension runtime and native menu-bar lifecycle — boots shipped sources in JavaScriptCore; menu tests cover restoration, refresh serialization, actions and teardown; fetch tests cover HTTP connection cleanup, cancellation and request isolation |
-| `ext-icon-test` | `Extensions/Service/ExtensionIconCache.swift` — artwork sizing and its fallback |
-| `ext-failure-test` | `Extensions/Model/` — a failure's headline, detail and Copy Error report, the console ring buffer, and which actions ↵ and ⌘↵ fire |
-| `icon-cache-test` | `Platform/Images/IconCache.swift` — row sizing at 1×/2×, warm reuse, stamp and style invalidation, bitmap release, fitted geometry across all 256 alpha values, and that a row icon draws identically to the 96px one |
-| `entry-icon-test` | `EntryIcon` — that each case draws, caches and prints apart from the others, and that a moved `FileIconStamp` retires the bitmap decoded before it |
-| `text-diff-test` | `QuickActions/Model/TextDiffEngine.swift` — exact chunks, Unicode, ties, token-cap boundaries and fast paths |
-| `settings-backup-test` | `Settings/AppSettingsKey.swift`, `Backup/Model/SettingsBackupCoverage.swift` |
-| `settings-file-test` | `Settings/Model/` and `Settings/Service/` — key paths, value tokens, the printer and parser, and the repository's import, replace, save, reload and symlink handling on a scratch folder |
-| `window-file-test` | `WindowManagement/Model/WindowManagementFileFormat.swift` — command shortcuts, custom sizes, layouts and rooms as settings.json spells them, hand edits and bad records |
-| `backup-archive-test` | all of `Backup/Model/`, plus `Backup/Service/BackupStaging.swift` |
-| `updates-test` | `Updates/Model/` — version precedence, channel filtering, install route, readiness |
-| `support-test` | `Support/Model/` — when the support reminder comes due, and a clock moved backwards |
-| `onboarding-test` | `Onboarding/Model/` — the tour's step order, and the Tab card following `PaletteTabAction` |
-| `mcp-test` | `MCP/Model/` and `MCPSettingsStore` — JSON-RPC framing, handles, tool names, output flattening, trust, `@server` addressing, the shape a vendor CLI is handed, and which servers Blitz leaves to that CLI |
-| `mcp-stdio-test` | `MCP/Service/` against a stub server — handshake, listing, calling, and every way one can go away |
-| `mcp-oauth-test` | OAuth parsing, RFC 7636 PKCE, discovery and resource binding, loopback callback validation/cancellation, dynamic registration, supplied client credentials and their token-endpoint authentication, Keychain token rotation, concurrent refresh, the wider margin for a token lent to a CLI, redirects and one-retry 401 handling |
+| launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
+| the palette shell and shared views | `palette-*`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
+| icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
+| clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test` |
+| file search and screenshots | `file-search-*`, `screenshot-test` |
+| navigation | `menu-search-test`, `window-switch-test` |
+| window management, layouts and rooms | `window-*`, `space-gesture-test` |
+| calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test` |
+| emoji and dictionary | `emoji-*`, `dictionary-test` |
+| hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
+| system actions and dialogs | `system-action-test`, `volume-test`, `dialog-draft-test` |
+| notes and snippets | `notes-*`, `snippets-test` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-test`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
+| AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
+| extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
+| settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
+| updates, support, onboarding | `updates-test`, `support-test`, `onboarding-test` |
 
-The subprocess harnesses bring their own servers: `Tests/ai-fixtures/codex-stub.js`
-and `mcp-stub.js`, each copied into a scratch directory and put in front of PATH so the locator finds
-it the way it would find a real one. Both read fd 0 synchronously rather than through a stream —
+The subprocess harnesses bring their own stub servers from `Tests/ai-fixtures/`: `codex-stub.js`
+(`codex-turn-test`), `installed-cli-stub.js` (`installed-ai-test`) and `mcp-stub.js`
+(`mcp-stdio-test`) are each copied into a scratch directory and put in front of PATH so the locator
+finds them the way it would find a real one. Both read fd 0 synchronously rather than through a stream —
 `codex-stub.js` stalls mid-turn on purpose, and an event loop would read the next line while it is
 still holding — and both write with `fs.writeSync`, so a reply is on the pipe before a mode that
 exits does. `installed-cli-stub.js` reads the same way for the one turn shape that answers back:
@@ -163,9 +122,10 @@ on the pipe when it arrives.
 
 `mcp-oauth-test` starts `Tests/ai-fixtures/mcp-oauth-stub.js` on a port the kernel picks (it prints
 `ready <port>`) and binds the single-use callback through `MCPOAuthListener(port:)` on another free
-port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: it made concurrent
-runs from two checkouts fail each other, and a sign-in in a running Blitz fail the harness. Its
-Keychain scope is unique to each run and removed on completion.
+port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: concurrent runs
+from two checkouts would fail each other, and a sign-in in a running Blitz would fail the harness.
+Its Keychain scope is unique to each run and removed on completion. `ext-fetch-test` (inside
+`ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`.
 
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
@@ -179,21 +139,21 @@ The layering rule reduces to one grep, and it must return nothing:
 grep -rln 'import AppKit\|import SwiftUI\|import Cocoa' Blitz/Features/*/Model/
 ```
 
-Beyond the imports, the injected-environment half is not mechanically checkable, so it is worth an eye
-when touching a pure file:
+Beyond the imports, these pure files take their environment as parameters so that their harnesses can
+control it. Nothing checks that mechanically, so keep it when touching one:
 
-- `Calculator/Model/` still takes its clock via `now`/`calendar`, its rates via `rates` and its
+- `Calculator/Model/` takes its clock via `now`/`calendar`, its rates via `rates` and its
   separators via `format`
-- `Uninstall/Model/`'s deciding half still receives directory **names** and a `PathFacts`, never URLs
-- `HotKeys/Model/DoubleTap*` still take the clock as a parameter
-- `WindowManagement/Model/` still touches no `NSScreen` and makes no AX call, layouts included
-- `Features/PaletteRowIndex.swift` still imports Foundation alone, despite living under `Features/`
-- `Quicklinks/Model/` is still handed the home directory rather than reading it
-- `FileSearch/Model/` is still handed the home directory rather than reading it
-- `Screenshots/Model/` is still handed the home directory, the capture location and the filesystem's
+- `Uninstall/Model/`'s deciding half receives directory **names** and a `PathFacts`, never URLs
+- `HotKeys/Model/DoubleTap*` take the clock as a parameter
+- `WindowManagement/Model/` touches no `NSScreen` and makes no AX call, layouts included
+- `Features/PaletteRowIndex.swift` imports Foundation alone, despite living under `Features/`
+- `Quicklinks/Model/` is handed the home directory rather than reading it
+- `FileSearch/Model/` is handed the home directory rather than reading it
+- `Screenshots/Model/` is handed the home directory, the capture location and the filesystem's
   answers rather than reading them
 
-## Build and size checks
+## Build checks
 
 A clean build is part of the bar; nothing builds the app for you, so this is on you.
 
@@ -212,7 +172,6 @@ find ~/Library/Developer/Xcode/DerivedData -name "Blitz*.app" -maxdepth 6 -print
 - No `@unchecked Sendable`, `nonisolated(unsafe)` or `assumeIsolated` added without a stated reason.
 - The type-checker did not time out. `LauncherList.rows` already carries an explicit annotation for
   this reason; the fix for a timeout is an annotation, not a restructure.
-- Release binary growth under **2%** for an ordinary change.
 
 ### Lint
 
@@ -220,10 +179,10 @@ find ~/Library/Developer/Xcode/DerivedData -name "Blitz*.app" -maxdepth 6 -print
 ./Scripts/lint.sh
 ```
 
-SwiftLint owns the rules that catch defects, including the two checkable comment rules — the
-100-character cap and the ban on stacked comment lines. Errors block; warnings do not. There is no
-formatter, deliberately — the configuration and the measurements behind that are in
-[development.md](development.md#formatting).
+SwiftLint owns the rules that catch defects; errors block, warnings do not. It does not check
+comments — the comment rules in [standards.md](standards.md#comments) are on the author, and its one
+length rule, `line_length`, warns at 130. The formatter, `./Scripts/format.sh`, is separate and not
+part of the bar; see [development.md](development.md#formatting).
 
 The script then runs `Scripts/check-settings-search.js`, one check SwiftLint can't: every
 `SettingsAnchor` must be claimed by a section, and every row in `SettingsSearchCatalog` must be
@@ -232,10 +191,11 @@ search result that navigates and then sits there.
 
 ## Performance measurement
 
-`Platform/Signposts.swift` emits eight intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.start`,
+`Platform/Signposts.swift` emits intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.start`,
 `AppIndex.scan`, `AppIndex.rank`, `PaletteWindowController.show`, `UninstallScanner.discover` and
-`UninstallScanner.measure`, `FileSearchService.search`, and `Notes.search`. Open the Time Profiler or
-`os_signpost` instrument in Instruments and filter to that subsystem; nothing needs recompiling.
+`UninstallScanner.measure`, `FileSearchService.search`, `ScreenshotService.search`,
+`ContactsStore.fetch` and `Notes.search`. Open the Time Profiler or `os_signpost` instrument in
+Instruments and filter to that subsystem; nothing needs recompiling.
 
 None of the benchmarks below join the suite, so each is registered in `run-tests.sh` as `run index`
 instead: `--index` hands it editor flags without queueing it, and without that entry nothing in the
@@ -273,7 +233,7 @@ iteration count for timings, or `--probe` to diff every chunk between two builds
 `Tests/clipboard-file-performance.swift` measures file capture with private pasteboards and temporary
 fixtures. It reports wall and process CPU time as JSON for modern and legacy formats, including
 32/1,000/10,000 durable files, rejected-input controls and an uncapped-reader control that guards
-the attachment path against the bounded reader it now delegates to. Compare three fresh processes
+the attachment path against the bounded reader it delegates to. Compare three fresh processes
 per build with identical `-O` settings:
 
 ```sh
@@ -326,26 +286,23 @@ it three times, take the median.
 
 ### Recorded baselines
 
-Measured at the end of the 2026 refactor, on `main`. Useful as orders of magnitude, not as contracts.
+Measured on `main`. Useful as orders of magnitude, not as contracts.
 
 | | Value |
 | --- | --- |
-| Release binary | 3,655,736 B (from 3,471,592 B at the start of the refactor) |
 | Resident memory | 40–80 MB in normal use; the hard ceiling is 100 MB |
 | `SettingsPaneScanner` warm scan | 0.014 ms (16.5 ms cold), 52 panes |
-| Largest view / owner | `RootPaletteView` 662 lines, `AppCore` 284 lines |
-| Comment density | 1,653 of 27,289 source lines (6.1%) |
-| The harness suite | ~15 s wall clock, 11-way parallel (~98 s serial, ~140 s before either) |
+| The harness suite | ~15 s wall clock, 11-way parallel; ~98 s serial |
 | `palette-selection-test` | 111,684 assertions — a tripwire: a change in this count means the row-order model moved |
 | `SnippetKeywordPolicy` match | 7 µs/keystroke at 50 keywords, 59 µs at 1,000 — the `lowercased()` is 0.09 µs of it |
 | `ClipboardStore.pinnedItems` | 27–127 µs per uncached search, 1,000-row window — no cache earns its invalidation yet |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
 | Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |
-| Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter (from 43 and 52 before `PaletteSurface`); an arrow step 14–20 ms, from 26 |
+| Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter; an arrow step 14–20 ms |
 
-Launch time, allocation counts and RSS have never been captured as numbers. The signposts are in place,
-so any of them can be taken from `main` whenever a change makes it worth knowing.
+Launch time and allocation counts are not recorded. The signposts are in place, so either can be
+taken from `main` whenever a change makes it worth knowing.
 
 ## Manual regression sweep
 
@@ -541,6 +498,16 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Search Files is absent from Settings ▸ Commands, and `Enable Commands` off leaves its shortcut live
 - Export, clear both lists and the shortcut, re-import: all three return, defaults undo not duplicated
 
+### Screenshots
+
+- Off by default: Search Screenshots is absent and nothing reads the capture folder; switching it on
+  in Settings ▸ File Search lists recent captures newest first under **Recent Screenshots**
+- A filename query narrows the list; with text search off, a word visible only inside a capture
+  finds nothing, and with it on, the same word finds that capture once it has been read
+- ⇧⌘T copies the capture's text and reports **Copied text** or **No text found**; Move to Trash
+  drops the row and its banner's **Undo** brings the file back
+- Switching the feature off while the screen is open returns it to the launcher
+
 ### Notes
 
 - With Notes **off**: all three commands are absent, their shortcuts no-op, and the Notes directory is
@@ -595,8 +562,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - An empty note shows `Start writing…`; ⌘F moves it below the find bar without overlap, and closing Find
   restores its position. The footer count is right after typing, pasting and undoing
 - With Render Markdown and Show Formatting Bar on, the band under a note holds the character count on
-  the left and the round formatting button on the right; with either setting off, the old centred
-  count footer is back and nothing else moved
+  the left and the round formatting button on the right; with either setting off, the centred count
+  footer shows instead and nothing else moved
 - The bar starts collapsed, ⌥⌘T and the round button both expand and collapse it, the buttons slide out
   from behind that button, and the state survives switching notes, hiding the window and a relaunch
 - Every bar button applies its formatting, undoes in one step with ⌘Z, and autosaves; clicking keeps the
@@ -654,6 +621,24 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   System Settings ▸ General ▸ Language & Region without a relaunch — and nothing prompts for location
 - A crypto query (`1 btc`, `0.5 sol to eur`) answers, and `1 usd to btc` stays in plain notation
 
+### Emoji
+
+- Search Emoji opens the grid with Pinned, then Frequently Used, then the categories; arrows move the
+  selection and ↵ pastes into the app you came from
+- A tone-capable emoji's ⌘K menu offers **Paste with Skin Tone**; a one-off tone leaves Settings ▸
+  Emoji's default unchanged
+- Edit Keywords… (⌘E) saves a custom term that then finds the emoji; pinning appends to Pinned and
+  ⌥⌘↑/↓ reorders it there
+- ⌘+ and ⌘- change the column count and ⌘0 restores it, without moving the preference in Settings
+
+### Dictionary
+
+- Define Word opens an empty screen; typing a word shows its entry with headword, part of speech and
+  numbered senses, and a nonsense word reads **No definition found**
+- ↵ copies the whole definition and closes the palette; ⌘↵ opens the word in Dictionary.app
+- An unmatched launcher query offers the Define Word fallback; hiding the command in Settings ▸
+  Commands removes the fallback too
+
 ### Calendar and meetings
 
 - With Calendar **off**: no launcher entries, no card, no permission prompt at launch
@@ -704,6 +689,16 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Export with auto join and camera preview on, import onto a clean profile: both come back **off**,
   while the menu-bar settings carry over
 
+### Camera
+
+- Open Camera shows the panel already live, mirrored; the camera light goes out the moment the panel
+  closes, by Escape, click-away or a photo
+- The first run asks for camera access once, before any panel appears; after a denial the stage
+  offers **Open Privacy Settings**
+- Taking a photo closes the panel and puts a PNG on the clipboard that pastes as the mirrored frame
+- With two cameras attached, Switch Camera swaps without the stage going black, and the next open
+  starts on the camera switched to
+
 ### Reminders
 
 - Turning Reminders on asks with Blitz's dialog first, then macOS; dismissing either leaves it off
@@ -738,6 +733,25 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   it out again
 - Export with Contacts on, import onto a clean profile: it comes back **off**, with nothing marked
 
+### Navigation
+
+- With Settings ▸ Navigation off, Switch Windows and Search Menu Bar Items are absent and their
+  shortcuts do nothing
+- Switch Windows lists every open window of every running app, most recent app first and minimized
+  windows last; ↵ raises the chosen window — un-minimizing it, or pulling its Space forward
+- Pressing the Switch Windows shortcut again steps down the list, and releasing its modifiers
+  switches, as ⌘Tab does; a single press then typing still searches
+- Search Menu Bar Items lists the front app's menu items by path; ↵ presses one, ⌘K offers Copy Menu
+  Path and Turn Off Menu Search for that app, and an app turned off reads as excluded on next open
+
+### Undo banners
+
+- Hide from Search (⇧⌘H) on a launcher row hides it without asking, keeps the palette open on the
+  same query, and the banner's **Undo** brings the row back
+- Move to Trash in File Search moves the file without asking; **Undo** restores it to where it was
+- Complete Reminder (⌘↵) ticks the reminder off; **Undo** unticks it in Reminders.app too
+- Hovering a banner holds it past its five seconds; leaving lets it fade
+
 ### System actions and window management
 
 - A confirmation-gated action (Restart, Quit All) confirms, showing the subject's own glyph
@@ -757,6 +771,24 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   with the gap, hides other apps and parks their extra windows; quitting, `kill -9` then relaunching, and
   turning Window Management off each bring every window back.
   Repeat on two displays and with Reduce Motion on
+
+### Quick AI and Quick Actions
+
+- With AI off, Quick AI and AI Chat are absent and Tab rings past Quick AI; with it on, Tab from a
+  typed query asks it and the answer streams in place
+- ⌘J hands the conversation to the AI Chat window with its reply intact, and Quick AI then starts
+  fresh
+- Quick Actions are off out of the box; enabling asks with Blitz's dialog, then Accessibility
+- Fix Grammar on a selection in another app replaces it, with the `Fixing Grammar…` pill while the
+  model works; the full list is in [quick-actions.md](features/quick-actions.md#manual-sweep)
+
+### MCP
+
+- With MCP off, no server process runs and no tool is offered in a chat
+- A stdio server reaches ready from Test Connection, and its process is gone on Quit
+- A chat question answered by a tool shows the tool row inline and asks first; Allow This Chat does
+  not ask again in that conversation
+- The full list is in [mcp.md](features/mcp.md#manual-sweep)
 
 ### Extensions
 

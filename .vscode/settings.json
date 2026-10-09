@@ -4,7 +4,7 @@
   // it conflicts with the extension.
 
   // Code intelligence comes from SourceKit-LSP via buildServer.json, written by
-  // xcode-build-server (see docs/development.md), since there's no Package.swift.
+  // Scripts/sync-lsp.sh (see docs/development.md), since there's no Package.swift.
 
   // The Xcode toolchain dir has no lldb-dap; the valid one ships under Developer/usr/bin.
   // Point the debugger at it so F5 (Run and Debug) works.
@@ -16,7 +16,7 @@
 
   // Formatting is swift-format from the Xcode toolchain, reached through sourcekit-lsp — no extra
   // extension or brew package. defaultFormatter is required: without it VS Code refuses to pick one
-  // and ⌘S silently does nothing. `.swift-format` tunes it down to this tree's style; it still
+  // and ⌘S silently does nothing. `.swift-format` at the repo root tunes it to this tree's style.
   "[swift]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "swiftlang.swift-vscode"

@@ -28,7 +28,8 @@ Write code as if the platform released yesterday:
   one needs an explicit task saying so.
 
 Carbon is a deliberate capability-gap dependency rather than inertia: nothing modern registers a
-system-wide chord, and HIToolbox's TIS APIs remain the public input-source mechanism. SwiftTerm is the
+system-wide chord, HIToolbox's TIS APIs remain the public input-source mechanism, and its `kVK_`
+constants are the only spelling of a virtual key code. SwiftTerm is the
 one third-party exception on the same terms: the system has no terminal emulator to embed. No other
 dependency comes in without a gap of that kind. Full reasoning in
 [standards.md](docs/standards.md#posture).
@@ -44,7 +45,7 @@ dependency comes in without a gap of that kind. Full reasoning in
 | `Blitz/Windows/` | the non-palette AppKit surfaces: `Dialog/`, `HUD/`, `About/`, `AppWindowController` |
 | `Blitz/Features/` | one folder per feature; larger ones split `Model/` `Service/` `UI/` `Settings/` |
 | `Tests/` | the standalone harnesses — one Swift file each, no XCTest target |
-| `Scripts/` | every executable script: test runner, data generators, packaging, linting, editor setup |
+| `Scripts/` | every executable script: test runner, data generators, lint, format, release signing, editor setup |
 
 | Read it before you | Doc |
 | --- | --- |
@@ -62,37 +63,44 @@ Never break these without an explicit task to do so. Anything feature-specific l
 feature's doc, under its own `## Invariants`.
 
 - **`AppCore` is the sole owner.** New long-lived state goes on `AppCore`, wired in `start()` — never a
-  competing singleton. Views reach a feature's **coordinator** through `@Environment`, not `AppCore`.
-- **A file under `Features/*/Model/` may not import AppKit or SwiftUI**, and takes every environment
-  fact — clock, filesystem, home directory, rates — as an injected parameter. The harnesses compile the
-  shipped sources, so this is enforced by compilation rather than convention.
-- **Swift 6 language mode: data-race violations are hard errors.** `@MainActor` is the default,
-  cross-actor model types are `Sendable`, and heavy or IO-bound work goes off-main as `nonisolated`
-  functions driven by `Task.detached`. Do not add a second actor.
+  competing singleton. A view reads `@Environment(AppCore.self)` and uses it to *locate* a feature's
+  **coordinator** — `core.quicklinkCoordinator.deleteQuicklink(…)` — and every action goes through
+  that coordinator; a view never reaches past it to mutate a store.
+- **A file under `Features/*/Model/` may not import AppKit, SwiftUI or Cocoa.** The harnesses compile
+  the shipped sources, so this is enforced by compilation rather than convention.
+- **Swift 6 language mode: data-race violations are hard errors.** `@MainActor` is the default and
+  the home of state, cross-actor model types are `Sendable`, and heavy or IO-bound work goes off-main
+  as `nonisolated` functions driven by `Task.detached`. A private `actor` is allowed only where it
+  replaces a lock plus `@unchecked Sendable`. Details in
+  [standards.md](docs/standards.md#concurrency-and-lifetime).
 - **Dark is the baseline, and a colour's dark branch is the literal it always was.** `Theme.Colors`
   resolves per appearance through `ramp`/`adaptive`; every dark value is the `Color.white.opacity(…)`
   the forced-dark build shipped, restated rather than re-derived. Retune a light branch freely — change
   a dark one only when the task is to change Dark. `AppAppearance` drives `NSApp.appearance`, and
   `.system` maps to `nil` so AppKit follows macOS on its own.
-- **Blitz presents its own dialogs — never `NSAlert` or a system popover.** A question
-  goes through `DialogController`, a report through a HUD via `HUDPresenter`.
+- **Blitz presents its own dialogs — never `NSAlert`, `.alert` or `.confirmationDialog`.** A question
+  goes through `DialogController`, a report through a HUD via `HUDPresenter`. On the palette and its
+  borderless surfaces menus are Blitz's own too — no `NSMenu`, `NSPopover` or SwiftUI `.popover` —
+  with the system share picker as the one exception. Settings is a stock titled window and uses
+  SwiftUI `.popover` for its pickers.
 - **A networked feature fetches on a private `.ephemeral`, `urlCache = nil` session**, never
   `URLSession.shared`, so its own cache file stays the only copy on disk. `CurrencyRateStore` is the
   reference — copy it rather than inventing a second shape. A flag that grants a capability is never
   carried by a backup or by `settings.json`: `snippetsEnabled` is excluded from settings backups so an
   import cannot grant keystroke listening.
-- **Extensions stay inside `Features/Extensions/`.** Every view, row, menu, geometry and sizing
-  constant an extension needs is written and owned there — never added to `DesignSystem/`, never bolted
+- **Extension isolation is one-way.** `Features/Extensions/` may build on what the app shares —
+  `Theme` tokens, `InterfaceMetrics`, `Platform/`, and shared components such as `edgeDissolve`,
+  `thinScrollbar`, `SectionHeader`, `EmptyResults`, `BarButton`, `KeyCapChip`, `armedHover`,
+  `frosted` and `tooltip`. Nothing flows back: a view, row, menu, geometry or sizing constant that
+  exists for an extension is written and owned there — never added to `DesignSystem/`, never bolted
   onto `Theme`, and never lifted somewhere another feature can build on it. Another surface may render
-  one as an opaque box — `LauncherScreen` does exactly that with `ExtensionArgumentsAccessory` — but it
-  never reaches inside one. An extension renders untrusted third-party code whose shape we do not
-  control, so it must never be able to force a change on a launcher surface.
-  **Duplicating a view or a piece of layout maths to keep it here is the correct trade**, and the one
-  place the no-duplication rule yields. What *is* shared: `Theme`'s base tokens (spacing, radius,
-  colour), `InterfaceMetrics` as the view over those same base tokens, `PopoverMenuItem` as a data
-  shape, and `Platform/`. What is never shared: anything with
-  "how an extension looks or moves" in it. `ExtensionActionsPanel` and `ExtensionGridGeometry` exist
-  precisely because the palette's own menu and the emoji grid must stay free to change without them.
+  an extension view as an opaque box — `LauncherScreen` does exactly that with
+  `ExtensionArgumentsAccessory` — but it never reaches inside one. An extension renders untrusted
+  third-party code whose shape we do not control, so it must never be able to force a change on a
+  launcher surface. **Duplicating a view or a piece of layout maths to keep extension-specific code
+  here is the correct trade**, and the one place the no-duplication rule yields.
+  `ExtensionActionsPanel` and `ExtensionGridGeometry` exist precisely because the palette's own menu
+  and the emoji grid must stay free to change without them.
 - **`AppEntry.Kind` is the only thing that says what an entry is.** One case per launcher section and
   per `VisibilityStore` category — never re-derive a category by sniffing an entry ID. Which *pane*
   lists a command is a separate fact, and `SettingsTab.ownedCommands` is the only place that states it.
@@ -125,8 +133,8 @@ feature's doc, under its own `## Invariants`.
   persisted must stay keyed by `Bundle.main.bundleIdentifier`.
 - **XcodeGen owns the project.** `Blitz.xcodeproj` is committed but generated from `project.yml`;
   after editing it, run `xcodegen generate` and commit both. SwiftTerm is the one SwiftPM package,
-  declared under `packages:` with `Package.resolved` committed; Blitz's own code never uses
-  `Bundle.module`, and every `xcodebuild` needs `-skipPackagePluginValidation`.
+  declared under `packages:` with `Package.resolved` committed, and every `xcodebuild` needs
+  `-skipPackagePluginValidation`.
 
 ## Before you finish
 

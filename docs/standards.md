@@ -18,19 +18,20 @@ The reason it is worth being strict about: a compatibility floor is not a one-ti
 outlives the platform that needed it, gets copied by the next feature that sees it, and turns a
 one-line call into a layer nobody dares delete. Blitz has no external API, no plugin surface and one
 supported OS, so it has nothing to be compatible *with* — which is the whole reason it stays this
-small. The version-gated code this project has deleted has consistently been larger than the feature it
-was gating.
+small. Version-gated code is consistently larger than the feature it gates.
 
 In practice that means Observation and never `ObservableObject` or `@Published`; `async`/`await` and
 never a completion handler or a `DispatchQueue` hop; `SMAppService` and never an `LSSharedFileList`
 shim; structured concurrency and never detached bookkeeping you have to remember to cancel. When one of
 these gains a successor, the migration is the change — not a wrapper preserving the old spelling.
 
-Carbon has two deliberate capability-gap uses. The global hotkey engine uses `RegisterEventHotKey`
-because nothing modern can register a system-wide chord, and `CGEventTap` cannot see a lone modifier
-press. `InputSourceSwitcher` uses HIToolbox's TIS APIs because they remain the public mechanism for
-enumerating and selecting keyboard input sources. Neither use is inertia, and every raw C pointer is
-decoded to plain values before it crosses into actor code.
+Carbon stays for capability gaps, not inertia. The global hotkey engine (`HotKeyCenter`) uses
+`RegisterEventHotKey` because nothing modern can register a system-wide chord, and `CGEventTap` cannot
+see a lone modifier press. `InputSourceSwitcher` and `ASCIIKeyboardLayout` use HIToolbox's TIS APIs
+because they remain the public mechanism for enumerating and reading keyboard input sources. Every
+other `import Carbon` is there for the `kVK_` virtual key-code constants and the `cmdKey` modifier
+masks, which have no other spelling. Every raw C pointer is decoded to plain values before it crosses
+into actor code.
 
 SwiftTerm is the one third-party dependency, on the same footing. A terminal window that runs `vim`,
 `htop` or a `sudo` prompt needs a VT emulator, and macOS ships none to embed; a hand-rolled one is
@@ -47,15 +48,16 @@ Full detail in [architecture.md](architecture.md); the rules a new feature has t
 - A larger feature splits into `Model/` (pure), `Service/` (effects), `UI/` (views and the feature's
   coordinator) and `Settings/` (its panes). A small one stays flat. Split when the flat folder stops being
   scannable, not on principle.
-- **`Model/` may not import AppKit or SwiftUI.** Everything from the environment is injected — the clock,
-  the filesystem, the home directory, the rates table. This is the enforced rule below.
+- **`Model/` may not import AppKit, SwiftUI or Cocoa.** That is the enforced rule, checked by
+  compilation. Where a harness needs to control an environment fact — the clock, the home directory,
+  the rates table — inject it; that is a preference, not a rule.
 - New long-lived state belongs on `AppCore`, wired in `start()`. Do not create a second singleton.
 - A Settings pane lives with its feature. Only a pane no feature owns lives in `Settings/Panes/`.
 - Shared visual primitives go in `DesignSystem/`, system shims in `Platform/`. Neither may depend on a
   feature.
 
-Feature work reaches the app through a **coordinator**, called by `AppCore` and by views via
-`@Environment`. Confirmation gates live in the coordinator, never in the runner — which is what lets
+Feature work reaches the app through a **coordinator**, called by `AppCore` and by views, which locate
+it through `@Environment(AppCore.self)`. Confirmation gates live in the coordinator, never in the runner — which is what lets
 `ShellCommandRunner` and `SystemActionRunner` stay harness-compilable while the "are you sure?" step
 remains unbypassable.
 
@@ -90,10 +92,10 @@ fit the table.
 | `Policy` | A pure decision — no state, no effects |
 
 `Manager` is the one worth thinking twice about. It means *lifecycle plus policy*, which is a lot for one
-type, so there are only two: `ClipboardManager` (polls, and owns the capture policy and the paste-side
-handshake) and `HotKeyManager` (persists bindings, and drives Carbon registration and double-tap
-dispatch). A third is fine if it genuinely owns both halves — but check first whether `Store`, `Monitor`
-or `Coordinator` describes it better, because usually one of them does.
+type: `ClipboardManager` polls *and* owns the capture policy and the paste-side handshake;
+`HotKeyManager` persists bindings *and* drives Carbon registration and double-tap dispatch. A new one
+is fine if it genuinely owns both halves — but check first whether `Store`, `Monitor` or `Coordinator`
+describes it better, because usually one of them does.
 
 `Registry` and `ViewModel` are retired: a static table is a `Catalog`, shared app state is a `State`.
 SwiftUI-layer names (`View`, `Screen`, `Card`, `Row`, `Sheet`) are a separate vocabulary and are not
@@ -129,14 +131,20 @@ Match the surrounding code. Beyond that:
 
 Swift 6 language mode: data-race violations are hard errors, and that is the design, not an obstacle.
 
-- **`@MainActor` is the default.** Almost everything has UI coupling or identity; assume main actor
-  unless there is a reason.
+- **`@MainActor` is the default and the home of state.** Almost everything has UI coupling or
+  identity; assume main actor unless there is a reason.
 - Heavy or IO-bound work goes off-main explicitly, as `nonisolated static` pure functions driven by
-  `Task.detached` — the app scan, image decode, the settings-pane scan, shell execution. Keep that
-  boundary; do not introduce a custom actor.
+  `Task.detached` — the app scan, image decode, the settings-pane scan, shell execution, the FX rate
+  fetch. Keep that boundary.
+- **A private `actor` is allowed where it replaces a lock plus `@unchecked Sendable`** — a small piece
+  of shared mutable state touched from detached work. It stays private to its file and never becomes
+  a second home for app state, which is `@MainActor`'s.
 - Cross-actor model types are `Sendable`. Reach for `@unchecked Sendable` or `nonisolated(unsafe)` only
   with a written reason, and never for convenience.
-- **No new `MainActor.assumeIsolated`.** It traps at runtime if the assumption is ever wrong.
+- **`MainActor.assumeIsolated` and `DispatchQueue.main.async` are for callbacks guaranteed to run on
+  main** — a `queue: .main` observer, an event tap on the main run loop — and for an AppKit next-turn
+  re-assert. Each use carries a one-line comment saying which. Neither is ever a fix for a race or an
+  ordering problem of unknown cause; `assumeIsolated` traps at runtime if the assumption is wrong.
 - Any long-lived `Task` is stored and cancelled in `stop()` or `deinit`. An un-owned `Task` is a leak
   with extra steps.
 - Block observers go through the RAII `NotificationToken` (`Platform/NotificationToken.swift`), not a
@@ -146,25 +154,30 @@ Swift 6 language mode: data-race violations are hard errors, and that is the des
   loop, which on a GCD thread can miss the exit and block forever.
 - Every escaping closure capturing `self` uses `[weak self]`, or `[unowned self]` where the closure
   cannot outlive the owner (as in `AppCore`'s coordinator wiring).
-- `DispatchQueue.main.async` is not a fix for an ordering problem. If order matters, make it explicit.
 - `ClipboardStore` uses `isolated deinit` for its SQLite teardown — the idiom to copy for a resource that
   must be torn down on its actor.
+- Raw Carbon and C pointers are decoded to plain values before crossing into actor code (see
+  `hotKeyCarbonEventHandler`).
+- `HealthTicker` (`Platform/HealthTicker.swift`) is the one shared timer for periodic health checks, so
+  the event taps do not each own one.
 
 Two gotchas worth knowing before they cost an afternoon:
 
 - **`withObservationTracking`'s `onChange` is a willSet hook.** It fires *before* the write lands, so a
   re-read must be deferred into a `Task` — which is also where the tracking is re-armed, since the
-  closure is one-shot. `AppCore.track` is the shape to copy.
+  closure is one-shot. `AppCore.track` is the shape to copy; without the `Task` the re-read sees the
+  old value.
 - **A signpost interval leaks if the wrapped work throws.** The `.end` emit is skipped on the throw path
   unless it is in a `defer`. `Signposts.interval` already does this.
 
 ### Observation
 
-38 types use `@Observable`; nothing uses `ObservableObject` or `@Published`. Migrating anything new into
-this model:
+State is `@MainActor @Observable`; nothing uses `ObservableObject` or `@Published`, and views read
+it through `@Environment`, never `@EnvironmentObject`. The rules of the model:
 
 - `@ObservationIgnored` on memo caches and lazily-built collaborators. Without it, reading a memo
-  registers a dependency and the view re-renders on its own cache fill.
+  registers a dependency and the view re-renders on its own cache fill. `AppCore`'s coordinators are
+  all `@ObservationIgnored private(set) lazy` for this reason.
 - Never write a type annotation on `@Environment` for an `@Observable` type — the macro resolves the
   keyless overload by type, and an annotation changes which overload is chosen.
 - **The compiler is blind to a missed injection site.** A view reading `@Environment(AppSettings.self)`
@@ -177,7 +190,8 @@ this model:
 Budgets, not aspirations:
 
 - **Resident memory under 100 MB, always.** No feature is worth going over. Memory returns to baseline
-  after the palette closes.
+  after the palette closes. A change that touches caches, images, the index or other long-lived memory
+  measures it — the four readings in the PR template; any other change does not need to.
 - Launch is the thing the app protects most. Work added to `AppCore.start()` or to an initialiser is the
   most expensive place to put it; defer it into a `Task` or do it on first use.
 - The palette must feel instant. Anything on the summon path is resolved once per show, never per render.
@@ -218,8 +232,9 @@ Minimal code, not annotated prose.
 6. A `///` doc comment on a public type or method follows the same rules. It is not a licence to stack
    lines.
 
-None of this is linted, by choice. A rule that fires after the
-comment is written buys a second edit; these are cheap to get right on the first pass instead.
+None of this is linted, by choice — SwiftLint's only length rule is `line_length`, and it measures
+code. A rule that fires after the comment is written buys a second edit; these are cheap to get right
+on the first pass instead.
 
 ## Accessibility
 
@@ -229,7 +244,7 @@ need saying explicitly. Adding it as the view is written costs a line; retrofitt
 
 ## What is actually checked
 
-Everything above is guidance. The mechanical bar — the harnesses, the purity grep, format and lint, a
+Everything above is guidance. The mechanical bar — the harnesses, the purity grep, lint, a
 clean build — is one list, in [testing.md](testing.md#definition-of-done), so that it cannot drift by
 being written down twice. Anything not on it is a judgement call: make it, and say why in the PR if it
 is not obvious.

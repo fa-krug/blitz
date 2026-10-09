@@ -5,23 +5,22 @@ conventions for writing new code live in [standards.md](standards.md).
 
 ## The layering
 
-Independently of the folder tree, every mature subsystem has converged on the same four layers, and the
+Independently of the folder tree, every mature subsystem follows the same four layers, and the
 `Tests/` harnesses are what hold them apart.
 
 ```
 ┌─ PURE ─────────────────────────────────────────────────────────────────────┐
-│ Foundation only. No AppKit, no clock, no network, no filesystem. Every     │
-│ environment fact is an injected parameter.                                 │
+│ No AppKit, SwiftUI or Cocoa: the layer that decides, never presents.       │
 │ ⇒ Compiled verbatim by a harness, so it cannot drift.                      │
 │                                                                            │
 │ SearchRelevance · LauncherMatch · EntryNaming · ScriptRomanization ·       │
-│ LauncherOrder · LauncherSuggestions · LauncherRankingStore · SearchScopes · │
-│ LauncherQueryHistory{,Store} ·                                             │
+│ LauncherOrder · LauncherSuggestions · LauncherRankingStore ·               │
+│ SearchScopes · LauncherQueryHistory{,Store} ·                              │
 │ FileSearch{Query,Result,Scope} · Screenshot{Query,File,TextStore} ·        │
-│ Calculator/* · EmojiCatalog · EmojiGridGeometry · SystemAction ·            │
+│ Calculator/* · EmojiCatalog · EmojiGridGeometry · SystemAction ·           │
 │ VolumeLevel ·                                                              │
-│ WindowCommand · WindowPlacementEngine · WindowActionMemory · WindowLayout/* ·      │
-│ CustomWindowSize{,Store} · Room/* ·                                        │
+│ WindowCommand · WindowPlacementEngine · WindowActionMemory ·               │
+│ WindowLayout/* · CustomWindowSize{,Store} · Room/* ·                       │
 │ PaletteRowIndex ·                                                          │
 │ Uninstall{Target,SearchRoot,Rules,Protection,Plan} ·                       │
 │ Quicklink{,Destination,Favicon,Store,Archive} · AppleShortcut ·            │
@@ -33,7 +32,8 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │ MeetingLink · MeetingEvent · UpcomingWindow · MeetingDay · MenuBarSummary  │
 │ AutoJoinPolicy · EventDraft · SupportReminderSchedule ·                    │
 │ Reminders/Model/* · Contacts/Model/* ·                                     │
-│ MenuSearch{Item,Shortcut,Query,TreeNode,SnapshotPolicy,Target} ·           │
+│ MenuSearch{Item,Shortcut,Query,Target} · MenuTreeNode ·                    │
+│ MenuSnapshotPolicy ·                                                       │
 │ WindowSwitch{Entry,Order,Query}                                            │
 └──────────────────────────────────┬─────────────────────────────────────────┘
                                    │ consumed by
@@ -44,7 +44,7 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 │ AXWindowAccess · AXScreens · WindowInventory · WindowLayoutRunner ·        │
 │ RoomWindowSweep · RoomRunner ·                                             │
 │ IconCache · WindowMover · UninstallScanner · UninstallRunner ·             │
-│ SystemActionRunner · QuicklinkLauncher · TextInjector ·             │
+│ SystemActionRunner · QuicklinkLauncher · TextInjector ·                    │
 │ SnippetKeywordListener · NotesRepository · CurrencyRateStore · Paster ·    │
 │ HotKeyCenter · HyperKeyTap · ModifierTapMonitor · RunningAppsMonitor ·     │
 │ CalendarStore · MeetingLauncher · MeetingClock · CameraSession ·           │
@@ -56,7 +56,7 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 └──────────────────────────────────┬─────────────────────────────────────────┘
                                    │ published through
 ┌─ OBSERVABLE STATE ───────────────▼─────────────────────────────────────────┐
-│ 39 @MainActor @Observable stores, sessions, indices and State types        │
+│ @MainActor @Observable stores, sessions, indices and State types           │
 └──────────────────────────────────┬─────────────────────────────────────────┘
                                    │ rendered by
 ┌─ VIEW ───────────────────────────▼─────────────────────────────────────────┐
@@ -67,8 +67,9 @@ Independently of the folder tree, every mature subsystem has converged on the sa
 In the folder tree those become `Model/`, `Service/`, and `UI/` plus `Settings/` — observable state lives
 in whichever of the two owns it.
 
-- **`Model/` — pure.** Foundation only, plus SQLite3 or CoreGraphics where the data demands it.
-  Everything from the environment is **injected**: `CalcEngine` takes `now` / `calendar` / `rates`,
+- **`Model/` — pure.** No AppKit, SwiftUI or Cocoa; Foundation and whatever lower framework the data
+  needs (SQLite3, CoreGraphics, Carbon's key codes, CryptoKit). Where a harness has to control an
+  environment fact, it is **injected**: `CalcEngine` takes `now` / `calendar` / `rates`,
   `LauncherRankingStore` takes `now` and its file URL, `WindowActionMemory` takes `now` as a parameter,
   `UninstallRules` is handed directory *names* rather than URLs, and `QuicklinkStore` is handed the home
   directory. This is the layer that **decides** things.
@@ -77,12 +78,13 @@ in whichever of the two owns it.
   lives here. This is the layer that **does** things.
 - **`UI/` and `Settings/` — views**, plus the feature's coordinator. Declarative, thin, holding no policy.
 
-The rule is checkable, which is the point: **a file under `Model/` may not import AppKit or SwiftUI**,
+The rule is checkable, which is the point: **a file under `Model/` may not import AppKit, SwiftUI or
+Cocoa**,
 because the harnesses compile the shipped sources rather than a copy. A harness that stops compiling is
 the signal that a decision leaked into the effect layer, or an effect into the decision layer.
 
 The boundary keeps effects out of decisions: `CalcEngine.evaluate` is handed a finished
-`CurrencyRates?` rather than reaching for one, which is what keeps it Foundation-only and testable.
+`CurrencyRates?` rather than reaching for one, which is what keeps it pure and testable.
 Confirmation gates live in the coordinator, never in the runner — which is why `ShellCommandRunner`
 and `SystemActionRunner` stay harness-compilable while the "are you sure?" step still cannot be bypassed.
 
@@ -101,8 +103,7 @@ managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextInde
 `ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
 (`AppSettings`, `PaletteState`, `FileSearchSession`, `MenuSearchSession`, `UninstallSession`,
-`MeetingClock`), `NotesStore`, the twenty-one feature coordinators, and the
-window controllers.
+`MeetingClock`), `NotesStore`, every feature's coordinator, and the window controllers.
 
 `AppDelegate.applicationDidFinishLaunching` calls `AppCore.shared.start()` and nothing else. That is the
 one wiring point, and `start()` reads as the app's whole boot sequence in one screen.
@@ -111,7 +112,7 @@ one wiring point, and `start()` reads as the app's whole boot sequence in one sc
 into a store to mutate it.** That is the rule; `AppCore` holds only the closure wiring that connects a
 hotkey to a coordinator. Views inject `AppCore` through `@Environment` and use it as the *locator* for
 those coordinators — `core.quicklinkCoordinator.deleteQuicklink(…)` is the shape, and the alternative
-is injecting fifteen coordinators separately for no gain. Reading a store off `AppCore` to render it is
+is injecting every coordinator separately for no gain. Reading a store off `AppCore` to render it is
 fine too; deciding something with one is what the rule forbids. `showNotice`, `confirm`,
 `reportFailure`, `showMessage` and `pickVolume` are forwarders on `AppCore` itself, so
 `DialogController` and `MessageHUDController` stay single-owned.
@@ -146,10 +147,12 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
   palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
   Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
   Settings is the one window **hidden rather than torn down on close** (`keepsContentWhenClosed`):
-  rebuilding its split, sidebar and toolbar cost ~200 ms per open, so a reopen keeps them and only
-  restarts the session — `SettingsNavigationState.restart` empties history, clears the sidebar's
-  search and bumps `session`, which remounts the pane so its appear-time refreshes still run. Editor
-  panels are dismissed on close, and Quit from the Dock still closes it outright.
+  rebuilding its split, sidebar and toolbar costs ~200 ms per open, so a reopen keeps them and only
+  restarts the session. `SettingsCoordinator.showSettings` calls
+  `SettingsNavigationState.restart(on:page:revealing:)` with the pane the caller asked for, or the
+  one the window was closed on when it names none; that starts a fresh history on that pane and bumps
+  `session`, which clears the sidebar's search and remounts the pane so its appear-time refreshes
+  still run. Editor panels are dismissed on close, and Quit from the Dock still closes it outright.
 - **Notes** — a persistent, titled, non-activating `NotesPanel` managed by `NotesWindowController`.
   The user owns its size and AppKit autosaves the frame; its TextKit 2 editor renders Markdown over the
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed
@@ -190,43 +193,16 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
 assigns `NSApp.appearance` from `AppSettings.appearance`, and `.system` assigns `nil` so AppKit follows
 macOS by itself. Nothing else in the app sets an appearance.
 
-## Observation
+## Observation and concurrency
 
-39 types are `@MainActor @Observable`. Nothing uses `ObservableObject` or `@Published`, and views read
-state through `@Environment` rather than `@EnvironmentObject`.
-
-Three things about this model are easy to get wrong:
-
-- **`@ObservationIgnored` on memo caches** and lazily-built collaborators. Without it, reading a memo
-  registers a dependency and the view re-renders on its own cache fill. `AppCore`'s coordinators are all
-  `@ObservationIgnored private(set) lazy` for this reason.
-- **Never annotate `@Environment` with a type** for an `@Observable` value. The macro resolves the
-  keyless overload by type, and an explicit annotation changes which overload is chosen.
-- **The compiler cannot see a missed injection site.** A view reading `@Environment(AppSettings.self)`
-  from a hierarchy nobody injected into compiles fine and traps at runtime, so check the injection when
-  adding a hosting view.
-
-`AppCore.track` is the pattern for reacting to a settings change outside a view.
-`withObservationTracking`'s `onChange` is a **willSet** hook — it fires before the write lands and is
-one-shot — so the closure defers the re-read into a `Task` and re-arms the tracking there. Both halves
-are required; removing the `Task` reads the old value.
-
-## Concurrency
-
-The target builds in **Swift 6 language mode**, so data-race violations are hard errors. Almost
-everything is `@MainActor`; cross-actor model types are `Sendable`. Heavy and IO-bound work — the app
-scan, image decode, the settings-pane scan, shell execution, the FX rate fetch — is pushed off-main as
-`nonisolated static` functions driven by `Task.detached`. There is exactly one actor, deliberately.
-
-House idioms for the sharp edges:
-
-- Block-observer lifetimes go through the RAII `NotificationToken` (`Platform/NotificationToken.swift`)
-  rather than removal in a `deinit`.
-- `ClipboardStore` uses `isolated deinit` for its SQLite teardown.
-- Raw Carbon and C pointers are decoded to plain values before crossing into actor code (see
-  `hotKeyCarbonEventHandler`).
-- `HealthTicker` (`Platform/HealthTicker.swift`) is the one shared timer for periodic health checks, so
-  the event taps do not each own one.
+State lives in `@MainActor @Observable` types — the stores, sessions, indices and `State` types
+`AppCore` owns — and views read it through `@Environment`. Each hosting view is handed `AppCore` and
+the shared state it reads by one environment modifier per surface (`paletteEnvironment`,
+`settingsEnvironment`), and `AppCore` reacts to a settings change outside a view through
+`AppCore.track`. Off-main work leaves through `nonisolated` functions driven by `Task.detached` and
+comes back as `Sendable` values. The rules for both — the Observation gotchas, when an `actor` is
+allowed, the main-thread idioms — live in
+[standards.md](standards.md#concurrency-and-lifetime).
 
 ## The tree
 
@@ -236,23 +212,24 @@ everything that feature owns.
 ```
 Blitz/
   App/              @main, AppDelegate, AppCore — the composition root
-  DesignSystem/     Theme (the token source), KeyCapChip, Tooltip, SymbolImage,
-                    GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/, Interaction/
+  DesignSystem/     Theme (the token source), InterfaceMetrics, KeyCapChip, BarButton, Tooltip,
+                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/,
+                    Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
-                    AppDisplayName, SymbolicHotKeys,
-                    NotificationToken, AppPaths, Signposts, HealthTicker, Memo, ActivationPolicy,
-                    Images/, Compression/
-  Resources/        RaycastRuntime.generated.js, the embedded extension runtime
+                    AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
+                    HealthTicker, Memo, ActivationPolicy, ProcessExit, Images/, Compression/
+  Resources/        RaycastRuntime.generated.js (the embedded extension runtime), EmojiKeywords/
   Palette/          the palette shell: PalettePanel, PaletteWindowController, RootPaletteView,
-                    the PaletteScreen protocol, PaletteCoordinator, PaletteState, PaletteMode
+                    the PaletteScreen protocol, PaletteCoordinator, PaletteState, PaletteMode,
+                    MenuPanel, EmptyResults, armedHover
   Windows/          the non-palette AppKit surfaces: AppWindowController, Dialog/, HUD/, About/
   Assets.xcassets/  the app icon and the bundled image sets some catalog symbols resolve to
   Features/
     PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
-    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Emoji/ FileSearch/ Screenshots/
-    MenuSearch/
-    Notes/ Quicklinks/ Snippets/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ Backup/
-    WindowManagement/ Onboarding/ Updates/ Support/ AI/ Settings/
+    Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Camera/ Emoji/ Dictionary/
+    FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/
+    AppleShortcuts/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ TextInjection/
+    WindowManagement/ AI/ QuickActions/ MCP/ Backup/ Onboarding/ Updates/ Support/ Settings/
     Extensions/
         Model/      pure — the harness inputs
         Service/    effects — stores, monitors, runners, AppKit glue
@@ -263,7 +240,9 @@ Blitz/
                     (Model/, Service/, SettingsFileSchema), and Panes/ for the panes no feature
                     owns
 Tests/              the standalone harnesses, one Swift file each
-Scripts/            run-tests.sh, the two data generators, packaging, formatting, editor setup
+Scripts/            run-tests.sh, lint.sh, format.sh, the three gen-*.js data generators,
+                    raycast-runtime/ (the extension runtime build), release signing checks,
+                    sync-lsp.sh
 ```
 
 A feature splits into the sub-folders it has something for; a small one may stay flat until the flat
