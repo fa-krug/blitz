@@ -1,7 +1,7 @@
 import Foundation
 import JavaScriptCore
 
-/// The JS→Swift seam. Answers are JSON, so nothing non-`Sendable` crosses back to the JS queue.
+/// The JS→Swift seam. Answers are JSON, so nothing non-`Sendable` crosses back to the JS thread.
 @MainActor
 protocol ExtensionHostAPI: AnyObject, Sendable {
     func perform(api: String, method: String, arguments: [RenderValue]) async throws -> String
@@ -19,27 +19,33 @@ protocol ExtensionRuntimeDelegate: AnyObject {
     func runtime(_ runtime: ExtensionRuntime, log level: String, message: String)
 }
 
-/// The one `JSContext` a command runs in; every touch is on `queue`, only values cross.
+/// The one `JSContext` a command runs in; every touch is on `thread`, only values cross.
 final class ExtensionRuntime: @unchecked Sendable {
-    private let queue: DispatchQueue
+    private let thread: ExtensionJSThread
     private var context: JSContext?
-    private var timers: [String: DispatchSourceTimer] = [:]
+    private var timers: [String: Timer] = [:]
     private var hostTasks: [String: Task<Void, Never>] = [:]
     private var generation = UUID()
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private let nodeShims = ExtensionNodeShims()
 
-    /// Set once at startup; read on the JS queue, so it is written before the runtime ever boots.
+    /// Set once at startup; read on the JS thread, so it is written before the runtime ever boots.
     private nonisolated(unsafe) weak var delegate: ExtensionRuntimeDelegate?
     private let hostAPI: ExtensionHostAPI
     private let runtimeOverride: URL?
 
     /// `runtimeURL` overrides the bundled runtime; only the harness passes it.
-    init(hostAPI: ExtensionHostAPI, runtimeURL: URL? = nil, priority: DispatchQoS = .userInitiated) {
-        queue = DispatchQueue(
-            label: "de.fa-krug.blitz.extensions.js", qos: priority, autoreleaseFrequency: .workItem)
+    init(
+        hostAPI: ExtensionHostAPI, runtimeURL: URL? = nil,
+        priority: QualityOfService = .userInitiated
+    ) {
+        thread = ExtensionJSThread(name: "de.fa-krug.blitz.extensions.js", priority: priority)
         self.hostAPI = hostAPI
         self.runtimeOverride = runtimeURL
+    }
+
+    deinit {
+        thread.stop()
     }
 
     @MainActor
@@ -66,7 +72,7 @@ final class ExtensionRuntime: @unchecked Sendable {
     /// Idempotent, so any command can lazily ensure the engine is up.
     func boot(config: ExtensionBootConfig) async throws {
         try await withCheckedThrowingContinuation { continuation in
-            queue.async {
+            thread.async {
                 do {
                     try self.bootOnQueue(config: config)
                     continuation.resume()
@@ -124,7 +130,7 @@ final class ExtensionRuntime: @unchecked Sendable {
         }
     }
 
-    /// Pre-encoded: `[Any]` isn't Sendable, so only the JSON string crosses onto the queue.
+    /// Pre-encoded: `[Any]` isn't Sendable, so only the JSON string crosses onto the thread.
     func dispatch(session: String, handler: String, payload: String, completesSession: Bool = false) async {
         await onQueue { context in
             _ = context.objectForKeyedSubscript("__blitz")?
@@ -135,7 +141,7 @@ final class ExtensionRuntime: @unchecked Sendable {
     /// Escape or the back chevron inside a pushed screen; true when one was popped.
     func popNavigation(session: String) async -> Bool {
         await withCheckedContinuation { continuation in
-            queue.async {
+            thread.async {
                 guard let context = self.context else { return continuation.resume(returning: false) }
                 let result = context.objectForKeyedSubscript("__blitz")?
                     .invokeMethod("popNavigation", withArguments: [session])
@@ -156,12 +162,12 @@ final class ExtensionRuntime: @unchecked Sendable {
             _ = context.objectForKeyedSubscript("__blitz")?
                 .invokeMethod("stop", withArguments: [session])
         }
-        queue.async { self.nodeShims.closeFiles() }
+        thread.async { self.nodeShims.closeFiles() }
     }
 
     private func onQueue(_ body: @escaping @Sendable (JSContext) -> Void) async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            thread.async {
                 if let context = self.context { body(context) }
                 continuation.resume()
             }
@@ -232,7 +238,14 @@ final class ExtensionRuntime: @unchecked Sendable {
         let compile: @convention(block) (String, String) -> JSValue? = { [weak self] code, filename in
             guard let context = self?.context else { return nil }
             let wrapped = "(function (exports, require, module, __filename, __dirname) {\n\(code)\n})"
-            return context.evaluateScript(wrapped, withSourceURL: URL(fileURLWithPath: filename))
+            // The post-boot handler only logs, which left the caller a bare "is not a function".
+            let handler = context.exceptionHandler
+            nonisolated(unsafe) var thrown: JSValue?
+            context.exceptionHandler = { _, exception in thrown = exception }
+            let factory = context.evaluateScript(wrapped, withSourceURL: URL(fileURLWithPath: filename))
+            context.exceptionHandler = handler
+            if let thrown { context.exception = thrown }
+            return factory
         }
         context.setObject(compile, forKeyedSubscript: "__blitzCompile" as NSString)
     }
@@ -260,7 +273,7 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     private func settle(callId: String, generation: UUID, ok: Bool, payload: String) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            queue.async {
+            thread.async {
                 defer { continuation.resume() }
                 guard generation == self.generation else { return }
                 self.hostTasks[callId] = nil
@@ -273,7 +286,7 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     func drainHostCalls() async {
         await withCheckedContinuation { continuation in
-            queue.async {
+            thread.async {
                 if self.hostTasks.isEmpty {
                     continuation.resume()
                 } else {
@@ -306,27 +319,23 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     // MARK: - Timers
 
+    /// Called on the JS thread, so the timer lands on its run loop and is invalidated there too.
     private func startTimer(id: String, milliseconds: Double, repeats: Bool) {
-        let timer = DispatchSource.makeTimerSource(queue: queue)
         let interval = max(milliseconds, 0) / 1000
-        if repeats {
-            timer.schedule(deadline: .now() + interval, repeating: max(interval, 0.001))
-        } else {
-            timer.schedule(deadline: .now() + interval)
-        }
-        timer.setEventHandler { [weak self] in
+        let period = repeats ? max(interval, 0.001) : interval
+        let timer = Timer(timeInterval: period, repeats: repeats) { [weak self] _ in
             guard let self else { return }
             if !repeats { self.timers[id] = nil }
             _ = self.context?.objectForKeyedSubscript("__blitz")?
                 .invokeMethod("fireTimer", withArguments: [id])
         }
-        timers[id]?.cancel()
+        timers[id]?.invalidate()
         timers[id] = timer
-        timer.resume()
+        RunLoop.current.add(timer, forMode: .default)
     }
 
     private func clearTimer(id: String) {
-        timers[id]?.cancel()
+        timers[id]?.invalidate()
         timers[id] = nil
     }
 
@@ -334,8 +343,8 @@ final class ExtensionRuntime: @unchecked Sendable {
     func shutdown() {
         let hostAPI = self.hostAPI
         Task { @MainActor in hostAPI.sessionEnded() }
-        queue.async {
-            for timer in self.timers.values { timer.cancel() }
+        thread.async {
+            for timer in self.timers.values { timer.invalidate() }
             self.timers.removeAll()
             for task in self.hostTasks.values { task.cancel() }
             self.hostTasks.removeAll()
@@ -371,5 +380,47 @@ final class ExtensionRuntime: @unchecked Sendable {
                 withJSONObject: value, options: [.fragmentsAllowed])
         else { return "" }
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+/// GCD workers get 512 KB of stack, which JavaScriptCore's parser overflows on sql.js-sized bundles.
+final class ExtensionJSThread: @unchecked Sendable {
+    /// The main thread's size, which every bundle the runtime has met parses within.
+    private static let stackSize = 8 << 20
+    private let runLoop: CFRunLoop
+
+    init(name: String, priority: QualityOfService) {
+        let started = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var runLoop: CFRunLoop?
+        let thread = Thread {
+            runLoop = CFRunLoopGetCurrent()
+            // Without a source `run` returns at once instead of waiting for work.
+            RunLoop.current.add(NSMachPort(), forMode: .default)
+            started.signal()
+            while !Thread.current.isCancelled {
+                autoreleasepool { _ = RunLoop.current.run(mode: .default, before: .distantFuture) }
+            }
+        }
+        thread.name = name
+        thread.qualityOfService = priority
+        thread.stackSize = Self.stackSize
+        thread.start()
+        started.wait()
+        self.runLoop = runLoop!
+    }
+
+    func async(_ work: @escaping @Sendable () -> Void) {
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) {
+            autoreleasepool(invoking: work)
+        }
+        CFRunLoopWakeUp(runLoop)
+    }
+
+    /// Runs after everything already queued, then lets the thread exit.
+    func stop() {
+        async {
+            Thread.current.cancel()
+            CFRunLoopStop(CFRunLoopGetCurrent())
+        }
     }
 }

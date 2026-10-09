@@ -11,7 +11,8 @@ set -uo pipefail
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$0")/.." || exit 1
 
-BIN="${TMPDIR:-/tmp}/blitz-harness"
+# Inside the checkout: worktrees running the suite at once must not share binaries or markers.
+BIN="$PWD/.build/harness"
 mkdir -p "$BIN"
 
 # `--exec` is the worker half: xargs re-enters here once per queued harness.
@@ -64,7 +65,7 @@ only="${1:-}"
 # xcodebuild never compiles the harnesses, so without this nothing in Tests/ resolves in an editor.
 # The source lists below are the only copy, which is why this lives here rather than in its own script.
 emit_db=0
-DB="${TMPDIR:-/tmp}/blitz-compile-db.json"
+DB="$BIN/compile-db.json"
 if [ "$only" = "--index" ]; then
     emit_db=1
     only=""

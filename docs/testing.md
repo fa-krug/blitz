@@ -34,6 +34,10 @@ because each harness already roots its scratch state somewhere of its own — a 
 `temporaryDirectory`, a `UserDefaults(suiteName:)`, or `NSPasteboard.withUniqueName()` — and a new
 harness must keep doing that rather than reach for a fixed path.
 
+The binaries, logs and pass/fail markers land in the checkout's own `.build/harness/` (gitignored),
+so worktrees running the suite at the same time never overwrite each other's builds or results.
+A shared `$TMPDIR/blitz-harness` used to make one worktree's run fail another's.
+
 Two consequences worth knowing. Status lines arrive in **completion order**, not the order the `run`
 lines are written; and a failing harness's compiler diagnostics or assertion output are replayed
 together at the bottom, under its name, rather than streamed where they happened. That is deliberate:
@@ -155,9 +159,11 @@ exits does. `installed-cli-stub.js` reads the same way for the one turn shape th
 Claude's consent channel is a reply on stdin in the middle of a turn, so the stub has to be sitting
 on the pipe when it arrives.
 
-`mcp-oauth-test` starts `Tests/ai-fixtures/mcp-oauth-stub.js` on `127.0.0.1:4963` and tests the
-single-use callback on `127.0.0.1:4962`. Both ports must be free; the harness never chooses another
-port. Its Keychain scope is unique to each run and removed on completion.
+`mcp-oauth-test` starts `Tests/ai-fixtures/mcp-oauth-stub.js` on a port the kernel picks (it prints
+`ready <port>`) and binds the single-use callback through `MCPOAuthListener(port:)` on another free
+port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: it made concurrent
+runs from two checkouts fail each other, and a sign-in in a running Blitz fail the harness. Its
+Keychain scope is unique to each run and removed on completion.
 
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
