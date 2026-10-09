@@ -20,6 +20,7 @@ struct FuzzTest {
         transliteration()
         naming()
         comparator()
+        membership()
         denseIndex()
         suggestions()
         sharedFold()
@@ -198,6 +199,30 @@ struct FuzzTest {
     }
 
     static func first(_ query: String, _ items: [Item]) -> String? { rank(query, items).first }
+
+    static func matching(_ query: String, _ items: [Item]) -> [String] {
+        LauncherOrder.matching(
+            items, query: LauncherOrder.Query(query), sensitivity: .high,
+            profile: \.profile, signals: \.signals
+        ).map(\.name)
+    }
+
+    static func membership() {
+        print("\n# membership")
+        let shortcuts = (1...250).map { Item(name: "Shortcut \($0)") }
+        check(
+            "a Settings filter keeps every match past the launcher's cap",
+            matching("shortcut", shortcuts).count == 250 && rank("shortcut", shortcuts).count == 200)
+        let slack = [Item(name: "Slack Huddle"), Item(name: "Zed"), Item(name: "Slack")]
+        check(
+            "…in the list's own order, never by score",
+            matching("slack", slack) == ["Slack Huddle", "Slack"]
+                && rank("slack", slack) == ["Slack", "Slack Huddle"])
+        check("…and a blank query keeps the whole list", matching(" ", slack).count == slack.count)
+        check(
+            "an alias finds its row there too",
+            matching("fig", [Item(name: "Figma", alias: "fig"), Item(name: "Zed")]) == ["Figma"])
+    }
 
     static func comparator() {
         print("\n# comparator")

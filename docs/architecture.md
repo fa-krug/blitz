@@ -145,6 +145,11 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
   palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
   Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
+  Settings is the one window **hidden rather than torn down on close** (`keepsContentWhenClosed`):
+  rebuilding its split, sidebar and toolbar cost ~200 ms per open, so a reopen keeps them and only
+  restarts the session — `SettingsNavigationState.restart` empties history, clears the sidebar's
+  search and bumps `session`, which remounts the pane so its appear-time refreshes still run. Editor
+  panels are dismissed on close, and Quit from the Dock still closes it outright.
 - **Notes** — a persistent, titled, non-activating `NotesPanel` managed by `NotesWindowController`.
   The user owns its size and AppKit autosaves the frame; its TextKit 2 editor renders Markdown over the
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed
@@ -254,21 +259,21 @@ Blitz/
         Settings/   the feature's own panes
     Settings/       the Settings shell only: SettingsCoordinator, the root/sidebar/detail views, the chrome,
                     navigation types, SettingsTab, AppSettings, AppSettingsKey, the settings file
-                    (Model/, Service/, SettingsFileSchema), and Panes/ for the two panes no feature
+                    (Model/, Service/, SettingsFileSchema), and Panes/ for the panes no feature
                     owns
 Tests/              the standalone harnesses, one Swift file each
 Scripts/            run-tests.sh, the two data generators, packaging, formatting, editor setup
 ```
 
 A feature splits into the sub-folders it has something for; a small one may stay flat until the flat
-folder stops being scannable. `HotKeys/` has no `Settings/` because its Shortcuts pane is part of the
-Settings shell rather than the feature, and `Onboarding/` has none because its tour is its own window.
+folder stops being scannable. `Onboarding/` has no `Settings/` because its tour is its own window.
 
 Every `SettingsTab` maps to one `…SettingsView`, and each is a stock `Form` with
 `.formStyle(.grouped)` — see [ui.md](ui.md#settings). A pane lives with its feature; only a pane no
-feature owns (General, Permissions) lives in `Settings/Panes/`. The four launcher-category panes —
-Applications, System Settings, System Actions, Commands — are thin wrappers over the shared
-`LauncherItemsSection`; Apple Shortcuts pairs its feature switch with the same `LauncherItemsList`.
+feature owns (General, Appearance, Navigation, Permissions) lives in `Settings/Panes/`. The four
+launcher-category panes — Applications, System Settings, System Actions, Commands — are thin wrappers
+over the shared `LauncherItemsSection`; Apple Shortcuts pairs its feature switch with the same
+`LauncherItemsList`.
 
 `SettingsTab` and `SettingsSection` both identify by the case itself, never by an index. A selectable
 `List` flattens section and row IDs into one namespace, so overlapping `Int` IDs make SwiftUI drop

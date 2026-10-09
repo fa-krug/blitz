@@ -9,7 +9,7 @@ private final class AppWindow: NSWindow {
     }
 }
 
-/// Built on first show, torn down on close so its SwiftUI tree deallocates. Never quits the app.
+/// Built on first show and torn down on close, unless kept hidden. Never quits the app.
 @MainActor
 final class AppWindowController: NSObject, NSWindowDelegate {
     private let title: String
@@ -21,9 +21,13 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     private let cascadeAnchor: NSRect?
     private let activation: ActivationPolicy
     private let closesOnEscape: Bool
+    /// Closing hides the window instead, so reopening skips rebuilding what it holds.
+    private let keepsContentWhenClosed: Bool
     /// For an owner holding something that should end with the window, not just hide behind it.
     private let onClose: (() -> Void)?
     private var window: NSWindow?
+    /// False while a kept window waits hidden; a torn-down one has no window at all.
+    private var isShown = false
     /// Rebuilt with the window, so a chrome's state never outlives the window it decorated.
     private var chrome: WindowChrome?
 
@@ -31,7 +35,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     init(
         title: String, contentSize: CGSize, minimumSize: CGSize? = nil, resizable: Bool = false,
         autosaveName: String? = nil, cascadingFrom cascadeAnchor: NSRect? = nil,
-        activation: ActivationPolicy, closesOnEscape: Bool = false, onClose: (() -> Void)? = nil
+        activation: ActivationPolicy, closesOnEscape: Bool = false,
+        keepsContentWhenClosed: Bool = false, onClose: (() -> Void)? = nil
     ) {
         self.title = title
         self.contentSize = contentSize
@@ -41,6 +46,7 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         self.cascadeAnchor = cascadeAnchor
         self.activation = activation
         self.closesOnEscape = closesOnEscape
+        self.keepsContentWhenClosed = keepsContentWhenClosed
         self.onClose = onClose
     }
 
@@ -62,31 +68,38 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     @discardableResult
     func show(chrome: WindowChrome? = nil, contentViewController: () -> NSViewController) -> Bool {
         if let window {
-            raise(window)
+            reveal(window)
             return false
         }
         let window = makeWindow(content: contentViewController(), chrome: chrome)
         self.chrome = chrome
         self.window = window
-        activation.windowDidOpen(window)
-        raise(window)
+        reveal(window)
         return true
     }
 
     /// Re-raise an open window without rebuilding it; `false` when none is open.
     @discardableResult
     func focus() -> Bool {
-        guard let window else { return false }
+        guard let window, isShown else { return false }
         raise(window)
         return true
     }
 
-    func close() {
-        window?.close()
+    /// Shows a kept window again with the tree it closed on; `false` when there is none.
+    @discardableResult
+    func reopen() -> Bool {
+        guard let window, !isShown else { return false }
+        reveal(window)
+        return true
     }
 
-    /// Nil while closed; what a sibling window cascades from.
-    var frame: NSRect? { window?.frame }
+    func close() {
+        if keepsContentWhenClosed { hide() } else { window?.close() }
+    }
+
+    /// Nil while closed, kept or not; what a sibling window cascades from.
+    var frame: NSRect? { isShown ? window?.frame : nil }
 
     /// The title bar sits inside the frame but outside the layout area, so it is added back.
     func fitContent(width: CGFloat, height: CGFloat) {
@@ -104,10 +117,20 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard keepsContentWhenClosed else { return true }
+        hide()
+        return false
+    }
+
+    /// Reached by a kept window too when something closes it outright, such as Quit from the Dock.
     func windowWillClose(_ notification: Notification) {
         guard let window else { return }
+        let wasShown = isShown
         self.window = nil
         self.chrome = nil
+        isShown = false
+        guard wasShown else { return }
         activation.windowDidClose(window)
         onClose?()
     }
@@ -155,13 +178,29 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
+    private func reveal(_ window: NSWindow) {
+        if !isShown {
+            isShown = true
+            activation.windowDidOpen(window)
+        }
+        raise(window)
+    }
+
+    private func hide() {
+        guard let window, isShown else { return }
+        isShown = false
+        window.orderOut(nil)
+        activation.windowDidClose(window)
+        onClose?()
+    }
+
     private func raise(_ window: NSWindow) {
         if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         // `NSApp.activate` is async, so re-assert next turn — never onto a window closed since.
         DispatchQueue.main.async { [weak self, weak window] in
-            guard let window, self?.window === window else { return }
+            guard let window, let self, self.window === window, self.isShown else { return }
             window.makeKeyAndOrderFront(nil)
         }
     }

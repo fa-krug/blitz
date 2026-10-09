@@ -10,7 +10,7 @@ enum Permissions {
     /// EventKit caches status per process: a grant made here reads `.notDetermined` until relaunch.
     private static let eventKitGrants = Mutex<Set<EKEntityType>>([])
 
-    static func isAccessibilityTrusted() -> Bool {
+    nonisolated static func isAccessibilityTrusted() -> Bool {
         AXIsProcessTrusted()
     }
 
@@ -39,7 +39,7 @@ enum Permissions {
         NSWorkspace.shared.open(url)
     }
 
-    static func calendarAccess() -> CalendarAccess {
+    nonisolated static func calendarAccess() -> CalendarAccess {
         eventKitAccess(for: .event)
     }
 
@@ -50,7 +50,7 @@ enum Permissions {
         return granted
     }
 
-    static func remindersAccess() -> CalendarAccess {
+    nonisolated static func remindersAccess() -> CalendarAccess {
         eventKitAccess(for: .reminder)
     }
 
@@ -61,7 +61,7 @@ enum Permissions {
     }
 
     /// EventKit's own three states, which reminders share with the calendar.
-    private static func eventKitAccess(for type: EKEntityType) -> CalendarAccess {
+    nonisolated private static func eventKitAccess(for type: EKEntityType) -> CalendarAccess {
         switch EKEventStore.authorizationStatus(for: type) {
         case .fullAccess: return .granted
         case .notDetermined:
@@ -72,7 +72,7 @@ enum Permissions {
     }
 
     /// Anything short of the whole address book reads as no access: Blitz lists every card.
-    static func contactsAccess() -> CalendarAccess {
+    nonisolated static func contactsAccess() -> CalendarAccess {
         switch CNContactStore.authorizationStatus(for: .contacts) {
         case .authorized: return .granted
         case .notDetermined: return .notDetermined

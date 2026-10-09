@@ -433,6 +433,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Every installed app appears; Settings panes appear under System Settings; running apps show the dot
 - Icons render with no placeholder flash on reopen, and Settings ▸ Applications scrolls without hitching,
   even with the scrollbar thumb dragged from end to end in under a second
+- A row in Settings ▸ Applications, System Settings, System Actions, Commands, Apple Shortcuts or
+  Quicklinks opens its page; an alias or shortcut set there shows as a badge on the row, a hidden or
+  disabled item dims its row, and Back scrolls the list to the row again
+- Configure Command (⇧⌘,) on any of those items opens its page directly
 - An app removed since the last open drops out after a reopen
 - Learned ranking still surfaces your habitual result for a short query
 - ↑ in an empty field (compact bar included) recalls the last search acted on, a further ↑ steps
@@ -752,6 +756,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Settings and backup
 
 - Every pane renders and the sidebar switches without flicker
+- Closing and reopening Settings lands on General with Back disabled and the sidebar search empty;
+  an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)
+  shows the new state; General's Calculator and Search sections appear a frame later, and
+  a search result into one of them still scrolls to and lights its row
 - A feature switch takes effect in the launcher immediately; every setting survives relaunch
 - Export produces a `.blitz`; import applies it and reports a per-category summary
 - Untick a category on export, and the import picker greys that row out rather than offering it

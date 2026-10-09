@@ -1,11 +1,13 @@
 import Observation
 
-/// Not on `AppCore`: one window's session, released in `windowWillClose` so history never survives.
+/// Not on `AppCore`: one window's session, restarted on every reopen so history never survives.
 @MainActor
 @Observable
 final class SettingsNavigationState {
     private var history: SettingsHistory
     private var requests = 0
+    /// Bumped by `restart`, so the pane remounts and its appear-time refreshes run again.
+    private(set) var session = 0
 
     init(tab: SettingsTab) {
         history = SettingsHistory(current: SettingsLocation(tab))
@@ -30,6 +32,14 @@ final class SettingsNavigationState {
         guard let target else { return }
         requests += 1
         scrollRequest = SettingsScrollRequest(target: target, token: requests)
+    }
+
+    /// A reopened window starts as a new one would: on `tab`, with no history behind it.
+    func restart(on tab: SettingsTab, page: String?, revealing target: SettingsTarget?) {
+        history = SettingsHistory(current: SettingsLocation(tab))
+        scrollRequest = nil
+        session += 1
+        select(tab, page: page, revealing: target)
     }
 
     func beginFlash(_ target: SettingsTarget) {

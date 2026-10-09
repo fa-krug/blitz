@@ -1,13 +1,16 @@
 enum SettingsTab: CaseIterable, Identifiable {
-    case general, applications, systemSettings, systemActions, commands, quicklinks, appleShortcuts,
-        fallbacks, clipboard, snippets, fileSearch, windowManagement, navigation, notes, calendar,
-        reminders, contacts, emoji, ai, quickActions, extensions, permissions, backup, about
+    case general, appearance, hyperKey, applications, systemSettings, systemActions, commands,
+        quicklinks, appleShortcuts, fallbacks, clipboard, snippets, fileSearch, windowManagement,
+        navigation, notes, calendar, reminders, contacts, emoji, ai, quickActions, extensions,
+        permissions, backup, about
     /// The case, never an index: a selectable `List` flattens section and row IDs together.
     var id: Self { self }
 
     var title: String {
         switch self {
         case .general: return "General"
+        case .appearance: return "Appearance"
+        case .hyperKey: return "Hyper Key"
         case .applications: return "Applications"
         case .systemSettings: return "System Settings"
         case .systemActions: return "System Actions"
@@ -37,6 +40,8 @@ enum SettingsTab: CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: return "switch.2"
+        case .appearance: return "paintbrush"
+        case .hyperKey: return "command"
         case .applications: return "square.grid.2x2"
         case .systemSettings: return "gearshape"
         case .systemActions: return "bolt"
@@ -81,7 +86,7 @@ enum SettingsSection: CaseIterable, Identifiable {
 
     var tabs: [SettingsTab] {
         switch self {
-        case .general: return [.general, .permissions]
+        case .general: return [.general, .appearance, .hyperKey, .permissions]
         case .launcher:
             return [
                 .applications, .systemSettings, .systemActions, .commands, .quicklinks,

@@ -3,7 +3,12 @@ import SwiftUI
 /// Settings' lifecycle, independent of the palette: neither surface opens or closes the other.
 @MainActor
 final class SettingsCoordinator {
-    private let window: AppWindowController
+    private lazy var window = AppWindowController(
+        title: "Settings", contentSize: Theme.Size.settingsWindow, resizable: true,
+        autosaveName: "SettingsWindow", activation: core.activationPolicy,
+        keepsContentWhenClosed: true,
+        // Hidden, not torn down, so an open editor panel would otherwise outlive the window.
+        onClose: { [weak self] in self?.editorPresenter?.dismissAll() })
     /// Environment injection only — never for state this type owns.
     private unowned let core: AppCore
     /// The open window's session; the window's chrome and view tree own it, so this self-nils.
@@ -13,9 +18,6 @@ final class SettingsCoordinator {
 
     init(core: AppCore) {
         self.core = core
-        window = AppWindowController(
-            title: "Settings", contentSize: Theme.Size.settingsWindow, resizable: true,
-            autosaveName: "SettingsWindow", activation: core.activationPolicy)
     }
 
     /// A fresh window mounts on `tab`; an open one navigates to it, recording the jump in history.
@@ -25,6 +27,10 @@ final class SettingsCoordinator {
     ) {
         if window.focus() {
             if let tab { navigation?.select(tab, page: page, revealing: target) }
+            return
+        }
+        if let navigation, window.reopen() {
+            navigation.restart(on: tab ?? .general, page: page, revealing: target)
             return
         }
         let navigation = SettingsNavigationState(tab: tab ?? .general)

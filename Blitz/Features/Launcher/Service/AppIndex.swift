@@ -218,7 +218,20 @@ struct AppEntry: Identifiable, Hashable, Sendable {
         }
     }
 
-    /// The Settings row holding this entry's alias, shortcut and switches: Configure Command's goal.
+    /// The page its pane opens for it, holding its alias, shortcut and switches; nil keeps a row.
+    var settingsPage: String? {
+        guard settingsOwner == nil, settingsTarget != nil else { return nil }
+        switch kind {
+        case .application, .systemSettings, .systemAction, .command, .appleShortcut, .quicklink,
+            .customCommand:
+            return id
+        case .quickAction, .snippet, .windowCommand, .windowLayout, .windowRoom, .extensionCommand,
+            .meeting, .contact:
+            return nil
+        }
+    }
+
+    /// The Settings row that lists this entry: where Configure Command lands without a page.
     var settingsTarget: SettingsTarget? {
         // Built per query and never indexed, so no pane lists one.
         guard !CommandCatalog.isQueryDriven(self) else { return nil }
@@ -734,6 +747,17 @@ final class AppIndex {
             guard let kind = AppEntry.Kind.named(by: q) else { return rank(q, limit: limit) }
             return categoryListing(kind, query: q)
         }
+    }
+
+    /// Index order, never score: a Settings list keeps the row being edited under the caret.
+    func entries(matching query: String, where include: (AppEntry) -> Bool) -> [AppEntry] {
+        let query = LauncherOrder.Query(query)
+        // Unfiltered, the pane mustn't observe visits and re-render on every launch.
+        guard !query.isEmpty else { return apps.filter(include) }
+        let usage = ranking.snapshot()
+        return LauncherOrder.matching(
+            apps.filter(include), query: query, sensitivity: sensitivity,
+            profile: \.search, signals: { signals(for: $0, usage: usage) })
     }
 
     /// Slice order is section order, so filtering keeps sections and selection aligned.

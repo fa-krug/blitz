@@ -108,7 +108,7 @@ private struct SettingsScrollTarget: ViewModifier {
         // This pane may have just mounted, so let its `Form` lay the anchor out before scrolling.
         await Task.yield()
         withAnimation(.easeOut(duration: Theme.Duration.settingsReveal)) {
-            // A hosted table's rows carry no id, so its section is as close as the jump can get.
+            // A lazy row may not be built yet, so the jump lands on its section first.
             if case .row(let anchor, _) = request.target {
                 proxy.scrollTo(SettingsTarget.section(anchor), anchor: .center)
             }

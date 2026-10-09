@@ -1,13 +1,30 @@
-import Combine
 import SwiftUI
+
+/// The four statuses, read together off the main actor: each read is a round trip to TCC.
+private struct PermissionStatuses: Equatable, Sendable {
+    let accessibilityTrusted: Bool
+    let calendar: CalendarAccess
+    let reminders: CalendarAccess
+    let contacts: CalendarAccess
+
+    nonisolated static func read() -> Self {
+        Self(
+            accessibilityTrusted: Permissions.isAccessibilityTrusted(),
+            calendar: Permissions.calendarAccess(), reminders: Permissions.remindersAccess(),
+            contacts: Permissions.contactsAccess())
+    }
+}
 
 struct PermissionsSettingsView: View {
     @Environment(AppCore.self) private var core
-    @State private var accessibilityTrusted = Permissions.isAccessibilityTrusted()
-    @State private var calendarAccess = Permissions.calendarAccess()
-    @State private var remindersAccess = Permissions.remindersAccess()
-    @State private var contactsAccess = Permissions.contactsAccess()
-    private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    /// The last read, so the pane opens on known statuses and corrects them a moment later.
+    private static var lastRead: PermissionStatuses?
+    @State private var statuses = Self.lastRead
+
+    private var accessibilityTrusted: Bool? { statuses?.accessibilityTrusted }
+    private var calendarAccess: CalendarAccess? { statuses?.calendar }
+    private var remindersAccess: CalendarAccess? { statuses?.reminders }
+    private var contactsAccess: CalendarAccess? { statuses?.contacts }
 
     var body: some View {
         Form {
@@ -20,7 +37,7 @@ struct PermissionsSettingsView: View {
                             Text(accessibilityStatus.title)
                         }
                         .foregroundStyle(accessibilityStatus.tint)
-                        Button(accessibilityTrusted ? "Open…" : "Grant Access…") {
+                        Button(accessibilityTrusted == false ? "Grant Access…" : "Open…") {
                             Permissions.openAccessibilitySettings()
                         }
                         .help("Opens Privacy & Security › Accessibility.")
@@ -151,8 +168,13 @@ struct PermissionsSettingsView: View {
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.permissions)
-        .onAppear(perform: refresh)
-        .onReceive(refreshTimer) { _ in refresh() }
+        // Polled: nothing announces a grant made in System Settings while this pane is open.
+        .task {
+            while !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     private var calendarNeedsPrompt: Bool { calendarAccess == .notDetermined }
@@ -160,34 +182,36 @@ struct PermissionsSettingsView: View {
     private var contactsNeedsPrompt: Bool { contactsAccess == .notDetermined }
 
     private var accessibilityStatus: (title: String, symbol: String, tint: Color) {
-        accessibilityTrusted
-            ? ("Granted", "checkmark.circle.fill", .green)
-            : ("Not granted", "exclamationmark.triangle.fill", .orange)
+        switch accessibilityTrusted {
+        case true?: ("Granted", "checkmark.circle.fill", .green)
+        case false?: ("Not granted", "exclamationmark.triangle.fill", .orange)
+        case nil: Self.unread
+        }
     }
+
+    /// Only before the pane's first read in this launch.
+    private static let unread = (
+        title: "Checking…", symbol: "circle.dotted", tint: Color.secondary)
 
     private var calendarStatus: (title: String, symbol: String, tint: Color) {
         Self.status(of: calendarAccess)
     }
 
-    private static func status(of access: CalendarAccess) -> (
+    private static func status(of access: CalendarAccess?) -> (
         title: String, symbol: String, tint: Color
     ) {
         switch access {
-        case .granted: return ("Granted", "checkmark.circle.fill", .green)
-        case .notDetermined: return ("Not asked yet", "questionmark.circle.fill", .secondary)
-        case .denied: return ("Not granted", "exclamationmark.triangle.fill", .orange)
+        case .granted?: return ("Granted", "checkmark.circle.fill", .green)
+        case .notDetermined?: return ("Not asked yet", "questionmark.circle.fill", .secondary)
+        case .denied?: return ("Not granted", "exclamationmark.triangle.fill", .orange)
+        case nil: return unread
         }
     }
 
-    private func refresh() {
-        let trusted = Permissions.isAccessibilityTrusted()
-        if trusted != accessibilityTrusted { accessibilityTrusted = trusted }
-        let access = Permissions.calendarAccess()
-        if access != calendarAccess { calendarAccess = access }
-        let reminders = Permissions.remindersAccess()
-        if reminders != remindersAccess { remindersAccess = reminders }
-        let contacts = Permissions.contactsAccess()
-        if contacts != contactsAccess { contactsAccess = contacts }
+    private func refresh() async {
+        let read = await Task.detached { PermissionStatuses.read() }.value
+        Self.lastRead = read
+        if read != statuses { statuses = read }
     }
 }
 

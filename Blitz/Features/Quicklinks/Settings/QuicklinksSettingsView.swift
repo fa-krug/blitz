@@ -1,44 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// The quicklink library plus the behaviour that applies to all of them.
+/// The quicklink library plus the behaviour that applies to all of them; a row opens its own page.
 struct QuicklinksSettingsView: View {
     @Environment(QuicklinkStore.self) private var store
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
-    @Environment(AliasStore.self) private var aliases
-    @Environment(HotKeyManager.self) private var hotKeys
     @Environment(SettingsNavigationState.self) private var navigation
-    @State private var query = ""
     @State private var editor: QuicklinkEditRequest?
     @State private var pendingDeletion: Quicklink?
 
-    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
-    private static let libraryRowHeight: CGFloat = 52
-
     var body: some View {
-        @Bindable var settings = settings
-        return Form {
-            FeatureSwitchSection(
-                anchor: .quicklinksQuicklinks,
-                enableTitle: "Enable quicklinks",
-                enableSubtitle: "Open saved links and searches from the launcher.",
-                isEnabled: $settings.quicklinksEnabled,
-                showsInLauncher: $settings.quicklinksShowInLauncher,
-                showsIcon: true,
-                showsHeader: false)
-
-            Group {
-                if !store.isAvailable { storageNotice }
-                FeatureCommandsSection(owner: .quicklinks, anchor: .quicklinksCommands)
-                library
-                behaviour
-                transfer
+        let shown = navigation.page.flatMap(store.quicklink(entryID:))
+        SettingsPagedPane(showsPage: shown != nil) {
+            if let shown {
+                QuicklinkDetailForm(
+                    quicklink: shown,
+                    onEdit: { editor = QuicklinkEditRequest(quicklink: shown) },
+                    onDelete: { pendingDeletion = shown })
             }
-            .settingsEnabled(settings.quicklinksEnabled)
+        } library: {
+            libraryForm
         }
-        .formStyle(.grouped)
-        .settingsScrollTarget(.quicklinks)
         .settingsEditorPanel(item: $editor) { request in
             QuicklinkEditorPanel(quicklink: request.quicklink, browserTab: request.browserTab)
         }
@@ -60,6 +43,31 @@ struct QuicklinksSettingsView: View {
         }
     }
 
+    private var libraryForm: some View {
+        @Bindable var settings = settings
+        return Form {
+            FeatureSwitchSection(
+                anchor: .quicklinksQuicklinks,
+                enableTitle: "Enable quicklinks",
+                enableSubtitle: "Open saved links and searches from the launcher.",
+                isEnabled: $settings.quicklinksEnabled,
+                showsInLauncher: $settings.quicklinksShowInLauncher,
+                showsIcon: true,
+                showsHeader: false)
+
+            Group {
+                if !store.isAvailable { storageNotice }
+                FeatureCommandsSection(owner: .quicklinks, anchor: .quicklinksCommands)
+                QuicklinkLibrarySection(editor: $editor)
+                behaviour
+                QuicklinkTransferSection()
+            }
+            .settingsEnabled(settings.quicklinksEnabled)
+        }
+        .formStyle(.grouped)
+        .settingsScrollTarget(.quicklinks)
+    }
+
     // MARK: - Sections
 
     private var storageNotice: some View {
@@ -69,53 +77,6 @@ struct QuicklinksSettingsView: View {
                 systemImage: "exclamationmark.triangle.fill"
             )
             .foregroundStyle(.orange)
-        }
-    }
-
-    @ViewBuilder
-    private var library: some View {
-        Section {
-            if !store.quicklinks.isEmpty {
-                SettingsFilterField(prompt: "Search quicklinks…", query: $query)
-            }
-            if results.isEmpty {
-                Text(
-                    store.quicklinks.isEmpty
-                        ? "No quicklinks yet."
-                        : "No quicklink matches “\(query)”."
-                )
-                .foregroundStyle(.secondary)
-            } else {
-                // One row holding the table: a `Form` realizes every row it is handed.
-                SettingsRowsTable(
-                    items: results, rowHeight: Self.libraryRowHeight,
-                    isEnabled: settings.quicklinksEnabled
-                ) { quicklink in
-                    QuicklinkSettingsRow(
-                        quicklink: quicklink,
-                        isEnabled: Binding(
-                            get: { quicklink.isEnabled },
-                            set: {
-                                core.quicklinkCoordinator.setQuicklinkEnabled($0, id: quicklink.id)
-                            }),
-                        onEdit: { editor = QuicklinkEditRequest(quicklink: quicklink) },
-                        onDelete: { pendingDeletion = quicklink }
-                    )
-                    .environment(store)
-                    .environment(aliases)
-                    .environment(hotKeys)
-                    .environment(navigation)
-                }
-            }
-            Button {
-                editor = QuicklinkEditRequest(quicklink: nil)
-            } label: {
-                SettingsRowTitle(.quicklinksQuicklinks, "Add Quicklink")
-            }
-        }
-        // A table row has no id to scroll to, so a jump to one narrows the list onto it instead.
-        .settingsFilterSeed(.quicklinksQuicklinks, query: $query) { title in
-            store.quicklinks.contains { $0.name == title }
         }
     }
 
@@ -146,8 +107,68 @@ struct QuicklinksSettingsView: View {
             SettingsSectionHeader(.quicklinksBehaviour)
         }
     }
+}
 
-    private var transfer: some View {
+/// Its own view, so a keystroke in the filter re-renders this section rather than the whole pane.
+private struct QuicklinkLibrarySection: View {
+    @Environment(QuicklinkStore.self) private var store
+    @Binding var editor: QuicklinkEditRequest?
+    @State private var query = ""
+
+    /// A title over a `.caption` link, as a native grouped `Form` row lays it out.
+    private static let rowHeight: CGFloat = 52
+
+    var body: some View {
+        // Once per render: a large library makes each pass over it cost a frame.
+        let results = matches
+        Section {
+            if !store.quicklinks.isEmpty {
+                SettingsFilterField(prompt: "Search quicklinks…", query: $query)
+            }
+            if results.isEmpty {
+                Text(
+                    store.quicklinks.isEmpty
+                        ? "No quicklinks yet."
+                        : "No quicklink matches “\(query)”."
+                )
+                .foregroundStyle(.secondary)
+            } else {
+                SettingsPageRows(
+                    items: results, rowHeight: Self.rowHeight, page: \.entryID,
+                    accessibilityName: \.name
+                ) { quicklink in
+                    QuicklinkLibraryRow(quicklink: quicklink)
+                }
+            }
+            Button {
+                editor = QuicklinkEditRequest(quicklink: nil)
+            } label: {
+                SettingsRowTitle(.quicklinksQuicklinks, "Add Quicklink")
+            }
+        }
+        // A lazy row may not be built yet, so a jump to one narrows the list onto it instead.
+        .settingsFilterSeed(.quicklinksQuicklinks, query: $query) { title in
+            store.quicklinks.contains { $0.name == title }
+        }
+    }
+
+    /// The store already publishes display order, so filtering keeps pins at the top.
+    private var matches: [Quicklink] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return store.quicklinks }
+        return store.quicklinks.filter {
+            $0.name.localizedCaseInsensitiveContains(trimmed)
+                || $0.link.localizedCaseInsensitiveContains(trimmed)
+        }
+    }
+}
+
+/// Apart from the pane, which would otherwise re-render on every edit just to grey out Export.
+private struct QuicklinkTransferSection: View {
+    @Environment(QuicklinkStore.self) private var store
+    @Environment(AppCore.self) private var core
+
+    var body: some View {
         Section {
             LabeledContent {
                 Button("Import…") { Task { await core.quicklinkCoordinator.importQuicklinks() } }
@@ -166,79 +187,103 @@ struct QuicklinksSettingsView: View {
             SettingsSectionHeader(.quicklinksImportExport)
         }
     }
-
-    /// The store already publishes display order, so filtering keeps pins at the top.
-    private var results: [Quicklink] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return store.quicklinks }
-        return store.quicklinks.filter {
-            $0.name.localizedCaseInsensitiveContains(trimmed)
-                || $0.link.localizedCaseInsensitiveContains(trimmed)
-        }
-    }
 }
 
-private struct QuicklinkSettingsRow: View {
-    @Environment(QuicklinkStore.self) private var store
+/// Read-only, so it holds no AppKit control: every edit happens on the quicklink's own page.
+private struct QuicklinkLibraryRow: View {
     let quicklink: Quicklink
-    @Binding var isEnabled: Bool
-    let onEdit: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
-        SettingsRow(title: quicklink.name, subtitle: quicklink.link, anchor: .quicklinksQuicklinks) {
-            Group {
-                if let path = store.faviconPaths[quicklink.id] {
-                    Image(nsImage: IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent))
-                        .resizable()
-                } else {
-                    SymbolImage(
-                        name: quicklink.symbol,
-                        size: Theme.Size.settingsRowIcon - Theme.Spacing.xs
-                    )
-                }
-            }
-            .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
+        SettingsRow(
+            title: quicklink.name, subtitle: quicklink.link,
+            labelOpacity: quicklink.isEnabled ? 1 : 0.45, anchor: .quicklinksQuicklinks
+        ) {
+            QuicklinkSettingsIcon(quicklink: quicklink)
         } trailing: {
             if quicklink.isPinned {
                 Image(systemName: "pin.fill")
                     .foregroundStyle(.secondary)
                     .help("Pinned to the top")
+                    .accessibilityLabel("Pinned")
             }
             if !quicklink.showsInRootSearch {
-                Image(systemName: "eye.slash")
-                    .foregroundStyle(.secondary)
-                    .help("Hidden from root search")
+                SettingsHiddenBadge(help: "Hidden from root search")
             }
-
-            // An alias only reaches the ranker through the root-search slice, so it dims with it.
-            AliasField(key: quicklink.entryID, name: quicklink.name)
-                .settingsEnabled(quicklink.isEnabled && quicklink.showsInRootSearch)
-
-            // A disabled quicklink's shortcut fires into the funnel's refusal, so it dims too.
-            ShortcutRecorder(action: .quicklink(id: quicklink.id))
-                .settingsEnabled(quicklink.isEnabled)
-
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.plain)
-            .help("Edit Quicklink")
-            .accessibilityLabel("Edit \(quicklink.name)")
-
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red)
-            }
-            .buttonStyle(.plain)
-            .help("Delete Quicklink")
-            .accessibilityLabel("Delete \(quicklink.name)")
-
-            Toggle("", isOn: $isEnabled)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .help("Enabled")
-                .accessibilityLabel("Enable \(quicklink.name)")
+            SettingsEntryBadges(aliasKey: quicklink.entryID, action: .quicklink(id: quicklink.id))
         }
+    }
+}
+
+/// One quicklink's own page: what it is, then the controls that act on it at once.
+private struct QuicklinkDetailForm: View {
+    @Environment(AppCore.self) private var core
+    let quicklink: Quicklink
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        Form {
+            // The window's Back chevron leaves the page, as on an extension's.
+            Section {
+                SettingsRow(title: quicklink.name, subtitle: quicklink.link) {
+                    QuicklinkSettingsIcon(quicklink: quicklink)
+                } trailing: {
+                    Button("Edit…", action: onEdit)
+                    Button("Delete…", role: .destructive, action: onDelete)
+                }
+            }
+
+            Section {
+                Toggle(isOn: isEnabled) {
+                    Text("Enabled")
+                    Text("Off offers it nowhere and leaves its shortcut doing nothing.")
+                }
+                LabeledContent {
+                    // It reaches the ranker only through the root-search slice, so it dims with it.
+                    AliasField(key: quicklink.entryID, name: quicklink.name)
+                        .settingsEnabled(quicklink.isEnabled && quicklink.showsInRootSearch)
+                } label: {
+                    Text("Alias")
+                    Text("Type it in root search to put this quicklink first.")
+                }
+                LabeledContent {
+                    // A disabled quicklink's shortcut fires into the funnel's refusal, so it dims.
+                    ShortcutRecorder(action: .quicklink(id: quicklink.id))
+                        .settingsEnabled(quicklink.isEnabled)
+                } label: {
+                    Text("Shortcut")
+                    Text("Opens it from anywhere.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .releasesFocusOnOutsideClick()
+    }
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { quicklink.isEnabled },
+            set: { core.quicklinkCoordinator.setQuicklinkEnabled($0, id: quicklink.id) })
+    }
+}
+
+/// The favicon when there is one, else the quicklink's symbol, at the Settings row size.
+private struct QuicklinkSettingsIcon: View {
+    @Environment(QuicklinkStore.self) private var store
+    let quicklink: Quicklink
+
+    var body: some View {
+        Group {
+            if let path = store.faviconPaths[quicklink.id] {
+                Image(nsImage: IconCache.artwork(atPath: path, extent: QuicklinkFavicon.extent))
+                    .resizable()
+            } else {
+                SymbolImage(
+                    name: quicklink.symbol,
+                    size: Theme.Size.settingsRowIcon - Theme.Spacing.xs
+                )
+            }
+        }
+        .frame(width: SettingsListMetrics.iconSize, height: SettingsListMetrics.iconSize)
     }
 }

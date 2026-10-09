@@ -10,6 +10,8 @@
 - `GlobeTapDetector` / `ModifierTapMonitor` — Globe recognition and the shared modifier-only tap.
 - `SpotlightShortcut` / `SpotlightHandoffSession` — whether macOS still takes ⌘Space, and binding it
   once the user frees it. See [Taking ⌘Space from Spotlight](#taking-space-from-spotlight).
+- `HyperKeyTap` and its Settings pane, `Settings/HyperKeySettingsView` — see
+  [The Hyper Key](#the-hyper-key).
 
 `HotKeyManager` owns them all: persistence, conflict lookup, and dispatch. Every action reads and
 writes one `HotKeyBinding`, so the four cases share persistence, conflict detection, the recorder and

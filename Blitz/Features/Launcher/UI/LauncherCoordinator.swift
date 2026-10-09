@@ -325,7 +325,7 @@ final class LauncherCoordinator {
         app.kind == .extensionCommand || app.settingsTarget != nil
     }
 
-    /// An extension's commands are configured on its own page; everything else on its Settings row.
+    /// Opens the page that configures it — its extension's, or its own — and else its row.
     func configure(_ app: AppEntry) {
         if app.kind == .extensionCommand {
             extensionCoordinator.showExtensionSettings(for: app)
@@ -333,7 +333,11 @@ final class LauncherCoordinator {
         }
         guard let target = app.settingsTarget else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
-        settingsCoordinator.showSettings(tab: target.tab, revealing: target)
+        if let page = app.settingsPage {
+            settingsCoordinator.showSettings(tab: target.tab, page: page)
+        } else {
+            settingsCoordinator.showSettings(tab: target.tab, revealing: target)
+        }
     }
 
     func showInFinder(_ app: AppEntry) {
