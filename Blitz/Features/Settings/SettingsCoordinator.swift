@@ -21,7 +21,7 @@ final class SettingsCoordinator {
     }
 
     /// A fresh window mounts on `tab`; an open one navigates to it, recording the jump in history.
-    /// A nil `tab` only reveals the window, so re-opening a minimised one keeps the pane it was on.
+    /// A nil `tab` keeps the pane the window was on, whether it was minimised or closed.
     func showSettings(
         tab: SettingsTab? = nil, page: String? = nil, revealing target: SettingsTarget? = nil
     ) {
@@ -30,7 +30,7 @@ final class SettingsCoordinator {
             return
         }
         if let navigation, window.reopen() {
-            navigation.restart(on: tab ?? .general, page: page, revealing: target)
+            navigation.restart(on: tab ?? navigation.tab, page: page, revealing: target)
             return
         }
         let navigation = SettingsNavigationState(tab: tab ?? .general)
