@@ -984,7 +984,7 @@ final class AppCore {
         messageHUD.dismiss()
     }
 
-    /// Something just made, previewed with one action; it shares the pill's spot, so it replaces it.
+    /// A way to or back from what just ran; it shares the pill's spot, so it replaces it.
     func showBanner(
         title: String, detail: String, symbol: String, actionTitle: String,
         action: @escaping () -> Void

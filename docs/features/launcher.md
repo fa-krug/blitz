@@ -778,9 +778,10 @@ for its query and has no preference to write.
 Hiding shrinks the list under the action that ran it, so `LauncherScreen.hideFromSearch(at:)`
 re-reads the order and drops the highlight into the index the row vacated, clamped to what is left —
 the move `selectFavorite` already makes. The palette stays open on the same query, with focus
-untouched. One function answers both the menu row and the chord, and it re-tests eligibility rather
-than trusting the caller, so ⇧⌘H falls through to whatever else wants the press on a row that offers
-no such menu item.
+untouched, and a banner names the hidden row with **Undo**, which makes it visible again — the
+action asks nothing first, so the banner is its way back. One function answers both the menu row
+and the chord, and it re-tests eligibility rather than trusting the caller, so ⇧⌘H falls through to
+whatever else wants the press on a row that offers no such menu item.
 
 ## Reveal in Finder
 

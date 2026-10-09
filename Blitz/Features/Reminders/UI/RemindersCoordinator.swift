@@ -199,7 +199,15 @@ final class RemindersCoordinator {
             Task { await reportGone(reminder) }
             return
         }
-        core.showMessage("Completed “\(reminder.title)”")
+        core.showBanner(
+            title: reminder.title, detail: "Completed", symbol: "checkmark.circle",
+            actionTitle: "Undo"
+        ) { [weak self] in self?.uncomplete(reminder) }
+    }
+
+    private func uncomplete(_ reminder: ReminderItem) {
+        guard !store.uncomplete(reminder) else { return }
+        Task { await reportGone(reminder) }
     }
 
     /// Always asked: a deleted reminder is gone from every device the list syncs to.

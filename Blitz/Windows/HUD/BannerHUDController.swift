@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// A done thing previewed with one way back to it, offered only until the banner fades.
+/// A done thing with one way to it or back from it, offered only until the banner fades.
 @MainActor
 final class BannerHUDController {
     private let presenter: HUDPresenter

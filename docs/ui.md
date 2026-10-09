@@ -49,7 +49,7 @@ These are the things that quietly break the look if changed. Preserve them unles
 - **Resolve every glyph through `SymbolImage`, not `Image(systemName:)`.** Some catalog symbols are bundled assets in `Assets.xcassets` (`toggleBluetooth`), and `Image(systemName:)` silently renders nothing for those.
 - **↵ runs the primary action, Escape cancels, and Cancel always renders leading** (the left button), matching macOS convention. A button never prints its key cap; a deliberate hover reveals its outlined `KeyCapChip` in a `Tooltip`.
 - **In the palette, a hover label is Blitz's `tooltip`, never `.help()`**: an AppKit tooltip never appears while the app sits inactive behind the non-activating panel. A Settings window activates the app, so `.help()` shows there and stays the label to use. The tooltip hangs above its control by default; a control in the palette header passes `edge: .bottom`, since above it is off the window, and a label may run to several lines — the chat's attachment pill lists every staged name.
-- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`, unless it previews something just made with a way back to it — that is `BannerHUDController`'s banner. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
+- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`, unless it previews something just made with a way back to it, or offers **Undo** for a one-keystroke destructive action that ran without asking — that is `BannerHUDController`'s banner. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
 - **Glass is for floating controls, with dialogs as the deliberate modal exception.** The action capsule, menu circle and `PopoverMenu` use it inside the palette; dialogs apply one system `.glassEffect(.regular)` to their root surface. Dialog buttons stay matte so their roles remain legible. Every HUD keeps the lighter `panelScrim` → `GlassEffectView()` → `clipShape` recipe.
 
 ---
@@ -571,12 +571,17 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   dwell, so it is shown with `dwells: false` and stays up until something replaces it or
   `HUDPresenter.dismiss()` runs — the caller owns that, and `QuickActionCoordinator.produce` pairs the
   two with a `defer` so a throw or a cancellation cannot strand it.
-- **`BannerHUDController`'s banner** previews something just made and offers one way back to it
-  before it fades: Smart Reminder writes the reminder straight away, then shows its title and due
-  day with **Open**. A fixed `bannerWidth 360` capsule in the pill's place — the two replace each
-  other through `AppCore` — with the subject glyph tinted `.success`, two truncating lines and a
-  `.modalAction(.standard)` button. It dwells `Duration.bannerHUD` (5s) so the button is reachable,
-  and a pointer over it holds the dwell through `HUDPresenter.hold()`; leaving re-arms it.
+- **`BannerHUDController`'s banner** offers one action on something that just happened, before it
+  fades. Either it previews something just made with a way back to it — Smart Reminder writes the
+  reminder straight away, then shows its title and due day with **Open** — or it is the way back
+  from a one-keystroke destructive action that runs without a confirmation, with **Undo**: Hide from
+  Search, Move to Trash and Complete Reminder each name what they acted on. Undo is what lets those
+  three skip the dialog; a destructive action with no way back confirms instead. A fixed
+  `bannerWidth 360` capsule in the pill's place — the two replace each other through `AppCore` —
+  with the subject glyph tinted `.success`, since either way the action went through, two
+  truncating lines and a `.modalAction(.standard)` button. It dwells `Duration.bannerHUD` (5s) so
+  the button is reachable, and a pointer over it holds the dwell through `HUDPresenter.hold()`;
+  leaving re-arms it.
 - **`HUDPresenter`** is what keeps those controllers from duplicating each other: one panel at a
   time, replace rather than stack, fade in, sit out its dwell, fade away, centred horizontally on
   a screen. The HUDs differ only in their content, their anchor (`edgeInset(hudEdgeOffset 48)` for

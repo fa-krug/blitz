@@ -92,12 +92,12 @@ Reminders' own all-day notification time applies.
 ## My Reminders
 
 `RemindersScreen` lists the store's snapshot through `ReminderAgenda`. The row's circle, in the list's
-colour, completes the reminder on a click.
+colour, completes the reminder on a click, through the same path as ⌘↵ and with the same banner.
 
 | Key | Does |
 | --- | --- |
 | ↵ | Edit Reminder — the prompt, filled in. The palette stays up behind it, so the edit lands in view. |
-| ⌘↵ | Complete Reminder |
+| ⌘↵ | Complete Reminder — unconfirmed, so a banner offers **Undo**, which unchecks it again |
 | ⌘O | Open in Reminders, through `x-apple-reminderkit://`, or the bare app with no handler |
 | ⌘N | New Reminder |
 | ⌘⌫ | Delete Reminder — always confirmed: it goes from every device the list syncs to |

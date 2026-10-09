@@ -230,13 +230,18 @@ not outlive the window.
 | Copy Name | ⌥⌘C | through `Paster`, palette stays open |
 | Copy Path | ⌃⌘C | the standardized path, palette stays open |
 | Paste File to … | ⇧⌘V | `Paster.pasteFile` into the app the palette was summoned over, named by `PasteTarget` |
-| Move to Trash | ⌃X | `FileManager.trashItem` off the main actor, then the row leaves the session |
+| Move to Trash | ⌃X | `FileManager.trashItem` off the main actor, then the row leaves the session and a banner offers **Undo** |
 
 None of the copies is marked with `ClipboardManager.internalType`, so a copied file enters clipboard
 history like any other copy. Move to Trash rides the clipboard's own ⌃X, asks nothing first — trashing is
 undoable, as it is for Uninstall and for an extension's `trash` — and has no ⌃⇧X counterpart, since there
-is no "all" to trash. The three ⌘C chords differ only by their second modifier, which
-`PaletteShortcut` reads in order — ⇧, then ⌥, then ⌃; bare ⌘C stays with the search field.
+is no "all" to trash. The way back is on screen: a banner names the file, and its **Undo** moves it
+from the URL `trashItem` handed back to where it was, off the main actor; then
+`FileSearchSession.refresh()` re-runs the published query on the session the row left, so the row
+returns once Spotlight lists the file again. When `trashItem` hands back no URL there is nothing to
+undo from, and a plain pill reports the move instead. The three ⌘C chords differ only by their
+second modifier, which `PaletteShortcut` reads in order — ⇧, then ⌥, then ⌃; bare ⌘C stays with the
+search field.
 
 The first in-flight query says nothing — the rows it is about to replace would only flash a message — an
 empty completed query says what the active filter admits ("No files found", "No images found"), a blank
