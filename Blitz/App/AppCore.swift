@@ -475,7 +475,7 @@ final class AppCore {
         if onboardingCoordinator.focusExisting() { return }
         if updateCoordinator.focusExisting() { return }
         if supportCoordinator.focusExisting() { return }
-        if customCommandCoordinator.focusOutputWindow() { return }
+        if customCommandCoordinator.focusTerminalWindow() { return }
         paletteCoordinator.showPalette(mode: .launcher, restoreAnyMode: true)
     }
 
@@ -665,9 +665,9 @@ final class AppCore {
             guardrails: .permissiveContentTransformations)
     }
 
-    /// The app's default model; the sentence parsed is the reader's own, so guardrails relax.
+    /// Its own model or the default; the sentence parsed is the reader's own, so guardrails relax.
     func smartReminderProvider() throws -> any AIProvider {
-        guard let selection = aiSettings.defaultModel else {
+        guard let selection = aiSettings.smartReminderRoute else {
             throw AIProviderError.unavailable("Choose a model in Settings \u{2192} AI.")
         }
         return try AIProviderFactory.make(

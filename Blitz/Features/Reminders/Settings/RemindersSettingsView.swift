@@ -41,7 +41,10 @@ struct RemindersSettingsView: View {
             FeatureCommandsSection(owner: .reminders, anchor: .remindersCommands)
                 .settingsEnabled(settings.remindersEnabled)
 
-            if !settings.aiEnabled {
+            if settings.aiEnabled {
+                SmartReminderModelSection()
+                    .settingsEnabled(settings.remindersEnabled)
+            } else {
                 Section {
                     WarningRow(
                         title: "Smart Reminder needs AI",
@@ -95,6 +98,37 @@ private struct WarningRow<Trailing: View>: View {
             Spacer(minLength: Theme.Spacing.lg)
             trailing
         }
+    }
+}
+
+private struct SmartReminderModelSection: View {
+    @Environment(AISettingsStore.self) private var aiSettings
+    @Environment(ChatGPTSubscriptionManager.self) private var subscription
+    @Environment(InstalledAIManager.self) private var installedAI
+
+    var body: some View {
+        Section {
+            AIModelSelectionRows(
+                selection: aiSettings.smartReminderModel,
+                inheritedTitle: "Same as default model",
+                select: aiSettings.selectSmartReminderModel,
+                modelLabel: {
+                    SettingsRowTitle(.remindersSmartReminder, "Model")
+                    Text("Turns a typed sentence into a reminder.")
+                },
+                effortLabel: {
+                    SettingsRowTitle(.remindersSmartReminder, "Reasoning effort")
+                }
+            )
+        } header: {
+            SettingsSectionHeader(.remindersSmartReminder)
+        } footer: {
+            Text("A short, fast model is plenty. Only the sentence and today's date are sent.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        // A route that went away while this pane was closed must not show as chosen.
+        .onAppear { aiSettings.reconcile(subscription: subscription, installedAI: installedAI) }
     }
 }
 

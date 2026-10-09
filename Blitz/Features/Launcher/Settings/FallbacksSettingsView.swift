@@ -43,16 +43,6 @@ struct FallbacksSettingsView: View {
                 SettingsSectionHeader(.fallbacksWebSearch)
             }
             .settingsEnabled(store.isEnabled(.builtin(.searchWeb)))
-
-            Section {
-                Toggle(isOn: $settings.shellCommandRunsInTerminal) {
-                    SettingsRowTitle(.fallbacksShellCommand, "Open in Terminal")
-                    Text("Run the typed line in your terminal app, not Blitz's output window.")
-                }
-            } header: {
-                SettingsSectionHeader(.fallbacksShellCommand)
-            }
-            .settingsEnabled(store.isEnabled(.builtin(.runShellCommand)))
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.fallbacks)

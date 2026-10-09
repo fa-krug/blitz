@@ -50,7 +50,6 @@ enum SettingsBackupCoverage {
         "quicklinksShowInLauncher": .quicklinksShowInLauncher,
         "quicklinkOpensNewWindow": .quicklinkOpensNewWindow,
         "quicklinkSelectionFallback": .quicklinkSelectionFallback,
-        "shellCommandRunsInTerminal": .shellCommandRunsInTerminal,
         "webSearchEngine": .webSearchEngine,
         "quicklinkConfirmsBeforeDelete": .quicklinkConfirmsBeforeDelete,
         "appleShortcutsEnabled": .appleShortcutsEnabled,
@@ -119,6 +118,9 @@ enum SettingsBackupCoverage {
             "AI connection metadata stays on the Mac with the Keychain credentials it describes.",
         AppSettingsKey.aiDefaultModel.rawValue:
             "The default model names an external AI destination; importing must not choose one.",
+        AppSettingsKey.aiSmartReminderModel.rawValue:
+            "Names an external AI destination for what is typed into Smart Reminder; an import must "
+            + "not choose one.",
         AppSettingsKey.aiWebSearch.rawValue:
             "Whether prompts may reach a search engine is a choice each Mac makes for itself.",
         AppSettingsKey.aiSystemPrompt.rawValue:

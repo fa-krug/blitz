@@ -12,6 +12,10 @@ final class AISettingsStore {
     private(set) var defaultModel: AIModelSelection? {
         didSet { persistDefaultModel() }
     }
+    /// Nil follows `defaultModel`; a dead override is dropped rather than rerouted.
+    private(set) var smartReminderModel: AIModelSelection? {
+        didSet { persistSmartReminderModel() }
+    }
     /// Off by default: a prompt reaches a search engine only once the user has said so.
     var webSearchEnabled: Bool {
         didSet { defaults.set(webSearchEnabled, forKey: AppSettingsKey.aiWebSearch.rawValue) }
@@ -97,8 +101,10 @@ final class AISettingsStore {
             defaults.data(forKey: AppSettingsKey.aiInstalledOverrides.rawValue))
         connections = Self.decodeConnections(
             defaults.data(forKey: AppSettingsKey.aiConnections.rawValue))
-        defaultModel = Self.decodeDefaultModel(
+        defaultModel = Self.decodeSelection(
             defaults.data(forKey: AppSettingsKey.aiDefaultModel.rawValue))
+        smartReminderModel = Self.decodeSelection(
+            defaults.data(forKey: AppSettingsKey.aiSmartReminderModel.rawValue))
         webSearchEnabled =
             defaults.object(forKey: AppSettingsKey.aiWebSearch.rawValue) as? Bool ?? false
         systemPrompt = defaults.string(forKey: AppSettingsKey.aiSystemPrompt.rawValue) ?? ""
@@ -144,6 +150,11 @@ final class AISettingsStore {
         if defaultModel == nil {
             defaultModel = firstAvailableSelection()
         }
+        if case .api(let connection, let model, _) = smartReminderModel,
+            !connections.contains(where: { $0.id == connection && $0.models.contains(model) })
+        {
+            smartReminderModel = nil
+        }
     }
 
     func connection(id: UUID) -> AIConnection? {
@@ -155,6 +166,18 @@ final class AISettingsStore {
             guard self.connection(id: connection)?.models.contains(model) == true else { return }
         }
         defaultModel = selection
+    }
+
+    func selectSmartReminderModel(_ selection: AIModelSelection?) {
+        if case .api(let connection, let model, _) = selection {
+            guard self.connection(id: connection)?.models.contains(model) == true else { return }
+        }
+        smartReminderModel = selection
+    }
+
+    /// The override while its route is on; otherwise Smart Reminder follows the default.
+    var smartReminderRoute: AIModelSelection? {
+        smartReminderModel.flatMap { isRouteEnabled($0.source) ? $0 : nil } ?? defaultModel
     }
 
     func save(_ connection: AIConnection) {
@@ -182,17 +205,29 @@ final class AISettingsStore {
                 connection: connection.id, model: model,
                 effort: connection.reasoningOptions(for: model)?.resolvedEffort(nil))
         }
+        if case .api(connection.id, let model, let effort) = smartReminderModel {
+            smartReminderModel =
+                connection.models.contains(model)
+                ? .api(
+                    connection: connection.id, model: model,
+                    effort: connection.reasoningOptions(for: model)?.resolvedEffort(effort))
+                : nil
+        }
     }
 
     func removeConnection(id: UUID) {
         connections.removeAll { $0.id == id }
         shownModels[AIModelSource.api(id).storageKey] = nil
         disabledRoutes.remove(AIModelSource.api(id).storageKey)
+        if case .api(id, _, _) = smartReminderModel { smartReminderModel = nil }
         guard case .api(id, _, _) = defaultModel else { return }
         defaultModel = firstAvailableSelection()
     }
 
     func reconcile(codexModels models: [ChatGPTSubscription.Model], isUnavailable: Bool) {
+        reconcileSmartReminderModel(
+            on: .codex, isUnavailable: isUnavailable, models: models.map(\.id)
+        ) { id, effort in models.first { $0.id == id }?.resolvedEffort(effort) }
         guard case .codex(let model, let effort) = defaultModel else { return }
         if isUnavailable {
             defaultModel = firstAvailableSelection()
@@ -212,6 +247,9 @@ final class AISettingsStore {
     func reconcile(
         installed kind: InstalledAIKind, models: [InstalledAIModel], isUnavailable: Bool
     ) {
+        reconcileSmartReminderModel(
+            on: kind.source, isUnavailable: isUnavailable, models: models.map(\.id)
+        ) { id, effort in models.first { $0.id == id }?.resolvedEffort(effort) }
         let selectedModel: String
         switch (kind, defaultModel) {
         case (.claude, .claude(let model, _)), (.grok, .grok(let model, _)),
@@ -270,6 +308,7 @@ final class AISettingsStore {
         } else {
             disabledRoutes.insert(source.storageKey)
             if defaultModel?.source == source { defaultModel = firstAvailableSelection() }
+            if smartReminderModel?.source == source { smartReminderModel = nil }
         }
         if defaultModel == nil { defaultModel = firstAvailableSelection() }
     }
@@ -371,6 +410,22 @@ final class AISettingsStore {
         defaultModel = firstAvailableSelection()
     }
 
+    private func reconcileSmartReminderModel(
+        on source: AIModelSource, isUnavailable: Bool, models: [String],
+        resolvedEffort: (String, String?) -> String?
+    ) {
+        guard let selection = smartReminderModel, selection.source == source else { return }
+        if isUnavailable {
+            smartReminderModel = nil
+            return
+        }
+        guard !models.isEmpty else { return }
+        let repaired =
+            models.contains(selection.model)
+            ? selection.withEffort(resolvedEffort(selection.model, selection.effort)) : nil
+        if repaired != selection { smartReminderModel = repaired }
+    }
+
     /// The on-device model leads: free, private, always configured, so never a surprising landing.
     private func firstAvailableSelection() -> AIModelSelection? {
         if isAppleIntelligenceAvailable(), isRouteEnabled(.appleIntelligence) {
@@ -413,6 +468,15 @@ final class AISettingsStore {
             })
     }
 
+    private func persistSmartReminderModel() {
+        guard let smartReminderModel, let data = try? JSONEncoder().encode(smartReminderModel)
+        else {
+            defaults.removeObject(forKey: AppSettingsKey.aiSmartReminderModel.rawValue)
+            return
+        }
+        defaults.set(data, forKey: AppSettingsKey.aiSmartReminderModel.rawValue)
+    }
+
     private func persistDefaultModel() {
         guard let defaultModel, let data = try? JSONEncoder().encode(defaultModel) else {
             defaults.removeObject(forKey: AppSettingsKey.aiDefaultModel.rawValue)
@@ -446,7 +510,7 @@ final class AISettingsStore {
         return connections
     }
 
-    private static func decodeDefaultModel(_ data: Data?) -> AIModelSelection? {
+    private static func decodeSelection(_ data: Data?) -> AIModelSelection? {
         guard let data else { return nil }
         return try? JSONDecoder().decode(AIModelSelection.self, from: data)
     }

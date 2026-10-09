@@ -287,10 +287,7 @@ enum SettingsSearchCatalog {
             keywords: ["no results", "empty", "search web", "order"]),
         .init(
             .fallbacksWebSearch, "Search engine",
-            keywords: ["google", "duckduckgo", "bing", "brave", "ecosia", "kagi", "startpage"]),
-        .init(
-            .fallbacksShellCommand, "Open in Terminal",
-            keywords: ["terminal", "iterm", "shell", "zsh", "output window", "interactive"])
+            keywords: ["google", "duckduckgo", "bing", "brave", "ecosia", "kagi", "startpage"])
     ]
 
     private static let ai: [SettingsSearchEntry] = [
@@ -602,6 +599,9 @@ enum SettingsSearchCatalog {
         .init(
             group: .remindersCommands, "Reminders commands",
             keywords: ["shortcut", "launcher", "create reminder", "smart", "ai", "natural language"]),
+        .init(
+            group: .remindersSmartReminder, "Smart Reminder",
+            keywords: ["ai", "llm", "model", "reasoning effort", "natural language"]),
         .init(
             group: .remindersLists, "Lists",
             keywords: ["accounts", "sources", "choose", "icloud", "exchange"])

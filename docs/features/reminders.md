@@ -30,9 +30,12 @@ whose **Open** shows it in Reminders.
 - **An edit writes only what changed.** Title and notes always go back; the due date — and the dated
   alarm that follows it — only when the draft's due differs from the reminder's, so fixing a typo never
   strips an alarm set in Reminders.app. Location and relative alarms are never touched.
-- **Smart Reminder exists only while AI is on.** It runs on the app's default model through
-  `AppCore.smartReminderProvider`, and `RemindersCoordinator.applyCommands` takes it out of the
-  launcher — its shortcut with it — when either switch is off. Turning AI off cancels a run in flight.
+- **Smart Reminder exists only while AI is on.** It runs on `AISettingsStore.smartReminderRoute`
+  through `AppCore.smartReminderProvider`: the model chosen in the Reminders pane, or the AI default
+  when none is, or when the chosen one's route is switched off. A connection, model or route that
+  goes away drops the choice rather than rerouting it, and `aiSmartReminderModel` stays out of
+  backups like `aiDefaultModel`. `RemindersCoordinator.applyCommands` takes it out of the launcher —
+  its shortcut with it — when either switch is off. Turning AI off cancels a run in flight.
   The model is sent the typed sentence and today's date, never a reminder already on the Mac.
 - **A model's reply is read, never trusted.** `SmartReminderPrompt.draft(from:)` takes the first `{`
   to the last `}` and decodes it field by field. No title is no reminder; a due date that is not a

@@ -37,7 +37,6 @@ extension SettingsAnchor {
 
     static let fallbacksFallbacks = Self(tab: .fallbacks, title: "Fallbacks")
     static let fallbacksWebSearch = Self(tab: .fallbacks, title: "Search the Web")
-    static let fallbacksShellCommand = Self(tab: .fallbacks, title: "Run Shell Command")
 
     static let aiAI = Self(tab: .ai, title: "AI")
     static let aiProviders = Self(tab: .ai, title: "Providers")
@@ -99,6 +98,7 @@ extension SettingsAnchor {
 
     static let remindersReminders = Self(tab: .reminders, title: "Reminders")
     static let remindersCommands = Self(tab: .reminders, title: "Commands")
+    static let remindersSmartReminder = Self(tab: .reminders, title: "Smart Reminder")
     static let remindersLists = Self(tab: .reminders, title: "Lists")
 
     static let contactsContacts = Self(tab: .contacts, title: "Contacts")

@@ -712,8 +712,8 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   transcript scrolls under it. `.fullSizeContentView` and `titlebarSeparatorStyle = .none` stay — the
   content still runs under the bar, and a hairline would split the surface the band unifies. Both also
   clear `isMovableByWindowBackground`: stock Settings isn't dragged by its content, and a drag across a
-  transcript selects text. Onboarding, Updates, Support and Command Output keep the transparent
-  titlebar they were tuned for. Never hand-draw a header band; a main surface takes the system's
+  transcript selects text. Onboarding, Updates, Support and the custom-command terminal windows keep
+  the transparent titlebar they were tuned for. Never hand-draw a header band; a main surface takes the system's
   material, not `glassEffect`.
 - `SettingsComponents.swift` holds only what more than one pane or editor needs: **`SettingsRow`**,
   **`SettingsTabIcon`** (the sidebar tile reused by feature switches),
