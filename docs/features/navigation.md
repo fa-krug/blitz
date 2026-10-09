@@ -26,13 +26,14 @@ launcher and a still-recorded shortcut for either does nothing.
 - **The order is total.** `(isMinimized, appRank, appName, handle)` — so a sweep that enumerated apps
   in a different order sorts identically, and minimized windows are always one run at the end rather
   than interleaved.
-- **Accessibility is gated twice**, on open and again on activate: a grant revoked while the palette
-  is open must not reach `AXUIElementPerformAction`. The open gate sits in both `show()` and
+- **Accessibility is gated twice**, on open and again on every action: a grant revoked while the
+  palette is open must not reach `AXUIElementPerformAction`. The open gate sits in both `show()` and
   `load()`, because a restore reaches `load()` alone.
 - **Activation hides with `restoreFocus: false`.** Restoring focus reactivates the displaced app,
   which races the raise and can land on the wrong window — the same reason a Space command does it.
-- **`AXWindowAccess` stays the one AX window layer.** `unminimize` and `focus` live there rather
-  than in a second AX shim, and Window Layouts brings its frontmost window forward through `focus`.
+- **`AXWindowAccess` stays the one AX window layer.** `unminimize`, `minimize`, `close` and `focus`
+  live there rather than in a second AX shim, and Window Layouts brings its frontmost window
+  forward through `focus`.
 
 ## How it is put together
 
@@ -44,8 +45,8 @@ launcher and a still-recorded shortcut for either does nothing.
 | `Service/WindowZOrder.swift` | the one `CGWindowList` call: per-pid front rank |
 | `Service/WindowSwitchSweep.swift` | the AX sweep, and the live element table it hands back |
 | `Service/WindowSwitchSession.swift` | the observable state — snapshot, filtered rows, elements |
-| `UI/WindowSwitchCoordinator.swift` | show, activate, the switch, the failure reports |
-| `UI/WindowSwitchScreen.swift` | the `PaletteScreen` conformance and the two empty states |
+| `UI/WindowSwitchCoordinator.swift` | show, activate, close, minimize, the switch, the reports |
+| `UI/WindowSwitchScreen.swift` | the `PaletteScreen` conformance, the ⌘K menu, the empty states |
 | `UI/WindowSwitchList.swift` | the list and its row: app icon, title, app name |
 
 ## Recency without a private symbol
@@ -102,6 +103,27 @@ so the switcher needs no Space handling of its own.
 Every step is allowed to fail quietly. What is reported is only the case the user can act on: the
 window's app quit between the sweep and the ↵.
 
+## Actions
+
+⌘K — or a right click on a row — opens `WindowSwitchActionsMenu`. With no rows there is nothing to
+act on, so `hasActions` reads `actions(at:)` and the footer drops its Actions half.
+
+- **Switch to Window** (↵) is the row's own activation, drawn with the app's icon.
+- **Close Window** presses the window's `kAXCloseButtonAttribute` button rather than destroying
+  anything, so an unsaved document still puts up its save sheet. A successful press drops the row
+  through `WindowSwitchSession.remove` instead of re-sweeping, which would race an app that is still
+  closing — or still asking.
+- **Minimize Window** sets `kAXMinimizedAttribute`, offered only on a row not already minimized.
+  `markMinimized` flips the entry in place and re-sorts, so the row joins the minimized run at the
+  end exactly where the next sweep would put it.
+- **Quit _App_** (⌃⇧Q) and **Force Quit _App_** (⌃⌥⇧Q) go through
+  `LauncherCoordinator.quit(bundleID:force:)`, the path the launcher's own Quit rows take, so every
+  instance quits and focus is handed back the same way. `perform` answers both chords without the
+  menu open.
+
+A refused press or write — no close button, a window that will not minimize, an app gone since the
+sweep — is a danger `showMessage`, and the palette stays open: nothing was raised to hide it for.
+
 ## Wiring
 
 - **`CommandID.switchWindows`** (`command:switch-windows`) and `CommandID.searchMenuItems` are both
@@ -147,3 +169,5 @@ coverage — the AX and `CGWindowList` paths need manual verification, particula
 2. A window on another Space is listed, and ↵ pulls that Space forward.
 3. An app with several windows lists them in its own front-to-back order, under one app rank.
 4. An app quit between the summon and the ↵ reports rather than failing silently.
+5. Close Window on an edited document leaves its save sheet up; the row leaves the list either way.
+6. Minimize Window moves the row into the minimized run, and ↵ on it then un-minimizes.

@@ -19,6 +19,20 @@ final class WindowSwitchSession {
 
     func element(for handle: Int) -> WindowSwitchSweep.Element? { elements[handle] }
 
+    /// Settled in place, not re-swept: the app may still be animating or asking to save.
+    func remove(_ handle: Int) {
+        snapshot.removeAll { $0.handle == handle }
+        elements[handle] = nil
+        applyQuery()
+    }
+
+    func markMinimized(_ handle: Int) {
+        guard let index = snapshot.firstIndex(where: { $0.handle == handle }) else { return }
+        snapshot[index].isMinimized = true
+        snapshot = WindowSwitchOrder.sorted(snapshot)
+        applyQuery()
+    }
+
     func reset() {
         snapshot = []
         filtered = []

@@ -91,7 +91,7 @@ final class WindowSwitchCoordinator {
             return
         }
         // Resolved before the hide: hiding resets the session, which drops the element table.
-        guard let element = session.element(for: entry.handle), !element.app.isTerminated else {
+        guard let element = liveElement(for: entry) else {
             Task { await self.reportGone(entry) }
             return
         }
@@ -99,6 +99,35 @@ final class WindowSwitchCoordinator {
         paletteCoordinator.hidePalette(restoreFocus: false)
         if entry.isMinimized { _ = AXWindowAccess.unminimize(element.window) }
         AXWindowAccess.focus(element.window, in: element.application, of: element.app)
+    }
+
+    /// The row leaves on the press: a save sheet the app puts up is the user's to answer there.
+    func close(_ entry: WindowSwitchEntry) {
+        guard Permissions.ensureAccessibility() else {
+            Task { await self.reportPermissionFailure() }
+            return
+        }
+        guard let element = liveElement(for: entry), AXWindowAccess.close(element.window) else {
+            return core.showMessage("Couldn’t close “\(entry.displayTitle)”", tone: .danger)
+        }
+        session.remove(entry.handle)
+    }
+
+    func minimize(_ entry: WindowSwitchEntry) {
+        guard Permissions.ensureAccessibility() else {
+            Task { await self.reportPermissionFailure() }
+            return
+        }
+        guard let element = liveElement(for: entry), AXWindowAccess.minimize(element.window) else {
+            return core.showMessage("Couldn’t minimize “\(entry.displayTitle)”", tone: .danger)
+        }
+        session.markMinimized(entry.handle)
+    }
+
+    private func liveElement(for entry: WindowSwitchEntry) -> WindowSwitchSweep.Element? {
+        guard let element = session.element(for: entry.handle), !element.app.isTerminated
+        else { return nil }
+        return element
     }
 
     // MARK: - Reporting
