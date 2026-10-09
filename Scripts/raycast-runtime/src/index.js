@@ -14,7 +14,7 @@ import { resolveComponent } from "./async-component.js";
 import { NavigationRoot, setFieldCommandHandler } from "./api/components.js";
 import { Surface } from "./reconciler.js";
 import { raycastApi } from "./api/index.js";
-import { configureSystem, runToastAction } from "./api/system.js";
+import { configureSystem, runToastAction, showToast, Toast } from "./api/system.js";
 import { WebSocket } from "./websocket.js";
 
 const reactModule = {
@@ -49,9 +49,10 @@ const sessions = new Map();
 /// One running command. A view command mounts a React tree through `Surface`; a no-view command just
 /// awaits its default export.
 class Session {
-  constructor(id, host) {
+  constructor(id, host, mode) {
     this.id = id;
     this.host = host;
+    this.mode = mode;
     this.surface = null;
     this.navigationDepth = 1;
     this.navigation = {};
@@ -61,6 +62,7 @@ class Session {
     this.surface = new Surface(
       (tree) => this.host.render(this.id, JSON.stringify(tree)),
       (error) => this.fail(error),
+      (error) => this.actionFailed(error),
     );
     this.surface.render(
       createElement(NavigationRoot, {
@@ -76,6 +78,17 @@ class Session {
 
   fail(error) {
     this.host.failed(this.id, describeError(error));
+  }
+
+  /// A throwing action is a failure toast over its screen, except in a menu, which shows none.
+  actionFailed(error) {
+    if (this.mode === "menu-bar") {
+      this.fail(error);
+      return;
+    }
+    log("error", [describeError(error)]);
+    const message = error instanceof Error ? error.message : String(error);
+    showToast({ style: Toast.Style.Failure, title: "Action failed", message }).catch(() => {});
   }
 
   unmount() {
@@ -121,7 +134,7 @@ globalThis.__blitz = {
   start(sessionId, code, filename, dirname, mode, contextJson) {
     const context = JSON.parse(contextJson || "{}");
     configureSystem(context);
-    const session = new Session(sessionId, hostCalls);
+    const session = new Session(sessionId, hostCalls, mode);
     sessions.set(sessionId, session);
     // Commands declaring `arguments` read `props.arguments.<name>` unguarded, so the bag always exists.
     const launchProps = {

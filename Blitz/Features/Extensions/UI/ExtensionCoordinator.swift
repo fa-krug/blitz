@@ -360,8 +360,14 @@ final class ExtensionCoordinator {
     }
 
     /// Its own window: a no-view command closes the palette before the pill is done.
-    func showHUD(_ message: String) {
-        core.showMessage(message)
+    func showHUD(_ message: String, tone: DialogTone = .success) {
+        core.showMessage(message, tone: tone)
+    }
+
+    /// A command with no screen to fail on says why, and a missing preference opens where it is set.
+    func reportFailure(_ failure: ExtensionFailure, of owner: InstalledExtension) {
+        showHUD(failure.headline, tone: .danger)
+        if failure.reason == .missingPreferences { showExtensionSettings(for: owner) }
     }
 
     /// The dialog outranks the palette, so a view command keeps its screen behind it.

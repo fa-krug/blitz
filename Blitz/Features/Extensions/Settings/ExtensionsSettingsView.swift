@@ -25,6 +25,7 @@ struct ExtensionsSettingsView: View {
                 ExtensionDetailForm(
                     installed: shown,
                     isUpdating: core.extensions.updating.contains(shown.manifest.name),
+                    updateFailure: core.extensions.updateFailures[shown.manifest.name],
                     onUpdate: core.extensions.updates[shown.manifest.name] == nil
                         ? nil : { update([shown.manifest.name]) },
                     onUninstall: { core.extensionCoordinator.confirmUninstall(shown) })
@@ -169,6 +170,7 @@ struct ExtensionsSettingsView: View {
                             installed: installed,
                             hasUpdate: core.extensions.updates[name] != nil,
                             isUpdating: core.extensions.updating.contains(name),
+                            needsSetup: core.extensions.needsSetup(installed),
                             onOpen: { navigation.select(.extensions, page: name) })
                     }
                 }
@@ -181,12 +183,10 @@ struct ExtensionsSettingsView: View {
             }
         } footer: {
             if !core.extensions.updateFailures.isEmpty {
-                Label(
-                    "Couldn't update \(listed(core.extensions.updateFailures.values.sorted())).",
-                    systemImage: "exclamationmark.triangle"
-                )
+                let titles = core.extensions.updateFailures.values.map(\.title).sorted()
+                Label("Couldn't update \(listed(titles)).", systemImage: "exclamationmark.triangle")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.Colors.warning)
             }
         }
     }
@@ -274,7 +274,7 @@ struct ExtensionsSettingsView: View {
                 // Under the buttons that caused it.
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.Colors.warning)
             }
         }
     }
@@ -415,6 +415,8 @@ private struct ExtensionLibraryRow: View {
     let installed: InstalledExtension
     let hasUpdate: Bool
     let isUpdating: Bool
+    /// A required preference is empty, so at least one command will not run yet.
+    let needsSetup: Bool
     let onOpen: () -> Void
 
     var body: some View {
@@ -424,6 +426,12 @@ private struct ExtensionLibraryRow: View {
                     resolved: installed.iconPath.map { ExtensionImage.Resolved(source: .file($0)) },
                     size: Theme.Size.rowIcon)
             } trailing: {
+                if needsSetup {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.warning)
+                        .help("Needs setup: a required preference is empty")
+                        .accessibilityLabel("Needs setup")
+                }
                 if isUpdating {
                     ProgressView().controlSize(.small)
                 } else if hasUpdate {
@@ -448,6 +456,8 @@ private struct ExtensionLibraryRow: View {
 private struct ExtensionDetailForm: View {
     let installed: InstalledExtension
     let isUpdating: Bool
+    /// Why the last update did not install, until one does.
+    let updateFailure: ExtensionUpdateFailure?
     /// Nil unless the store has a newer version.
     let onUpdate: (() -> Void)?
     let onUninstall: () -> Void
@@ -457,6 +467,9 @@ private struct ExtensionDetailForm: View {
             // The window's Back chevron leaves the page, as in System Settings.
             Section {
                 summary
+                if let updateFailure, !isUpdating {
+                    updateFailureRow(updateFailure)
+                }
             }
 
             // No heading: these two are one idea, and first so 19 commands can't bury them.
@@ -506,10 +519,23 @@ private struct ExtensionDetailForm: View {
         } trailing: {
             if isUpdating {
                 ProgressView().controlSize(.small)
-            } else if let onUpdate {
+            } else if let onUpdate, updateFailure == nil {
                 Button("Update", action: onUpdate)
             }
             Button("Uninstall…", role: .destructive, action: onUninstall)
+        }
+    }
+
+    /// The reason stays beside the button that tries again, so a flaky network is one press.
+    private func updateFailureRow(_ failure: ExtensionUpdateFailure) -> some View {
+        SettingsRow(title: "Update failed", subtitle: failure.reason, subtitleLineLimit: 3) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.Colors.warning)
+                .frame(width: Theme.Size.rowIcon)
+        } trailing: {
+            if let onUpdate {
+                Button("Retry Update", action: onUpdate)
+            }
         }
     }
 

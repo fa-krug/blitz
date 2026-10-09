@@ -150,6 +150,9 @@ Two host-call flavours:
 | `UI/ExtensionScreen.swift` | flattens one screen into the palette's row order |
 | `UI/ExtensionCommandScreen.swift` | that order adapted to `PaletteScreen`, so the flat selection indexes it |
 | `UI/ExtensionCoordinator.swift` | launching, leaving, and every host callback that touches a surface |
+| `Model/ExtensionFailure.swift` | why a command stopped: headline, stack, and the report Copy Error writes |
+| `Model/ExtensionConsoleLog.swift` | the last 50 console lines of the foreground command, kept in release builds |
+| `Model/ExtensionActionKeys.swift` | which actions ↵ and ⌘↵ fire, and the keycaps the ⌘K panel draws for them |
 
 `ExtensionRuntime` is `@unchecked Sendable` deliberately and narrowly: every `JSContext` / `JSValue`
 touch happens on one private thread, and only plain `Sendable` values cross in or out
@@ -421,7 +424,10 @@ screens hold (see [palette.md](palette.md)).
   edge without shifting their initial position; hover keeps the shared 10pt menu-row corner. The
   panel opens and closes from its bottom-right attachment with extension-owned opacity and scale
   timing, briefly reaching 1.003; its attached corner matches the footer button. The first action is
-  the primary ↵ action; an action's own `shortcut` is matched against modified keystrokes.
+  the primary ↵ action and, outside a Form, the second is ⌘↵ unless another action declares
+  `cmd+return` itself; the panel draws ↵ and ⌘↵ on the rows they fire (`ExtensionActionKeys`), and a
+  Form draws ⌘↵ on its submit action alone. An action's own `shortcut` is matched against modified
+  keystrokes. An empty List or Grid acts through its `EmptyView`'s `actions`.
   `ExtensionCommandScreen.menuContent` hands the whole panel to the palette as a
   `PaletteMenuContent`, so the palette never learns the row type — and a row's handler is taken from
   the flattened `ExtensionAction` list rather than the drawn rows, so ↵ and the panel fire the same
@@ -429,8 +435,12 @@ screens hold (see [palette.md](palette.md)).
   monochrome treatment; their menus use the same extension-owned transition, anchored to the control.
 - **Feedback** — `showToast` replaces the current toast, a glass pill that takes the footer menu button's place and is
   lit by its style's colour. Hovering turns its mark into an ×, and clicking anywhere but its button dismisses it and
-  gives the menu button back. A failure toast's button is always **Copy** (title and message); any other style shows
-  the command's primary action; `showHUD` is a centred pill, and `confirmAlert`
+  gives the menu button back. The pill draws the toast's `primaryAction` and `secondaryAction`; a failure toast
+  without a primary action offers **Copy** (title and message) instead. Toast buttons also appear as the last
+  section of ⌘K, and their `shortcut`s fire while the toast is up. With the palette hidden a toast is a HUD, and an
+  animated one that later turns into success or failure shows that outcome as a second HUD. An action handler that
+  throws or rejects is a failure toast over the screen it ran from — the rendered tree stays — except in a menu-bar
+  command, which shows no toasts and fails instead. `showHUD` is a centred pill, and `confirmAlert`
   goes through `DialogController` like every other question the app asks. Its dialog sits at
   `.dialog`, above the palette's `.palette`, so a view command keeps its screen behind it — and
   the palette does not dismiss while it is up (`AppCore.isShowingDialog`), because dismissing pops to
@@ -449,6 +459,15 @@ screens hold (see [palette.md](palette.md)).
   That is Raycast's contract and extensions depend on it: `Number(args.seconds)` is `0` for `""` but
   `NaN` for `undefined`, so omitting a blank argument silently corrupts whatever they compute — Coffee's
   "Caffeinate for…" spawned `caffeinate -t NaN`, which exits instantly.
+
+**A failed command is a screen with remedies, not a dead end.** A render error, a launch that never
+booted and a root component Blitz cannot draw all show `ExtensionFailureView` — the headline, then
+the stack. ↵ is **Retry** (the same command, arguments and launch context again), ⌘↵ **Copy Error**
+(the stack plus the last 50 console lines, which `ExtensionConsoleLog` keeps in release builds too),
+and ⌘K adds **Open Extension Preferences**. When the failure is an unset required preference, ↵ opens
+those preferences instead and ⌘↵ retries. A `no-view` command has no screen: its failure is a danger HUD with the
+error's first line, and a missing preference also opens the extension's Settings page — the same
+report the menu-bar lane gives.
 
 Escape clears a non-empty search field first, and dispatches `onSearchTextChange` as any other edit
 would, so a command that took the search text over sees the empty string. Only over an empty field do
@@ -502,7 +521,8 @@ multi-megabyte `.js.map` Raycast writes beside each bundle.
 
 **The Installed list is one plain row per extension, and its settings open on their own page.** An
 import can bring in hundreds, and a `Form` realizes every row it is handed, so a row holds no AppKit
-control — icon, title, an update badge and a chevron, nothing more. The page carries Update, Uninstall,
+control — icon, title, an update badge and a chevron, nothing more. A row whose extension still has an empty required preference carries a warning
+badge, so setup that is owed shows before a command refuses to run. The page carries Update, Uninstall,
 Show in launcher, Launcher icon, preferences and commands. A page is a Settings history location —
 the extension's manifest name as the Extensions pane's `page` — so the window's Back and Forward
 chevrons walk into and out of it, and choosing Extensions in the sidebar returns to the list. Anything
@@ -626,7 +646,8 @@ retries after two hours. It runs only while extensions are on and **Update autom
 installs every pending update — except one whose extension is running in the palette, refreshing in
 the background or serving a menu-bar item, which waits for the two-hour retry rather than having its
 folder replaced under it. A run that installed or failed something says so in a HUD ("Updated 2
-extensions"); failures stay listed under Settings › Extensions › Installed until an update succeeds.
+extensions"); failures stay listed under Settings › Extensions › Installed until an update succeeds, and the
+extension's own page shows the error beside **Retry Update**.
 The command always asks the store, installs when updates are automatic, and otherwise only says how
 many are available. `ExtensionUpdatePolicy` (`Model/`) holds the cadence, the deferral split and the
 HUD line, so `ext-version-test` drives them without a clock.
@@ -728,9 +749,12 @@ interval floor instead of sixty.
 **Components** — `List` (+ `Item`, `Section`, `EmptyView`, `Item.Detail`, `Dropdown`), `Grid`
 (+ `Item`, `Section`, `EmptyView`, `Dropdown`), `Detail` (+ `Metadata` with `Label`, `Link`, `TagList`,
 `Separator`), `Form` (`TextField`, `PasswordField`, `TextArea`, `Checkbox`, `Dropdown`, `TagPicker`,
-`DatePicker`, `FilePicker`, `Separator`, `Description`), `ActionPanel` (+ `Section`, `Submenu`) and
+`DatePicker`, `FilePicker`, `Separator`, `Description`, and `LinkAccessory` — a web link drawn at the
+header's trailing edge), `ActionPanel` (+ `Section`, `Submenu`) and
 `Action` with every convenience variant (`CopyToClipboard`, `Paste`, `OpenInBrowser`, `Open`, `OpenWith`,
-`ShowInFinder`, `Trash`, `Push`, `SubmitForm`, `PickDate`). Deprecated aliases (`ActionPanel.Item`,
+`ShowInFinder`, `Trash`, `Push`, `SubmitForm`, `PickDate`). `CreateSnippet`, `CreateQuicklink` and
+`ToggleQuickLook` render nothing: Blitz has no equivalent, and a row that can only fail is worse than
+none. Deprecated aliases (`ActionPanel.Item`,
 `Form.DropdownItem`, `CopyToClipboardAction`, …) are present too — shipped bundles still use them.
 
 **APIs** — `Clipboard`, `LocalStorage`, `Cache`, `environment`, `getPreferenceValues`, `showToast`,
