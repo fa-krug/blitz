@@ -253,7 +253,10 @@ collision is answered rather than avoided — an entry whose display name equals
 listing, so the app appears under Applications above the panes. Since slice order is section order
 (`publishEntries`), `categoryListing` filters and then sorts within each kind's run, as the empty list
 does, and the sectioned view stays 1:1 with the flat selection. Visibility still applies downstream,
-and no `limit` does, matching the empty query.
+and no `limit` does, matching the empty query. A ranked search is the one that is capped: the launcher
+shows its first `AppIndex.searchResultLimit` (50) visible rows, cut after visibility so a hidden entry
+never takes a slot, because the results list lays out every row on each keystroke. `matches(_:)` itself
+keeps its wider limit, since Settings filters its own lists through it.
 
 `LauncherScreen` therefore separates the two jobs the empty query used to do at once: `showSections`
 draws the headers, `pinsFavorites` pins the Favorites prefix and hands out the ⌘-digit slots. A category

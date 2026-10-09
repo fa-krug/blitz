@@ -5,8 +5,6 @@ struct GeneralSettingsView: View {
     @Environment(AppSettings.self) private var settings
     private var launcherRanking: LauncherRankingStore { core.launcherRanking }
     private var queryHistory: LauncherQueryHistoryStore { core.launcherQueryHistory }
-    @State private var confirmingRankingReset = false
-    @State private var confirmingHistoryClear = false
     @Environment(SettingsNavigationState.self) private var navigation
     @State private var inputSources: [InputSourceSwitcher.Option] = []
     /// Below the fold, held back a frame; a search result revealing one mounts them at once.
@@ -73,30 +71,6 @@ struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.general)
-        .confirmationDialog(
-            "Reset learned launcher ranking?",
-            isPresented: $confirmingRankingReset,
-            titleVisibility: .visible
-        ) {
-            Button("Reset Ranking", role: .destructive) {
-                launcherRanking.resetAll()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Blitz will relearn your preferred results as you use the launcher.")
-        }
-        .confirmationDialog(
-            "Clear launcher search history?",
-            isPresented: $confirmingHistoryClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                queryHistory.clear()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("↑ will start again from the next search you run.")
-        }
         .onAppear(perform: refreshInputSources)
         // Past the task's first suspension, so the sections above the fold paint a frame first.
         .task {
@@ -143,10 +117,8 @@ struct GeneralSettingsView: View {
                 Text("Lower finds names from scattered letters.")
             }
             LabeledContent {
-                Button("Reset…", role: .destructive) {
-                    confirmingRankingReset = true
-                }
-                .disabled(launcherRanking.isEmpty)
+                Button("Reset…", role: .destructive, action: confirmRankingReset)
+                    .disabled(launcherRanking.isEmpty)
             } label: {
                 SettingsRowTitle(.generalSearch, "Learned ranking")
                 Text("Learned privately from the results you pick.")
@@ -156,16 +128,38 @@ struct GeneralSettingsView: View {
                 Text("↑ recalls searches after a restart. Shell commands are never kept.")
             }
             LabeledContent {
-                Button("Clear…", role: .destructive) {
-                    confirmingHistoryClear = true
-                }
-                .disabled(queryHistory.isEmpty)
+                Button("Clear…", role: .destructive, action: confirmHistoryClear)
+                    .disabled(queryHistory.isEmpty)
             } label: {
                 SettingsRowTitle(.generalSearch, "Search history")
                 Text("The searches ↑ walks back through.")
             }
         } header: {
             SettingsSectionHeader(.generalSearch)
+        }
+    }
+
+    private func confirmRankingReset() {
+        Task {
+            guard
+                await core.confirm(
+                    title: "Reset learned launcher ranking?",
+                    message: "Blitz will relearn your preferred results as you use the launcher.",
+                    symbol: PaletteMode.launcher.systemImage, confirmTitle: "Reset Ranking")
+            else { return }
+            launcherRanking.resetAll()
+        }
+    }
+
+    private func confirmHistoryClear() {
+        Task {
+            guard
+                await core.confirm(
+                    title: "Clear launcher search history?",
+                    message: "↑ will start again from the next search you run.",
+                    symbol: "clock.arrow.circlepath", confirmTitle: "Clear History")
+            else { return }
+            queryHistory.clear()
         }
     }
 

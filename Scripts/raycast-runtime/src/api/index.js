@@ -39,9 +39,6 @@ setActionEffects({
   trash: async ({ paths }) => {
     await system.trash(paths);
   },
-  createSnippet: () => system.unsupported("Action.CreateSnippet"),
-  createQuicklink: () => system.unsupported("Action.CreateQuicklink"),
-  quickLook: () => system.unsupported("Action.ToggleQuickLook"),
   unsupported: (what) => system.unsupported(what),
 });
 

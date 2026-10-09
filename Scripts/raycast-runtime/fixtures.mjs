@@ -815,6 +815,25 @@ export default function Command() {
 }
 `;
 
+const actionErrorSource = `
+import { Action, ActionPanel, List } from "@raycast/api";
+export default function Command() {
+  return (
+    <List>
+      <List.Item
+        title="Still here"
+        actions={
+          <ActionPanel>
+            <Action title="Throw" onAction={() => { throw new Error("sync kaboom"); }} />
+            <Action title="Reject" onAction={async () => { throw new Error("async kaboom"); }} />
+          </ActionPanel>
+        }
+      />
+    </List>
+  );
+}
+`;
+
 // ─── Runner ─────────────────────────────────────────────────────────
 
 export async function runFixtures() {
@@ -1362,6 +1381,21 @@ export async function runFixtures() {
   await wait();
   check("a throwing component reports a failure", harness.state.failures.some((message) => message.includes("kaboom")), harness.state.failures.join("|"));
   harness.stop("s1");
+
+  await run("A throwing action is a toast, not a failed screen", actionErrorSource, "view", async (harness) => {
+    const tree = harness.state.trees.at(-1);
+    const [throwing, rejecting] = findNode(tree, "List.Item").props.actions.children;
+    harness.dispatch("s1", throwing.props.onAction.$fn);
+    harness.dispatch("s1", rejecting.props.onAction.$fn);
+    await wait();
+    check("neither error fails the session", harness.state.failures.length === 0, harness.state.failures.join("|"));
+    check(
+      "each shows a failure toast",
+      harness.state.hostCalls.filter((name) => name === "feedback.showToast").length === 2,
+      harness.state.hostCalls.join(","),
+    );
+    check("the error reaches the console", harness.state.logs.some((line) => line.includes("async kaboom")));
+  });
 
   console.log(failures === 0 ? "\nAll runtime fixtures passed." : `\n${failures} check(s) failed.`);
   if (import.meta.url === `file://${process.argv[1]}`) process.exit(failures === 0 ? 0 : 1);

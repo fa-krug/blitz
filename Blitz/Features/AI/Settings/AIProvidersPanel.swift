@@ -54,7 +54,6 @@ struct AIProvidersPanel: View {
     @State private var keyStatuses: [UUID: Bool] = [:]
     @State private var keyError = false
     @State private var editor: AIConnectionEditorTarget?
-    @State private var pendingRemoval: AIConnection?
     @State private var modelQuery = ""
     /// Kept across providers, as Mail keeps its tab across accounts; one without it shows Overview.
     @State private var tab = AIProviderTab.overview
@@ -99,18 +98,6 @@ struct AIProvidersPanel: View {
                 target: target,
                 onSave: saveConnection,
                 onCancel: { editor = nil })
-        }
-        .confirmationDialog(
-            pendingRemoval.map { "Remove “\($0.title)”?" } ?? "Remove connection?",
-            isPresented: removalPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Remove Connection", role: .destructive) {
-                if let pendingRemoval { removeConnection(pendingRemoval) }
-            }
-            Button("Cancel", role: .cancel) { pendingRemoval = nil }
-        } message: {
-            Text("Its saved API key will also be deleted from Keychain.")
         }
         .onAppear {
             selection = selection ?? initialSelection
@@ -187,7 +174,7 @@ struct AIProvidersPanel: View {
             .help("Add API Connection")
             .accessibilityLabel("Add API Connection")
             Button {
-                pendingRemoval = selectedConnection
+                if let selectedConnection { confirmRemoval(of: selectedConnection) }
             } label: {
                 Image(systemName: "minus")
             }
@@ -760,12 +747,6 @@ struct AIProvidersPanel: View {
         .toggleStyle(.switch)
     }
 
-    private var removalPresented: Binding<Bool> {
-        Binding(
-            get: { pendingRemoval != nil },
-            set: { if !$0 { pendingRemoval = nil } })
-    }
-
     private func keyIsMissing(_ connection: AIConnection) -> Bool {
         keyStatuses[connection.id] != true && !AIEndpointPolicy.isLoopback(connection.baseURL)
     }
@@ -809,11 +790,22 @@ struct AIProvidersPanel: View {
         }
     }
 
+    private func confirmRemoval(of connection: AIConnection) {
+        Task {
+            guard
+                await core.confirm(
+                    title: "Remove “\(connection.title)”?",
+                    message: "Its saved API key will also be deleted from Keychain.",
+                    symbol: PaletteMode.ai.systemImage, confirmTitle: "Remove Connection")
+            else { return }
+            removeConnection(connection)
+        }
+    }
+
     private func removeConnection(_ connection: AIConnection) {
         do {
             try keyStore.removeSecret(for: connection.id)
             settings.removeConnection(id: connection.id)
-            pendingRemoval = nil
             loadKeyStatuses()
         } catch {
             keyError = true

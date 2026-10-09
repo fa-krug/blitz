@@ -39,8 +39,87 @@ struct ExtensionCommandScreen: PaletteScreen {
     /// A form owns the whole keyboard: its fields are the text, so the search field steps aside.
     var hidesSearchField: Bool { isForm }
 
-    /// A form or rowless Detail's primary action stands even with no row to land on.
-    var actsWithoutRows: Bool { isForm || screen.kind == .detail }
+    /// A form, a rowless Detail, an empty list's `EmptyView` and a failure all act without a row.
+    var actsWithoutRows: Bool {
+        isForm || screen.kind == .detail || screen.actsWithoutItems || failure != nil
+    }
+
+    /// A thrown error, or a root component this screen cannot draw.
+    var failure: ExtensionFailure? {
+        switch extensions.state {
+        case .failed(let failure): return failure
+        case .rendered:
+            guard case .unsupported(let type) = screen.kind, !type.isEmpty else { return nil }
+            return .unsupportedRoot(type)
+        default: return nil
+        }
+    }
+
+    /// One ⌘K row and what it does: an `ActionPanel` action, a toast button or a failure's remedy.
+    private struct MenuEntry {
+        var item: ExtensionActionItem
+        let run: () -> Void
+    }
+
+    /// A missing preference is fixed in Settings, so that is ↵; anything else is worth a retry.
+    private func failureEntries(_ failure: ExtensionFailure) -> [MenuEntry] {
+        let extensions = extensions
+        func entry(_ title: String, _ symbol: String, _ run: @escaping () -> Void) -> MenuEntry {
+            MenuEntry(
+                item: ExtensionActionItem(
+                    title: title, icon: ExtensionImage.Resolved(source: .symbol(symbol))),
+                run: run)
+        }
+        let retry = entry("Retry", "arrow.clockwise") { extensions.retry() }
+        let copy = entry("Copy Error", "doc.on.doc") { extensions.copyFailureReport(failure) }
+        let preferences = entry("Open Extension Preferences", "gearshape") {
+            extensions.openPreferences(scope: "extension")
+        }
+        var entries =
+            failure.reason == .missingPreferences
+            ? [preferences, retry, copy] : [retry, copy, preferences]
+        entries[0].item.shortcut = ExtensionActionKeys.returnCaps
+        entries[1].item.shortcut = ExtensionActionKeys.commandReturnCaps
+        return entries
+    }
+
+    /// The panel's actions, with ↵ and ⌘↵ drawn on the two they fire, then the toast's buttons.
+    private func menuEntries(at selection: Int) -> [MenuEntry] {
+        if let failure { return failureEntries(failure) }
+        let actions = panelActions(at: selection)
+        let caps = ExtensionActionKeys.caps(for: actions.map(\.keySlot), isForm: isForm)
+        let extensions = extensions
+        var entries = zip(actions, ExtensionActionsMenu.rows(actions, assetsPath: assetsPath))
+            .enumerated().map { index, pair in
+                var item = pair.1
+                item.shortcut = caps[index]
+                let handler = pair.0.handler
+                return MenuEntry(item: item) {
+                    if let handler { extensions.dispatch(handler: handler) }
+                }
+            }
+        for (index, action) in toastActions.enumerated() {
+            entries.append(
+                MenuEntry(
+                    item: ExtensionActionItem(
+                        title: action.title,
+                        icon: ExtensionImage.Resolved(source: .symbol("bell")),
+                        shortcut: ExtensionKeyShortcut(action.shortcut)?.caps.joined(),
+                        startsSection: index == 0 && !entries.isEmpty),
+                    run: { extensions.runToastAction(token: action.token) }))
+        }
+        return entries
+    }
+
+    /// The buttons of the toast showing over the screen, which ⌘K and their shortcuts also reach.
+    private var toastActions: [ExtensionToast.Action] {
+        guard let toast = extensions.toasts.last else { return [] }
+        return [toast.primaryAction, toast.secondaryAction].compactMap(\.self)
+    }
+
+    private func panelActions(at selection: Int) -> [ExtensionAction] {
+        ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection))
+    }
 
     /// A text area edits with ↑/↓ itself, so only ⇥ leaves it.
     func ownsVerticalKeys(at selection: Int) -> Bool {
@@ -71,21 +150,24 @@ struct ExtensionCommandScreen: PaletteScreen {
 
     /// The primary action is the panel's first `Action`.
     private func primaryAction(at selection: Int) -> ExtensionAction? {
-        ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection)).first
+        panelActions(at: selection).first
     }
 
     /// A submenu reached first is a grouping device, so its title stands in for the leaf's.
     var primaryActionTitle: String {
+        if let failure { return failureEntries(failure)[0].item.title }
         let primary = primaryAction(at: vm.selection)
         return primary?.enclosingSubmenuTitle ?? primary?.title ?? "Run"
     }
 
-    func hasPrimaryAction(at selection: Int) -> Bool { primaryAction(at: selection) != nil }
+    func hasPrimaryAction(at selection: Int) -> Bool {
+        failure != nil || primaryAction(at: selection) != nil
+    }
 
     /// A form usually ships one Submit action, and a one-row ⌘K panel is noise beside its pill.
     func hasActions(at selection: Int) -> Bool {
-        guard isForm else { return true }
-        return ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection)).count > 1
+        guard isForm, failure == nil else { return true }
+        return panelActions(at: selection).count > 1
     }
 
     /// A form's pill stands even with no field to land on: the action belongs to the screen.
@@ -99,39 +181,34 @@ struct ExtensionCommandScreen: PaletteScreen {
         at selection: Int, searchQuery: ActionMenuSearchQuery, menuSelection: Binding<Int>,
         onActivate: @escaping (Int) -> Void
     ) -> PaletteMenuContent? {
-        let actions = ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection))
-        guard !actions.isEmpty else { return nil }
+        let entries = menuEntries(at: selection)
+        guard !entries.isEmpty else { return nil }
         var pendingSection = false
-        var filteredActions: [ExtensionAction] = []
-        var filteredSectionStarts: [Bool] = []
+        var filtered: [MenuEntry] = []
         var bestMatch: (index: Int, score: Int)?
-        for action in actions {
-            if action.startsSection { pendingSection = true }
-            guard let score = searchQuery.score(action.title) else { continue }
-            filteredSectionStarts.append(pendingSection && !filteredActions.isEmpty)
-            filteredActions.append(action)
+        for entry in entries {
+            if entry.item.startsSection { pendingSection = true }
+            guard let score = searchQuery.score(entry.item.title) else { continue }
+            var match = entry
+            match.item.startsSection = pendingSection && !filtered.isEmpty
+            filtered.append(match)
             pendingSection = false
             if score > (bestMatch?.score ?? .min) {
-                bestMatch = (filteredActions.count - 1, score)
+                bestMatch = (filtered.count - 1, score)
             }
         }
-        let screen = screen
-        let assetsPath = assetsPath
-        let extensions = extensions
-        var items = ExtensionActionsMenu.rows(filteredActions, assetsPath: assetsPath)
-        for index in items.indices { items[index].startsSection = filteredSectionStarts[index] }
+        let header =
+            failure == nil ? ExtensionActionsMenu.header(screen: screen, selection: selection) : nil
+        let items = filtered.map(\.item)
         return PaletteMenuContent(
-            rowCount: filteredActions.count, preferredSelection: bestMatch?.index,
+            rowCount: filtered.count, preferredSelection: bestMatch?.index,
             view: { _ in
                 AnyView(
                     ExtensionActionsPanel(
-                        header: ExtensionActionsMenu.header(screen: screen, selection: selection),
-                        items: items, selection: menuSelection, onActivate: onActivate))
+                        header: header, items: items, selection: menuSelection,
+                        onActivate: onActivate))
             },
-            activate: { index in
-                guard let handler = filteredActions[index].handler else { return }
-                extensions.dispatch(handler: handler)
-            },
+            activate: { index in filtered[index].run() },
             clipPath: { bounds, metrics, _ in
                 UnevenRoundedRectangle(
                     topLeadingRadius: metrics.radius.menuPanel,
@@ -145,6 +222,10 @@ struct ExtensionCommandScreen: PaletteScreen {
     }
 
     func activate(at selection: Int) {
+        if let failure {
+            failureEntries(failure)[0].run()
+            return
+        }
         guard let primary = primaryAction(at: selection) else { return }
         if primary.enclosingSubmenuTitle != nil {
             vm.selection = selection
@@ -155,7 +236,20 @@ struct ExtensionCommandScreen: PaletteScreen {
         extensions.dispatch(handler: handler)
     }
 
-    func secondary(at selection: Int) -> Bool { false }
+    /// The second action, unless one claims ⌘↵ for itself; a form's ⌘↵ submits instead.
+    func secondary(at selection: Int) -> Bool {
+        if let failure {
+            failureEntries(failure)[1].run()
+            return true
+        }
+        let actions = panelActions(at: selection)
+        guard
+            let index = ExtensionActionKeys.secondary(in: actions.map(\.keySlot), isForm: isForm),
+            let handler = actions[index].handler
+        else { return false }
+        extensions.dispatch(handler: handler)
+        return true
+    }
 
     /// The `searchBarAccessory` dropdown; an empty one states and opens nothing, so it is none.
     var searchAccessory: ExtensionSearchAccessory? {
@@ -173,6 +267,11 @@ struct ExtensionCommandScreen: PaletteScreen {
             ExtensionSearchAccessoryButton(
                 accessory: accessory, value: extensions.accessorySelection(accessory),
                 assetsPath: assetsPath, isOpen: isOpen, action: action))
+    }
+
+    /// A form's `Form.LinkAccessory`, as an opaque box the palette seats in its header.
+    var linkAccessory: AnyView? {
+        ExtensionLinkAccessory(node: screen.searchBarAccessory).map { AnyView($0) }
     }
 
     /// A refresh behind rows already shown; an empty list says "Loading…" in its body instead.
@@ -259,7 +358,13 @@ struct ExtensionCommandScreen: PaletteScreen {
 
     /// Matched before the palette's own handling; true when an action fired.
     func dispatchShortcut(key: KeyEquivalent, modifiers: EventModifiers, at selection: Int) -> Bool {
-        let actions = ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection))
+        if let action = toastActions.first(where: {
+            ExtensionKeyShortcut($0.shortcut)?.matches(key: key, modifiers: modifiers) == true
+        }) {
+            extensions.runToastAction(token: action.token)
+            return true
+        }
+        let actions = panelActions(at: selection)
         guard
             let handler = actions.first(where: { $0.matches(key: key, modifiers: modifiers) })?
                 .handler

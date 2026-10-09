@@ -29,6 +29,12 @@ The command palette is a borderless floating `NSPanel` hosting SwiftUI; see
   the captured source is restored on hide and on termination — but only when the palette is still on the
   source it applied, so a switch made since, by the user or another app, stands. Never applied globally:
   the panel does not activate, so a global switch would land on whichever app is still frontmost.
+- **`RootPaletteView.body` reads neither the query nor the selection.** Everything that does — the
+  screen, its rows, the header, the bottom bar and the observers of those values — renders inside
+  `PaletteSurface`, so a keystroke or an arrow re-renders that alone. The root's ~10 `onKeyPress` and
+  ~20 `onChange` modifiers resolve the screen inside their closures, when they run; rebuilding those
+  chains was half of every keystroke. `scroll` lives in `PaletteSurfaceState` for the same reason: `land()`
+  writes it on every keystroke, and a plain `@State` write would re-render the root that owns it.
 
 ## Summoning
 
@@ -54,6 +60,11 @@ The command palette is a borderless floating `NSPanel` hosting SwiftUI; see
 Everything resolved "once per summon" is resolved there deliberately, not per render. `AppCore` holds
 only the closure wiring; the behaviour is `PaletteCoordinator`'s.
 
+The panel is built once, a turn after launch: `AppCore.start` calls
+`PaletteWindowController.prewarm()`, which mounts and lays the tree out while hidden, so the first
+summon costs about what every later one does rather than twice that. Every state change a summon makes
+lands before the off-screen layout pass, so one pass settles it.
+
 ## Screens
 
 `PaletteState` (mode / query / selection / `focusToken`) is the bridge between the panel and the app.
@@ -71,15 +82,17 @@ written to Chat History, and the AI Chat window's sidebar, as soon as it has a m
 
 Each `PaletteMode` maps to one type conforming to `PaletteScreen`, and the protocol is what keeps the
 selection invariant honest: a screen exposes `rows` as its single source of visible order, and the
-palette indexes into it. Adding a mode means adding a conformer, not a branch in `RootPaletteView`.
+palette indexes into it. Resolving a screen builds those rows, so `PaletteSurface` resolves it once
+per render and hands the header what it needs — a computed property read from the header rebuilt the
+whole list a dozen times a render. Adding a mode means adding a conformer, not a branch in `RootPaletteView`.
 A chord aimed at the selected row — ⌃X, ⇧⌘F, ⌘Y and the rest — follows the same rule:
 `PaletteShortcut` recognises the key and carries its compact-bar and open-menu guards, and the screen
 answers through `perform(_:at:)`, so a new chord never adds a cast to the shell.
 
 Where a reset leaves the highlight is the screen's to say too. Every reset — an open, a new query, a
 new filter — goes through `RootPaletteView.land()`, which reads `landingSelection`, so handlers that
-fire in one update agree whatever order they run in. `onAppear` lands as well: the first show builds
-the view after `prepare` has run, so no change handler ever sees that reset. The landing is row 0 on
+fire in one update agree whatever order they run in. `onAppear` lands as well, for a summon that beats
+the launch-time prewarm: that one builds the view after `prepare` has run, so no handler sees the reset. The landing is row 0 on
 every screen but the clipboard, which lands past its pins
 ([clipboard.md](clipboard.md#pinned-entries)).
 

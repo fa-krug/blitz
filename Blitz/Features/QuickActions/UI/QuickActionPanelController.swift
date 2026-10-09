@@ -7,7 +7,10 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
     private var panel: QuickActionPanel?
     private var state: QuickActionPanelState?
     private var onReplace: ((String) -> Void)?
+    private var onCopy: ((String) -> Void)?
+    private var onRetry: (() -> Void)?
     private var onRetranslate: ((Locale.Language) -> Void)?
+    private var onDismiss: (() -> Void)?
 
     /// Clear of the pointer, so the panel never opens under the hand that summoned it.
     private static let cursorOffset: CGFloat = 12
@@ -19,20 +22,27 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         metrics: InterfaceMetrics,
         languages: [Locale.Language],
         onRetranslate: @escaping (Locale.Language) -> Void,
-        onReplace: @escaping (String) -> Void
+        onRetry: @escaping () -> Void,
+        onReplace: @escaping (String) -> Void,
+        onCopy: @escaping (String) -> Void,
+        onDismiss: @escaping () -> Void
     ) {
         dismiss()
         self.state = state
         self.onReplace = onReplace
+        self.onCopy = onCopy
+        self.onRetry = onRetry
         self.onRetranslate = onRetranslate
+        self.onDismiss = onDismiss
 
         let hosting = NSHostingView(
             rootView: QuickActionResultView(
                 state: state,
                 languages: languages,
                 onReplace: { [weak self] in self?.replace(state.output) },
-                onCopy: { [weak self] in self?.copyOutput() },
-                onCancel: { [weak self] in self?.dismiss() },
+                onCopy: { [weak self] in self?.copy(state.output) },
+                onCancel: { [weak self] in self?.close() },
+                onRetry: { [weak self] in self?.onRetry?() },
                 onRetranslate: { [weak self] in self?.onRetranslate?($0) },
                 onOpenLanguageSettings: { [weak self] in self?.openLanguageSettings() },
                 onHeight: { [weak self] in self?.resize(toHeight: $0) }
@@ -49,8 +59,8 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
             guard let self, let state = self.state else { return }
             switch key {
             case .replace: if state.canReplace { self.replace(state.output) }
-            case .copy: if state.canReplace { self.copyOutput() }
-            case .cancel: self.dismiss()
+            case .copy: if state.canReplace { self.copy(state.output) }
+            case .cancel: self.close()
             }
         }
         self.panel = panel
@@ -62,24 +72,36 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Silent: the owner is the one tearing it down, so nothing is reported back.
     func dismiss() {
         guard let closing = panel else { return }
         panel = nil
         state = nil
         onReplace = nil
+        onCopy = nil
+        onRetry = nil
         onRetranslate = nil
+        onDismiss = nil
         closing.delegate = nil
         closing.onKey = nil
         closing.fadeOut(duration: Theme.Duration.exit)
     }
 
-    private func copyOutput() {
-        guard let state else { return }
-        Paster.copyPlainText(state.output)
+    /// The reader closed it, so the owner must stop the reply streaming into a panel nobody sees.
+    private func close() {
+        let callback = onDismiss
+        dismiss()
+        callback?()
+    }
+
+    private func copy(_ text: String) {
+        let callback = onCopy
+        dismiss()
+        callback?(text)
     }
 
     private func openLanguageSettings() {
-        dismiss()
+        close()
         AppLauncher.openSettingsPane(bundleID: Self.languageSettingsPane)
     }
 
@@ -128,6 +150,6 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard let panel, notification.object as? NSWindow === panel else { return }
-        dismiss()
+        close()
     }
 }

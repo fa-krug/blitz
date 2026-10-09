@@ -126,7 +126,7 @@ final class AppCore {
         settingsCoordinator: settingsCoordinator, settings: settings, core: self)
     @ObservationIgnored private(set) lazy var windowCommandCoordinator = WindowCommandCoordinator(
         settings: settings, paletteCoordinator: paletteCoordinator, windowMover: windowMover,
-        spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes)
+        spaceSwitcher: spaceSwitcher, customSizes: customWindowSizes, core: self)
     @ObservationIgnored private(set) lazy var customWindowSizeCoordinator =
         CustomWindowSizeCoordinator(
             store: customWindowSizes, settings: settings, appIndex: appIndex, hotKeys: hotKeys,
@@ -459,6 +459,9 @@ final class AppCore {
             observeFeatureSwitches()
             // Last, so an edit made while Blitz was quit reaches every sink wired above.
             if settings.settingsFileEnabled { startSettingsFile(importing: true) }
+
+            // Next turn, off the launch path: otherwise the first summon pays for the whole build.
+            Task { [weak self] in self?.windowController.prewarm() }
 
             // First launch binds no hotkey, so guide once; the marker is written at show-time.
             if !OnboardingState.hasOnboarded {
@@ -966,6 +969,16 @@ final class AppCore {
             failure.needsAutomationPermission
         else { return }
         Permissions.openAutomationSettings()
+    }
+
+    /// An open the palette already hid for: unreported, a refusal looks like nothing happened.
+    func reportOpenFailure(_ name: String, symbol: String, reason: String? = nil) {
+        Task {
+            _ = await reportFailure(
+                title: "Couldn’t Open “\(name)”",
+                message: reason ?? "macOS refused it — it may have moved, or no app can open it.",
+                symbol: symbol, recovery: nil)
+        }
     }
 
     /// The transient success/info pill, so `messageHUD` stays single-owned alongside `dialogs`.

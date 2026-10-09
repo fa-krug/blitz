@@ -458,26 +458,16 @@ Action.SubmitForm = function ActionSubmitForm(props) {
   });
 };
 
-Action.CreateSnippet = convenience("Action.CreateSnippet", (props) => ({
-  title: props.title ?? "Create Snippet",
-  icon: props.icon ?? Icon.Snippets,
-  shortcut: props.shortcut,
-  onAction: () => effects.createSnippet(props.snippet),
-}));
+/// An action Blitz has no equivalent for renders nothing, rather than a row that only fails.
+function hidden(displayName) {
+  const Component = () => null;
+  Component.displayName = displayName;
+  return Component;
+}
 
-Action.CreateQuicklink = convenience("Action.CreateQuicklink", (props) => ({
-  title: props.title ?? "Create Quicklink",
-  icon: props.icon ?? Icon.Link,
-  shortcut: props.shortcut,
-  onAction: () => effects.createQuicklink(props.quicklink),
-}));
-
-Action.ToggleQuickLook = convenience("Action.ToggleQuickLook", (props) => ({
-  title: props.title ?? "Quick Look",
-  icon: props.icon ?? Icon.Eye,
-  shortcut: props.shortcut,
-  onAction: () => effects.quickLook(props.target),
-}));
+Action.CreateSnippet = hidden("Action.CreateSnippet");
+Action.CreateQuicklink = hidden("Action.CreateQuicklink");
+Action.ToggleQuickLook = hidden("Action.ToggleQuickLook");
 
 Action.PickDate = function ActionPickDate(props) {
   return h(Action, {

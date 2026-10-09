@@ -55,6 +55,8 @@ struct ExtensionToast: Sendable, Equatable, Identifiable {
         let title: String
         /// Echoed back to `runToastAction` so JS can find the callback.
         let token: String
+        /// The `Keyboard.Shortcut` it declared, as sent.
+        var shortcut: [String: RenderValue]?
     }
 
     var id: Int = 0
@@ -88,7 +90,9 @@ struct ExtensionToast: Sendable, Equatable, Identifiable {
         guard let fields = value?.objectValue, let token = fields["token"]?.stringValue else {
             return nil
         }
-        return Action(title: fields["title"]?.stringValue ?? "", token: token)
+        return Action(
+            title: fields["title"]?.stringValue ?? "", token: token,
+            shortcut: fields["shortcut"]?.objectValue)
     }
 }
 

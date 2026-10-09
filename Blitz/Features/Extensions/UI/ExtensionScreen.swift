@@ -220,12 +220,18 @@ struct ExtensionScreen: Equatable {
         return haystack.contains { FuzzyMatch.score(needle, candidate: $0) != nil }
     }
 
-    /// The `ActionPanel` that applies to the current selection: the item's own, else the screen's.
+    /// The selection's panel: the item's own, an empty list's `EmptyView`'s, else the screen's.
     func actionPanel(forItemAt index: Int) -> RenderNode? {
         if items.indices.contains(index), let panel = items[index].node.node("actions") {
             return panel
         }
+        if items.isEmpty, let panel = emptyView?.node("actions") { return panel }
         return screenActions
+    }
+
+    /// An empty List or Grid still acts when its `EmptyView` carries the actions.
+    var actsWithoutItems: Bool {
+        items.isEmpty && emptyView?.node("actions") != nil
     }
 
     /// Where a drawn field sits in the focus order, or nil for one that is never landed on.
@@ -283,13 +289,37 @@ struct ExtensionAction: Equatable, Identifiable {
     var isDestructive: Bool { node.string("style") == "destructive" }
     var iconValue: RenderValue? { node.props["icon"] }
 
+    var shortcut: ExtensionKeyShortcut? { ExtensionKeyShortcut(node.object("shortcut")) }
+
     /// `{modifiers: ["cmd","shift"], key: "c"}` rendered as the palette's keycap glyphs.
-    var shortcutCaps: [String]? {
-        guard let shortcut = node.object("shortcut") else { return nil }
+    var shortcutCaps: [String]? { shortcut?.caps }
+
+    func matches(key: KeyEquivalent, modifiers: EventModifiers) -> Bool {
+        shortcut?.matches(key: key, modifiers: modifiers) ?? false
+    }
+
+    var keySlot: ExtensionActionKeys.Slot {
+        ExtensionActionKeys.Slot(
+            declaresCommandReturn: shortcut?.isCommandReturn == true,
+            isInSubmenu: enclosingSubmenuTitle != nil, ownCaps: shortcutCaps?.joined())
+    }
+}
+
+/// A Raycast `Keyboard.Shortcut`, as an action or a toast button declares it.
+struct ExtensionKeyShortcut: Equatable {
+    let key: String
+    let modifiers: [String]
+
+    init?(_ value: [String: RenderValue]?) {
+        guard let value else { return nil }
         // A cross-platform shortcut nests the real one under `macOS`.
-        let resolved = shortcut["macOS"]?.objectValue ?? shortcut
+        let resolved = value["macOS"]?.objectValue ?? value
         guard let key = resolved["key"]?.stringValue else { return nil }
-        let modifiers = (resolved["modifiers"]?.arrayValue ?? []).compactMap(\.stringValue)
+        self.key = key
+        modifiers = (resolved["modifiers"]?.arrayValue ?? []).compactMap(\.stringValue)
+    }
+
+    var caps: [String] {
         var caps = modifiers.compactMap { modifier -> String? in
             switch modifier {
             case "cmd": return "⌘"
@@ -299,19 +329,16 @@ struct ExtensionAction: Equatable, Identifiable {
             default: return nil
             }
         }
-        caps.append(ExtensionAction.keyCap(key))
+        caps.append(Self.keyCap(key))
         return caps
     }
 
-    /// Modifiers must match exactly, so ⌘⇧C never fires a plain ⌘C action.
-    func matches(key: KeyEquivalent, modifiers: EventModifiers) -> Bool {
-        guard let shortcut = node.object("shortcut") else { return false }
-        let resolved = shortcut["macOS"]?.objectValue ?? shortcut
-        guard let declared = resolved["key"]?.stringValue else { return false }
-        let declaredModifiers = (resolved["modifiers"]?.arrayValue ?? []).compactMap(\.stringValue)
+    var isCommandReturn: Bool { matches(key: .return, modifiers: .command) }
 
+    /// Modifiers must match exactly, so ⌘⇧C never fires a plain ⌘C action.
+    func matches(key pressed: KeyEquivalent, modifiers held: EventModifiers) -> Bool {
         var expected: EventModifiers = []
-        for modifier in declaredModifiers {
+        for modifier in modifiers {
             switch modifier {
             case "cmd": expected.insert(.command)
             case "ctrl": expected.insert(.control)
@@ -320,12 +347,12 @@ struct ExtensionAction: Equatable, Identifiable {
             default: break
             }
         }
-        let pressed: EventModifiers = [.command, .control, .option, .shift].filter {
-            modifiers.contains($0)
+        let chord: EventModifiers = [.command, .control, .option, .shift].filter {
+            held.contains($0)
         }
         .reduce(into: EventModifiers()) { $0.insert($1) }
-        guard pressed == expected else { return false }
-        return ExtensionAction.keyEquivalent(declared) == key
+        guard chord == expected else { return false }
+        return Self.keyEquivalent(key) == pressed
     }
 
     /// Raycast's `KeyEquivalent` names → SwiftUI's.

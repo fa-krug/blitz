@@ -42,7 +42,7 @@ struct CompactFavoritesRow: View {
     }
 }
 
-/// One compact favorite: bare icon, tooltip, action; no hover chrome, so it reads tight.
+/// One compact favorite: bare icon, label, action; no hover chrome, so it reads tight.
 private struct CompactFavoriteButton<Content: View>: View {
     let help: String
     let action: () -> Void
@@ -55,6 +55,7 @@ private struct CompactFavoriteButton<Content: View>: View {
                 .contentShape(RoundedRectangle(cornerRadius: metrics.radius.row, style: .continuous))
         }
         .buttonStyle(.plain)
-        .help(help)
+        // No hover label: the compact panel is the header's height, so any tooltip would be clipped.
+        .accessibilityLabel(help)
     }
 }

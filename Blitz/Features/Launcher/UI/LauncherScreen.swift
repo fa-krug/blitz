@@ -13,6 +13,8 @@ struct LauncherScreen: PaletteScreen {
     let meeting: MeetingEvent?
     let now: Date
     let openActions: () -> Void
+    /// The palette's ↵, so the menu's Open row stops at an unfilled field just as the key does.
+    let activateSelection: () -> Void
     /// Opens the palette's own menu for an `options=` field, keyed by argument name.
     let openArgumentOptions: (String) -> Void
     /// Called when an action reorders the list, so the highlight scrolls back into view.
@@ -44,8 +46,8 @@ struct LauncherScreen: PaletteScreen {
         appIndex: AppIndex, favorites: FavoritesStore, visibility: VisibilityStore,
         currencyRates: CurrencyRateStore, core: AppCore, vm: PaletteState, running: Bool,
         meeting: MeetingEvent?, now: Date,
-        openActions: @escaping () -> Void, openArgumentOptions: @escaping (String) -> Void,
-        scrollToFollow: @escaping () -> Void
+        openActions: @escaping () -> Void, activateSelection: @escaping () -> Void,
+        openArgumentOptions: @escaping (String) -> Void, scrollToFollow: @escaping () -> Void
     ) {
         self.appIndex = appIndex
         self.favorites = favorites
@@ -55,6 +57,7 @@ struct LauncherScreen: PaletteScreen {
         self.running = running
         self.now = now
         self.openActions = openActions
+        self.activateSelection = activateSelection
         self.openArgumentOptions = openArgumentOptions
         self.scrollToFollow = scrollToFollow
 
@@ -260,7 +263,7 @@ struct LauncherScreen: PaletteScreen {
             return MeetingActionsMenu.content(meeting: meeting, core: core)
         case .entry(let app):
             return AppActionsMenu.content(
-                app: app, searchQuery: vm.query, core: core, running: running,
+                app: app, core: core, running: running, primary: activateSelection,
                 favorites: favoriteActions(for: app, at: selection),
                 onResetRanking: {
                     core.launcherCoordinator.resetRanking(for: app)

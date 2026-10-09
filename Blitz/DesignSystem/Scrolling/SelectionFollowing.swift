@@ -36,7 +36,7 @@ private struct SelectionFollowing: ViewModifier {
     let atOrigin: Bool
     let proxy: ScrollViewProxy
 
-    @State private var band = Band(insetTop: 0, height: 0)
+    @State private var band = Band(insetTop: 0, height: 0, atOrigin: true)
     @State private var selection: CGRect?
     /// Where the selection is still owed a place; nil once it has one, and the pointer owns it.
     @State private var target: Target?
@@ -45,6 +45,8 @@ private struct SelectionFollowing: ViewModifier {
     private struct Band: Equatable {
         var insetTop: CGFloat
         var height: CGFloat
+        /// Resting at the origin already, so a scroll there would only cost a lookup of every row.
+        var atOrigin: Bool
     }
 
     private enum Target {
@@ -57,7 +59,9 @@ private struct SelectionFollowing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onScrollGeometryChange(for: Band.self) {
-                Band(insetTop: $0.contentInsets.top, height: $0.containerSize.height)
+                Band(
+                    insetTop: $0.contentInsets.top, height: $0.containerSize.height,
+                    atOrigin: abs($0.contentOffset.y + $0.contentInsets.top) < 0.5)
             } action: { old, new in
                 band = new
                 // The inset settles after mount and moves the resting offset: restate a landing.
@@ -77,7 +81,7 @@ private struct SelectionFollowing: ViewModifier {
         switch kind {
         case .top:
             target = nil
-            proxy.scrollToOrigin()
+            scrollToOrigin()
         case .follow:
             target = .band
             align()
@@ -87,12 +91,18 @@ private struct SelectionFollowing: ViewModifier {
         }
     }
 
+    /// `scrollTo` finds the anchor only after walking every lazy row's id: 40 ms on the emoji grid.
+    private func scrollToOrigin() {
+        guard !band.atOrigin else { return }
+        proxy.scrollToOrigin()
+    }
+
     private func align() {
         guard let target, let row else { return }
         // Origin, not the row's top, so the first row's section header stays on screen.
         if atOrigin {
             self.target = nil
-            return proxy.scrollToOrigin()
+            return scrollToOrigin()
         }
         // The lazy stack dropped the selected row: bring it back by id, then re-check its frame.
         guard let selection else {

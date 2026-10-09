@@ -115,6 +115,13 @@ final class AppleShortcutCoordinator {
     }
 
     func openShortcutsApp() {
-        AppLauncher.launch(Self.applicationURL)
+        Task {
+            do {
+                try await AppLauncher.launch(Self.applicationURL)
+            } catch {
+                core.reportOpenFailure(
+                    "Shortcuts", symbol: AppleShortcut.sfSymbol, reason: error.localizedDescription)
+            }
+        }
     }
 }

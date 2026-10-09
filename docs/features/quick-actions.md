@@ -38,7 +38,8 @@ selectable Markdown renderer with AI Chat.
 - **One run at a time.** Two overlapping runs would race for one selection, and the second would
   replace text the first had already changed. `QuickActionCoordinator` holds a single task and
   refuses a second while it lives; a generation token stops a task that finishes after being
-  replaced — by a retranslate, say — from clearing the newer handle.
+  replaced — by a retranslate, say — from clearing the newer handle. Closing the panel cancels the
+  run streaming into it, or a hidden stream would hold the slot and leave every shortcut dead.
 - **`Model/` stays Foundation-only.** `quick-action-test` compiles that folder standalone, which is
   what keeps `FoundationModels`, `Translation` and `NaturalLanguage` in `Service/` and `UI/`.
 - **Quick Actions route themselves.** `quickActionModel` is a second routing decision, defaulting to
@@ -182,8 +183,9 @@ It could not have been built on `HUDPresenter`: `HUDPanel` sets `ignoresMouseEve
 which is a closed two-case enum measured once at present time — a growing stream would clip.
 
 Non-activating, so the target app keeps its selection while the panel holds key. Keys go through
-`sendEvent`: `↵` replaces, `⌘C` copies, `esc` dismisses; click-away dismisses like every other
-borderless surface. The panel is anchored by its **top-left** and re-measured as the reply arrives —
+`sendEvent`: `↵` replaces, `⌘C` copies and closes behind a "Copied result" pill, `esc` dismisses;
+click-away dismisses like every other borderless surface. A failed reply offers **Retry**, which
+reruns the same selection without reading it again. The panel is anchored by its **top-left** and re-measured as the reply arrives —
 centring on every measure would walk it up the screen. Summarize uses chat's `ChatMarkdownText` and
 `MarkdownBlock.parse`, keeping its whole result selectable across paragraphs and headings, with the
 same math as chat; `midStream` is on while it runs, so an equation still arriving is held back.

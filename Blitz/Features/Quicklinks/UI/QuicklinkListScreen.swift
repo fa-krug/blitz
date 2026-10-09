@@ -75,6 +75,7 @@ struct QuicklinkListScreen: PaletteScreen {
         switch shortcut {
         case .commandDelete: return delete(at: selection)
         case .pin: return pin(at: selection)
+        case .edit: return edit(at: selection)
         case .newItem:
             core.paletteCoordinator.hidePalette(restoreFocus: false)
             core.quicklinkCoordinator.editQuicklink(
@@ -82,6 +83,14 @@ struct QuicklinkListScreen: PaletteScreen {
             return true
         default: return false
         }
+    }
+
+    /// ⌘E — the editor is a window of its own, so the palette steps aside like the menu row does.
+    private func edit(at selection: Int) -> Bool {
+        guard let quicklink = quicklink(at: selection) else { return false }
+        core.paletteCoordinator.hidePalette(restoreFocus: false)
+        core.quicklinkCoordinator.editQuicklink(quicklink)
+        return true
     }
 
     /// ⌘. — mirrors the Actions menu row; pinning lifts the row into the Pinned section.
@@ -165,7 +174,9 @@ enum QuicklinkActionsMenu {
         }
         items += openWithItems(quicklink: quicklink, core: core, values: values)
         items.append(
-            PopoverMenuItem(title: "Edit Quicklink", systemImage: "pencil", startsSection: true) {
+            PopoverMenuItem(
+                title: "Edit Quicklink", systemImage: "pencil", startsSection: true, shortcut: "⌘E"
+            ) {
                 core.paletteCoordinator.hidePalette(restoreFocus: false)
                 core.quicklinkCoordinator.editQuicklink(quicklink)
             })
@@ -206,7 +217,7 @@ enum QuicklinkActionsMenu {
         {
             items.append(
                 PopoverMenuItem(
-                    title: "Show in Finder", systemImage: "folder", startsSection: true, shortcut: "⌘F"
+                    title: "Show in Finder", systemImage: "folder", startsSection: true
                 ) {
                     core.paletteCoordinator.hidePalette(restoreFocus: false)
                     AppLauncher.showInFinder(URL(fileURLWithPath: path))

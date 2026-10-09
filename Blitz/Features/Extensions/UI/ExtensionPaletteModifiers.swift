@@ -2,16 +2,16 @@ import SwiftUI
 
 /// An action's own shortcut, matched before the palette's bindings see it.
 struct ExtensionShortcutKeys: ViewModifier {
-    let screen: ExtensionCommandScreen?
-    let selection: Int
+    /// Resolved per press, so the palette never re-renders its handlers to track the selection.
+    let target: () -> (screen: ExtensionCommandScreen, selection: Int)?
 
     func body(content: Content) -> some View {
         content.onKeyPress(phases: .down) { press in
-            guard let screen, !press.modifiers.isEmpty else { return .ignored }
-            return screen.dispatchShortcut(
+            guard !press.modifiers.isEmpty, let target = target() else { return .ignored }
+            return target.screen.dispatchShortcut(
                 key: ASCIIKeyboardLayout.keyEquivalent(fallingBackTo: press.key),
                 modifiers: press.modifiers,
-                at: selection) ? .handled : .ignored
+                at: target.selection) ? .handled : .ignored
         }
     }
 }

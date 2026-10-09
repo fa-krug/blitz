@@ -1,12 +1,14 @@
 import CryptoKit
 import Foundation
+import Network
 
 @main
 @MainActor
 struct MCPOAuthTests {
     static var passes = 0
     static var failures = 0
-    static let base = "http://127.0.0.1:4963"
+    /// Set from the stub's `ready <port>` line once it has bound.
+    static var base = ""
 
     static func expect(_ condition: @autoclosure () throws -> Bool, _ message: String) {
         if (try? condition()) == true { passes += 1 } else { failures += 1; print("FAIL: \(message)") }
@@ -207,27 +209,47 @@ struct MCPOAuthTests {
         expect(oldSecrets.headerValue == "old" && oldSecrets.oauth == nil, "old secrets decode")
     }
 
+    /// A port the kernel just handed out, so a concurrent run never holds the one this run binds.
+    static func freePort() -> NWEndpoint.Port {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        defer { close(socket) }
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                _ = bind(socket, $0, length)
+                _ = getsockname(socket, $0, &length)
+            }
+        }
+        return NWEndpoint.Port(rawValue: UInt16(bigEndian: address.sin_port)) ?? MCPOAuthListener.callbackPort
+    }
+
     static func listenerLifecycle() async throws {
-        let listener = MCPOAuthListener()
+        let port = freePort()
+        let callback = "http://127.0.0.1:\(port.rawValue)/callback"
+        let listener = MCPOAuthListener(port: port)
         try await listener.start(
             state: "expected", issuer: "https://auth.test", requiresIssuer: true, timeout: .seconds(10))
-        let competing = MCPOAuthListener()
+        let competing = MCPOAuthListener(port: port)
         do {
             try await competing.start(
                 state: "other", issuer: "https://auth.test", requiresIssuer: true, timeout: .seconds(2))
             expect(false, "occupied port must fail")
         } catch { expect(true, "occupied port fails") }
         competing.cancel()
-        let bad = URLRequest(url: URL(string: MCPOAuthListener.redirectURI + "?state=wrong&code=c")!)
+        let bad = URLRequest(url: URL(string: callback + "?state=wrong&code=c")!)
         let (_, refused) = try await MCPOAuthHTTP.send(bad)
         expect(refused.statusCode == 400, "wrong state refused without consuming listener")
         let target =
-            MCPOAuthListener.redirectURI + "?state=expected&code=fixture-code&iss=https%3A%2F%2Fauth.test"
+            callback + "?state=expected&code=fixture-code&iss=https%3A%2F%2Fauth.test"
         let (_, accepted) = try await MCPOAuthHTTP.send(URLRequest(url: URL(string: target)!))
         expect(accepted.statusCode == 200, "browser receives close-tab page")
         let code = try await listener.code()
         expect(code == "fixture-code", "callback yields code once")
-        let expiring = MCPOAuthListener()
+        let expiring = MCPOAuthListener(port: freePort())
         try await expiring.start(
             state: "expected", issuer: "https://auth.test", requiresIssuer: false, timeout: .milliseconds(80))
         do {
@@ -236,7 +258,7 @@ struct MCPOAuthTests {
         } catch {
             expect(error as? MCPOAuth.Failure == .timedOut, "timeout tears down listener")
         }
-        let cancelled = MCPOAuthListener()
+        let cancelled = MCPOAuthListener(port: freePort())
         try await cancelled.start(state: "expected", issuer: "https://auth.test", requiresIssuer: false)
         cancelled.cancel()
         do {
@@ -457,10 +479,11 @@ struct MCPOAuthTests {
         process.standardOutput = pipe
         try process.run()
         defer { if process.isRunning { process.terminate(); process.waitUntilExit() } }
-        let ready = pipe.fileHandleForReading.availableData
-        guard String(bytes: ready, encoding: .utf8)?.contains("ready") == true else {
+        let ready = String(bytes: pipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
+        guard ready.hasPrefix("ready "), let port = Int(ready.dropFirst(6).prefix { $0.isNumber }) else {
             throw MCPOAuth.Failure.network
         }
+        base = "http://127.0.0.1:\(port)"
         let discovered = try await MCPOAuthService.discover(base + "/mcp")
         expect(discovered.scope == "read", "401 discovery carries requested scopes")
         let registration = try await MCPOAuthService.registration(

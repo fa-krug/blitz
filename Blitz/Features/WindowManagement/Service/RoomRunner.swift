@@ -138,7 +138,7 @@ enum RoomRunner {
         where NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             else { continue }
-            AppLauncher.launch(url)
+            Task { try? await AppLauncher.launch(url) }
             launched.insert(bundleID)
         }
         return launched
