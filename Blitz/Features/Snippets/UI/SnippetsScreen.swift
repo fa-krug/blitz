@@ -46,6 +46,13 @@ struct SnippetsScreen: PaletteScreen {
             core.paletteCoordinator.hidePalette(restoreFocus: false)
             core.snippetCoordinator.editSnippet(
                 nil, draft: name.isEmpty ? nil : Snippet(name: name, text: ""))
+        case .edit:
+            guard let record = record(at: selection) else { return false }
+            core.paletteCoordinator.hidePalette(restoreFocus: false)
+            core.snippetCoordinator.editSnippet(record)
+        case .commandDelete:
+            guard let record = record(at: selection) else { return false }
+            Task { await core.snippetCoordinator.deleteSnippet(record) }
         default:
             return false
         }
@@ -103,9 +110,14 @@ enum SnippetActionsMenu {
                 PopoverMenuItem(title: "Paste Snippet", systemImage: "text.quote", shortcut: "↵") {
                     core.snippetCoordinator.expandSnippetFromPalette(id: record.id)
                 },
-                PopoverMenuItem(title: "Edit Snippet", systemImage: "pencil", startsSection: true) {
+                PopoverMenuItem(
+                    title: "Edit Snippet", systemImage: "pencil", startsSection: true, shortcut: "⌘E"
+                ) {
                     core.paletteCoordinator.hidePalette(restoreFocus: false)
                     core.snippetCoordinator.editSnippet(record)
+                },
+                PopoverMenuItem(title: "Duplicate Snippet", systemImage: "plus.square.on.square") {
+                    core.snippetCoordinator.duplicateSnippet(record)
                 },
                 PopoverMenuItem(title: "Create Snippet", systemImage: "plus", shortcut: "⌘N") {
                     core.paletteCoordinator.hidePalette(restoreFocus: false)
@@ -113,6 +125,12 @@ enum SnippetActionsMenu {
                 },
                 PopoverMenuItem(title: "Show in Finder", systemImage: "folder", startsSection: true) {
                     core.snippetCoordinator.showSnippetInFinder(record)
+                },
+                PopoverMenuItem(
+                    title: "Delete Snippet", systemImage: "trash", startsSection: true,
+                    shortcut: "⌘⌫", isDestructive: true
+                ) {
+                    Task { await core.snippetCoordinator.deleteSnippet(record) }
                 }
             ])
     }

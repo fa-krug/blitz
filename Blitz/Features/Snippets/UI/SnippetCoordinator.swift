@@ -133,6 +133,35 @@ final class SnippetCoordinator {
         AppLauncher.showInFinder(record.fileURL)
     }
 
+    func duplicateSnippet(_ record: StoredSnippet) {
+        Task {
+            do {
+                try await store.duplicate(id: record.id)
+            } catch {
+                await core.showNotice(
+                    title: "Couldn’t Duplicate “\(record.snippet.name)”",
+                    message: error.localizedDescription, symbol: "curlybraces", tone: .danger)
+            }
+        }
+    }
+
+    /// Always asks, as the pane does: the file itself goes, and nothing brings it back.
+    func deleteSnippet(_ record: StoredSnippet) async {
+        guard
+            await core.confirm(
+                title: "Delete “\(record.snippet.name)”?",
+                message: "This removes \(record.fileURL.lastPathComponent) from your snippets folder.",
+                symbol: "curlybraces", confirmTitle: "Delete")
+        else { return }
+        do {
+            try await store.delete(id: record.id)
+        } catch {
+            await core.showNotice(
+                title: "Couldn’t Delete “\(record.snippet.name)”",
+                message: error.localizedDescription, symbol: "curlybraces", tone: .danger)
+        }
+    }
+
     // MARK: - Expansion
 
     /// How far back `{clipboard offset=N}` reaches; deeper isn't a snippet idiom.

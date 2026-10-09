@@ -258,8 +258,12 @@ shortcut, file name and character count.
 which reads `previousApp` before hiding the panel and then calls the same `expandSnippet` funnel a
 launcher row does — so template expansion, cursor placement, the Accessibility prompt, the
 confirmation HUD and the pasteboard lease are the ones described below, not a second copy of them.
-The rest of the menu is **Edit Snippet** and **Create Snippet** (⌘N), which hand off to the pane's
-editor through `AppCore.pendingSnippetEdit`, and **Show in Finder**.
+The rest of the menu is **Edit Snippet** (⌘E) and **Create Snippet** (⌘N), which hand off to the
+pane's editor through `AppCore.pendingSnippetEdit`, **Duplicate Snippet**, **Show in Finder** and
+**Delete Snippet** (⌘⌫). A duplicate is a new file named "… Copy" (then "… Copy 2", …), and it
+leaves the keyword behind, since two snippets can't both answer one. Delete always confirms through
+Blitz's own dialog, as the pane's delete button does, and a failed duplicate or delete says so in
+a notice.
 
 ⌘N answers with no rows too, since the palette swallows ⌘K on an empty screen, and the empty library
 says so ("Press ⌘N to create one"). From the key, a non-empty search becomes the new snippet's name,

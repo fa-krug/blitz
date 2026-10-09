@@ -34,6 +34,20 @@ struct Snippet: Sendable, Hashable {
         let name = titled.isEmpty ? String(firstLine.prefix(draftNameLimit)) : titled
         return Snippet(name: name.trimmingCharacters(in: .whitespaces), text: text)
     }
+
+    /// "Duplicate": a free "… Copy" name, and no keyword, since two snippets can't both answer one.
+    func duplicate(takenNames: [String]) -> Snippet {
+        let taken = Set(takenNames.map { $0.folding(options: .caseInsensitive, locale: nil) })
+        var copy = self
+        copy.name = name + " Copy"
+        copy.keyword = nil
+        var suffix = 2
+        while taken.contains(copy.name.folding(options: .caseInsensitive, locale: nil)) {
+            copy.name = "\(name) Copy \(suffix)"
+            suffix += 1
+        }
+        return copy
+    }
 }
 
 /// Fingerprint of a snippet file's bytes, detecting an external edit before a save or delete.
