@@ -34,6 +34,10 @@ because each harness already roots its scratch state somewhere of its own — a 
 `temporaryDirectory`, a `UserDefaults(suiteName:)`, or `NSPasteboard.withUniqueName()` — and a new
 harness must keep doing that rather than reach for a fixed path.
 
+The binaries, logs and pass/fail markers land in the checkout's own `.build/harness/` (gitignored),
+so worktrees running the suite at the same time never overwrite each other's builds or results.
+A shared `$TMPDIR/blitz-harness` used to make one worktree's run fail another's.
+
 Two consequences worth knowing. Status lines arrive in **completion order**, not the order the `run`
 lines are written; and a failing harness's compiler diagnostics or assertion output are replayed
 together at the bottom, under its name, rather than streamed where they happened. That is deliberate:

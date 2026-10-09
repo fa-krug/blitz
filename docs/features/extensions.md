@@ -897,7 +897,7 @@ node test.mjs ~/.config/raycast/extensions/<uuid> [command]
 
 # 3. the real Swift engine, against JavaScriptCore
 Scripts/run-tests.sh ext-test
-"${TMPDIR:-/tmp}"/blitz-harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
+.build/harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
 ```
 
 `ext-test` compiles the real engine sources — there is no copy to keep in sync. `EXT_TEST_VERBOSE=1`
@@ -911,7 +911,7 @@ round-trips and the Provider Usage action, with live fetches but a recorded `lau
 status items stay hidden so a test run cannot interfere with the running app's menus:
 
 ```sh
-EXT_TEST_MENU_BAR=1 "${TMPDIR:-/tmp}/blitz-harness/ext-test" \
+EXT_TEST_MENU_BAR=1 .build/harness/ext-test \
   "$HOME/Library/Application Support/de.fa-krug.blitz.dev/extensions/opencodex-usage" usage-menu-bar
 ```
 
