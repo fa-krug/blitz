@@ -8,8 +8,8 @@ in (see Currency below).
 
 ## Invariants
 
-- **`Model/` (including `CalcDateTime`) stays Foundation-only *and pure*** — no AppKit or SwiftUI, no
-  clock read, no network, **no `Locale`**. `calc-test` compiles the real engine sources. Every
+- **`Model/` (including `CalcDateTime`) is pure** — no clock read, no network, **no `Locale`**.
+  `calc-test` compiles the real engine sources. Every
   externally-sourced input is injected: the clock via `now`/`calendar`, the FX table via `rates`,
   the Mac's own currency via `region`, which `RegionCurrency` reads and `CalcMemo` passes down, and
   the number format via `format`, which `RegionNumberFormatMonitor` reads from Language & Region.
@@ -177,7 +177,7 @@ for addition (`10kg + 20%` → `12 kg`) and act as fractional scalars for multip
 (`10kg * 3%` → `0.3 kg`, `10kg / 25%` → `40 kg`).
 
 A conversion may also appear **mid-expression, but only where `+` or `-` follows it**:
-`10kg to lb + 3lb` converts and then adds, without needing the parentheses it used to. The
+`10kg to lb + 3lb` converts and then adds, with no parentheses needed. The
 restriction is the whole point. `20 eur to usd * 30` has two honest readings — convert then scale,
 or convert into a scaled unit — so it stays silent and keeps asking for `(20 eur to usd) * 30`,
 while `+` and `-` carry no such ambiguity because a conversion target is never an addend.
@@ -536,8 +536,8 @@ ever asks for location, and a `Model/` file never performs it.
 
 Where the region names the currency already written, the amount pairs with the **dollar** instead —
 the **euro** where the dollar is the one that was typed. Converting is the only reason to write a
-lone amount, so `25 eur` on a European Mac answering `25.00 EUR` said nothing at all; it now reads
-`28.95 USD`.
+lone amount, and `25 eur` on a European Mac answering `25.00 EUR` would say nothing at all, so it
+reads `28.95 USD`.
 
 The target only applies where there is genuinely nothing else to say. An operator keeps the currency
 written (`$10 + €5` stays euros), an explicit target overrides everything, a trailing operator holds
@@ -566,11 +566,6 @@ Both halves of that follow from the store scheduling off the newest _whole_ snap
 whatever `rates` currently holds: a partial one answers without resetting the clock, so it can neither
 park the loop for a day nor be reloaded at launch as though it were complete.
 
-The same rule absorbs a cached snapshot written before crypto existed. It still prices fiat, so it is
-served rather than discarded — but it counts as no age at all, so the store re-fetches immediately
-instead of trusting a `fetchedAt` that says the table is hours fresh. `CurrencyFeed.pricesCoins` is
-that test, and it is sound only because a partial snapshot is never persisted.
-
 The table is cached at `~/Library/Caches/<bundle-id>/currency-rates.json` and refreshed every 24h.
 The feed republishes about once a day, so a tighter interval would cost requests without returning
 newer numbers. Age is measured from the persisted `fetchedAt`, not from launch, so relaunching
@@ -594,7 +589,8 @@ Date answers that display and copy identically also reuse their formatted text.
 
 When the launcher or Calculator History query evaluates to a result the card is pinned at the top of
 the list (flat selection index 0, shifting rows by one) and Enter copies the answer + records it to
-`CalculatorHistoryStore`.
+`CalculatorHistoryStore`; ⇧⌘↵ copies the whole calculation. The palette closes on a copy, so each one
+confirms with a **Copied result** / **Copied calculation** / **Copied expression** pill.
 
 ## Number format
 
@@ -631,8 +627,7 @@ it to canonical spelling or rejects the whole query. Rejection means **no card**
 canonical number takes the format's separators, and anything else — a dotted date, a version, a
 clock, a date formatter's `Friday, 24 July` — is left as written. Inside a function call every comma
 is an argument, as `CalcTokenizer` reads it, so a stored `max(1,234)` shows `max(1;234)`, never
-`max(1.234)`. The echoed expression additionally turns its canonical argument commas into `;`. `English` makes both directions the identity, so the
-English path is byte-for-byte what it was.
+`max(1.234)`. The echoed expression additionally turns its canonical argument commas into `;`. `English` makes both directions the identity.
 
 ## Additional units and transfer rates
 
@@ -640,7 +635,7 @@ English path is byte-for-byte what it was.
 `100Mbps to MB/s` gives `12.5 MB/s`, and `1GB / 10MB/s to s` gives `100 s`.
 Binary rates such as `MiB/s` and bit amounts such as `kbit` also work.
 SI prefixes expand for meters, grams, seconds, hertz, newtons, joules, watts and pascals,
-including `um`, `nm`, `us`, `ns` and `GHz`. Existing aliases keep their meanings.
+including `um`, `nm`, `us`, `ns` and `GHz`.
 
 Other units include tonnes (`t`), stone (`st`), nautical miles (`nmi`), mechanical horsepower (`hp`),
 BTU (international table), `rpm`, pound-force (`lbf`), US/UK tons and UK liquid measures

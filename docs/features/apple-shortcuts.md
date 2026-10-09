@@ -20,7 +20,6 @@ registered, so re-enabling restores every global shortcut.
 - **Only a successful read frees anything.** A shortcut missing from one loses its binding, alias,
   visibility, favorite slot and ranking; a failed read changes nothing, since it can't tell deleted
   from unreadable. An empty read and turning the feature off free nothing either.
-- **`Model/` stays Foundation-only and pure** for `apple-shortcut-test`.
 
 ## Discovery
 
@@ -72,7 +71,9 @@ The pane lists rows through `LauncherItemsList`, as the launcher-category panes 
 of icon, name and badges, each opening the shortcut's page with its "Show in launcher" switch (which
 hides one row from launcher search while its shortcut keeps working), alias field and shortcut
 recorder. Its filter is `AppIndex.entries(matching:where:)` over the shortcuts alone, so it answers
-to aliases.
+to aliases. The pane's **Open Shortcuts** launches the app through `AppLauncher.launch`; a refusal
+raises the launcher's **Couldn’t Open “Shortcuts”** dialog through `AppCore.reportOpenFailure`
+(see [launcher.md](launcher.md#opening-a-row)).
 
 `HotKeyAction.appleShortcut(id:)` persists under `hotkey.appleShortcut.<uuid>` with a
 `boundAppleShortcutIDs` index. `appleShortcutsEnabled` rides in settings backups like the quicklink

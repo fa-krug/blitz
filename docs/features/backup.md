@@ -143,6 +143,4 @@ Per category:
 An `id` never travels with a clip: `items.id` is `UNIQUE`, so a re-import minting fresh identities is
 what keeps a second pass from silently failing its inserts. Same reasoning as `QuicklinkArchive.merge`.
 
-The old flat `Blitz-Settings-*.json` export is gone rather than deprecated, and nothing reads it.
-
 Raycast import is documented separately in [raycast-import.md](raycast-import.md).

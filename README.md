@@ -40,6 +40,7 @@ If Blitz earns a place in your daily flow, you can support it through
 - **Per-app hotkeys** — bind a key to an app; press it to toggle (focus/hide).
 - **Search Files** — open files and folders from the folders you choose, through Spotlight, with no
   index of our own.
+- **Search Screenshots** — find a capture by name, or by the text inside it if you opt in.
 - **Dictionary** — look a word up with the Define Word command, or define whatever you typed from the
   launcher's fallbacks, read from the Mac's own dictionaries.
 - **Clipboard history** — text and images, searchable, pasted back into the app you were using.
@@ -51,8 +52,12 @@ If Blitz earns a place in your daily flow, you can support it through
 - **Snippets** — reusable Markdown templates with dynamic placeholders, arguments, nested references
   and optional keyword expansion.
 - **Custom commands** — run named shell commands through fuzzy search or their own global hotkeys.
-- **Window management** — 34 Rectangle-style actions: halves, quarters, thirds, sizing, nudging,
-  display moves, fullscreen and Spaces.
+- **Window management** — 35 Rectangle-style actions: halves, quarters, thirds, sizing, nudging,
+  display moves, fullscreen and Spaces, plus custom sizes of your own.
+- **Window layouts and rooms** — save an arrangement of apps and run it in one press, or walk into a
+  room: its windows tiled on your display, everything else stepped back.
+- **Switch Windows and Search Menu Bar Items** — raise any open window, or press any menu item of the
+  front app, by name.
 - **System actions** — lock, sleep, restart, empty trash, toggle appearance, Bluetooth, mute, hidden
   files, and more.
 - **Calendar and meetings** — your next meeting on the empty palette and in the menu bar, one key to
@@ -64,13 +69,20 @@ If Blitz earns a place in your daily flow, you can support it through
 - **Notes** — an unlimited collection of plain Markdown files in one floating editor, searchable from
   the palette and rendered as you write.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.
+- **Camera** — a live, mirrored preview to check yourself before a call, and a photo to the
+  clipboard.
 - **AI chat** — use your own key or an installed AI account: ask Quick AI from the palette, or keep
   longer conversations in the AI Chat window, with a searchable, pinnable history. Let it read your
   calendar and reminders, or change them with your confirmation, if you choose. Off out of the box,
   like every AI feature.
+- **MCP servers** — connect remote or local Model Context Protocol servers and let AI chat use their
+  tools, asking before a server's first call in each chat until you always allow it.
 - **Quick Actions** — fix grammar, rewrite, translate or summarize the selected text in any app.
 - **Raycast extensions** — run the ones you already have natively, rendered as SwiftUI.
+- **Uninstall** — remove an app together with the caches, preferences and containers it leaves
+  behind.
 - **Backup and import** — export your settings to a file, or import your setup from Raycast.
+- **Welcome Tour** — a short first-launch walkthrough, there again whenever you want it.
 
 ## Install
 
@@ -90,10 +102,14 @@ disabled, and keystrokes are matched locally, never stored and never sent anywhe
 
 ## Using it
 
-1. Open **Settings → General** and record a global shortcut to summon Blitz.
-2. Press it anywhere → the palette floats in. Type to filter, **↵** to launch.
-3. **Tab** switches between Apps and Clipboard; **↑/↓** move, **Esc** dismisses.
-4. **Settings → Shortcuts** — search an app or custom command and record a global shortcut.
+1. The Welcome Tour opens on first launch: record the shortcut that summons Blitz, or take ⌘Space
+   from Spotlight. It lives in **Settings → General** afterwards.
+2. Press it anywhere → the palette floats in. Type to filter, **↵** to launch, **⌘K** for a row's
+   actions.
+3. **Tab** rings the launcher, Quick AI and Clipboard History — from the launcher it hands what you
+   typed to Quick AI, or to the clipboard when AI is off; **↑/↓** move, **Esc** dismisses.
+4. Open a row's page in **Settings → Applications**, **Commands** or any other launcher pane and record
+   a global shortcut for it.
 5. **Settings → Snippets** — enable the feature, then create templates with expansion keywords.
 
 ## Building from source

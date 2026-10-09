@@ -28,10 +28,12 @@ same URL, so `SupportCoordinator.checkout` is the only place the destination is 
 - **One button, one link.** `SupportCoordinator.checkout` is the only destination, and no surface
   restates what is behind it — the checkout page owns that, so nothing here can fall out of step
   with it. Adding a second button means adding a second thing to keep in sync.
-- **The button is the composition, not its footer.** It sits under the hero at 46pt tall, because this
+- **The button is the composition, not its footer.** It sits under the hero, full size, because this
   window asks where the update window reports — an actions row pinned to the bottom edge reads as a
   utility dialog.
-- **Brand colour appears exactly twice**: the app icon, which is violet on its own, and the button.
+- **Inside this window, brand colour appears exactly twice**: the app icon, which is violet on its
+  own, and the button. `Theme.Colors.brand` is shared — About and the schedule use it too — so the
+  rule is about this window's composition, not the token.
 - **Support's views are Support's own.** `SupportActionButton` is private to `SupportWindowView`
   rather than reaching for Onboarding's card rows, which are that window's.
 

@@ -11,9 +11,9 @@ feature is enabled in Settings.
   `MDQuerySetMaxCount` is the reason the
   feature uses `MDQuery`; `NSMetadataQuery` has no source-result cap and can break the 100 MB budget on
   a broad filename.
-- **Everything under `Model/` stays Foundation-only and pure**, `FileSearchIgnoreList`'s `import Darwin`
-  and the `UniformTypeIdentifiers` of `FileSearchFilter` and `FileSearchPreviewKind` included — value
-  types with no environment of their own. `file-search-test` compiles the shipped files together with
+- **`Model/` is value types with no environment of their own**, `FileSearchIgnoreList`'s
+  `import Darwin` and the `UniformTypeIdentifiers` of `FileSearchFilter` and `FileSearchPreviewKind`
+  included. `file-search-test` compiles the shipped files together with
   the existing pure fuzzy scorer.
 - **Search is filename-only, and every list comes from Spotlight.** Blitz creates no content index,
   history, query cache, watcher or search data — the blank screen's Recently Used rows are one more
@@ -71,8 +71,8 @@ makes ties deterministic.
 
 **`kMDItemPath` is the only attribute read from a result.** `MDQuery` hands the path back from its own
 cache; every other attribute is a metadata fetch costing about half a millisecond, which over a thousand
-candidates was the whole of the old latency — a broad query spent a full second fetching content types
-alone. What a row needs beyond the path (is it a folder, is it hidden, is it an application) comes from
+candidates would be the whole of the latency — a broad query would spend a full second fetching
+content types alone. What a row needs beyond the path (is it a folder, is it hidden, is it an application) comes from
 one `resourceValues` stat, taken only for candidates the ignore list did not already drop. Measured on
 the developer home: 200 URLs stat in 13 ms, where 200 metadata fetches cost 200 ms.
 
@@ -148,11 +148,8 @@ cancels and clears the session as well.
 against the current user's Spotlight index and reports first-run and repeated-query latency; it stays
 outside `run-tests.sh` because filesystem contents and Spotlight state are machine-dependent.
 
-The 2026-09-12 baseline used a release-optimized standalone process against the developer home, after
-the path-only rewrite above. The blank screen's recents took 41 ms on a repeat and 184 ms cold; across
-`a`, `e`, `swift`, `pdf` and `project` on the shipped settings, first runs took 88–397 ms and repeated
-medians 54–107 ms. The 2026-08-11 measurement of the same queries, when every candidate's content type
-and invisible flag were fetched, was 192–831 ms first and 191–668 ms repeated. The benchmark runs every
+Run it as a release-optimized standalone process; the queries are `a`, `e`, `swift`, `pdf` and
+`project` on the shipped settings, plus the blank screen's recents. The benchmark runs every
 query twice, once on the shipped rules and once with five extra user patterns, and the second pass is
 within a few ms — so pattern matching is not where the time goes. The palette's debounce adds 120 ms
 before a typed query's measured interval and nothing before the recents one. These are local orders of

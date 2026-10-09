@@ -28,6 +28,13 @@ produces, rendered natively into the palette. No Electron, no browser, no Node.j
   JSON strings) cross in or out. Keep that boundary.
 - **`Resources/RaycastRuntime.generated.js` is emitted by `Scripts/raycast-runtime/build.mjs`** and
   committed — never edit it by hand; change `Scripts/raycast-runtime/src/` and rebuild.
+- **Isolation runs one way.** Extension views build on the shared design system — `Theme`'s tokens,
+  `InterfaceMetrics`, `Platform/`, primitives such as `.tooltip()`, used rather than `.help()` because
+  an AppKit tooltip never shows behind the non-activating panel — but nothing extension-specific is
+  ever lifted into shared code: a view, geometry or motion that says how an extension looks or moves
+  stays in `Features/Extensions/`, which is why `ExtensionActionsPanel`, `ExtensionGridGeometry` and
+  `ExtensionColors` exist. Another surface may render an extension's view as an opaque box — the
+  launcher's `ExtensionArgumentsAccessory` — but never reaches inside it.
 - **`ExtensionScreen` is the only place extension row order is decided**, so the flat palette selection
   keeps matching the visible rows — the same invariant every other palette screen holds.
 - **Off means off.** `extensionsEnabled` is opt-in, and `ExtensionManager.setEnabled(false)` stops the
@@ -85,7 +92,7 @@ timers, `fetch`, `URL`, `URLSearchParams`, `Blob`/`File`/`FormData`, `DOMExcepti
 
 ## The JS runtime
 
-`Blitz/Resources/RaycastRuntime.generated.js` (~200 KB minified) is **generated and committed**, the
+`Blitz/Resources/RaycastRuntime.generated.js` (minified) is **generated and committed**, the
 same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node. Sources live in
 [`Scripts/raycast-runtime/`](../../Scripts/raycast-runtime):
 
@@ -94,11 +101,18 @@ same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node
 | `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
 | `src/host.js` | the JS→Swift seam: async `hostCall`, blocking `hostCallSync`, logging |
 | `src/reconciler.js` | `react-reconciler` host config that commits into a JSON tree |
+| `src/async-component.js` | renders an async component — `withAccessToken`'s wrapped command — on React's concurrent path, where the thenable it suspended on survives |
+| `src/modules.js` | the `require` a bundle sees: `react`, `react/jsx-runtime`, `@raycast/api` and the Node builtins |
+| `src/polyfills.js` | globals JavaScriptCore lacks that bundles and React's scheduler assume |
+| `src/api/index.js` | assembles the `@raycast/api` module from the files below |
 | `src/api/components.js` | every `@raycast/api` component |
 | `src/api/system.js` | Clipboard, LocalStorage, Cache, Toast, preferences, environment |
 | `src/api/oauth.js` | `OAuth.PKCEClient`, `OAuth.TokenSet`, redirect url builders |
 | `src/api/enums.generated.js` | Icon / Color / Toast.Style / … extracted from the real `@raycast/api` types |
 | `src/node-shims.js` | `path`, `fs`, `os`, `child_process`, `crypto`, `zlib`, `util`, `events`, `buffer`, `punycode`, … |
+| `src/events.js` | Node's `events`, its own module so the stream core can build on it without an import cycle |
+| `src/streams.js` | Node's stream core — `Readable`, `Writable`, `Duplex`, `Transform`, `pipe`, backpressure — for object-mode pipelines such as `stream-json` |
+| `src/web-streams.js` | WHATWG streams, enough for a `fetch` body: readers, `pipeThrough`, `pipeTo`, async iteration, `TransformStream` |
 | `src/websocket.js` | the `WebSocket` global, and the raw socket a bundled `ws` attaches to |
 | `src/dgram.js` | a UDP socket that answers one thing: an mDNS lookup of a `.local` name |
 | `src/url.js`, `src/punycode.js`, `src/buffer.js` | web/Node primitives JavaScriptCore lacks |
@@ -161,19 +175,18 @@ evaluation and the blocking shims off the main actor.
 
 That thread is an `ExtensionJSThread` — a run loop on a dedicated `Thread` with an 8 MB stack —
 rather than a `DispatchQueue`, because a GCD worker's 512 KB stack is too shallow for JavaScriptCore's
-parser: sql.js's emscripten output threw `RangeError: Maximum call stack size exceeded` while compiling,
-so `__blitzCompile` returned nothing and the command died on `… is not a function`. Apple Passwords is
+parser: sql.js's emscripten output throws `RangeError: Maximum call stack size exceeded` while
+compiling on one, so `__blitzCompile` would return nothing and the command die on `… is not a function`. Apple Passwords is
 the reference case. JS timers are run-loop `Timer`s on that thread, scheduled and invalidated there.
 
 **One foreground command at a time, one context per command.** Starting a foreground command stops
-its predecessor and throws the whole `JSContext` away; the next launch boots a fresh one (~7 ms warm,
-measured). Scheduled `no-view` refreshes borrow this runtime while the palette is idle and yield to a
+its predecessor and throws the whole `JSContext` away; the next launch boots a fresh one. Scheduled `no-view` refreshes borrow this runtime while the palette is idle and yield to a
 foreground launch. Menu commands use a separate transient lane owned by the extension feature.
 
-Reusing a context was subtly broken. Timers are global and React's scheduler drives every commit
-through `setTimeout`, so cancelling an extension's leftover timers on teardown also cancelled the
-scheduler's — which latches `isMessageLoopRunning` and silently stops *every later session* from
-committing. The symptom was a command that worked once and then hung on "Starting…" forever. Leaving
+A reused context cannot be cleaned safely. Timers are global and React's scheduler drives every
+commit through `setTimeout`, so cancelling an extension's leftover timers on teardown would also
+cancel the scheduler's — which latches `isMessageLoopRunning` and silently stops *every later
+session* from committing, leaving a command that works once and then hangs on "Starting…". Leaving
 the timers alone instead leaks any interval an extension forgot to clear. Discarding the context avoids
 both, and as a bonus no module-level state in an extension bundle survives into its next run.
 
@@ -281,7 +294,7 @@ screens hold (see [palette.md](palette.md)).
   **Swift owns the selection** — the runtime keeps `makeSearchDropdown` hook-free so an extension may
   call `List.Dropdown({…})` directly — so `ExtensionManager.accessoryValues` keys it by render-node id
   and `seedSearchBarAccessory` reports the opening choice through `onChange` on the first commit, as
-  Raycast does; without that, a command filtering its rows by the value renders nothing (issue #511).
+  Raycast does; without that, a command filtering its rows by the value renders nothing.
   A `value` prop makes it controlled: the extension holds it, nothing is seeded, nothing reported.
   `storeValue` parks the pick in `ExtensionStorage.accessoryValues` — host UI state, outside the
   `LocalStorage` namespace JavaScript reads, and gone when the extension is uninstalled.
@@ -320,7 +333,7 @@ screens hold (see [palette.md](palette.md)).
   never pass through `resolve` at all. The palette is handed in as `[name: css]`, resolved once per
   appearance by `ExtensionImage.svgPalette(isDark:)` — a `Color` can only be flattened to sRGB on the
   main actor, which is exactly what the decode must not touch. Anything reading a decoded image keys
-  its `.task` on `ExtensionImage.LoadKey`, since the URL alone no longer says what will be drawn.
+  its `.task` on `ExtensionImage.LoadKey`, since the URL alone does not say what will be drawn.
   The feature's own fills live in `ExtensionColors` — never in `Theme`.
 - **Form** — label-left/control-right rows. Field values live in the extension (React owns them); every
   edit dispatches `onBlitzChange` and the resulting re-render is what updates the control, so
@@ -404,9 +417,9 @@ screens hold (see [palette.md](palette.md)).
   so both share one selection, and clicking a control takes focus as well as acting, which is what
   lets the two be mixed mid-form.
 
-  `Tests/ext-form-test.swift` drives activation rules, geometry and the parser; earlier interaction checks used
-  a Form Lab extension covering every control, sectioned and empty and 40-option lists, validation
-  errors, wrapping labels, and forms taller than the palette, in both appearances.
+  `Tests/ext-form-test.swift` drives activation rules, geometry and the parser; interaction is checked by
+  hand against a Form Lab extension covering every control, sectioned and empty and 40-option lists,
+  validation errors, wrapping labels, and forms taller than the palette, in both appearances.
 - **ActionPanel** — flattened (sections and submenus included) into `ExtensionActionsPanel`, the
   feature's own scrolling ⌘K panel. A separator marks each change of `ActionPanel.Section` node,
   titled or not, including to or from loose actions. A submenu's actions stay in their section, and
@@ -489,9 +502,10 @@ the launcher unticks the same checkbox. The
 extension's switch reads on while any command is shown, and flipping it shows or hides every one.
 
 A published row carries the extension's own title in `AppEntry.ownerName`, which both labels the row
-and makes the extension a keyword for every command it ships — `lucide` finds *Search Icons*. It is
-matched in the launcher's weakest literal band, so a third-party title can never take a query from a
-real app; see [launcher.md](launcher.md#owner-names).
+and makes the extension a keyword for every command it ships — `lucide` finds *Search Icons*. It lands
+in the [subtitle field](launcher.md#search-fields), and an exact subtitle is rule 5 of
+[the comparator](launcher.md#the-comparator): typing an extension's title lists its commands, while
+an app's exact title past three characters still wins by rule 3.
 
 ## Installing extensions
 
@@ -581,8 +595,8 @@ install one extension would be absurd.
 
 **Downloading is a walk to the folder's tree, then one recursive listing.** The contents API caps a
 directory at 1000 entries without saying so, and costs a call per directory against GitHub's anonymous
-budget of 60 an hour per IP — Color Picker has 17 directories, so an install used to spend 18 calls and
-three of them exhausted the hour. Walking `<path>` to its sha and asking for that tree with
+budget of 60 an hour per IP — a per-directory walk of an extension with 17 directories spends 18
+calls, so three installs would exhaust the hour. Walking `<path>` to its sha and asking for that tree with
 `recursive=1` costs one call per path segment plus one, whatever the folder holds, and the file bodies
 come from `raw.githubusercontent.com`, which the API budget does not count. A `truncated` listing is a
 prefix, so it throws rather than install part of an extension. A 404 from the API is reported as a
@@ -614,7 +628,7 @@ that throws on use; the Swift helper still compiles. `ExtensionInstaller.environ
 environment by looking for a `Cargo.toml`, so every other extension keeps `dist`'s minification,
 external source maps and type check.
 
-`-e dist` also type-checks, so an extension that does not compile now fails at the build rather than
+`-e dist` also type-checks, so an extension that does not compile fails at the build rather than
 at the copy. An extension without `ray` falls back to its own build script and installs from the
 source, which is the only contract such an extension offers. Lifecycle scripts are skipped on purpose: the
 build script is the contract, a `postinstall` is code nobody asked to run. The package manager is
@@ -683,8 +697,8 @@ along with the extension's stored preferences and its chosen icon.
 
 A user alias binds to a **command**, keyed by the launcher entry id
 (`extension:<extension>/<command>`) — the same key the shortcut, favorite and ranking stores use.
-Settings › Extensions › the command › Alias is the writer; `AppIndex` already ranks it as
-`.userAlias`. The field sits beside the shortcut recorder on the command's title row, the same
+Settings › Extensions › the command › Alias is the writer; `AppIndex` hands it to
+`LauncherOrder.Signals.alias`, the same ranking every other entry's alias gets. The field sits beside the shortcut recorder on the command's title row, the same
 pairing Settings ▸ Commands uses. It dims when the command is hidden from launcher search — the
 global Show in launcher switch, or this extension's — because the ranker never sees the entry then.
 
@@ -832,8 +846,8 @@ The `fs` functions hand URL arguments to that same validator: a URL whose scheme
 throws `ERR_INVALID_URL_SCHEME` instead of degrading to its pathname, and `fs.existsSync` counts
 that as absence, like Node. Raycast's Visual Studio Code extension leans on the guard — a
 `vscode-remote://` workspace whose stripped pathname exists locally (an SSH host opened at `/`
-always does) would otherwise pass `isFolderEntry` and reach `fileURLToPath`, which took the whole
-Search Recent Projects command down.
+always does) would otherwise pass `isFolderEntry` and reach `fileURLToPath`, which throws and takes
+the whole Search Recent Projects command down.
 
 A bundle that ships its own HTTP client rather than calling `fetch` — node-fetch travels inside
 `@raycast/utils`, and axios has a Node adapter — reaches the network through `http.request`, so the
@@ -924,7 +938,10 @@ Scripts/run-tests.sh ext-test
 .build/harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
 ```
 
-`ext-test` compiles the real engine sources — there is no copy to keep in sync. `EXT_TEST_VERBOSE=1`
+`ext-test` compiles the real engine sources — there is no copy to keep in sync — and
+`Tests/ext-menu-bar-test.swift` and `Tests/ext-fetch-test.swift` compile into it rather than running
+as harnesses of their own; `Tests/ext-list-key-test.swift` compiles into `ext-form-test` the same
+way. `EXT_TEST_VERBOSE=1`
 prints the extension's own console output; `EXT_TEST_SETTLE_MS=8000` gives a slow command longer;
 `EXT_TEST_PREFS='{"version":"v8"}'` stands in for preferences the user set in Settings, which is the
 only way to reach a code path an extension gates on a preference with no manifest default. Both
@@ -941,13 +958,13 @@ EXT_TEST_MENU_BAR=1 .build/harness/ext-test \
 
 ### Debugging a failing extension
 
-1. Run it through `node test.mjs <dir>` for a full render-tree dump, then through `/tmp/ext-test <dir>`
+1. Run it through `node test.mjs <dir>` for a full render-tree dump, then through `.build/harness/ext-test <dir>`
    to confirm the same behaviour under JavaScriptCore.
 2. `EXT_TEST_VERBOSE=1` surfaces the extension's `console.error`, which is usually where an extension
    explains itself.
 3. Build the runtime with `--dev` to get unminified React errors instead of `Minified React error #130`.
 
-Two JavaScriptCore differences that have already bitten and are worth remembering: `Error.stack`
+Two JavaScriptCore differences worth remembering: `Error.stack`
 contains frames only (V8 repeats the message, so the headline has to be prepended by hand), and
 `MessageChannel` is absent, so React's scheduler falls back to `setTimeout`.
 
@@ -1007,11 +1024,12 @@ the same tile `IconCache` draws for the built-in commands, so the row reads as p
 
 An extension's own artwork has its own cache — `Service/ExtensionIconCache.swift` — rather than
 living in `IconCache`. That split is the point: `IconCache` stays the app-and-symbol layer and knows
-nothing about extensions. It lends out only the pixel work (`displayPixel`, `artworkExtent`,
-`paintedExtent`, `rasterized`), so there is one definition of how an icon is measured and drawn.
+nothing about extensions. It lends out only the pixel work — `fitted`, `artwork(atPath:extent:)`
+with its cached and async twins, and `appIconExtent` — so there is one definition of how an icon is
+measured and drawn.
 
 `ExtensionIconCache.extent` fits that artwork to **0.76** of the canvas, where an app icon and a
-symbol tile both sit at `IconCache.artworkExtent` **0.83**. The gap is deliberate and optical, not a
+symbol tile both sit at `IconCache.appIconExtent` **0.83**. The gap is deliberate and optical, not a
 size correction — measured, all three paths already produce an identical 40pt box.
 
 Every macOS 26 app icon is a squircle with a glyph inside it, and the ground disappears into the

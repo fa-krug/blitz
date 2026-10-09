@@ -4,8 +4,6 @@ A palette sub-screen (reached like Clipboard / Calculator History) presenting a 
 
 ## Invariants
 
-- **`Model/` stays Foundation-only** — `EmojiCatalog`, `EmojiGridGeometry` and the generated dataset are
-  compiled by `emoji-test`, so an `import AppKit` there breaks the test suite.
 - **`EmojiData.generated.swift` and `Resources/EmojiKeywords/` are emitted by `node Scripts/gen-emoji.js`**
   (Node 18+ for global `fetch`) and are never edited by hand. Regenerate and commit instead.
 - **Keyword packs are plain files, never `.lproj` folders.** One localization folder in the bundle
@@ -72,7 +70,7 @@ an emptied field clears the emoji's terms. `EmojiKeywordStore` keeps them in `em
 under Application Support, keyed by base glyph and kept out of the generated dataset so a regeneration
 never drops them. `AppCore` pushes every change into `EmojiIndex.setCustomKeywords`. The configuration
 backup carries them beside the pins, and an import replaces them under the same bounds a load applies.
-Settings › Emoji › Search counts them and offers Reset….
+Settings › Emoji & Symbols › Search counts them and offers Reset….
 
 ## Rendering
 

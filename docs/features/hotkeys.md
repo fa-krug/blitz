@@ -37,8 +37,8 @@ the keycap rendering — only the _engine_ differs.
   System Settings and binds it afterwards; nothing writes `com.apple.symbolichotkeys`.
 - `KeyShortcut`'s hand-written `init(from:)` is a correctness seam, not a format one: it routes every
   decode through the initializer that masks device modifier bits off.
-- **The modifier-only detectors stay Foundation-only and pure** for `hotkey-test`, with the clock
-  injected as a parameter. Every `CGEvent` call lives in
+- **The modifier-only detectors take the clock as a parameter**, so `hotkey-test` drives them
+  deterministically. Every `CGEvent` call lives in
   `Service/ModifierTapMonitor.swift`, which is listen-only, installs *only* while a modifier-only
   shortcut is bound, and never prompts for Accessibility.
 - **`KeyShortcut.hyperChord(includesShift:)` is the only spelling of the Hyper chord**, read by both the
@@ -167,7 +167,7 @@ combo hotkeys fire from Hyper+key with no extra registration.
 
 Which key is chosen persists as a `HyperKey` string raw value in `AppSettings` — renaming a case is a
 migration, and a removed case decodes to `.none`. **F-keys are deliberately not candidates:** the
-top-row media functions fire *below* the tap, so binding F1 as Hyper still dimmed the display.
+top-row media functions fire *below* the tap, so binding F1 as Hyper would still dim the display.
 
 ### Caps Lock has to stop being Caps Lock
 
