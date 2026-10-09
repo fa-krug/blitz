@@ -168,7 +168,10 @@ the option to hide a current event immediately or after a chosen delay.
 through the join card's own ⌘K menu instead, where the meeting they act on is on screen.
 
 A miss reports through the HUD (`Nothing to join right now`), not a dialog: it is transient and there
-is nothing to acknowledge.
+is nothing to acknowledge. So does Create Event with the feature off. With it on but access denied,
+the fix is in System Settings, so a failure dialog offers **Open Settings** to Privacy & Security →
+Calendars; access TCC has no record of re-runs `setCalendarEnabled`'s consent path instead, since
+Settings cannot list an app that never asked.
 
 ## Reading the store
 
@@ -345,8 +348,9 @@ disagree with it.
 `CalendarStore.access` is a snapshot, refreshed on `start`, on every `reload` and after a request —
 TCC announces nothing when a grant changes in Settings. `refreshAccess()` is why anything that acts on
 `access` outside those three re-reads first: the enable path, so its guard cannot bounce off a stale
-`.granted` and leave a dead button, and the Calendar pane on appear, so a grant made in Settings while
-the feature was off is not reported as still missing. EventKit caches its status per process, so a
+`.granted` and leave a dead button, the Calendar pane on appear, so a grant made in Settings while
+the feature was off is not reported as still missing, and Create Event, so its report names the
+grant as it is now. EventKit caches its status per process, so a
 grant made from Blitz still reads `.notDetermined` until relaunch; `Permissions` remembers the
 request's own answer and reports that type as granted, for reminders as well as the calendar.
 

@@ -313,14 +313,25 @@ final class RemindersCoordinator {
 
     // MARK: - Reports
 
-    /// Both the switch and the grant are needed; a miss says which one, through the HUD.
+    /// Both the switch and the grant are needed; a miss says which one is missing.
     private func isReady() -> Bool {
-        store.refreshAccess()
-        guard settings.remindersEnabled, store.access == .granted else {
+        guard settings.remindersEnabled else {
             report("Turn Reminders on in Settings first")
             return false
         }
-        return true
+        store.refreshAccess()
+        switch store.access {
+        case .granted:
+            return true
+        case .notDetermined:
+            paletteCoordinator.hidePalette(restoreFocus: false)
+            // System Settings lists no app TCC has no record of, so only asking again can grant it.
+            setRemindersEnabled(true)
+        case .denied:
+            paletteCoordinator.hidePalette(restoreFocus: false)
+            Task { await reportAccessDenied() }
+        }
+        return false
     }
 
     private func isAIReady() -> Bool {
@@ -329,6 +340,15 @@ final class RemindersCoordinator {
             return false
         }
         return true
+    }
+
+    /// Only System Settings can undo a denial, so unlike a switch left off this offers the way.
+    private func reportAccessDenied() async {
+        let openSettings = await core.reportFailure(
+            title: "Blitz Needs Reminders Access",
+            message: "macOS has not given Blitz access to your reminders.",
+            symbol: "checklist", recovery: "Open Settings")
+        if openSettings { Permissions.openRemindersSettings() }
     }
 
     private func reportNoList() async {

@@ -117,8 +117,11 @@ to-do list long enough to need search would crowd apps out of the root.
 | Create Reminder | Prompts for a title, notes and a due date, and writes the reminder. | yes |
 | Smart Reminder | Takes one sentence in its inline field, writes the AI model's reminder, and previews it in a banner. | yes |
 
-New reminders go on the default Reminders list. A miss — the feature off, no access, AI off — reports
-through the HUD, not a dialog.
+New reminders go on the default Reminders list. A switch left off — Reminders or AI — reports
+through the HUD, not a dialog: Settings is where to go, and there is nothing to acknowledge. Denied
+access is different, because the fix is in System Settings, so it reports through a failure dialog
+whose **Open Settings** goes to Privacy & Security → Reminders. Access TCC has no record of cannot be
+fixed there at all, so it re-runs `setRemindersEnabled`'s consent path instead.
 
 ## Chat tools
 
