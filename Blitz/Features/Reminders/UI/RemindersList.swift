@@ -98,7 +98,7 @@ private struct ReminderRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Complete")
+            .tooltip("Complete", alignment: .leading)
             .accessibilityLabel("Complete \(reminder.title)")
             Text(reminder.title)
                 .font(metrics.typography.rowTitle)

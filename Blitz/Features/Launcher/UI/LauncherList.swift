@@ -277,6 +277,8 @@ private struct AppRow: View {
             Text(app.name)
                 .font(metrics.typography.rowTitle)
                 .lineLimit(1)
+                // A long subtitle, alias or keycap run truncates before the name does.
+                .layoutPriority(1)
             if let subtitle = app.subtitle {
                 Text(subtitle)
                     .font(metrics.typography.rowTrailing)
@@ -327,5 +329,9 @@ private struct AppRow: View {
                 .fill(fill)
         )
         .armedHover($hovered)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(app.name)
+        .accessibilityValue(app.kindLabel)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

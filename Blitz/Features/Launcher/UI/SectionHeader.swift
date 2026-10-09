@@ -21,7 +21,8 @@ struct SectionHeader: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(configureHelp)
+                .tooltip(configureHelp, alignment: .leading)
+                .accessibilityLabel(configureHelp)
             }
             Spacer(minLength: 0)
         }
