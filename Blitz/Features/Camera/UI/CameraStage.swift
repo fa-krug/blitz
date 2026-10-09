@@ -11,22 +11,13 @@ struct CameraStage: View {
         case .live(let capture):
             CameraFeed(session: capture, mirrored: mirrored)
         case .denied:
-            unavailable("Blitz has no access to the camera.")
+            EmptyResults(
+                text: "Blitz has no access to the camera", symbol: "video.slash",
+                hint: "Allow Blitz under Privacy & Security in System Settings",
+                action: .init(title: "Open Privacy Settings") { Permissions.openCameraSettings() })
         case .noCamera:
-            unavailable("No camera on this Mac.")
+            EmptyResults(text: "No camera on this Mac", symbol: "video.slash")
         }
-    }
-
-    private func unavailable(_ message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            SymbolImage(name: "video.slash", size: Theme.Size.dialogIcon)
-            Text(message)
-                .font(Theme.Typography.rowTrailing)
-                .multilineTextAlignment(.center)
-        }
-        .foregroundStyle(Theme.Colors.textSecondary)
-        .padding(Theme.Spacing.xxl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

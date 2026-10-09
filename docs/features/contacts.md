@@ -60,6 +60,10 @@ a disc — Blitz never reads photos.
 Email Address for the first of each, Open in Contacts, and Show in / Remove from Launcher Search. A
 miss — no number, nothing to place calls — reports through the HUD, not a dialog.
 
+Without access the empty list offers the way back, as Calendar's and Reminders' do: a denial opens
+**Privacy Settings**, and `.notDetermined` — which System Settings cannot list — offers **Allow
+Access**, rerunning `setContactsEnabled(true)` with the palette hidden.
+
 ## Launcher search
 
 A marked card is an `AppEntry.Kind.contact` entry under its own **Contacts** section, published by

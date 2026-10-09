@@ -356,3 +356,7 @@ lists no app that has never asked, so a `notDetermined` state that could only be
 a dead end. Both entry points funnel through `CalendarCoordinator.setCalendarEnabled`, so Blitz's
 dialog still comes first. A denial is the one state that Settings alone can undo, and both panes send
 it there.
+
+My Schedule's empty state makes the same split, so a list Blitz cannot read is never a dead end: a
+denial offers **Open Privacy Settings** (`Permissions.openCalendarSettings`), and `.notDetermined`
+offers **Allow Access**, which hides the palette and runs `setCalendarEnabled(true)` again.

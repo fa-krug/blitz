@@ -102,6 +102,10 @@ colour, completes the reminder on a click.
 | ⌘N | New Reminder |
 | ⌘⌫ | Delete Reminder — always confirmed: it goes from every device the list syncs to |
 
+A list Blitz cannot read says why and offers the way out, the same split Calendar makes: a denial
+offers **Open Privacy Settings**, and `.notDetermined` — which System Settings cannot list — offers
+**Allow Access**, rerunning `setRemindersEnabled(true)` with the palette hidden.
+
 Reminders are not individual launcher entries, unlike meetings: My Reminders is one search away, and a
 to-do list long enough to need search would crowd apps out of the root.
 

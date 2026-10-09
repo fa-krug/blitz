@@ -55,7 +55,7 @@ struct ContactsScreen: PaletteScreen {
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
         let rows = rows
         if rows.isEmpty {
-            EmptyResults(text: emptyMessage)
+            emptyState
         } else {
             ContactsList(
                 groups: ContactDirectory.grouping(rows),
@@ -72,11 +72,35 @@ struct ContactsScreen: PaletteScreen {
     }
 
     /// Names why the list is empty: no access reads very differently from an empty address book.
-    private var emptyMessage: String {
-        if store.access != .granted { return "Blitz has no access to your contacts" }
-        if !store.hasLoaded { return "Loading contacts…" }
-        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty { return "No matching contacts" }
-        return "No contacts"
+    private var emptyState: EmptyResults {
+        switch store.access {
+        case .denied:
+            return EmptyResults(
+                text: "Blitz has no access to your contacts", symbol: "person.crop.circle",
+                hint: "Allow Blitz under Privacy & Security in System Settings",
+                action: .init(title: "Open Privacy Settings") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    Permissions.openContactsSettings()
+                })
+        // Settings lists no app TCC has no record of, so only asking again gets Blitz there.
+        case .notDetermined:
+            return EmptyResults(
+                text: "Blitz hasn't been given access to your contacts", symbol: "person.crop.circle",
+                hint: "macOS asks once before Blitz can read them",
+                action: .init(title: "Allow Access") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    core.contactsCoordinator.setContactsEnabled(true)
+                })
+        case .granted:
+            break
+        }
+        if !store.hasLoaded {
+            return EmptyResults(text: "Loading contacts…", symbol: "person.crop.circle")
+        }
+        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            return EmptyResults(text: "No matching contacts")
+        }
+        return EmptyResults(text: "No contacts", symbol: "person.crop.circle")
     }
 }
 
