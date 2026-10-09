@@ -13,9 +13,7 @@ export function configureSystem(info) {
 }
 
 export function unsupported(what) {
-  return Promise.reject(
-    new Error(`${what} is not supported in Blitz extensions yet. See docs/extensions.md.`),
-  );
+  return Promise.reject(new Error(`${what} is not supported in Blitz yet.`));
 }
 
 // ─── Clipboard ──────────────────────────────────────────────────────

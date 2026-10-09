@@ -137,10 +137,11 @@ const reconciler = Reconciler(hostConfig);
 /// go through `handlers`, which is rebuilt on each serialization so a dispatch always hits the
 /// callback from the newest render.
 export class Surface {
-  constructor(onTree, onError) {
+  constructor(onTree, onError, onActionError = onError) {
     this.handlers = new Map();
     this.onTree = onTree;
     this.onError = onError;
+    this.onActionError = onActionError;
     this.container = { id: 0, type: "#root", props: {}, children: [], onCommit: () => this.flush() };
     this.root = reconciler.createContainer(
       this.container,
@@ -175,10 +176,18 @@ export class Surface {
     this.onTree({ children });
   }
 
+  /// A throwing handler is the action's failure, not the screen's: the tree it rendered stays up.
   dispatch(handlerId, args, onComplete) {
     const handler = this.handlers.get(handlerId);
     if (!handler) return false;
-    Promise.resolve(handler(...args)).then(() => onComplete?.(), (error) => this.onError(error));
+    let result;
+    try {
+      result = handler(...args);
+    } catch (error) {
+      this.onActionError(error);
+      return true;
+    }
+    Promise.resolve(result).then(() => onComplete?.(), (error) => this.onActionError(error));
     return true;
   }
 
