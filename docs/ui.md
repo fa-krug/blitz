@@ -818,6 +818,14 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   to its first suspension, so without the yield they land in the first frame anyway. Measured while
   General still held Appearance and Hyper Key, it brought the first paint from ~170 ms to ~110. A
   pending search reveal into the pane mounts them at once, so the jump has its row to scroll to.
+- **The sidebar's highlight moves before the pane builds.** `SettingsDetailView` keeps showing the
+  previous pane until a `.task(id: navigation.tab)` past `Task.yield()` catches it up, so a click is
+  answered in ~10 ms and the pane follows on the next frame, as in System Settings; a pane that
+  paints in one update took the highlight down with it for 100–280 ms.
+- **A pane never asks TCC on the main actor.** A status read is a round trip to TCC — Contacts costs
+  ~17 ms every time, Accessibility and Calendars ~45 ms on the first — so the Permissions pane reads
+  all four together in a `Task.detached`, polls that each second while open (nothing announces a
+  grant made in System Settings), and opens on the last read; that took it from ~280 ms to ~65.
 
 ### The window-layout editor
 
