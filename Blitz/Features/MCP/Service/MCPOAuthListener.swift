@@ -3,12 +3,19 @@ import Network
 
 @MainActor
 final class MCPOAuthListener {
-    nonisolated static let redirectURI = "http://127.0.0.1:4962/callback"
+    nonisolated static let callbackPort: NWEndpoint.Port = 4962
+    nonisolated static let redirectURI = "http://127.0.0.1:\(callbackPort.rawValue)/callback"
+    private let port: NWEndpoint.Port
     private var task: Task<Void, Never>?
     private var ready: CheckedContinuation<Void, Error>?
     private var reply: CheckedContinuation<String, Error>?
     private var result: Result<String, Error>?
     private var accepted = false
+
+    /// Only the harness binds elsewhere: a registered client names `redirectURI`, so sign-in can't.
+    init(port: NWEndpoint.Port = callbackPort) {
+        self.port = port
+    }
 
     isolated deinit { task?.cancel() }
 
@@ -18,7 +25,7 @@ final class MCPOAuthListener {
         guard result == nil else { throw CancellationError() }
         let listener = try NetworkListener(
             using: .parameters { TCP() }
-                .localEndpoint(.hostPort(host: .ipv4(.loopback), port: 4962)))
+                .localEndpoint(.hostPort(host: .ipv4(.loopback), port: port)))
         listener.newConnectionLimit = 16
         try await withTaskCancellationHandler {
             try Task.checkCancellation()

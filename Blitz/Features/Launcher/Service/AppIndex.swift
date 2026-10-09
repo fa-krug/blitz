@@ -415,6 +415,9 @@ final class AppIndex {
         let minute: Int
     }
 
+    /// Rows a typed launcher search shows; every row costs layout on each keystroke.
+    static let searchResultLimit = 50
+
     /// Repeated renders for the same query reuse the ranking instead of re-matching every frame.
     @ObservationIgnored private var matchMemo = Memo<MatchKey, [AppEntry]>()
     @ObservationIgnored private var resultsMemo = Memo<ResultsKey, Results>()
@@ -782,7 +785,11 @@ final class AppIndex {
         return resultsMemo.value(for: key) {
             // Filtering stays downstream of `matches` so that memo is never keyed on hidden state.
             let visible = matches(q).filter(visibility.isVisible)
-            guard q.isEmpty else { return Results(entries: visible) }
+            guard q.isEmpty else {
+                // Capped after visibility so hidden entries take no slot; a category stays whole.
+                guard AppEntry.Kind.named(by: q) == nil else { return Results(entries: visible) }
+                return Results(entries: Array(visible.prefix(Self.searchResultLimit)))
+            }
             let split = favorites.ordered(visible)
             let suggested =
                 showsSuggestions ? suggestions(from: split.rest, usage: usage, hotKeys: hotKeys) : []

@@ -34,6 +34,10 @@ because each harness already roots its scratch state somewhere of its own — a 
 `temporaryDirectory`, a `UserDefaults(suiteName:)`, or `NSPasteboard.withUniqueName()` — and a new
 harness must keep doing that rather than reach for a fixed path.
 
+The binaries, logs and pass/fail markers land in the checkout's own `.build/harness/` (gitignored),
+so worktrees running the suite at the same time never overwrite each other's builds or results.
+A shared `$TMPDIR/blitz-harness` used to make one worktree's run fail another's.
+
 Two consequences worth knowing. Status lines arrive in **completion order**, not the order the `run`
 lines are written; and a failing harness's compiler diagnostics or assertion output are replayed
 together at the bottom, under its name, rather than streamed where they happened. That is deliberate:
@@ -156,9 +160,11 @@ exits does. `installed-cli-stub.js` reads the same way for the one turn shape th
 Claude's consent channel is a reply on stdin in the middle of a turn, so the stub has to be sitting
 on the pipe when it arrives.
 
-`mcp-oauth-test` starts `Tests/ai-fixtures/mcp-oauth-stub.js` on `127.0.0.1:4963` and tests the
-single-use callback on `127.0.0.1:4962`. Both ports must be free; the harness never chooses another
-port. Its Keychain scope is unique to each run and removed on completion.
+`mcp-oauth-test` starts `Tests/ai-fixtures/mcp-oauth-stub.js` on a port the kernel picks (it prints
+`ready <port>`) and binds the single-use callback through `MCPOAuthListener(port:)` on another free
+port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: it made concurrent
+runs from two checkouts fail each other, and a sign-in in a running Blitz fail the harness. Its
+Keychain scope is unique to each run and removed on completion.
 
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
@@ -334,6 +340,8 @@ Measured at the end of the 2026 refactor, on `main`. Useful as orders of magnitu
 | `ClipboardStore.pinnedItems` | 27–127 µs per uncached search, 1,000-row window — no cache earns its invalidation yet |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
+| Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |
+| Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter (from 43 and 52 before `PaletteSurface`); an arrow step 14–20 ms, from 26 |
 
 Launch time, allocation counts and RSS have never been captured as numbers. The signposts are in place,
 so any of them can be taken from `main` whenever a change makes it worth knowing.

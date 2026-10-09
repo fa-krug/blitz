@@ -1,5 +1,5 @@
 const http = require('node:http');
-const base = 'http://127.0.0.1:4963';
+let base;
 let refreshes = 0;
 let calls = 0;
 let redirects = 0;
@@ -61,7 +61,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.url === '/mcp-away') {
-    res.writeHead(307, { Location: 'http://localhost:4963/unexpected' });
+    res.writeHead(307, { Location: base.replace('127.0.0.1', 'localhost') + '/unexpected' });
     return res.end();
   }
   if (req.url === '/unexpected') { redirects++; return send(200, {}); }
@@ -86,4 +86,8 @@ const server = http.createServer(async (req, res) => {
   send(404, {});
 });
 server.on('error', error => { console.error(error.code); process.exit(1); });
-server.listen(4963, '127.0.0.1', () => console.log('ready'));
+// Port 0: the kernel picks, so concurrent runs from other checkouts never contend for one.
+server.listen(0, '127.0.0.1', () => {
+  base = `http://127.0.0.1:${server.address().port}`;
+  console.log(`ready ${server.address().port}`);
+});

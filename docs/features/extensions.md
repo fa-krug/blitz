@@ -24,7 +24,7 @@ produces, rendered natively into the palette. No Electron, no browser, no Node.j
   its snapshot. Reload a fresh context when its menu opens; retain it until the menu closes and any
   asynchronous action and host calls finish. Never keep a context alive to preserve handlers.
 - **`ExtensionRuntime`'s `@unchecked Sendable` is load-bearing.** Every `JSContext` / `JSValue` touch
-  happens on its private serial queue, and only plain `Sendable` values (`RenderValue`, `RenderTree`,
+  happens on its own private thread, and only plain `Sendable` values (`RenderValue`, `RenderTree`,
   JSON strings) cross in or out. Keep that boundary.
 - **`Resources/RaycastRuntime.generated.js` is emitted by `Scripts/raycast-runtime/build.mjs`** and
   committed — never edit it by hand; change `Scripts/raycast-runtime/src/` and rebuild.
@@ -53,7 +53,7 @@ runs the bundle, and renders the React tree it produces:
         │                                 + the @raycast/api shim + Node/web polyfills
         │  render tree as JSON      ▲  dispatch(handlerId, args)
         ▼                          │
-  ExtensionRuntime (JavaScriptCore, private serial queue)
+  ExtensionRuntime (JavaScriptCore, private 8 MB-stack thread)
         │  RenderTree / RenderValue (Sendable)     ▲  host calls
         ▼                                          │
   ExtensionManager (@MainActor) ── ExtensionHostBridge ── Clipboard / storage / toasts / fetch / exec
@@ -109,7 +109,7 @@ Two host-call flavours:
   `fetch`, `exec`, `oauth`. Swift answers later through `__blitz.settle`, so the JS thread never blocks on the
   UI.
 - **Blocking** (`invokeSync`) for the synchronous Node shims only — `fs.readFileSync`,
-  `execSync`, `createHash`, `gunzipSync`. Safe because Swift services these entirely on the JS queue;
+  `execSync`, `createHash`, `gunzipSync`. Safe because Swift services these entirely on the JS thread;
   nothing there touches the main actor, so a blocking answer cannot deadlock.
 
 ## The Swift host
@@ -155,9 +155,15 @@ Two host-call flavours:
 | `Model/ExtensionActionKeys.swift` | which actions ↵ and ⌘↵ fire, and the keycaps the ⌘K panel draws for them |
 
 `ExtensionRuntime` is `@unchecked Sendable` deliberately and narrowly: every `JSContext` / `JSValue`
-touch happens on one private serial queue, and only plain `Sendable` values cross in or out
+touch happens on one private thread, and only plain `Sendable` values cross in or out
 (`RenderValue` for arguments, `RenderTree` for output, JSON strings for results). That keeps extension
 evaluation and the blocking shims off the main actor.
+
+That thread is an `ExtensionJSThread` — a run loop on a dedicated `Thread` with an 8 MB stack —
+rather than a `DispatchQueue`, because a GCD worker's 512 KB stack is too shallow for JavaScriptCore's
+parser: sql.js's emscripten output threw `RangeError: Maximum call stack size exceeded` while compiling,
+so `__blitzCompile` returned nothing and the command died on `… is not a function`. Apple Passwords is
+the reference case. JS timers are run-loop `Timer`s on that thread, scheduled and invalidated there.
 
 **One foreground command at a time, one context per command.** Starting a foreground command stops
 its predecessor and throws the whole `JSContext` away; the next launch boots a fresh one (~7 ms warm,
@@ -208,11 +214,11 @@ settled content while loading. Button changes wait until the menu closes so its 
 under the pointer.
 The session stays alive while the menu is open. After a settled render or menu
 closure, a 100 ms coalescing delay lets React commit effects and host calls drain before releasing the
-context; a further 50 ms after the drain lets their results render. The runtime queue drains
+context; a further 50 ms after the drain lets their results render. The runtime thread drains
 temporary Objective-C objects after each work item, including
 context teardown. Loading and closed-menu actions have a 60-second deadline; an open, settled menu is exempt.
 This bounds asynchronous work, but cannot interrupt an extension stuck in synchronous JavaScript or a
-blocking Node shim on the runtime queue.
+blocking Node shim on the runtime thread.
 
 A saved button restores after relaunch without executing JavaScript; only its next due refresh boots
 the runtime. Activation and the saved button live on the command's own record in
@@ -803,7 +809,7 @@ extends the latter at module scope, and running the callback in place is the who
 
 **WebAssembly** — `compile`, `instantiate` and their streaming forms run through the synchronous
 `Module` and `Instance` constructors. JavaScriptCore settles the promise forms from a run-loop timer on
-the thread that owns the VM, and the runtime's queue never spins one, so they stayed pending forever.
+the thread that owns the VM, and the runtime's former GCD queue never spun one, so they stayed pending.
 sql.js loads that way; Zotero is the reference case, whose Search Database sat on Loading… with no
 error.
 
@@ -915,7 +921,7 @@ node test.mjs ~/.config/raycast/extensions/<uuid> [command]
 
 # 3. the real Swift engine, against JavaScriptCore
 Scripts/run-tests.sh ext-test
-"${TMPDIR:-/tmp}"/blitz-harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
+.build/harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
 ```
 
 `ext-test` compiles the real engine sources — there is no copy to keep in sync. `EXT_TEST_VERBOSE=1`
@@ -929,7 +935,7 @@ round-trips and the Provider Usage action, with live fetches but a recorded `lau
 status items stay hidden so a test run cannot interfere with the running app's menus:
 
 ```sh
-EXT_TEST_MENU_BAR=1 "${TMPDIR:-/tmp}/blitz-harness/ext-test" \
+EXT_TEST_MENU_BAR=1 .build/harness/ext-test \
   "$HOME/Library/Application Support/de.fa-krug.blitz.dev/extensions/opencodex-usage" usage-menu-bar
 ```
 

@@ -62,7 +62,7 @@ final class ExtensionFetcher: Sendable {
     }
 }
 
-/// `ExtensionNodeShims` launches a child on the JS queue; `wait` collects it off that queue.
+/// `ExtensionNodeShims` launches a child on the JS thread; `wait` collects it off that thread.
 enum ExtensionAsyncProcess {
     enum ProcessError: LocalizedError {
         case notStarted

@@ -200,6 +200,7 @@ struct ExtensionTests {
         await searchAccessoryRuntimeChecks()
         await nodeContractChecks()
         await webAssemblyChecks()
+        await deepNestingChecks()
         await asyncComponentChecks()
         await menuBarRuntimeChecks()
         await menuBarHostChecks()
@@ -1519,7 +1520,7 @@ struct ExtensionTests {
         runtime.shutdown()
     }
 
-    /// sql.js loads through `WebAssembly.instantiate`, whose promise never settled on the JS queue.
+    /// sql.js loads through `WebAssembly.instantiate`, whose promise never settled on the JS thread.
     @MainActor
     static func webAssemblyChecks() async {
         let (runtime, host, recorder) = makeRuntime()
@@ -1546,6 +1547,41 @@ struct ExtensionTests {
             "WebAssembly promise APIs settle", host.huds == ["true 14 true"],
             "\(host.huds) \(recorder.failures.joined(separator: "|"))")
         await runtime.stop(session: "wasm")
+        runtime.shutdown()
+    }
+
+    /// sql.js overflowed a GCD worker's 512 KB stack in the parser, so `__blitzCompile` got nothing.
+    @MainActor
+    static func deepNestingChecks() async {
+        let (runtime, host, recorder) = makeRuntime()
+        try? await runtime.boot(
+            config: .current(supportDirectory: FileManager.default.temporaryDirectory))
+        let depth = 400
+        let nested = String(repeating: "(function () {", count: depth)
+            + String(repeating: "})", count: depth)
+        let command = """
+            \(nested);
+            module.exports.default = async () => {
+              await require("@raycast/api").showHUD("deep bundle parsed");
+            };
+            """
+        await runtime.start(
+            session: "deep", code: command, file: URL(fileURLWithPath: "/tmp/deep.js"),
+            mode: .noView, context: launchContext(mode: .noView))
+        await settle()
+        check(
+            "deeply nested bundle compiles", host.huds == ["deep bundle parsed"],
+            "\(host.huds) \(recorder.failures.joined(separator: "|"))")
+        await runtime.stop(session: "deep")
+
+        await runtime.start(
+            session: "broken", code: "module.exports.default = () => {", file: URL(fileURLWithPath: "/tmp/broken.js"),
+            mode: .noView, context: launchContext(mode: .noView))
+        await settle()
+        check(
+            "a bundle that fails to compile reports why",
+            recorder.failures.contains { $0.contains("SyntaxError") }, recorder.failures.joined(separator: "|"))
+        await runtime.stop(session: "broken")
         runtime.shutdown()
     }
 
