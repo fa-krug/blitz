@@ -75,6 +75,11 @@ struct QuicklinkListScreen: PaletteScreen {
         switch shortcut {
         case .commandDelete: return delete(at: selection)
         case .pin: return pin(at: selection)
+        case .newItem:
+            core.paletteCoordinator.hidePalette(restoreFocus: false)
+            core.quicklinkCoordinator.editQuicklink(
+                nil, name: vm.query.trimmingCharacters(in: .whitespacesAndNewlines))
+            return true
         default: return false
         }
     }
@@ -100,7 +105,13 @@ struct QuicklinkListScreen: PaletteScreen {
     @ViewBuilder
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
         if rows.isEmpty {
-            EmptyResults(text: store.enabled.isEmpty ? "No quicklinks yet" : "No matching quicklinks")
+            if store.enabled.isEmpty {
+                EmptyResults(
+                    text: "No quicklinks yet", symbol: Quicklink.sfSymbol,
+                    hint: "Press ⌘N to create one")
+            } else {
+                EmptyResults(text: "No matching quicklinks")
+            }
         } else {
             let selected = quicklink(at: selection)
             HStack(spacing: 0) {
@@ -161,6 +172,11 @@ enum QuicklinkActionsMenu {
         items.append(
             PopoverMenuItem(title: "Duplicate Quicklink", systemImage: "plus.square.on.square") {
                 core.quicklinkCoordinator.duplicateQuicklink(id: quicklink.id)
+            })
+        items.append(
+            PopoverMenuItem(title: "New Quicklink", systemImage: "plus.circle", shortcut: "⌘N") {
+                core.paletteCoordinator.hidePalette(restoreFocus: false)
+                core.quicklinkCoordinator.editQuicklink(nil)
             })
         items.append(
             quicklink.isPinned

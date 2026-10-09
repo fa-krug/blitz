@@ -199,6 +199,9 @@ already-finished one with it.
 `MeetingActionsMenu` is a meeting's ⌘K menu everywhere it is a row: the card, the launcher's Meetings
 section, My Schedule and the details page. Its `secondary` and `perform` answer the menu's chords —
 ⌘↵ copies the link, ⌘O opens Calendar, ⌘I shows details — so every label has a key that works.
+My Schedule alone passes `offersNewEvent`, adding **New Event** (⌘N): its `perform` answers ⌘N before
+it needs a row, so an empty schedule ("Press ⌘N to create one") creates one too. The launcher and
+the details page leave the key to themselves, so their menus never show it.
 
 `Show Details` pushes `.meetingDetails`. `CalendarCoordinator.showDetails(of:)` has `CalendarStore`
 load the details before the push, so the page's first frame is already filled. The store queries only

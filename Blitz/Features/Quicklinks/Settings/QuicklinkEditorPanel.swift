@@ -7,6 +7,8 @@ struct QuicklinkEditRequest: Identifiable {
     var quicklink: Quicklink?
     /// Seeds a new quicklink's name and link from the browser tab Create Quicklink was run over.
     var browserTab: BrowserTab?
+    /// A new quicklink's name, typed into the search field before ⌘N.
+    var name = ""
 }
 
 /// Add / edit panel for a single quicklink, presented from the Quicklinks pane.
@@ -31,9 +33,9 @@ struct QuicklinkEditorPanel: View {
     @State private var isReadingBrowserTab = false
     @State private var tagList: String
 
-    init(quicklink: Quicklink?, browserTab: BrowserTab? = nil) {
+    init(quicklink: Quicklink?, browserTab: BrowserTab? = nil, draftName: String = "") {
         self.quicklink = quicklink
-        _name = State(initialValue: quicklink?.name ?? browserTab?.title ?? "")
+        _name = State(initialValue: quicklink?.name ?? browserTab?.title ?? draftName)
         _link = State(initialValue: quicklink?.link ?? browserTab?.url ?? "")
         _iconSymbol = State(initialValue: quicklink?.iconSymbol)
         _favicon = State(initialValue: quicklink?.favicon)

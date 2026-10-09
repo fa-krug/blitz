@@ -23,7 +23,8 @@ struct QuicklinksSettingsView: View {
             libraryForm
         }
         .settingsEditorPanel(item: $editor) { request in
-            QuicklinkEditorPanel(quicklink: request.quicklink, browserTab: request.browserTab)
+            QuicklinkEditorPanel(
+                quicklink: request.quicklink, browserTab: request.browserTab, draftName: request.name)
         }
         .onChange(of: core.pendingQuicklinkEdit?.id, initial: true) { _, _ in
             guard let request = core.pendingQuicklinkEdit else { return }

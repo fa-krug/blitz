@@ -39,6 +39,19 @@ struct SnippetsScreen: PaletteScreen {
 
     func secondary(at selection: Int) -> Bool { false }
 
+    func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
+        switch shortcut {
+        case .newItem:
+            let name = vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            core.paletteCoordinator.hidePalette(restoreFocus: false)
+            core.snippetCoordinator.editSnippet(
+                nil, draft: name.isEmpty ? nil : Snippet(name: name, text: ""))
+        default:
+            return false
+        }
+        return true
+    }
+
     func body(selection: Int, scroll: ScrollIntent) -> AnyView {
         AnyView(content(selection: selection, scroll: scroll))
     }
@@ -47,7 +60,7 @@ struct SnippetsScreen: PaletteScreen {
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
         let rows = rows
         if rows.isEmpty {
-            EmptyResults(text: emptyMessage)
+            emptyState
         } else {
             let selected = record(at: selection)
             HStack(spacing: 0) {
@@ -70,10 +83,14 @@ struct SnippetsScreen: PaletteScreen {
     }
 
     /// An empty library and an over-narrow filter are different problems with different answers.
-    private var emptyMessage: String {
-        if store.state == .loading { return "Loading snippets…" }
+    private var emptyState: EmptyResults {
+        if store.state == .loading {
+            return EmptyResults(text: "Loading snippets…", symbol: "curlybraces")
+        }
         return store.snippets.contains(where: { $0.snippet.isEnabled })
-            ? "No matching snippets" : "No snippets yet"
+            ? EmptyResults(text: "No matching snippets")
+            : EmptyResults(
+                text: "No snippets yet", symbol: "curlybraces", hint: "Press ⌘N to create one")
     }
 }
 
@@ -90,7 +107,7 @@ enum SnippetActionsMenu {
                     core.paletteCoordinator.hidePalette(restoreFocus: false)
                     core.snippetCoordinator.editSnippet(record)
                 },
-                PopoverMenuItem(title: "Create Snippet", systemImage: "plus") {
+                PopoverMenuItem(title: "Create Snippet", systemImage: "plus", shortcut: "⌘N") {
                     core.paletteCoordinator.hidePalette(restoreFocus: false)
                     core.snippetCoordinator.editSnippet(nil)
                 },

@@ -307,9 +307,9 @@ final class QuicklinkCoordinator {
         }
     }
 
-    /// Opens the Quicklinks pane with the editor showing `quicklink`; nil is a new one.
-    func editQuicklink(_ quicklink: Quicklink?) {
-        core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink)
+    /// Opens the Quicklinks pane with the editor showing `quicklink`; nil is a new one, named `name`.
+    func editQuicklink(_ quicklink: Quicklink?, name: String = "") {
+        core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name)
         settingsCoordinator.showSettings(tab: .quicklinks)
     }
 

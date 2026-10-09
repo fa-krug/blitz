@@ -110,7 +110,8 @@ struct RemindersScreen: PaletteScreen {
         if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
             return EmptyResults(text: "No matching reminders")
         }
-        return EmptyResults(text: "No open reminders", symbol: "checkmark.circle")
+        return EmptyResults(
+            text: "No open reminders", symbol: "checkmark.circle", hint: "Press ⌘N to create one")
     }
 }
 

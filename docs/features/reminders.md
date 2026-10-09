@@ -99,7 +99,7 @@ colour, completes the reminder on a click, through the same path as ⌘↵ and w
 | ↵ | Edit Reminder — the prompt, filled in. The palette stays up behind it, so the edit lands in view. |
 | ⌘↵ | Complete Reminder — unconfirmed, so a banner offers **Undo**, which unchecks it again |
 | ⌘O | Open in Reminders, through `x-apple-reminderkit://`, or the bare app with no handler |
-| ⌘N | New Reminder |
+| ⌘N | New Reminder — with no rows too, which the empty list's hint names |
 | ⌘⌫ | Delete Reminder — always confirmed: it goes from every device the list syncs to |
 
 A list Blitz cannot read says why and offers the way out, the same split Calendar makes: a denial

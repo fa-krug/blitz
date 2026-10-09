@@ -30,7 +30,7 @@ struct ScheduleScreen: PaletteScreen {
 
     func actions(at selection: Int) -> PopoverMenuContent? {
         guard let meeting = meeting(at: selection) else { return nil }
-        return MeetingActionsMenu.content(meeting: meeting, core: core)
+        return MeetingActionsMenu.content(meeting: meeting, core: core, offersNewEvent: true)
     }
 
     func activate(at selection: Int) {
@@ -45,6 +45,10 @@ struct ScheduleScreen: PaletteScreen {
     }
 
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
+        if shortcut == .newItem {
+            core.calendarCoordinator.createEvent()
+            return true
+        }
         guard let meeting = meeting(at: selection) else { return false }
         return MeetingActionsMenu.perform(shortcut, meeting: meeting, core: core)
     }
@@ -99,6 +103,8 @@ struct ScheduleScreen: PaletteScreen {
         if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
             return EmptyResults(text: "No matching meetings")
         }
-        return EmptyResults(text: "Nothing scheduled \(store.span.orPhrase)", symbol: "calendar")
+        return EmptyResults(
+            text: "Nothing scheduled \(store.span.orPhrase)", symbol: "calendar",
+            hint: "Press ⌘N to create one")
     }
 }
