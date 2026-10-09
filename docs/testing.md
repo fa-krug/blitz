@@ -736,7 +736,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - "Top Half" lands flush with the top of the visible frame, on a secondary display too
 - A command with the Notes window focused places Notes, not the app behind it
 - Cycling, Restore, custom sizes and display moves all work on Notes and on Settings
-- Fullscreen on Settings toggles it; on the Notes window it does nothing
+- Fullscreen on Settings toggles it; on the Notes window it shows *This window can't go full screen*
+- A command with no window focused, or on a natively fullscreen window, shows a neutral pill saying
+  why; a press that changes nothing (Make Larger at full size) shows none
 - With the note switcher open a command places Notes; the switcher and HUDs are never placed
 - Rooms: create one from Switch Room; ⇥ glides the preview through its layouts; ↵ lands its windows
   with the gap, hides other apps and parks their extra windows; quitting, `kill -9` then relaunching, and

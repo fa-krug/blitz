@@ -272,6 +272,12 @@ itself but the user's original frame is still the right Restore target.
 Windows that are minimized, not `AXWindow`-roled (sheets, popovers), already natively fullscreen, or
 that report no position or size are rejected before any work happens.
 
+Quiet is about the window, not the reader. `WindowMover.perform` returns an `Outcome`, and
+`WindowCommandCoordinator` turns a refusal into a neutral pill — *No window to move*, *This window
+can't be moved*, *Exit full screen to move this window*, *This window can't go full screen* — so a refused shortcut never reads as a dead
+one. `.unchanged` (a window already where the command puts it, or a saturated Make Larger) stays
+silent, and so does `.needsAccessibility`, where the system's own prompt is already up.
+
 `AXEnhancedUserInterface` is cleared for the duration of the writes and restored immediately, because
 some apps reinterpret frame writes while it is on — but never while VoiceOver is running, which would
 break the screen reader. **This mitigation is inherited convention and unverified on macOS 26**; if a
@@ -406,8 +412,10 @@ Everything runs headless because the layer is pure. `WindowMover` and `SpaceSwit
 into either harness and have no automated coverage — the AX and `CGEvent` paths need manual
 verification, particularly:
 
-1. A non-resizable window (System Information) must fail silently, left untouched rather than
-   half-moved.
+1. A non-resizable window (System Information) is left untouched rather than half-moved, and only
+   a move it refuses outright shows the *can't be moved* pill. With no window focused, a command
+   shows *No window to move*; on a natively fullscreen window, *Exit full screen to move this
+   window*; a repeat press that changes nothing shows no pill.
 2. **A mixed-resolution multi-monitor setup** — the coordinate-flip bug appears nowhere else. Tile on
    the secondary display, then round-trip Next/Previous Display.
 3. Toggle Fullscreen on a window that accepts it and one that refuses it.

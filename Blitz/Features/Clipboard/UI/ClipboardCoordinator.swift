@@ -203,6 +203,7 @@ final class ClipboardCoordinator {
     func copyColor(_ color: ColorValue, as format: ColorFormat) {
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(format.string(for: color))
+        core.showMessage("Copied color")
     }
 
     func revealClip(_ item: ClipboardItem) {
@@ -221,14 +222,14 @@ final class ClipboardCoordinator {
     func openClip(_ item: ClipboardItem) {
         guard let url = clipURL(for: item) else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
-        AppLauncher.open(url)
+        if !AppLauncher.open(url) { core.reportOpenFailure(url.lastPathComponent, symbol: "doc") }
     }
 
     /// ⌘O on a link or an address: the default browser or mail app takes it.
     func openLink(_ item: ClipboardItem) {
         guard let url = item.openableURL else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
-        AppLauncher.open(url)
+        if !AppLauncher.open(url) { core.reportOpenFailure(url.absoluteString, symbol: "link") }
     }
 
     /// The palette stays up under the sheet, as File Search's Share does.
