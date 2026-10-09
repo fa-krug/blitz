@@ -123,10 +123,10 @@ struct ClipboardScreen: PaletteScreen {
     /// ⌘⌫ / ⌃X — the screen owns the chord whether or not a row sits under the selection.
     private func delete(at selection: Int) {
         guard let item = item(at: selection) else { return }
-        store.remove(item)
+        Task { await core.clipboardCoordinator.deleteClip(item) }
     }
 
-    /// ⌃⇧X — mirrors the Actions row, confirmation included; pinned entries go with the rest.
+    /// ⌃⇧X — mirrors the Actions row, confirmation included; pinned entries are kept.
     private func deleteAll() {
         Task { await core.clipboardCoordinator.deleteAllClips() }
     }
@@ -281,7 +281,7 @@ enum ClipboardActionsMenu {
                 title: "Delete Entry", systemImage: "trash", startsSection: true, shortcut: "⌃X",
                 isDestructive: true
             ) {
-                store.remove(item)
+                Task { await core.clipboardCoordinator.deleteClip(item) }
             })
         items.append(
             PopoverMenuItem(

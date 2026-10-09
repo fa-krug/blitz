@@ -415,6 +415,8 @@ Pins change five things:
   out from under the selection. It uses the same atomic timestamp and rowid update as `promote`.
 - **Retention.** Pruning skips pinned rows (`AND pinned_at IS NULL`), so a pin outlives the retention
   window — and "Clear History" skips them on the same condition, so only `remove` drops a pin.
+  `ClipboardCoordinator.deleteClip` is the one path to it, from ⌘⌫, ⌃X and the menu row alike, and
+  it confirms before a pinned row goes; an unpinned row still goes at once.
 - **Selection.** Pinning lifts a row out of its date bucket, so `ClipboardCoordinator.togglePinnedClip` moves the
   palette selection to the row's new index in the _current_ results and bumps `palette.followToken`,
   which is what makes the list scroll the highlight back into view.
