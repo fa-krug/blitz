@@ -460,6 +460,9 @@ final class AppCore {
             // Last, so an edit made while Blitz was quit reaches every sink wired above.
             if settings.settingsFileEnabled { startSettingsFile(importing: true) }
 
+            // Next turn, off the launch path: otherwise the first summon pays for the whole build.
+            Task { [weak self] in self?.windowController.prewarm() }
+
             // First launch binds no hotkey, so guide once; the marker is written at show-time.
             if !OnboardingState.hasOnboarded {
                 OnboardingState.markShown()
