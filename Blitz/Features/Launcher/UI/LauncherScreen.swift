@@ -503,6 +503,10 @@ struct LauncherScreen: PaletteScreen {
         else { return false }
         visibility.setItemVisible(false, for: app)
         select(row: min(index, max(reorderedResults().entries.count - 1, 0)))
+        core.showBanner(
+            title: "Hidden from Search", detail: app.name, symbol: "eye.slash",
+            actionTitle: "Undo"
+        ) { [visibility] in visibility.setItemVisible(true, for: app) }
         return true
     }
 

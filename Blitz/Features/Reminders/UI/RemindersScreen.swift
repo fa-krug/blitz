@@ -66,7 +66,7 @@ struct RemindersScreen: PaletteScreen {
         let groups = groups
         let rows = groups.flatMap(\.reminders)
         if rows.isEmpty {
-            EmptyResults(text: emptyMessage)
+            emptyState
         } else {
             RemindersList(
                 groups: groups,
@@ -84,11 +84,34 @@ struct RemindersScreen: PaletteScreen {
     }
 
     /// Names why the list is empty: no access reads very differently from a clear to-do list.
-    private var emptyMessage: String {
-        if store.access != .granted { return "Blitz has no access to your reminders" }
-        if !store.hasLoaded { return "Loading reminders…" }
-        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty { return "No matching reminders" }
-        return "No open reminders"
+    private var emptyState: EmptyResults {
+        switch store.access {
+        case .denied:
+            return EmptyResults(
+                text: "Blitz has no access to your reminders", symbol: "checklist",
+                hint: "Allow Blitz under Privacy & Security in System Settings",
+                action: .init(title: "Open Privacy Settings") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    Permissions.openRemindersSettings()
+                })
+        // Settings lists no app TCC has no record of, so only asking again gets Blitz there.
+        case .notDetermined:
+            return EmptyResults(
+                text: "Blitz hasn't been given access to your reminders", symbol: "checklist",
+                hint: "macOS asks once before Blitz can read them",
+                action: .init(title: "Allow Access") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    core.remindersCoordinator.setRemindersEnabled(true)
+                })
+        case .granted:
+            break
+        }
+        if !store.hasLoaded { return EmptyResults(text: "Loading reminders…", symbol: "checklist") }
+        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            return EmptyResults(text: "No matching reminders")
+        }
+        return EmptyResults(
+            text: "No open reminders", symbol: "checkmark.circle", hint: "Press ⌘N to create one")
     }
 }
 

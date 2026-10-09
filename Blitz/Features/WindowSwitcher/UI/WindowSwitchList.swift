@@ -7,6 +7,7 @@ struct WindowSwitchList: View {
     let selectedID: WindowSwitchEntry.ID?
     let scroll: ScrollIntent
     let onActivate: (WindowSwitchEntry) -> Void
+    let onActions: (WindowSwitchEntry) -> Void
 
     private var firstRowSelected: Bool {
         selectedID != nil && selectedID == entries.first?.id
@@ -21,6 +22,7 @@ struct WindowSwitchList: View {
                             .selectionFrame(entry.id == selectedID)
                             .contentShape(Rectangle())
                             .onTapGesture { onActivate(entry) }
+                            .onRightClick { onActions(entry) }
                     }
                 }
                 .padding(.horizontal, metrics.spacing.md)

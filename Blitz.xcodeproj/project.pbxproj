@@ -247,6 +247,7 @@
 		4ABD6E9C77C77CAC51DB222C /* DialogPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C798FFB7F1A305209A3841 /* DialogPanel.swift */; };
 		4BA5A0ABAC11F7ECC409424B /* CurrencyFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FEBFCB26407BE08EFF7523 /* CurrencyFeed.swift */; };
 		4BF1A5F535C1D29B8831440E /* ExtensionGridGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4C18ED37957C170AACF222 /* ExtensionGridGeometry.swift */; };
+		4C50F7A37899013B04025CA0 /* FormDraftMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F22ED027B6DDA64EF9FA091 /* FormDraftMemory.swift */; };
 		4D107D4D2FD17CE2DD883028 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975EE263236783DAD60A7F2A /* AIProvider.swift */; };
 		4D5036C26D85703E50099D6B /* AppleShortcutRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AA725BCBDA38FB342ECEA9 /* AppleShortcutRunner.swift */; };
 		4D5E22EF5CF0D0A5B71B93E3 /* QuickActionPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0AE84F5689B1D4F2E5C276 /* QuickActionPrompt.swift */; };
@@ -1283,6 +1284,7 @@
 		7E38F3740E7B49F509E173BF /* RoomWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomWindow.swift; sourceTree = "<group>"; };
 		7E4C1DF8C037A32B814A1A88 /* AIToolLoopProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIToolLoopProvider.swift; sourceTree = "<group>"; };
 		7F07D2229C456FC9AE822108 /* WindowInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInventory.swift; sourceTree = "<group>"; };
+		7F22ED027B6DDA64EF9FA091 /* FormDraftMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormDraftMemory.swift; sourceTree = "<group>"; };
 		7F2888FBB079E1EDAECCD7EC /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
 		7FC25A31FEF56F6B48BD51EB /* AIProvidersPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvidersPanel.swift; sourceTree = "<group>"; };
 		801BA28BFB7729301BF6B474 /* MarkdownCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownCodeView.swift; sourceTree = "<group>"; };
@@ -3359,6 +3361,7 @@
 				17F421E0BF065A59022588FD /* DialogTextField.swift */,
 				3CCC20C364742113F21FCB0D /* DialogTextInput.swift */,
 				A69676EC87E7D86291C295AA /* DialogView.swift */,
+				7F22ED027B6DDA64EF9FA091 /* FormDraftMemory.swift */,
 				34A47E2F43AA91CB492463FB /* VolumeSlider.swift */,
 			);
 			path = Dialog;
@@ -4340,6 +4343,7 @@
 				75ED9F46C634A412B74C7538 /* FileSearchSurface.swift in Sources */,
 				62CD81826260D26A603AD539 /* FocusRelease.swift in Sources */,
 				B1969BE760ADBD25998393E9 /* FolderPicker.swift in Sources */,
+				4C50F7A37899013B04025CA0 /* FormDraftMemory.swift in Sources */,
 				4122A78DC5E3639DDA8855B1 /* FrequentEmojiStore.swift in Sources */,
 				B3F9FAA73E68461FD10FFBD4 /* GeneralSettingsView.swift in Sources */,
 				8FAA73EE2433FEBCA60FC039 /* GlassEffectView.swift in Sources */,

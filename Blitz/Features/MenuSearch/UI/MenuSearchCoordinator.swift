@@ -100,6 +100,20 @@ final class MenuSearchCoordinator {
         }
     }
 
+    func copyPath(_ item: MenuSearchItem) {
+        Paster.copyPlainText(item.displayPath)
+        core.showMessage("Copied menu path")
+    }
+
+    /// Writes the list Settings › Navigation edits, then reloads into the `.excluded` state.
+    func excludeTargetApp() {
+        guard let bundleID = frozenApp?.bundleIdentifier else { return }
+        if !settings.menuSearchDisabledApps.contains(bundleID) {
+            settings.menuSearchDisabledApps.append(bundleID)
+        }
+        load()
+    }
+
     // MARK: - Reporting
 
     private func reportPermissionFailure() async {

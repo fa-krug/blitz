@@ -52,6 +52,11 @@ through Observation rather than through a hand-reassigned `rootView`. `mirrored`
 coordinator rather than in `AppSettings`: it is remembered for the launch, and a display preference
 that grants nothing is not worth a settings key or a line in a backup.
 
+With no video, the stage is an `EmptyResults` under `video.slash`. `.denied` adds **Open Privacy
+Settings** (`Permissions.openCameraSettings`) — `start()` has already asked, so only Settings can undo
+it — and `.noCamera` offers nothing, since no click fixes it. Opening Settings takes key, so the panel
+closes behind it as it would on any click-away.
+
 Switching cameras swaps the input inside one `beginConfiguration`/`commitConfiguration` while the
 session keeps running, so the stage never blanks. The next open starts on the camera switched to,
 unless it has been unplugged since. `Switch Camera` only appears when

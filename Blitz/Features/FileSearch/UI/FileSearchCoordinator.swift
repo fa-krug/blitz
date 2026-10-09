@@ -97,14 +97,41 @@ final class FileSearchCoordinator {
         let session = session ?? self.session
         Task {
             do {
-                try await Task.detached(priority: .userInitiated) {
-                    try FileManager.default.trashItem(at: result.url, resultingItemURL: nil)
+                let trashed = try await Task.detached(priority: .userInitiated) {
+                    var trashed: NSURL?
+                    try FileManager.default.trashItem(at: result.url, resultingItemURL: &trashed)
+                    return trashed as URL?
                 }.value
                 session.remove(result)
-                core.showMessage("Moved to Trash")
+                guard let trashed else {
+                    core.showMessage("Moved to Trash")
+                    return
+                }
+                core.showBanner(
+                    title: "Moved to Trash", detail: result.name, symbol: "trash",
+                    actionTitle: "Undo"
+                ) { [self] in restore(result, from: trashed, into: session) }
             } catch {
                 await core.showNotice(
                     title: "Couldn’t Move \(result.name) to Trash",
+                    message: error.localizedDescription,
+                    symbol: "trash", tone: .danger)
+            }
+        }
+    }
+
+    private func restore(
+        _ result: FileSearchResult, from trashed: URL, into session: FileSearchSession
+    ) {
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FileManager.default.moveItem(at: trashed, to: result.url)
+                }.value
+                session.refresh()
+            } catch {
+                await core.showNotice(
+                    title: "Couldn’t Put Back \(result.name)",
                     message: error.localizedDescription,
                     symbol: "trash", tone: .danger)
             }

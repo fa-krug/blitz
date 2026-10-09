@@ -227,6 +227,12 @@ final class RemindersStore {
         return save(reminder, in: store)
     }
 
+    func uncomplete(_ item: ReminderItem) -> Bool {
+        guard case let (reminder, store)? = stored(item) else { return false }
+        reminder.isCompleted = false
+        return save(reminder, in: store)
+    }
+
     func delete(_ item: ReminderItem) -> Bool {
         guard case let (reminder, store)? = stored(item),
             (try? store.remove(reminder, commit: true)) != nil

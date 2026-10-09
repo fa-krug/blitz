@@ -93,7 +93,8 @@ struct RootPaletteView: View {
             return MenuSearchScreen(
                 session: menuSearch, core: core, vm: vm, openActions: openActions)
         case .switchWindows:
-            return WindowSwitchScreen(session: windowSwitch, core: core)
+            return WindowSwitchScreen(
+                session: windowSwitch, core: core, vm: vm, openActions: openActions)
         case .rooms:
             return RoomsScreen(coordinator: core.roomCoordinator, session: core.roomSession, vm: vm)
         case .roomWindows:

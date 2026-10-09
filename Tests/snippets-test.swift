@@ -14,6 +14,7 @@ struct SnippetsTests {
         _ = NSApplication.shared
         testIdentityAndRevision()
         testClipDraft()
+        testDuplicateName()
         testRaycastImport()
         try testMarkdownCodec()
         try testRepositoryStorage()
@@ -83,6 +84,19 @@ struct SnippetsTests {
             "unknown braces stay literal text",
             !SnippetTemplateEngine.containsPlaceholders("func f() { return {x} }"))
         check("plain text has no placeholders", !SnippetTemplateEngine.containsPlaceholders("Hi"))
+    }
+
+    /// Duplicate Snippet: a free "… Copy" name, case-insensitively, and the keyword stays behind.
+    private static func testDuplicateName() {
+        let original = Snippet(
+            name: "Sign-off", text: "Thanks", keyword: "!so", showsConfirmation: true)
+        let copy = original.duplicate(takenNames: ["Sign-off"])
+        check("a copy is named after the original", copy.name == "Sign-off Copy")
+        check("a copy keeps the text and options", copy.text == "Thanks" && copy.showsConfirmation)
+        check("a copy leaves the keyword with the original", copy.keyword == nil)
+        check(
+            "a taken copy name, in any case, counts on",
+            original.duplicate(takenNames: ["Sign-off", "sign-off copy"]).name == "Sign-off Copy 2")
     }
 
     private static func testRaycastImport() {

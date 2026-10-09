@@ -49,7 +49,7 @@ These are the things that quietly break the look if changed. Preserve them unles
 - **Resolve every glyph through `SymbolImage`, not `Image(systemName:)`.** Some catalog symbols are bundled assets in `Assets.xcassets` (`toggleBluetooth`), and `Image(systemName:)` silently renders nothing for those.
 - **↵ runs the primary action, Escape cancels, and Cancel always renders leading** (the left button), matching macOS convention. A button never prints its key cap; a deliberate hover reveals its outlined `KeyCapChip` in a `Tooltip`.
 - **In the palette, a hover label is Blitz's `tooltip`, never `.help()`**: an AppKit tooltip never appears while the app sits inactive behind the non-activating panel. A Settings window activates the app, so `.help()` shows there and stays the label to use. The tooltip hangs above its control by default; a control in the palette header passes `edge: .bottom`, since above it is off the window, and a label may run to several lines — the chat's attachment pill lists every staged name.
-- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`, unless it previews something just made with a way back to it — that is `BannerHUDController`'s banner. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
+- **A transient readout is a HUD, not a dialog.** `VolumeHUDController`'s box is volume and mute only, since that one needs an actual level and number; every other success or info confirmation goes through `MessageHUDController`'s pill, whose leading glyph *is* its `DialogTone`, unless it previews something just made with a way back to it, or offers **Undo** for a one-keystroke destructive action that ran without asking — that is `BannerHUDController`'s banner. A pill has no subject to name, so the icon rule above does not apply to it — and that mapping stays file-scoped so nothing can reach for it when building a `DialogRequest`. A new HUD means a new presenter, not a second shape bolted onto an existing controller.
 - **Glass is for floating controls, with dialogs as the deliberate modal exception.** The action capsule, menu circle and `PopoverMenu` use it inside the palette; dialogs apply one system `.glassEffect(.regular)` to their root surface. Dialog buttons stay matte so their roles remain legible. Every HUD keeps the lighter `panelScrim` → `GlassEffectView()` → `clipShape` recipe.
 
 ---
@@ -398,6 +398,10 @@ All lists share one row grammar so launcher and clipboard look identical:
 - **Scroll moves only on keyboard nav/reset**, driven by a `ScrollIntent` (`DesignSystem/Scrolling/ScrollIntent.swift`) — mouse selection targets a visible row and never yanks scroll. `.top` scrolls to the origin anchor that `scrollOriginAnchor()` installs — a zero-height overlay applied to the scrolled content _after_ its padding, so it marks offset 0 without joining the layout and the restored origin is exact (targeting the first row instead leaves the top padding hidden under the header); it is restated when the header's inset settles after mount, which moves the resting offset. A `.top` that finds the list already resting at the origin does nothing: `scrollTo` reaches the overlay only after walking every lazy row's id, which cost the emoji grid about 40 ms on every open. A `.follow` that lands on flat index 0 restores the origin instead, so that row's section header comes back into view. A reset lands on the screen's `landingSelection` through `RootPaletteView.land()`: row 0 takes `.top`; a later row takes `.center`, which brings a row the lazy stack has not built in by id, centres it once its frame is measured and then lets go — restated, like `.top`, when the inset settles. One intent state serves every mode — they never coexist.
 - **`.follow` is an invariant, not a command** (`scrollFollowsSelection`, `DesignSystem/Scrolling/`). Each list marks its selected row with `selectionFrame(_:)`, and the modifier keeps that row inside the band between the floating bars, re-checking as the geometry and the row's frame settle, then **stops watching the moment the row is inside**. That self-release is what keeps it safe: once a keystroke has landed nothing is observing, so a wheel scroll — or a scrollbar-thumb drag, which `onScrollPhaseChange` cannot see at all — is never pulled back. Two measured facts it rests on: `frame(in: .scrollView)` reports the *inset-excluded* space, so the band is simply `0…containerSize.height`; and SwiftUI's minimal scroll-to-visible counts the strip behind the bottom bar as visible while its *destination* math respects the insets. Hence the split — Blitz decides **whether** to scroll (`SelectionReveal`, pure, pinned by `Tests/scroll-reveal-test.swift`) and SwiftUI performs the move with an explicit `.top`/`.bottom` anchor. Scroll far by hand and the lazy stack drops the selected row, so there is no frame to measure at all: the fallback brings it back by id and the invariant, still standing, re-checks the moment it reports — which is why arrowing after a long mouse scroll lands the selection on screen rather than moving it out of sight. A one-shot `scrollTo` here left the highlight stranded under the pill whenever the target row's layout was not yet known, with nothing looking again until the next key press. **The id passed to `scrollFollowsSelection` must be the lazy container's own `ForEach` identity** — an `.id()` applied inside a row registers only once that row has been realized, which is exactly when scrolling to it is unnecessary, and the fallback that brings a dropped row back by id then has nothing to aim at.
 - **Keycaps** use `KeyCapChip`: `.outline` (white-0.20 border) for hotkey hints on rows, `.filled` (white-0.10 fill) for footer shortcuts.
+- **An empty list is `EmptyResults`** (`Palette/EmptyResults.swift`): a `dialogIcon` glyph through
+  `SymbolImage` in `textTertiary`, the reason in `rowTitle`, an optional `rowTrailing` hint naming
+  the next step ("Press ⌘N to create one"), and an optional `.modalAction(.standard)` button when one
+  click fixes it — a denied permission offers **Open Privacy Settings**, never a dead end.
 
 ### Section headers
 
@@ -504,7 +508,20 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   **↵ runs the dialog's primary action; Escape cancels**, on every dialog including destructive ones.
   Arrow keys walk the volume slider along the same 5% grid the volume commands use (`DialogPanel`
   reports `.increment` / `.decrement` and `DialogController` applies `VolumeLevel.stepped`, so the
-  panel never learns what a volume step is); click-away resolves as a dismissal.
+  panel never learns what a volume step is); click-away resolves as a dismissal (see below).
+- **Click-away dismisses, but a form keeps what was typed.** `windowDidResignKey` resolves the dialog
+  as its cancel rather than leaving it up: the panel floats at `.dialog` on every Space, so a dialog
+  kept open after the user moved to another app would cover that app, keep the palette dimmed, and
+  refuse every other prompt while it waited. Losing an edit to a stray click is the cost, so New Event,
+  the reminder prompt and Edit Contact each keep a `FormDraftMemory`: a click-away that changed
+  something keeps that edit, and the next time the form opens **on the same opening draft** it starts
+  from the edit instead. The opening draft is the subject — a blank `EventDraft()` for New Event, the
+  record's own values for an edit, the prefill for a new reminder — so a kept edit never opens on a
+  different record or prefill, and a record changed elsewhere since opens on its new values. New and
+  Edit Reminder keep separate memories. Only click-away keeps: ↵, Escape and Cancel are deliberate,
+  and end that subject's kept edit. One edit is kept per form, so a second click-away with changes on
+  another subject replaces it. The memory lives on `DialogController` for the session and is never
+  written to disk. The other dialogs keep plain click-away dismissal.
 - **Async, not modal.** Presentation is `async` (`withCheckedContinuation`), so there is no nested run
   loop. A held hotkey can't stack dialogs: while one is up, a second request resolves immediately as a
   dismissal — which is why the old `isConfirmingCommand` re-entrancy flag is gone. The guard is keyed
@@ -567,12 +584,17 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   dwell, so it is shown with `dwells: false` and stays up until something replaces it or
   `HUDPresenter.dismiss()` runs — the caller owns that, and `QuickActionCoordinator.produce` pairs the
   two with a `defer` so a throw or a cancellation cannot strand it.
-- **`BannerHUDController`'s banner** previews something just made and offers one way back to it
-  before it fades: Smart Reminder writes the reminder straight away, then shows its title and due
-  day with **Open**. A fixed `bannerWidth 360` capsule in the pill's place — the two replace each
-  other through `AppCore` — with the subject glyph tinted `.success`, two truncating lines and a
-  `.modalAction(.standard)` button. It dwells `Duration.bannerHUD` (5s) so the button is reachable,
-  and a pointer over it holds the dwell through `HUDPresenter.hold()`; leaving re-arms it.
+- **`BannerHUDController`'s banner** offers one action on something that just happened, before it
+  fades. Either it previews something just made with a way back to it — Smart Reminder writes the
+  reminder straight away, then shows its title and due day with **Open** — or it is the way back
+  from a one-keystroke destructive action that runs without a confirmation, with **Undo**: Hide from
+  Search, Move to Trash and Complete Reminder each name what they acted on. Undo is what lets those
+  three skip the dialog; a destructive action with no way back confirms instead. A fixed
+  `bannerWidth 360` capsule in the pill's place — the two replace each other through `AppCore` —
+  with the subject glyph tinted `.success`, since either way the action went through, two
+  truncating lines and a `.modalAction(.standard)` button. It dwells `Duration.bannerHUD` (5s) so
+  the button is reachable, and a pointer over it holds the dwell through `HUDPresenter.hold()`;
+  leaving re-arms it.
 - **`HUDPresenter`** is what keeps those controllers from duplicating each other: one panel at a
   time, replace rather than stack, fade in, sit out its dwell, fade away, centred horizontally on
   a screen. The HUDs differ only in their content, their anchor (`edgeInset(hudEdgeOffset 48)` for
@@ -651,6 +673,9 @@ bars, while a snippet's inline enumerated arguments remain `DialogChip`s. Two th
   default button's keycap says ⌘↵.
 - **An accessory can refuse its own primary action.** An invalid draft leaves the dialog up on ↵ and
   on a click alike, which is what a greyed-out button would say if `DialogAction` could carry one.
+- **A draft form survives a click-away.** `.eventDraft`, `.reminderDraft` and `.contactDraft` reopen
+  on the edit a click-away left behind, for the same subject only; see
+  [Dialogs & HUD](#dialogs--hud).
 
 ## Settings
 

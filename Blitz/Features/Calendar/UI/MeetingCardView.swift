@@ -77,8 +77,9 @@ extension MeetingEvent.CalendarColor {
 /// Actions for a meeting, shared by the card, every launcher and schedule row and the details page.
 @MainActor
 enum MeetingActionsMenu {
+    /// `offersNewEvent` only where ⌘N is handled, so the row never shows a key that does nothing.
     static func content(
-        meeting: MeetingEvent, core: AppCore, offersDetails: Bool = true
+        meeting: MeetingEvent, core: AppCore, offersDetails: Bool = true, offersNewEvent: Bool = false
     ) -> PopoverMenuContent {
         var items: [PopoverMenuItem] = []
         if meeting.link != nil {
@@ -102,6 +103,15 @@ enum MeetingActionsMenu {
             items.append(
                 PopoverMenuItem(title: "Show Details", systemImage: "info.circle", shortcut: "⌘I") {
                     core.calendarCoordinator.showDetails(of: meeting)
+                })
+        }
+        if offersNewEvent {
+            items.append(
+                PopoverMenuItem(
+                    title: "New Event", systemImage: "plus.circle", startsSection: true,
+                    shortcut: "⌘N"
+                ) {
+                    core.calendarCoordinator.createEvent()
                 })
         }
         return PopoverMenuContent(header: meeting.title, items: items)

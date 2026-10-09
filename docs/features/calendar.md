@@ -167,8 +167,14 @@ the option to hide a current event immediately or after a chosen delay.
 **A command that opens a surface is bindable**; the two that act on the next meeting are reached
 through the join card's own ⌘K menu instead, where the meeting they act on is on screen.
 
+New Event keeps what a click-away left in it: the next Create Event starts from that title, start and
+duration, while Escape and Cancel discard it ([ui.md](../ui.md#dialogs--hud)).
+
 A miss reports through the HUD (`Nothing to join right now`), not a dialog: it is transient and there
-is nothing to acknowledge.
+is nothing to acknowledge. So does Create Event with the feature off. With it on but access denied,
+the fix is in System Settings, so a failure dialog offers **Open Settings** to Privacy & Security →
+Calendars; access TCC has no record of re-runs `setCalendarEnabled`'s consent path instead, since
+Settings cannot list an app that never asked.
 
 ## Reading the store
 
@@ -196,6 +202,9 @@ already-finished one with it.
 `MeetingActionsMenu` is a meeting's ⌘K menu everywhere it is a row: the card, the launcher's Meetings
 section, My Schedule and the details page. Its `secondary` and `perform` answer the menu's chords —
 ⌘↵ copies the link, ⌘O opens Calendar, ⌘I shows details — so every label has a key that works.
+My Schedule alone passes `offersNewEvent`, adding **New Event** (⌘N): its `perform` answers ⌘N before
+it needs a row, so an empty schedule ("Press ⌘N to create one") creates one too. The launcher and
+the details page leave the key to themselves, so their menus never show it.
 
 `Show Details` pushes `.meetingDetails`. `CalendarCoordinator.showDetails(of:)` has `CalendarStore`
 load the details before the push, so the page's first frame is already filled. The store queries only
@@ -345,8 +354,9 @@ disagree with it.
 `CalendarStore.access` is a snapshot, refreshed on `start`, on every `reload` and after a request —
 TCC announces nothing when a grant changes in Settings. `refreshAccess()` is why anything that acts on
 `access` outside those three re-reads first: the enable path, so its guard cannot bounce off a stale
-`.granted` and leave a dead button, and the Calendar pane on appear, so a grant made in Settings while
-the feature was off is not reported as still missing. EventKit caches its status per process, so a
+`.granted` and leave a dead button, the Calendar pane on appear, so a grant made in Settings while
+the feature was off is not reported as still missing, and Create Event, so its report names the
+grant as it is now. EventKit caches its status per process, so a
 grant made from Blitz still reads `.notDetermined` until relaunch; `Permissions` remembers the
 request's own answer and reports that type as granted, for reminders as well as the calendar.
 
@@ -356,3 +366,7 @@ lists no app that has never asked, so a `notDetermined` state that could only be
 a dead end. Both entry points funnel through `CalendarCoordinator.setCalendarEnabled`, so Blitz's
 dialog still comes first. A denial is the one state that Settings alone can undo, and both panes send
 it there.
+
+My Schedule's empty state makes the same split, so a list Blitz cannot read is never a dead end: a
+denial offers **Open Privacy Settings** (`Permissions.openCalendarSettings`), and `.notDetermined`
+offers **Allow Access**, which hides the palette and runs `setCalendarEnabled(true)` again.

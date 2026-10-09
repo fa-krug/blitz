@@ -102,6 +102,13 @@ final class FileSearchSession {
         results.removeAll { $0.id == result.id }
     }
 
+    /// Re-runs the published search, so a file put back since it ran is listed again.
+    func refresh() {
+        guard let request else { return }
+        self.request = nil
+        search(request.query, filter: request.filter)
+    }
+
     private func runWorker() async {
         while let pending = pendingSearch {
             let delay = ContinuousClock.now.duration(to: pending.earliestStart)

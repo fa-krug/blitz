@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The banner: subject glyph, what was made and when, and one action, on the pill's recipe.
+/// The banner: subject glyph, what just happened to it, and one action, on the pill's recipe.
 struct BannerHUDView: View {
     let title: String
     let detail: String

@@ -92,15 +92,19 @@ Reminders' own all-day notification time applies.
 ## My Reminders
 
 `RemindersScreen` lists the store's snapshot through `ReminderAgenda`. The row's circle, in the list's
-colour, completes the reminder on a click.
+colour, completes the reminder on a click, through the same path as ⌘↵ and with the same banner.
 
 | Key | Does |
 | --- | --- |
 | ↵ | Edit Reminder — the prompt, filled in. The palette stays up behind it, so the edit lands in view. |
-| ⌘↵ | Complete Reminder |
+| ⌘↵ | Complete Reminder — unconfirmed, so a banner offers **Undo**, which unchecks it again |
 | ⌘O | Open in Reminders, through `x-apple-reminderkit://`, or the bare app with no handler |
-| ⌘N | New Reminder |
+| ⌘N | New Reminder — with no rows too, which the empty list's hint names |
 | ⌘⌫ | Delete Reminder — always confirmed: it goes from every device the list syncs to |
+
+A list Blitz cannot read says why and offers the way out, the same split Calendar makes: a denial
+offers **Open Privacy Settings**, and `.notDetermined` — which System Settings cannot list — offers
+**Allow Access**, rerunning `setRemindersEnabled(true)` with the palette hidden.
 
 Reminders are not individual launcher entries, unlike meetings: My Reminders is one search away, and a
 to-do list long enough to need search would crowd apps out of the root.
@@ -113,8 +117,11 @@ to-do list long enough to need search would crowd apps out of the root.
 | Create Reminder | Prompts for a title, notes and a due date, and writes the reminder. | yes |
 | Smart Reminder | Takes one sentence in its inline field, writes the AI model's reminder, and previews it in a banner. | yes |
 
-New reminders go on the default Reminders list. A miss — the feature off, no access, AI off — reports
-through the HUD, not a dialog.
+New reminders go on the default Reminders list. A switch left off — Reminders or AI — reports
+through the HUD, not a dialog: Settings is where to go, and there is nothing to acknowledge. Denied
+access is different, because the fix is in System Settings, so it reports through a failure dialog
+whose **Open Settings** goes to Privacy & Security → Reminders. Access TCC has no record of cannot be
+fixed there at all, so it re-runs `setRemindersEnabled`'s consent path instead.
 
 ## Chat tools
 
@@ -143,4 +150,6 @@ be reached. Completing asks before it ticks it off on every device.
 `ReminderDraftFields` is a dialog accessory: title, notes, an unlabelled `No Date` · `Date` ·
 `Date & Time` choice and a date field. The field is laid out even under `No Date`, disabled, because a dialog is measured
 once as it is presented and a field that came and went would be clipped. The choice row is
-`DialogChoiceRow`, shared with New Event.
+`DialogChoiceRow`, shared with New Event. Clicking away keeps the edit: reopening the same reminder,
+unchanged since — or New Reminder with the same prefill — starts from it, while Escape and Cancel
+discard it ([ui.md](../ui.md#dialogs--hud)).

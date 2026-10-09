@@ -78,6 +78,7 @@ struct FileSearchSessionTests {
         await unchangedPolicyKeepsResults()
         await blankQueryLoadsRecents()
         await filterChangeRerunsTheQuery()
+        await refreshRerunsThePublishedRequest()
 
         print(failures == 0 ? "File search session tests passed" : "\(failures) tests failed")
         exit(failures == 0 ? 0 : 1)
@@ -182,6 +183,23 @@ struct FileSearchSessionTests {
         expect(
             snapshot.calls == ["report", "report [Images]"],
             "narrowing the filter re-runs the same words, and re-stating it runs nothing")
+    }
+
+    static func refreshRerunsThePublishedRequest() async {
+        let probe = FileSearchProbe()
+        let session = makeSession(probe: probe, debounce: .milliseconds(10))
+        session.refresh()
+        session.search("report", filter: .images)
+        await waitUntil { session.state == .ready }
+        session.results.first.map(session.remove)
+        expect(session.results.isEmpty, "the trashed row leaves the published results")
+        session.refresh()
+        await waitUntil { session.state == .ready && session.results.first?.name == "report" }
+
+        let snapshot = await probe.snapshot()
+        expect(
+            snapshot.calls == ["report [Images]", "report [Images]"],
+            "refreshing re-runs the published words and filter, and does nothing before a search")
     }
 
     static func makeSession(probe: FileSearchProbe, debounce: Duration) -> FileSearchSession {

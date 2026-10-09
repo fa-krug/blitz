@@ -367,6 +367,8 @@ run ext-icon-test          Blitz/Platform/Appearance.swift \
                            Blitz/Features/Clipboard/Model/ColorSpaces.swift
 run system-action-test     Blitz/Features/SystemActions/Model/SystemAction.swift
 run volume-test            Blitz/Features/SystemActions/Model/VolumeLevel.swift
+run dialog-draft-test      Blitz/Windows/Dialog/FormDraftMemory.swift \
+                           Blitz/Features/Calendar/Model/EventDraft.swift
 run window-command-test    Blitz/Features/WindowManagement/Model/WindowCommand.swift \
                            Blitz/Features/WindowManagement/Model/WindowCycle.swift \
                            Blitz/Features/WindowManagement/Model/WindowPlacementEngine.swift \

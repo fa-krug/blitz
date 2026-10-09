@@ -268,8 +268,20 @@ final class CalendarCoordinator {
 
     func createEvent() {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        guard settings.calendarEnabled, store.access == .granted else {
+        guard settings.calendarEnabled else {
             report("Turn Calendar on in Settings first")
+            return
+        }
+        store.refreshAccess()
+        switch store.access {
+        case .granted:
+            break
+        case .notDetermined:
+            // System Settings lists no app TCC has no record of, so only asking again can grant it.
+            setCalendarEnabled(true)
+            return
+        case .denied:
+            Task { await reportAccessDenied() }
             return
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -429,6 +441,15 @@ final class CalendarCoordinator {
     func showDetails(of meeting: MeetingEvent) {
         store.loadDetails(of: meeting)
         paletteCoordinator.navigate(to: .meetingDetails)
+    }
+
+    /// Only System Settings can undo a denial, so unlike a switch left off this offers the way.
+    private func reportAccessDenied() async {
+        let openSettings = await core.reportFailure(
+            title: "Blitz Needs Calendar Access",
+            message: "macOS has not given Blitz access to your calendars.",
+            symbol: "calendar", recovery: "Open Settings")
+        if openSettings { Permissions.openCalendarSettings() }
     }
 
     /// A miss is transient, so it reports through the HUD rather than a dialog needing dismissal.

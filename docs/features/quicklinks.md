@@ -196,6 +196,9 @@ running browser whose window is frontmost (`BrowserTabs.mostRecentBrowser`, whic
 list front to back), replacing the link and filling the name only when it is empty; its failures,
 including a refused Automation prompt, show under the form.
 
+⌘N on Search Quicklinks hands over `QuicklinkEditRequest.name` instead of a tab — the search text,
+seeding only a new quicklink's name, so the editor still reads **Add Quicklink**.
+
 ## Favicons
 
 A website quicklink can wear its site's icon instead of a symbol. The editor's **Icon** field carries a
@@ -253,8 +256,9 @@ shortcut, when it was created). Like Calculator History it stays out of the Tab 
 back chevron or a bare backspace.
 Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
 **Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate,
-Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (menu only, and only for a resolved path),
-and Delete (`⌘⌫`).
+New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (menu only, and
+only for a resolved path), and Delete (`⌘⌫`). ⌘N works with no rows as well — the empty library's
+hint names it — and opens the editor named after the search text.
 
 The Open With section lists the system default first, marked, then up to six more apps
 `NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked

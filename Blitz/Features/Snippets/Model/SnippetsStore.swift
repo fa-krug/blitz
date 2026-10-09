@@ -130,6 +130,15 @@ final class SnippetsStore {
         scheduleReload(after: .zero)
     }
 
+    /// A new file, so the original keeps its identity and the shortcut keyed to it.
+    @discardableResult
+    func duplicate(id: StoredSnippet.ID) async throws -> StoredSnippet {
+        guard let record = record(id: id) else {
+            throw SnippetRepository.RepositoryError.fileNotFound(URL(fileURLWithPath: id))
+        }
+        return try await create(record.snippet.duplicate(takenNames: snippets.map(\.snippet.name)))
+    }
+
     func record(id: StoredSnippet.ID) -> StoredSnippet? {
         snippets.first(where: { $0.id == id })
     }

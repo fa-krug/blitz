@@ -30,7 +30,7 @@ struct ScheduleScreen: PaletteScreen {
 
     func actions(at selection: Int) -> PopoverMenuContent? {
         guard let meeting = meeting(at: selection) else { return nil }
-        return MeetingActionsMenu.content(meeting: meeting, core: core)
+        return MeetingActionsMenu.content(meeting: meeting, core: core, offersNewEvent: true)
     }
 
     func activate(at selection: Int) {
@@ -45,6 +45,10 @@ struct ScheduleScreen: PaletteScreen {
     }
 
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
+        if shortcut == .newItem {
+            core.calendarCoordinator.createEvent()
+            return true
+        }
         guard let meeting = meeting(at: selection) else { return false }
         return MeetingActionsMenu.perform(shortcut, meeting: meeting, core: core)
     }
@@ -57,7 +61,7 @@ struct ScheduleScreen: PaletteScreen {
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
         let rows = rows
         if rows.isEmpty {
-            EmptyResults(text: emptyMessage)
+            emptyState
         } else {
             ScheduleList(
                 results: rows,
@@ -74,9 +78,33 @@ struct ScheduleScreen: PaletteScreen {
     }
 
     /// Names why the list is empty: no access reads very differently from a free afternoon.
-    private var emptyMessage: String {
-        if store.access != .granted { return "Blitz has no access to your calendar" }
-        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty { return "No matching meetings" }
-        return "Nothing scheduled \(store.span.orPhrase)"
+    private var emptyState: EmptyResults {
+        switch store.access {
+        case .denied:
+            return EmptyResults(
+                text: "Blitz has no access to your calendar", symbol: "calendar",
+                hint: "Allow Blitz under Privacy & Security in System Settings",
+                action: .init(title: "Open Privacy Settings") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    Permissions.openCalendarSettings()
+                })
+        // Settings lists no app TCC has no record of, so only asking again gets Blitz there.
+        case .notDetermined:
+            return EmptyResults(
+                text: "Blitz hasn't been given access to your calendar", symbol: "calendar",
+                hint: "macOS asks once before Blitz can read it",
+                action: .init(title: "Allow Access") {
+                    core.paletteCoordinator.hidePalette(restoreFocus: false)
+                    core.calendarCoordinator.setCalendarEnabled(true)
+                })
+        case .granted:
+            break
+        }
+        if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            return EmptyResults(text: "No matching meetings")
+        }
+        return EmptyResults(
+            text: "Nothing scheduled \(store.span.orPhrase)", symbol: "calendar",
+            hint: "Press ⌘N to create one")
     }
 }
