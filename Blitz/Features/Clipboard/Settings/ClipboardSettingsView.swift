@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 struct ClipboardSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(AppSettings.self) private var settings
-    @State private var confirmingClear = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -55,26 +54,26 @@ struct ClipboardSettingsView: View {
 
             Section {
                 LabeledContent {
-                    Button("Clear…", role: .destructive) { confirmingClear = true }
+                    Button("Clear…", role: .destructive, action: confirmClear)
                 } label: {
                     SettingsRowTitle(.clipboardDisabledApplications, "Clear history")
-                    Text("Removes every clip and image.")
+                    Text("Removes every unpinned clip and image.")
                 }
             }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.clipboard)
-        .confirmationDialog(
-            "Clear clipboard history?",
-            isPresented: $confirmingClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                core.clipboardCoordinator.clearHistory()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This can't be undone.")
+    }
+
+    private func confirmClear() {
+        Task {
+            guard
+                await core.confirm(
+                    title: "Clear clipboard history?",
+                    message: "Every entry goes except pinned ones. This can't be undone.",
+                    symbol: PaletteMode.clipboard.systemImage, confirmTitle: "Clear History")
+            else { return }
+            core.clipboardCoordinator.clearHistory()
         }
     }
 }
