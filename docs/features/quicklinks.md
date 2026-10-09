@@ -252,8 +252,9 @@ the selected quicklink's glyph over an Information block (name, link, the app it
 shortcut, when it was created). Like Calculator History it stays out of the Tab cycle and exits via the
 back chevron or a bare backspace.
 Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
-**Open With** section, Edit, Duplicate, Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder
-(`⌘F`, only for a resolved path), and Delete (`⌘⌫`).
+**Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate,
+Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (menu only, and only for a resolved path),
+and Delete (`⌘⌫`).
 
 The Open With section lists the system default first, marked, then up to six more apps
 `NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked
