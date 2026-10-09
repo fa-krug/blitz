@@ -557,6 +557,9 @@ run ext-form-test          $E/Model/ExtensionFormMetrics.swift \
                            $E/UI/ExtensionListKey.swift \
                            Tests/ext-list-key-test.swift
 run ext-image-size-test   $E/Model/ExtensionImageSize.swift
+run ext-failure-test       $E/Model/ExtensionFailure.swift \
+                           $E/Model/ExtensionConsoleLog.swift \
+                           $E/Model/ExtensionActionKeys.swift
 run ext-accessory-test     $E/Model/RenderNode.swift \
                            $E/Model/ExtensionPickerItem.swift \
                            $E/Model/ExtensionSearchAccessory.swift \
@@ -564,6 +567,7 @@ run ext-accessory-test     $E/Model/RenderNode.swift \
 run slow ext-test          -parse-as-library \
                            Tests/ext-menu-bar-test.swift \
                            Tests/ext-fetch-test.swift \
+                           $E/Model/ExtensionActionKeys.swift \
                            $E/Model/ExtensionLaunchError.swift \
                            $E/Model/ExtensionMenuBarSnapshot.swift \
                            $E/Service/ExtensionStorage.swift \

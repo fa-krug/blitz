@@ -6,9 +6,25 @@ enum ExtensionSessionState: Equatable {
     case idle
     case launching
     case rendered(RenderTree)
-    case failed(String)
+    case failed(ExtensionFailure)
     /// A no-view command that ran to completion.
     case finished
+}
+
+/// A store update that did not install, kept until one does so Settings can say why.
+struct ExtensionUpdateFailure: Equatable {
+    let title: String
+    let reason: String
+}
+
+/// What started the running command, so Retry can start it again exactly.
+private struct ExtensionLaunch {
+    let extensionName: String
+    let commandName: String
+    let arguments: [String: String]
+    let fallbackText: String?
+    let launchType: ExtensionLaunchType
+    let launchContext: [String: RenderValue]
 }
 
 /// Owns the installed set, the runtime and the running command.
@@ -19,8 +35,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     /// The store's newer version of each installed extension that has one, keyed by manifest name.
     private(set) var updates: [String: ExtensionListing] = [:]
     private(set) var updating: Set<String> = []
-    /// Titles of the updates that last failed, by manifest name, until one succeeds or it goes.
-    private(set) var updateFailures: [String: String] = [:]
+    /// The updates that last failed, by manifest name, until one succeeds or it goes.
+    private(set) var updateFailures: [String: ExtensionUpdateFailure] = [:]
     private(set) var menuBars: ExtensionMenuBarManager?
     private(set) var state: ExtensionSessionState = .idle
     /// The command whose session is live, if any.
@@ -63,6 +79,13 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     @ObservationIgnored private var nextToastID = 1
     @ObservationIgnored private var paginationLatch = ExtensionPagination.Latch()
     @ObservationIgnored private var lastOAuthExtensionName: String?
+    @ObservationIgnored private var lastLaunch: ExtensionLaunch?
+    /// What the foreground command logged, for Copy Error.
+    @ObservationIgnored private var console = ExtensionConsoleLog()
+    /// Animated toasts shown as a HUD, so their success or failure can follow as one too.
+    @ObservationIgnored private var hudToastIDs: Set<Int> = []
+    /// Each setter syncs on its own, so an outcome waits for the title and message that follow.
+    @ObservationIgnored private var hudOutcomes: [Int: ExtensionToast] = [:]
 
     init(clipboardStore: ClipboardStore) {
         storage = ExtensionStorage(directory: ExtensionCatalog.storageDirectory())
@@ -118,8 +141,11 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
                         }, enableInteraction: { host.enableInteraction() })
                 },
                 onError: { [weak coordinator] message, owner, needsPreferences in
-                    coordinator?.showHUD(message)
-                    if needsPreferences { coordinator?.showExtensionSettings(for: owner) }
+                    coordinator?.reportFailure(
+                        ExtensionFailure(
+                            message: message,
+                            reason: needsPreferences ? .missingPreferences : .error),
+                        of: owner)
                 })
         }
         await refresh()
@@ -221,6 +247,18 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         guard let icon = command.icon else { return nil }
         let candidate = owner.directory.appendingPathComponent("assets").appendingPathComponent(icon)
         return FileManager.default.fileExists(atPath: candidate.path) ? candidate.path : nil
+    }
+
+    /// An unset required preference blocks a command; any one of them is setup still owed.
+    func needsSetup(_ installed: InstalledExtension) -> Bool {
+        let name = installed.manifest.name
+        let shared = installed.manifest.preferences
+        return installed.manifest.commands.contains { command in
+            !storage.missingRequiredPreferences(
+                extension: name, schemas: shared + command.preferences
+            ).isEmpty
+        }
+            || !storage.missingRequiredPreferences(extension: name, schemas: shared).isEmpty
     }
 
     // MARK: - Install / uninstall
@@ -342,7 +380,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
                 updateFailures[name] = nil
             } catch {
                 failed.append(listing.title)
-                updateFailures[name] = listing.title
+                updateFailures[name] = ExtensionUpdateFailure(
+                    title: listing.title, reason: error.localizedDescription)
             }
         }
         await refresh()
@@ -415,7 +454,9 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
 
     func run(_ entry: AppEntry, arguments: [String: String] = [:]) async {
         guard let (owner, command) = resolve(entry) else {
-            state = .failed(ExtensionLaunchError.unknownCommand(entry.id).localizedDescription)
+            state = .failed(
+                ExtensionFailure(
+                    message: ExtensionLaunchError.unknownCommand(entry.id).localizedDescription))
             return
         }
         await run(owner, command: command, arguments: arguments)
@@ -434,23 +475,28 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         }
         await stop()
         guard isEnabled else { return }
+        lastLaunch = ExtensionLaunch(
+            extensionName: owner.manifest.name, commandName: command.name, arguments: arguments,
+            fallbackText: fallbackText, launchType: launchType, launchContext: launchContext)
+        console.clear()
+        running = ExtensionCommandRef(extensionName: owner.manifest.name, commandName: command.name)
         let schemas = owner.manifest.preferences + command.preferences
         let missing = storage.missingRequiredPreferences(
             extension: owner.manifest.name, schemas: schemas)
         guard missing.isEmpty else {
-            running = ExtensionCommandRef(
-                extensionName: owner.manifest.name, commandName: command.name)
-            state = .failed(ExtensionLaunchError.missingPreferences(missing).localizedDescription)
+            fail(
+                ExtensionFailure(
+                    message: ExtensionLaunchError.missingPreferences(missing).localizedDescription,
+                    reason: .missingPreferences))
             return
         }
         guard let bundle = owner.bundleURL(for: command) else {
-            running = ExtensionCommandRef(
-                extensionName: owner.manifest.name, commandName: command.name)
-            state = .failed(ExtensionLaunchError.notBuilt(command.title).localizedDescription)
+            fail(
+                ExtensionFailure(
+                    message: ExtensionLaunchError.notBuilt(command.title).localizedDescription))
             return
         }
 
-        running = ExtensionCommandRef(extensionName: owner.manifest.name, commandName: command.name)
         navigationDepth = 1
         state = .launching
 
@@ -471,7 +517,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             // No-op while a context is already up; after `stop()` this builds a fresh one.
             try await runtime.boot(config: .current(supportDirectory: supportPath))
         } catch {
-            state = .failed(error.localizedDescription)
+            fail(ExtensionFailure(message: error.localizedDescription))
             return
         }
 
@@ -480,7 +526,9 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             (try? String(contentsOf: bundle, encoding: .utf8)) ?? ""
         }.value
         guard !code.isEmpty else {
-            state = .failed(ExtensionLaunchError.notBuilt(command.title).localizedDescription)
+            fail(
+                ExtensionFailure(
+                    message: ExtensionLaunchError.notBuilt(command.title).localizedDescription))
             return
         }
 
@@ -519,6 +567,35 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             launchContext: launchContext)
     }
 
+    /// A no-view command has no screen to fail on, so its failure is reported and released.
+    private func fail(_ failure: ExtensionFailure) {
+        state = .failed(failure)
+        guard let running, let owner = extensionNamed(running.extensionName),
+            owner.command(named: running.commandName)?.mode == .noView
+        else { return }
+        coordinator?.reportFailure(failure, of: owner)
+        Task { await stop() }
+    }
+
+    /// The failed command again, with the arguments and context it was first given.
+    func retry() {
+        guard let launch = lastLaunch, let owner = extensionNamed(launch.extensionName),
+            let command = owner.command(named: launch.commandName)
+        else { return }
+        Task {
+            await run(
+                owner, command: command, arguments: launch.arguments,
+                fallbackText: launch.fallbackText, launchType: launch.launchType,
+                launchContext: launch.launchContext)
+        }
+    }
+
+    /// The failure with what the command logged before it, for a bug report.
+    func copyFailureReport(_ failure: ExtensionFailure) {
+        Paster.copyPlainText(failure.report(console: console.lines))
+        coordinator?.showHUD("Copied Error")
+    }
+
     func stop() async {
         oauthSession.cancel()
         guard let sessionID else {
@@ -537,6 +614,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         state = .idle
         running = nil
         toasts = []
+        hudToastIDs = []
         navigationDepth = 1
         accessoryValues = [:]
         paginationLatch = ExtensionPagination.Latch()
@@ -879,7 +957,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             return
         }
         guard session == sessionID else { return }
-        state = .failed(message)
+        fail(ExtensionFailure(message: message))
     }
 
     func runtime(_ runtime: ExtensionRuntime, session: String, navigationDepth depth: Int) {
@@ -899,6 +977,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     }
 
     func runtime(_ runtime: ExtensionRuntime, log level: String, message: String) {
+        console.append(level: level, message: message)
         #if DEBUG
             print("[extension \(level)] \(message)")
         #endif
@@ -952,8 +1031,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         nextToastID += 1
         // A no-view command's toast has no palette to appear in, so show a HUD.
         guard coordinator?.isPaletteVisible == true else {
-            coordinator?.showHUD(
-                [toast.title, toast.message].compactMap { $0 }.joined(separator: " — "))
+            showHUD(for: stamped)
+            if stamped.style == .animated { hudToastIDs.insert(stamped.id) }
             return stamped.id
         }
         toasts = [stamped]
@@ -963,6 +1042,21 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     }
 
     func update(toast id: Int, with toast: ExtensionToast) {
+        // A progress toast shown as a HUD ends as one: the outcome is what the user waited for.
+        if hudOutcomes[id] != nil {
+            hudOutcomes[id] = toast
+            return
+        }
+        if hudToastIDs.contains(id) {
+            guard toast.style != .animated else { return }
+            hudToastIDs.remove(id)
+            hudOutcomes[id] = toast
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(150))
+                self?.showHUDOutcome(id)
+            }
+            return
+        }
         guard let index = toasts.firstIndex(where: { $0.id == id }) else { return }
         var stamped = toast
         stamped.id = id
@@ -971,7 +1065,19 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     }
 
     func hide(toast id: Int) {
+        hudToastIDs.remove(id)
         toasts.removeAll { $0.id == id }
+    }
+
+    private func showHUDOutcome(_ id: Int) {
+        guard let toast = hudOutcomes.removeValue(forKey: id), toast.style != .animated else { return }
+        showHUD(for: toast)
+    }
+
+    private func showHUD(for toast: ExtensionToast) {
+        coordinator?.showHUD(
+            [toast.title, toast.message].compactMap { $0 }.joined(separator: " — "),
+            tone: toast.style == .failure ? .danger : .success)
     }
 
     private func scheduleToastDismissal(id: Int) {

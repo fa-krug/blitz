@@ -801,6 +801,10 @@ struct RootPaletteView: View {
                     accessory, isOpen: openMenu == .extensionAccessory,
                     action: toggleExtensionSearchAccessory)
             }
+            if !isCollapsed, let link = extensionCommandScreen?.linkAccessory {
+                headerGutter(width: metrics.spacing.md)
+                link
+            }
             if !isCollapsed, let indicator = extensionCommandScreen?.loadingIndicator {
                 headerGutter(width: metrics.spacing.md)
                 indicator

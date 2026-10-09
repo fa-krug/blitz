@@ -23,8 +23,8 @@ struct ExtensionCommandView: View {
         switch state {
         case .launching where screen.root == nil:
             EmptyResults(text: "Starting…")
-        case .failed(let message):
-            ExtensionFailureView(message: message)
+        case .failed(let failure):
+            ExtensionFailureView(failure: failure)
         case .finished:
             EmptyResults(text: "Done")
         default:
@@ -49,10 +49,7 @@ struct ExtensionCommandView: View {
                     // A commit rendered null; "Starting…" here would look like a hang.
                     EmptyResults(text: "Nothing to show")
                 } else {
-                    ExtensionFailureView(
-                        message:
-                            "This command renders \(type), which Blitz doesn't support yet. See docs/extensions.md."
-                    )
+                    ExtensionFailureView(failure: .unsupportedRoot(type))
                 }
             }
         }
@@ -62,27 +59,19 @@ struct ExtensionCommandView: View {
 /// The stack trace is kept: it is the only debugging signal an author gets.
 struct ExtensionFailureView: View {
     @Environment(\.metrics) private var metrics
-    let message: String
-
-    private var headline: String {
-        message.split(separator: "\n").first.map(String.init) ?? message
-    }
-    private var detail: String? {
-        let lines = message.split(separator: "\n").dropFirst()
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
-    }
+    let failure: ExtensionFailure
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: metrics.spacing.md) {
                 HStack(spacing: metrics.spacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(headline)
+                        .foregroundStyle(Theme.Colors.warning)
+                    Text(failure.headline)
                         .font(metrics.typography.rowTitle)
                         .textSelection(.enabled)
                 }
-                if let detail {
+                if let detail = failure.detail {
                     Text(detail)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -126,7 +115,11 @@ struct ExtensionToastPill: View {
                 if let message = toast.message, !message.isEmpty {
                     Text(message).foregroundStyle(Theme.Colors.textSecondary)
                 }
-                if toast.style == .failure {
+                // The extension's own remedy outranks a generic Copy, even on a failure.
+                if let action = toast.primaryAction {
+                    divider
+                    actionButton(action)
+                } else if toast.style == .failure {
                     divider
                     button {
                         Paster.copyPlainText(
@@ -139,13 +132,10 @@ struct ExtensionToastPill: View {
                             Text(copiedAt == nil ? "Copy" : "Copied")
                         }
                     }
-                } else if let action = toast.primaryAction {
+                }
+                if let action = toast.secondaryAction {
                     divider
-                    button {
-                        onAction(action.token)
-                    } label: {
-                        Text(action.title)
-                    }
+                    actionButton(action)
                 }
             }
             .font(metrics.typography.bar)
@@ -180,6 +170,16 @@ struct ExtensionToastPill: View {
         Rectangle()
             .fill(Theme.Colors.border)
             .frame(width: Theme.Size.hairline, height: metrics.size.menuIcon * 0.7)
+    }
+
+    private func actionButton(_ action: ExtensionToast.Action) -> some View {
+        let caps = ExtensionKeyShortcut(action.shortcut)?.caps.joined()
+        return button {
+            onAction(action.token)
+        } label: {
+            Text(action.title)
+        }
+        .help(caps.map { "\(action.title)  \($0)" } ?? action.title)
     }
 
     private func button(

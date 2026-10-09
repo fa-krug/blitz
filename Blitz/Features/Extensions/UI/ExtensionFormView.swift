@@ -166,7 +166,9 @@ struct ExtensionFormView: View {
             }
 
         case "Form.LinkAccessory":
-            EmptyView()
+            if let link = ExtensionLinkAccessory(node: field) {
+                labelled(field, showTitle: false) { link }
+            }
 
         default:
             labelled(field) {
