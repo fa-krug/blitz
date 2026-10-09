@@ -63,8 +63,8 @@ ranking runs in memory over it, and activating a row re-resolves the live elemen
 | `Model/MenuSearchTarget.swift` | the five cases a summon can land on, and their empty states |
 | `Service/AXMenuAccess.swift` | every `AXUIElement` read: the walk, the path re-resolve, the press |
 | `Service/MenuSearchSession.swift` | the observable state — walk lifecycle, snapshot, filtered rows |
-| `UI/MenuSearchCoordinator.swift` | freezing the target and icon, activation, the failure reports |
-| `UI/MenuSearchScreen.swift` | the `PaletteScreen` conformance and the empty-state switch |
+| `UI/MenuSearchCoordinator.swift` | freezing the target and icon, activation, copy, exclusion, reports |
+| `UI/MenuSearchScreen.swift` | the `PaletteScreen` conformance, the ⌘K menu, the empty-state switch |
 | `UI/MenuSearchList.swift` | the menu sections and the row: app icon, title, path, keycap chips |
 
 `MenuSearchTarget.classify` splits a summon five ways — `searchable`, `excluded`, `selfTarget`,
@@ -96,6 +96,21 @@ chip, or not at all.
 
 The list decodes exactly one `NSImage` — the frozen app's icon — and every row paints it, so a
 4,000-row snapshot never costs more than one bitmap.
+
+## Actions
+
+⌘K — or a right click on a row — opens `MenuSearchActionsMenu`, and only while the target is
+`.searchable`: every other state has no rows, so `hasActions` reads `actions(at:)` and the footer
+drops its Actions half rather than offering a menu that opens on nothing.
+
+- **Activate Menu Item** (↵) is the row's own press, drawn with the frozen app's icon.
+- **Copy Menu Path** (⌃⌘C, the palette's `copyPath` chord) copies `displayPath` — the parents and
+  the title on the same ` → ` the id and the search field use — so what lands on the clipboard is
+  the path the row describes.
+- **Turn Off Menu Search for _App_** appends the frozen app's bundle ID to
+  `menuSearchDisabledApps` — the same list, written the same way, as Settings › Navigation's
+  `DisabledApplicationsList` — and calls `load()`, which classifies the app `.excluded` and drops
+  the snapshot. Undoing it is the Settings row, which is where the exclusion is visible afterwards.
 
 ## Where it is reachable from
 

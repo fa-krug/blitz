@@ -12,6 +12,7 @@ struct MenuSearchList: View {
     let selectedID: MenuSearchItem.ID?
     let scroll: ScrollIntent
     let onActivate: (MenuSearchItem) -> Void
+    let onActions: (MenuSearchItem) -> Void
 
     /// One bitmap for the whole list; every row paints the same frozen app icon.
     @State private var icon: NSImage?
@@ -64,6 +65,7 @@ struct MenuSearchList: View {
                             .selectionFrame(item.id == selectedID)
                             .contentShape(Rectangle())
                             .onTapGesture { onActivate(item) }
+                            .onRightClick { onActions(item) }
                         }
                     }
                 }

@@ -115,7 +115,8 @@ window's app quit between the sweep and the ↵.
   neither knows about the other. `AppIndex.isCommandEnabled` feeds `hotKeys.allowsAction`, so both
   shortcuts go dead with the switch, and each `show()` re-guards the flag anyway.
 - **`menuSearchDisabledApps`** (empty) is the exclusion list. It ships with no seeded entries, unlike
-  the clipboard's: a menu read only ever happens because the user asked for one.
+  the clipboard's: a menu read only ever happens because the user asked for one. The pane and the
+  Menu Search ⌘K row **Turn Off Menu Search for _App_** are its two writers, and both append.
 - **`menuSearchShowsAppleMenu`** (off) lists the Apple menu's own items. Off by default because that
   menu is identical under every app, so it would pad every snapshot with the same ~50 rows;
   [menu-search.md](menu-search.md) owns how it is applied.
