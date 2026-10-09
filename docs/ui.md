@@ -508,7 +508,20 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   **↵ runs the dialog's primary action; Escape cancels**, on every dialog including destructive ones.
   Arrow keys walk the volume slider along the same 5% grid the volume commands use (`DialogPanel`
   reports `.increment` / `.decrement` and `DialogController` applies `VolumeLevel.stepped`, so the
-  panel never learns what a volume step is); click-away resolves as a dismissal.
+  panel never learns what a volume step is); click-away resolves as a dismissal (see below).
+- **Click-away dismisses, but a form keeps what was typed.** `windowDidResignKey` resolves the dialog
+  as its cancel rather than leaving it up: the panel floats at `.dialog` on every Space, so a dialog
+  kept open after the user moved to another app would cover that app, keep the palette dimmed, and
+  refuse every other prompt while it waited. Losing an edit to a stray click is the cost, so New Event,
+  the reminder prompt and Edit Contact each keep a `FormDraftMemory`: a click-away that changed
+  something keeps that edit, and the next time the form opens **on the same opening draft** it starts
+  from the edit instead. The opening draft is the subject — a blank `EventDraft()` for New Event, the
+  record's own values for an edit, the prefill for a new reminder — so a kept edit never opens on a
+  different record or prefill, and a record changed elsewhere since opens on its new values. New and
+  Edit Reminder keep separate memories. Only click-away keeps: ↵, Escape and Cancel are deliberate,
+  and end that subject's kept edit. One edit is kept per form, so a second click-away with changes on
+  another subject replaces it. The memory lives on `DialogController` for the session and is never
+  written to disk. The other dialogs keep plain click-away dismissal.
 - **Async, not modal.** Presentation is `async` (`withCheckedContinuation`), so there is no nested run
   loop. A held hotkey can't stack dialogs: while one is up, a second request resolves immediately as a
   dismissal — which is why the old `isConfirmingCommand` re-entrancy flag is gone. The guard is keyed
@@ -660,6 +673,9 @@ bars, while a snippet's inline enumerated arguments remain `DialogChip`s. Two th
   default button's keycap says ⌘↵.
 - **An accessory can refuse its own primary action.** An invalid draft leaves the dialog up on ↵ and
   on a click alike, which is what a greyed-out button would say if `DialogAction` could carry one.
+- **A draft form survives a click-away.** `.eventDraft`, `.reminderDraft` and `.contactDraft` reopen
+  on the edit a click-away left behind, for the same subject only; see
+  [Dialogs & HUD](#dialogs--hud).
 
 ## Settings
 

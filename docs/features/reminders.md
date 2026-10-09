@@ -150,4 +150,6 @@ be reached. Completing asks before it ticks it off on every device.
 `ReminderDraftFields` is a dialog accessory: title, notes, an unlabelled `No Date` · `Date` ·
 `Date & Time` choice and a date field. The field is laid out even under `No Date`, disabled, because a dialog is measured
 once as it is presented and a field that came and went would be clipped. The choice row is
-`DialogChoiceRow`, shared with New Event.
+`DialogChoiceRow`, shared with New Event. Clicking away keeps the edit: reopening the same reminder,
+unchanged since — or New Reminder with the same prefill — starts from it, while Escape and Cancel
+discard it ([ui.md](../ui.md#dialogs--hud)).

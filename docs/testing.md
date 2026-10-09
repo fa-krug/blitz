@@ -114,6 +114,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `callout-test` | `DesignSystem/Theme.swift`, `HotKeys/UI/CalloutPlacement.swift` |
 | `system-action-test` | `SystemActions/Model/SystemAction.swift` |
 | `volume-test` | `SystemActions/Model/VolumeLevel.swift` |
+| `dialog-draft-test` | `Windows/Dialog/FormDraftMemory.swift` — what a click-away keeps, what a deliberate ending drops, and that a kept edit only reopens on its own subject |
 | `window-command-test` | `WindowManagement/WindowCommand.swift`, `WindowPlacementEngine.swift`, `WindowActionMemory.swift` |
 | `window-layout-test` | `WindowManagement/Model/WindowLayout*.swift` and `CustomWindowSize*.swift` — the layout record, its geometry and its inverse, the plan and the store; custom sizes' units, frames and store |
 | `window-room-test` | `WindowManagement/Model/Room*.swift` — every room layout and its minimum sizes, the grid, arrangement reading, window matching, parking, the plan, Tab's choices and the three stores |
@@ -686,6 +687,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Create Event writes to the default calendar and shows up on the card, the schedule and the launcher
   without a relaunch; a blank title leaves the dialog up on ↵ and on a click
 - Arrow keys move the caret in the New Event title field, and still step the Set Volume slider
+- Type a New Event title, click another app: the dialog closes, and Create Event reopens on that
+  title; Escape or Cancel instead, and it reopens blank. Editing one reminder or contact, clicking
+  away, then editing a different one opens the other's own values
 - Every command row of Settings ▸ Calendar has Add Alias, Record Hotkey and a checkbox, and none of
   the five appears in Settings ▸ Commands
 - Export with auto join and camera preview on, import onto a clean profile: both come back **off**,

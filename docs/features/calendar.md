@@ -167,6 +167,9 @@ the option to hide a current event immediately or after a chosen delay.
 **A command that opens a surface is bindable**; the two that act on the next meeting are reached
 through the join card's own ⌘K menu instead, where the meeting they act on is on screen.
 
+New Event keeps what a click-away left in it: the next Create Event starts from that title, start and
+duration, while Escape and Cancel discard it ([ui.md](../ui.md#dialogs--hud)).
+
 A miss reports through the HUD (`Nothing to join right now`), not a dialog: it is transient and there
 is nothing to acknowledge. So does Create Event with the feature off. With it on but access denied,
 the fix is in System Settings, so a failure dialog offers **Open Settings** to Privacy & Security →

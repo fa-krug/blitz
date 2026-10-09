@@ -165,7 +165,8 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
 - **Dialogs** — borderless `DialogPanel`s driven by `DialogController`, the app's only presenter for
   confirmations, failure reports and value prompts. Presentation is `async`, so nothing blocks the main
   actor, and the presenter refuses a second dialog while one is up — that, not a flag, is what stops a
-  held hotkey stacking dialogs.
+  held hotkey stacking dialogs. Click-away dismisses; the draft forms' kept edits live on
+  `DialogController` too, in one `FormDraftMemory` per form. See [ui.md](ui.md#dialogs--hud).
 - **Support** — a titled `AppWindowController` window owned by `SupportCoordinator`, sized to the
   height its content measured. Every route into it — the palette's menu circle, Settings → About, the
   menu bar, the launcher, and the 30-day reminder — lands on `showSupport()`, which is what moves the

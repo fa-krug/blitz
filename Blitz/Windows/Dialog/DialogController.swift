@@ -7,7 +7,12 @@ final class DialogController: NSObject, NSWindowDelegate {
     private let settings: AppSettings
     private let onPresentationChanged: (Bool) -> Void
     private var panel: DialogPanel?
-    private var continuation: CheckedContinuation<Int, Never>?
+    /// Nil resumes it as a click-away rather than as the request's cancel.
+    private var continuation: CheckedContinuation<Int?, Never>?
+    private let newEventDrafts = FormDraftMemory<EventDraft>()
+    private let newReminderDrafts = FormDraftMemory<ReminderDraft>()
+    private let reminderEditDrafts = FormDraftMemory<ReminderDraft>()
+    private let contactEditDrafts = FormDraftMemory<ContactDraft>()
 
     init(settings: AppSettings, onPresentationChanged: @escaping (Bool) -> Void) {
         self.settings = settings
@@ -80,7 +85,9 @@ final class DialogController: NSObject, NSWindowDelegate {
     }
 
     func createEvent() async -> EventDraft? {
+        let opening = EventDraft()
         let state = EventDraftState()
+        state.draft = newEventDrafts.draft(openingOn: opening)
         let request = DialogRequest(
             title: "New Event", symbol: "calendar.badge.plus", tone: .neutral,
             actions: [
@@ -88,13 +95,17 @@ final class DialogController: NSObject, NSWindowDelegate {
                 DialogAction(title: "Cancel", role: .cancel)
             ],
             defaultIndex: 0, cancelIndex: 1, accessory: .eventDraft(state))
-        guard await present(request) == 0, state.draft.isValid else { return nil }
+        let choice = await present(request) { [newEventDrafts] clickedAway in
+            newEventDrafts.settle(state.draft, openedOn: opening, clickedAway: clickedAway)
+        }
+        guard choice == 0, state.draft.isValid else { return nil }
         return state.draft
     }
 
     /// `isNew` only words the dialog; the caller decides whether the draft creates or edits.
     func editReminder(_ draft: ReminderDraft, isNew: Bool) async -> ReminderDraft? {
-        let state = ReminderDraftState(draft: draft, now: Date())
+        let drafts = isNew ? newReminderDrafts : reminderEditDrafts
+        let state = ReminderDraftState(draft: drafts.draft(openingOn: draft), now: Date())
         let request = DialogRequest(
             title: isNew ? "New Reminder" : "Edit Reminder", symbol: "checklist", tone: .neutral,
             actions: [
@@ -102,12 +113,15 @@ final class DialogController: NSObject, NSWindowDelegate {
                 DialogAction(title: "Cancel", role: .cancel)
             ],
             defaultIndex: 0, cancelIndex: 1, accessory: .reminderDraft(state))
-        guard await present(request) == 0, state.draft.isValid else { return nil }
+        let choice = await present(request) { clickedAway in
+            drafts.settle(state.draft, openedOn: draft, clickedAway: clickedAway)
+        }
+        guard choice == 0, state.draft.isValid else { return nil }
         return state.draft
     }
 
     func editContact(_ draft: ContactDraft) async -> ContactDraft? {
-        let state = ContactDraftState(draft: draft)
+        let state = ContactDraftState(draft: contactEditDrafts.draft(openingOn: draft))
         let request = DialogRequest(
             title: "Edit Contact", message: "Saved to every device the card syncs to.",
             symbol: "person.crop.circle", tone: .neutral,
@@ -116,7 +130,10 @@ final class DialogController: NSObject, NSWindowDelegate {
                 DialogAction(title: "Cancel", role: .cancel)
             ],
             defaultIndex: 0, cancelIndex: 1, accessory: .contactDraft(state))
-        guard await present(request) == 0, state.draft.isValid else { return nil }
+        let choice = await present(request) { [contactEditDrafts] clickedAway in
+            contactEditDrafts.settle(state.draft, openedOn: draft, clickedAway: clickedAway)
+        }
+        guard choice == 0, state.draft.isValid else { return nil }
         return state.draft
     }
 
@@ -168,10 +185,13 @@ final class DialogController: NSObject, NSWindowDelegate {
         return state.values
     }
 
-    private func present(_ request: DialogRequest) async -> Int {
+    /// `onEnd` hears whether click-away ended it; a refused dialog never showed, so never ends.
+    private func present(
+        _ request: DialogRequest, onEnd: ((_ clickedAway: Bool) -> Void)? = nil
+    ) async -> Int {
         // Keyed on the continuation, so a panel still fading can't swallow the next.
         guard continuation == nil else { return request.cancelIndex }
-        return await withCheckedContinuation { continuation in
+        let choice: Int? = await withCheckedContinuation { continuation in
             self.continuation = continuation
             onPresentationChanged(true)
             let width =
@@ -209,6 +229,8 @@ final class DialogController: NSObject, NSWindowDelegate {
             panel.contentView?.layoutSubtreeIfNeeded()
             show(panel)
         }
+        onEnd?(choice == nil)
+        return choice ?? request.cancelIndex
     }
 
     /// Moves the full-size glass panel, avoiding the transient rim caused by scaling its content.
@@ -237,7 +259,7 @@ final class DialogController: NSObject, NSWindowDelegate {
     }
 
     /// Resumes before the fade finishes, so a confirmation isn't held up by animation.
-    private func finish(_ index: Int) {
+    private func finish(_ index: Int?) {
         guard let continuation else { return }
         self.continuation = nil
         onPresentationChanged(false)
@@ -273,9 +295,9 @@ final class DialogController: NSObject, NSWindowDelegate {
     private static let centerLift: CGFloat = 0.08
     // MARK: - NSWindowDelegate
 
-    /// Click-away resolves as a dismissal rather than leaving an orphaned dialog behind.
+    /// Dismisses, since a `.dialog` panel left up floats over other apps; a form keeps its draft.
     func windowDidResignKey(_ notification: Notification) {
         guard let panel, notification.object as? NSWindow === panel else { return }
-        panel.onKey?(.cancel)
+        finish(nil)
     }
 }
