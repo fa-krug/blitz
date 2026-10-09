@@ -38,6 +38,8 @@ final class QuickActionCoordinator {
     @ObservationIgnored private var generation = 0
     /// Cancellation is cooperative, so a cancelled run must not hide the pill a newer run showed.
     @ObservationIgnored private var progressOwner: Int?
+    /// The run streaming into the panel; closing it must not cancel a newer run started meanwhile.
+    @ObservationIgnored private var panelRun: Int?
 
     init(
         settings: AppSettings, store: QuickActionSettingsStore,
@@ -347,6 +349,7 @@ final class QuickActionCoordinator {
     }
 
     private func present(_ state: QuickActionPanelState, target: Target) {
+        panelRun = generation
         panels.present(
             state,
             metrics: settings.interfaceSize.metrics,
@@ -355,14 +358,24 @@ final class QuickActionCoordinator {
                 state.targetLanguage = language
                 self?.rerun(state, target: target)
             },
+            onRetry: { [weak self] in self?.rerun(state, target: target) },
             onReplace: { [weak self] text in
                 self?.deliver(text, to: target, action: state.action)
+            },
+            onCopy: { [weak self] text in
+                Paster.copyPlainText(text)
+                self?.core.showMessage("Copied result")
+            },
+            onDismiss: { [weak self] in
+                guard let self, self.panelRun == self.generation else { return }
+                self.cancel()
             })
     }
 
     private func rerun(_ state: QuickActionPanelState, target: Target) {
         state.restart()
         start { [weak self] in await self?.perform(state, target: target, previewing: true) }
+        panelRun = generation
     }
 
     private var targetLanguage: Locale.Language {

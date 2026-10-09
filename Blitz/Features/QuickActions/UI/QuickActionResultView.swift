@@ -8,6 +8,7 @@ struct QuickActionResultView: View {
     let onReplace: () -> Void
     let onCopy: () -> Void
     let onCancel: () -> Void
+    let onRetry: () -> Void
     let onRetranslate: (Locale.Language) -> Void
     let onOpenLanguageSettings: () -> Void
     let onHeight: (CGFloat) -> Void
@@ -117,9 +118,13 @@ struct QuickActionResultView: View {
         case .running, .finished:
             output
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(metrics.typography.rowTitle)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: metrics.spacing.lg) {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(metrics.typography.rowTitle)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                Button("Retry", action: onRetry)
+                    .buttonStyle(.modalAction(.standard, fillsWidth: false))
+            }
         case .needsLanguageDownload:
             downloadPrompt
         }
