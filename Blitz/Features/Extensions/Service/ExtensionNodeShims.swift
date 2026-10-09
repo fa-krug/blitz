@@ -3,12 +3,12 @@ import CryptoKit
 import Darwin
 import Foundation
 
-/// Answered inline on the JS queue, so a blocking answer can never deadlock the UI.
+/// Answered inline on the JS thread, so a blocking answer can never deadlock the UI.
 final class ExtensionNodeShims: @unchecked Sendable {
     private let fileManager = FileManager.default
     private var fileHandles: [Int32: FileHandle] = [:]
 
-    /// A lock flag like `O_EXLOCK` would block the JS queue with no way back.
+    /// A lock flag like `O_EXLOCK` would block the JS thread with no way back.
     private static let openableFlags =
         O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL | O_NOFOLLOW
     private static let openFileLimit = 256
@@ -380,7 +380,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
 
         switch method {
         case "run":
-            // This runs on the JS queue, so a child that never exits would freeze the whole runtime.
+            // This runs on the JS thread, so a child that never exits would freeze the whole runtime.
             return try launch(spec).collect(timeout: timeout)
         case "start":
             let child = try launch(spec)
