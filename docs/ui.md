@@ -38,13 +38,13 @@ These are the things that quietly break the look if changed. Preserve them unles
 - **Dark is the baseline and its values are frozen.** Every `Theme.Colors` token resolves per appearance, and its **dark branch is the literal the forced-dark build shipped** — restated, never recomputed. Retune a light branch freely; touch a dark one only when the task is to change Dark. `AppCore.applyAppearance()` is the only place an appearance is assigned, from `AppSettings.appearance`; `.system` assigns `nil` so AppKit follows macOS.
 - **New colors go through `Theme.Colors.ramp(dark:light:)`** (an alpha that inverts) or `adaptive(dark:light:)` (two explicit `NSColor`s, for anything that isn't a plain inversion — `panelScrim`, `layoutPreviewGround`). Never a bare `Color.white.opacity(…)` in a view: it disappears in Light.
 - **No grays, no opaque fills on the surface.** Reach for `Theme.Colors.*` instead of `.gray`, `NSColor.windowBackground`, etc.
-- **Three things stay fixed in both appearances, on purpose.** The `EdgeDissolve`/`OverflowFade` gradients are **mask luminance, not color** — inverting them breaks the dissolve everywhere. `ExtensionTintColors` and a tinted `IconCache` tile keep white ink, because a saturated tile carries its own contrast. And `IconCache` cannot use a dynamic `NSColor` at all: it rasterizes off-main, so the surface is carried explicitly and is part of the cache key.
+- **Three things stay fixed in both appearances, on purpose.** The `EdgeDissolve`/`OverflowFade` gradients are **mask luminance, not color** — inverting them breaks the dissolve everywhere. An `ExtensionTint` tile and a tinted `IconCache` tile keep white ink, because a saturated tile carries its own contrast. And `IconCache` cannot use a dynamic `NSColor` at all: it rasterizes off-main, so the surface is carried explicitly and is part of the cache key.
 - **An icon is drawn for a surface *and* a system icon style, and both move under you.** macOS restyles the icons `NSWorkspace` hands out when System Settings → Appearance → **Icon & widget style** changes, so `IconStyleMonitor` and Blitz's own appearance both call `IconCache.invalidateStyled()`. **The monitor may not invalidate on the notification itself.** AppKit posts `NSWorkspaceIconAppearanceConfigurationDidChange` before IconServices has swapped what `NSWorkspace` vends — measured at 25–120ms behind, jittering run to run — and the images it hands back are live objects macOS restyles in place, so flattening one on the signal freezes the *outgoing* style into a bitmap nothing ever invalidates again. `IconStyleMonitor` therefore polls `IconCache.styleFingerprint()` until the pixels actually move, and only then invalidates. Waiting also sidesteps the cost: re-flattening every icon the instant a restyle begins forces a cold IconServices regeneration, measured at 160× the settled draw cost. That drops the cached bitmaps, bumps every cache key so an in-flight decode cannot repopulate a stale one, and moves `IconCache.style.generation`. **Any view that draws an icon must key its fetch on that generation** — wrap the view's own key in `IconRequest`, or call `IconCache.observeStyle()` where the icon is resolved synchronously in a `body`. It is reached through `IconCache` rather than injected precisely because icons are drawn in menus, popovers and every list, where a missed injection would be a silent staleness bug.
 - **No hard dividers between the list and the bars.** The header and bottom bar are `safeAreaInset` overlays with no background; separation comes from `edgeDissolve()`, nothing else. (One deliberate exception: the vertical hairline between a list and its preview pane, as the clipboard and file search screens draw.)
 - **The panel corner is clipped once, at the root.** `RootPaletteView.body` ends with `.background(panelScrim) → .background(GlassEffectView()) → .clipShape(RoundedRectangle(26, .continuous))`. Keep that order; the scrim goes _over_ the glass, and the clip is last.
-- **Don't use the native scroll edge effect.** Inside a transparent panel it renders a hard-bounded rectangle. Use `edgeDissolve()`, or a gradient `mask` where a surface owns its own fade — `scrollEdgeEffectStyle` draws a *material* where a scroll view meets a safe area, so over a panel that already has `panelScrim` + `GlassEffectView` it composites to nothing. Tried and rejected on `QuickActionResultView`, with and without `safeAreaBar`. This is a rule about the borderless panels; the Settings window is a titled `NSWindow` whose system titlebar draws the band itself (see "Settings").
+- **Don't use the native scroll edge effect.** Inside a transparent panel it renders a hard-bounded rectangle. Use `edgeDissolve()`, or a gradient `mask` where a surface owns its own fade — `scrollEdgeEffectStyle` draws a *material* where a scroll view meets a safe area, so over a panel that already has `panelScrim` + `GlassEffectView` it composites to nothing, with or without `safeAreaBar`; `QuickActionResultView`'s own gradient mask is the shape to copy. This is a rule about the borderless panels; the Settings window is a titled `NSWindow` whose system titlebar draws the band itself (see "Settings").
 - **Test over a light desktop.** Transparency and corner masking bugs only show over bright wallpaper. Dark wallpaper hides them.
-- **No `NSAlert` or system popovers.** Every confirmation, failure report, value prompt and transient readout is Blitz's own SwiftUI surface (see "Dialogs & HUD"). An Aqua alert on an alpha-over-vibrancy app reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath.
+- **No `NSAlert`, and no system popover on the palette's surfaces.** Every confirmation, failure report, value prompt and transient readout is Blitz's own SwiftUI surface (see "Dialogs & HUD"), and every palette menu is Blitz's own `PopoverMenu` (see "Liquid Glass") — never `NSMenu`, `NSPopover`, `.contextMenu` or SwiftUI `.popover`. An Aqua alert on an alpha-over-vibrancy app reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath. Two scoped exceptions: the system share picker (`Platform/SharePicker.swift`), since AirDrop, Mail and Messages are the system's to draw; and Settings and the AI Chat window, stock titled windows whose pickers and menus are SwiftUI `.popover`, `Menu` and context menus by design (see "Settings").
 - **A dialog has three independent axes; never let one infer another.** The **icon** (`DialogRequest.symbol`, required) is always the *subject's* own glyph — a command being confirmed uses its `SystemAction.sfSymbol`, so the Restart dialog shows the same icon as the Restart row. Tone never picks an icon. The **tone** (`DialogTone`: `.neutral` / `.success` / `.danger`) tints only that glyph. The **button** takes its color from `DialogAction.Role` (`.standard` white / `.destructive` red / `.cancel` secondary), so a red-glyph security warning can still carry a plain white button — as "Import executable commands?" does.
 - **Resolve every glyph through `SymbolImage`, not `Image(systemName:)`.** Some catalog symbols are bundled assets in `Assets.xcassets` (`toggleBluetooth`), and `Image(systemName:)` silently renders nothing for those.
 - **↵ runs the primary action, Escape cancels, and Cancel always renders leading** (the left button), matching macOS convention. A button never prints its key cap; a deliberate hover reveals its outlined `KeyCapChip` in a `Tooltip`.
@@ -396,7 +396,7 @@ All lists share one row grammar so launcher and clipboard look identical:
 - **Hover state lives on the row**, not the list, so a mouse sweep repaints only the rows entering/leaving (a list-level hover rebuilds every row per move — don't do that).
 - **Hover is armed by pointer movement, not by the pointer's position** (`armedHover`, `Palette/HoverArming.swift`). A palette shown under a resting pointer lights nothing, and keys or a scroll drop the highlight until the pointer moves clear of the slop radius around where it stood — a row must never light up because it *slid under* a still pointer. Two measured facts the rule rests on: SwiftUI fires hover phases for rows arriving under a stationary pointer, but **not** for a lit row that merely shifts, so `PaletteState.hoverDisarmToken` clears what is already lit; and a wheel gesture ends with a mouse-moved event carrying no displacement, so *event type is not evidence the pointer moved*. `Tests/hover-arming-test.swift` pins both halves.
 - **Scroll moves only on keyboard nav/reset**, driven by a `ScrollIntent` (`DesignSystem/Scrolling/ScrollIntent.swift`) — mouse selection targets a visible row and never yanks scroll. `.top` scrolls to the origin anchor that `scrollOriginAnchor()` installs — a zero-height overlay applied to the scrolled content _after_ its padding, so it marks offset 0 without joining the layout and the restored origin is exact (targeting the first row instead leaves the top padding hidden under the header); it is restated when the header's inset settles after mount, which moves the resting offset. A `.top` that finds the list already resting at the origin does nothing: `scrollTo` reaches the overlay only after walking every lazy row's id, which cost the emoji grid about 40 ms on every open. A `.follow` that lands on flat index 0 restores the origin instead, so that row's section header comes back into view. A reset lands on the screen's `landingSelection` through `RootPaletteView.land()`: row 0 takes `.top`; a later row takes `.center`, which brings a row the lazy stack has not built in by id, centres it once its frame is measured and then lets go — restated, like `.top`, when the inset settles. One intent state serves every mode — they never coexist.
-- **`.follow` is an invariant, not a command** (`scrollFollowsSelection`, `DesignSystem/Scrolling/`). Each list marks its selected row with `selectionFrame(_:)`, and the modifier keeps that row inside the band between the floating bars, re-checking as the geometry and the row's frame settle, then **stops watching the moment the row is inside**. That self-release is what keeps it safe: once a keystroke has landed nothing is observing, so a wheel scroll — or a scrollbar-thumb drag, which `onScrollPhaseChange` cannot see at all — is never pulled back. Two measured facts it rests on: `frame(in: .scrollView)` reports the *inset-excluded* space, so the band is simply `0…containerSize.height`; and SwiftUI's minimal scroll-to-visible counts the strip behind the bottom bar as visible while its *destination* math respects the insets. Hence the split — Blitz decides **whether** to scroll (`SelectionReveal`, pure, pinned by `Tests/scroll-reveal-test.swift`) and SwiftUI performs the move with an explicit `.top`/`.bottom` anchor. Scroll far by hand and the lazy stack drops the selected row, so there is no frame to measure at all: the fallback brings it back by id and the invariant, still standing, re-checks the moment it reports — which is why arrowing after a long mouse scroll lands the selection on screen rather than moving it out of sight. A one-shot `scrollTo` here left the highlight stranded under the pill whenever the target row's layout was not yet known, with nothing looking again until the next key press. **The id passed to `scrollFollowsSelection` must be the lazy container's own `ForEach` identity** — an `.id()` applied inside a row registers only once that row has been realized, which is exactly when scrolling to it is unnecessary, and the fallback that brings a dropped row back by id then has nothing to aim at.
+- **`.follow` is an invariant, not a command** (`scrollFollowsSelection`, `DesignSystem/Scrolling/`). Each list marks its selected row with `selectionFrame(_:)`, and the modifier keeps that row inside the band between the floating bars, re-checking as the geometry and the row's frame settle, then **stops watching the moment the row is inside**. That self-release is what keeps it safe: once a keystroke has landed nothing is observing, so a wheel scroll — or a scrollbar-thumb drag, which `onScrollPhaseChange` cannot see at all — is never pulled back. Two measured facts it rests on: `frame(in: .scrollView)` reports the *inset-excluded* space, so the band is simply `0…containerSize.height`; and SwiftUI's minimal scroll-to-visible counts the strip behind the bottom bar as visible while its *destination* math respects the insets. Hence the split — Blitz decides **whether** to scroll (`SelectionReveal`, pure, pinned by `Tests/scroll-reveal-test.swift`) and SwiftUI performs the move with an explicit `.top`/`.bottom` anchor. Scroll far by hand and the lazy stack drops the selected row, so there is no frame to measure at all: the fallback brings it back by id and the invariant, still standing, re-checks the moment it reports — which is why arrowing after a long mouse scroll lands the selection on screen rather than moving it out of sight. A one-shot `scrollTo` here would strand the highlight under the pill whenever the target row's layout is not yet known, with nothing looking again until the next key press. **The id passed to `scrollFollowsSelection` must be the lazy container's own `ForEach` identity** — an `.id()` applied inside a row registers only once that row has been realized, which is exactly when scrolling to it is unnecessary, and the fallback that brings a dropped row back by id then has nothing to aim at.
 - **Keycaps** use `KeyCapChip`: `.outline` (white-0.20 border) for hotkey hints on rows, `.filled` (white-0.10 fill) for footer shortcuts.
 - **An empty list is `EmptyResults`** (`Palette/EmptyResults.swift`): a `dialogIcon` glyph through
   `SymbolImage` in `textTertiary`, the reason in `rowTitle`, an optional `rowTrailing` hint naming
@@ -426,8 +426,8 @@ Source: `Theme.frosted(in:)`, `DesignSystem/PopoverMenu.swift`.
 Glass is normally for floating controls. The dialog root is the one modal-surface exception.
 
 - `View.frosted(in:)` = `glassEffect(.regular.interactive(), in:)` — regular, interactive glass, so it follows the system Liquid Glass (clear ↔ tinted) setting; `.clear` ignores that setting. Used on the action-group capsule and the menu circle. Dialogs intentionally use untinted, non-interactive `.glassEffect(.regular)` on their root instead; HUDs retain the panel recipe (see "Dialogs & HUD"). Retune it in `frosted(in:)`, not per call site.
-- **Menus are in-window overlays, not system popovers.** `.contextMenu`/`NSMenu` stall clicks for seconds inside a `LazyVStack` and spill outside the panel. Use `PopoverMenu` anchored to a corner via `.overlay`, inset `menuInset` (8pt) so its own corner isn't clipped by the panel's. A menu hung off a control instead of a corner — the clipboard type filter, `.topTrailing` — insets by that control's own metrics so their edges line up.
-- **A menu's `width` is fixed, never intrinsic**, so it can't jitter as its rows change. Every header menu states its own at its `RootPaletteView.menuContent` case — `menuWidth 276`, or a token of its own where that reads too wide (`clipboardFilterMenuWidth`, `fileSearchFilterMenuWidth`, `emojiCategoryMenuWidth`) — so retuning one never moves another. Native footer menus add 30pt without changing those header widths; extension Actions owns its nearby 310pt width inside the feature.
+- **Menus are Blitz's own, not system popovers.** `.contextMenu`/`NSMenu` stall clicks for seconds inside a `LazyVStack` and draw nothing like the palette. A `PopoverMenu` is hosted in its own borderless `MenuPanel` (`Palette/MenuPanel.swift`), so its glass renders against the desktop and nothing clips it; `MenuPanelController` seats that window at one of the palette's `MenuPanelCorner`s, inset `Spacing.md` so the menu's edge lines up with the control it hangs off — the header menus take twice that, to meet the header button in its wider gutter.
+- **A menu's `width` is fixed, never intrinsic**, so it can't jitter as its rows change. Every header menu states its own at its `RootPaletteView.menuContent` case — `menuWidth 276`, or a token of its own where that reads too wide (`clipboardFilterMenuWidth`, `fileSearchFilterMenuWidth`, `emojiCategoryMenuWidth`) — so retuning one never moves another. Native footer menus add 30pt without changing those header widths; extension Actions states its own width inside the feature.
 - **`PopoverMenu`** uses `glassEffect(.regular)` with `menuPanel 16` corners and **no hand-tuned shadow** — Tahoe glass carries its own elevation; adding a drop shadow reads heavy and non-native. A footer menu raises only its attached bottom corner to the controls' 18-point radius, so the two silhouettes meet exactly.
 - Its native search field is a row-height sibling of the scroller, above header menus or below footer menus. It uses an 18pt horizontal inset to align with the visible row glyphs. The top field stays vertically symmetric; the bottom field keeps its 1pt optical lift. Menus omit the adjacent edge dissolve and centre **No Results** in one row when their filtered rows are empty. The 8pt resting list inset belongs to the scroll content, so rows can reach the surface edges without shifting their initial position; hover fills keep the dedicated `menuRow 10` corner.
 - `PopoverMenuRow`: leading glyph, label, trailing shortcut glyph and `menuHover` fill on hover. Menus animate in with opacity and scale from the anchored corner, stretching briefly to 1.003 before settling; `Theme.MenuMotion` owns the entry, settle and exit timings.
@@ -462,8 +462,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `textSecondary` for the same legibility as a key-cap symbol; semantic colours stay unchanged.
   `.neutral` stays gray rather than system blue on purpose, since a hue here should mark a state the
   way the other two do, not decorate an otherwise neutral message. There is no separate
-  warning-vs-error case: both read equally severe and were only ever told apart by the icon's shape,
-  which the action-derived icon now owns.
+  warning-vs-error case: both read equally severe, and telling them apart by the icon's shape would
+  take the icon away from the subject it names.
   `MessageHUDController.show(message:tone:)` (the pill; see below) takes the same `DialogTone` for its
   status dot, so the pill and the dialogs speak one tint vocabulary even though they render it
   differently. `AppCore` derives a system action's tone from `SystemActionFeedback.isNoOp`, so
@@ -524,8 +524,10 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   written to disk. The other dialogs keep plain click-away dismissal.
 - **Async, not modal.** Presentation is `async` (`withCheckedContinuation`), so there is no nested run
   loop. A held hotkey can't stack dialogs: while one is up, a second request resolves immediately as a
-  dismissal — which is why the old `isConfirmingCommand` re-entrancy flag is gone. The guard is keyed
-  on the live continuation, not on the panel, so a dialog still fading out can't swallow the next one.
+  dismissal, so no re-entrancy flag is needed. The guard is keyed on the live continuation, not on the
+  panel, so a dialog still fading out can't swallow the next one.
+- **A form opens focused.** `DialogController` lays the panel's content out before the panel goes
+  key, so a form's first field takes focus as the dialog appears and typing starts there.
 - **Entrance and exit.** A dialog starts 3pt below its final position at 8% opacity. AppKit moves the
   cached full-panel surface upward over `dialogEnter` (0.12s), with the alpha following the same curve
   so the fade masks the window's whole-pixel movement and the native shadow travels with the glass.
@@ -533,8 +535,7 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   Exit is an interruptible `fadeOut` over `dialogExit` (0.10s); its handler hides the window only if
   the alpha is still 0. The
   continuation resumes **before** that fade, so confirming Restart is never held up by animation.
-  Other borderless surfaces retain the shared `Duration.enter` / `Duration.exit` timings and
-  `PanelTransition` behavior.
+  Other borderless surfaces keep the shared `Theme.Duration.enter` / `Theme.Duration.exit` timings.
 - **Non-activating**, like the palette: the dialog takes key focus for its own keys without pulling app
   focus off whatever the user was in. It sits at `.dialog`, above the palette's `.palette`, and is
   centred on the **cursor's** display with the same slight optical lift the palette uses.
@@ -546,7 +547,7 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   because a level needs an actual bar and number, not a one-line message: speaker glyph
   (`dialogIcon 32`, neutral `Color.primary` — a level isn't a success/warning statement), the bar, then
   the level as monospaced text beside it, in a fixed `volumeReadout 38` slot so the track can't resize
-  as the number runs 0% → 100% — the same trick `VolumeSlider` uses, since the two now read as one
+  as the number runs 0% → 100% — the same trick `VolumeSlider` uses, since the two read as one
   control in two places. That slot is measured, not guessed: 38 is the widest string it ever holds
   ("Muted", 36pt in `rowTrailing`) plus a hair, because every point of slack is subtracted straight off
   the track. Fixed `hudWidth 200 × hudHeight 100`, with **asymmetric padding** — `xxl` 20 vertical,
@@ -646,8 +647,8 @@ leaves, and `fadeIn`/`fadeOut` for the panels; Reduce Motion removes all of it. 
 
 ## The camera preview panel
 
-`CameraPreviewPanel` is the third borderless surface, beside the dialog and the notes panel. It takes
-the same recipe — `panelScrim`, then `GlassEffectView`, then the clip — and the same optical lift a
+`CameraPanel` is a borderless surface beside the dialog, shared by Open Camera and the calendar's
+join preview. It takes the same recipe — `panelScrim`, then `GlassEffectView`, then the clip — and the same optical lift a
 dialog takes, but sits at `.floating` rather than `.dialog` so a failure report still lands on
 top of it.
 
@@ -711,8 +712,8 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   `NSTextView` keeps its caret, its keyboard and its selection, so a "disabled" prompt box still takes
   typing and still gives up its text to ⌘A ⌘C. Swap the editor for a `Text` when it must be read-only,
   the way `SystemPromptEditor` does; dimming an editor that still accepts input is the bug, not the fix.
-- **A group is a `Section`**, with `header:` for its name and `footer:` for the caption that used to
-  ride under the last row.
+- **A group is a `Section`**, with `header:` for its name and `footer:` for a caption under its last
+  row.
 - **Interface size and Emoji Skin Tone use `settingsOptionSegment`** for the same square selection
   shape, while keeping their own content sizes.
 - **A pane scans as section → setting → control, so its words are rationed.** A subtitle is a short
@@ -722,8 +723,8 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   checkbox.
 - **Settings is one SwiftUI `NavigationSplitView`** (`SettingsRootView`), hosted with
   `sceneBridgingOptions = [.toolbars, .title]` so its toolbar, title and search field reach the AppKit
-  window. It was an `NSSplitViewController`; in that sidebar every search bar drew a hard scroll edge
-  with a hairline, which no `scrollEdgeEffectStyle` or accessory style could soften.
+  window. Not an `NSSplitViewController`: in that sidebar every search bar draws a hard scroll edge
+  with a hairline, which no `scrollEdgeEffectStyle` or accessory style can soften.
   `.toolbar(removing: .sidebarToggle)` goes *before* `navigationSplitViewColumnWidth`, or the column
   shrinks to AppKit's default thickness.
 - **The pane's own title is not in the pane.** `.navigationTitle` puts it in the titlebar beside the
@@ -746,8 +747,8 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   **`FeatureSwitchSection`** (a feature's master switch plus its launcher-visibility companion),
   **`SettingsFilterField`** (the filter row above a long list), **`launcherVisibilityHelp()`**, and the
   Settings editor header, fields and surface. `ModalActionButtonStyle.swift` keeps every borderless surface's actions on one
-  implementation — dialogs, Settings editors, the camera footers and the Quick Action panel. `Onboarding/UI/OnboardingCard.swift` keeps the older hand-drawn card,
-  which that window still uses.
+  implementation — dialogs, Settings editors, the camera footers and the Quick Action panel. `Onboarding/UI/OnboardingCard.swift` is the onboarding window's own
+  hand-drawn card.
 - **A Settings editor borrows the dialog language, not its job.** `SettingsEditorPresenter` hosts the
   existing form in an activating, transparent child `NSPanel`, with the same `panel 26` Liquid Glass
   surface, 3pt/8% entrance and matte action buttons. A blocking child covers and dims the whole parent,
@@ -756,9 +757,9 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   the surface puts `WindowDragBackground` behind its content, and the panel hands `performDrag(with:)`
   up to its parent. The
   presenting binding remains the dismissal source of truth, while launcher handoffs are consumed into
-  pane-local state so opening an editor does not repaint the split view. A list that can keep growing
-  scrolls at a stated row count instead — Custom Commands caps its arguments at `visibleArgumentRows` —
-  so a panel's height stays a property of the editor, not of what has been typed into it. Extension
+  pane-local state so opening an editor does not repaint the split view. A list inside an editor is
+  bounded rather than open-ended — Custom Commands caps its arguments at `CustomCommandArgument.limit`
+  — so a panel's height stays a property of the editor, not of what has been typed into it. Extension
   editor visuals stay inside `Features/Extensions/`; the shared presenter treats them as opaque content.
 - **The sidebar searches every pane *and* its rows.** `.searchable(placement: .sidebar)` sits above the list and
   swaps it for a flat, ranked result list; each result carries the pane's `systemImage`, the row's
@@ -828,9 +829,9 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   Back; Configure Command opens the page directly (`AppEntry.settingsPage`). A row shows what its
   page sets as badges (`SettingsEntryBadges`): the alias as a chip, the shortcut as key caps, an
   eye-slash when hidden, a dimmed label when off, then a chevron. An `NSTableView` reusing hosted
-  rows with their controls came first and lost: each hosted row is its own hosting view, about twice
-  a Form row's cost, so 51 System Settings rows still took 200 ms to open and a scroll step missed
-  frames. Read-only lazy rows open that pane in about 85 ms, and Quicklinks in 125 against 200.
+  rows with their controls is no answer: each hosted row is its own hosting view, about twice a Form
+  row's cost, so 51 System Settings rows take 200 ms to open and a scroll step misses frames.
+  Read-only lazy rows open that pane in about 85 ms.
   Rows are a fixed height, matching the native Form row they stand in for: 45 pt for a one-line
   launcher row, 52 pt for a title over a `.caption` subtitle; the stack hangs 11 pt into the Form
   row's padding at the top (including the filter's divider) and 10 pt at the bottom. A lazy row may
@@ -840,8 +841,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   application scope icons consistently across pages.
 - **A pane taller than a screenful may hold its lower sections back a frame.** General mounts
   Calculator and Search from a `.task` after `await Task.yield()` — a task body runs synchronously up
-  to its first suspension, so without the yield they land in the first frame anyway. Measured while
-  General still held Appearance and Hyper Key, it brought the first paint from ~170 ms to ~110. A
+  to its first suspension, so without the yield they land in the first frame anyway. A
   pending search reveal into the pane mounts them at once, so the jump has its row to scroll to.
 - **The sidebar's highlight moves before the pane builds.** `SettingsDetailView` keeps showing the
   previous pane until a `.task(id: navigation.tab)` past `Task.yield()` catches it up, so a click is
@@ -850,7 +850,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
 - **A pane never asks TCC on the main actor.** A status read is a round trip to TCC — Contacts costs
   ~17 ms every time, Accessibility and Calendars ~45 ms on the first — so the Permissions pane reads
   all four together in a `Task.detached`, polls that each second while open (nothing announces a
-  grant made in System Settings), and opens on the last read; that took it from ~280 ms to ~65.
+  grant made in System Settings), and opens on the last read in ~65 ms rather than ~280.
 
 ### The window-layout editor
 
@@ -886,8 +886,9 @@ See [features/window-layouts.md](features/window-layouts.md#the-editor).
 
 ### The shortcut recorder callout
 
-`ShortcutRecorder` is a **120pt** field showing only the binding — a combo's modifiers collapse into
-one cap (`HotKeyBinding.compactKeycaps`), so any shortcut fits in two chips. Recording is narrated by
+`ShortcutRecorder` is a `shortcutRecorder` (**120pt**) field showing only the binding — one cap per
+modifier and one for the key (`HotKeyBinding.keycaps`), with a Hyper chord's modifiers collapsed into
+the single ✦ cap. Recording is narrated by
 `ShortcutRecorderPopover`, a small **132 × 82** callout above it: caps, one label line, an `esc` cap in
 the top-left corner. Its fixed frame shows the prompt (`⌥ A` at half opacity, "Type a
 shortcut"), live held keys, a pending second Globe tap, or a conflict (rejected caps + owner, orange).

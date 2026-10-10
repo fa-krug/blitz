@@ -3,8 +3,7 @@ import AppKit
 // `@preconcurrency` downgrades AX diagnostics: `kAX…` are mutable C globals, but constant.
 @preconcurrency import ApplicationServices
 
-/// Every `AXUIElement` call in the feature. Shared, so the mover and the layout runner cannot
-/// disagree about what a window is or how one is written.
+/// Every `AXUIElement` call, shared so the mover and layout runner agree on what a window is.
 @MainActor
 enum AXWindowAccess {
     /// A hung target must not stall main for the AX default. Per element, never inherited.
@@ -127,7 +126,6 @@ enum AXWindowAccess {
     // MARK: - Writing a frame
 
     /// The one write sequence, so a stubborn app lands the same way from any caller.
-    /// See docs/features/window-management.md#applying-a-placement.
     static func write(
         _ target: CGRect, anchor: WindowPlacementEngine.Anchor, to window: AXUIElement,
         current: CGRect, canResize: Bool, canvas: CGRect?

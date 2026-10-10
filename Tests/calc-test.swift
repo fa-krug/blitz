@@ -85,11 +85,11 @@ struct CalcTests {
         expectDisplay("10em", "160 px")  // partial "e" isn't an exponent, so `em` stays a unit
         expectDisplay("1e3k + 1", "1,000,001")  // exponent then compact suffix, both applied
 
-        // Exact up to 2^53, past the old 1e15 cutoff — truncating these lost real digits on copy
+        // Exact up to 2^53: truncating these would lose real digits on copy
         expectDisplay("2^49", "562,949,953,421,312")
         expectDisplay("2^50", "1,125,899,906,842,624")
         expectCopy("2^50", "1125899906842624")
-        expectDisplay("999999999999999 + 1", "1,000,000,000,000,000")  // exactly the old cutoff
+        expectDisplay("999999999999999 + 1", "1,000,000,000,000,000")  // exactly 1e15
         // Beyond 2^53 the precision is genuinely gone, so exponent form is the honest answer
         expectDisplay("123456789 * 123456789", "1.524157875e+16")
 
@@ -687,7 +687,7 @@ struct CalcTests {
         expectDisplay("20% off 500", "400")
         expectDisplay("50 as % of 200", "25%")
 
-        // Badges on paths that previously had none
+        // Badges on base conversions and bare expressions
         expectBadges("255 to hex", source: "Decimal", target: "Hexadecimal")
         expectBadges("0xff to decimal", source: "Hexadecimal", target: "Decimal")
         expectBadges("3*3", source: "Expression", target: "Result")
@@ -771,7 +771,7 @@ struct CalcTests {
         // CLDR signs TWD "NT$", so `ntd` is what Taiwan types; `twd` keeps working
         expectError("1 ntd to usd", "No exchange rate for TWD.")
         expectError("1299 usd to ntd", "No exchange rate for TWD.")
-        // Slang is no longer carried: CLDR has no "quid", and we don't hand-maintain synonyms
+        // No slang: CLDR has no "quid", and we don't hand-maintain synonyms
         expectNil("50 quid to usd")
         expectNil("100 bucks to eur")
         // The last word of a name isn't always its noun — Special Drawing Rights.
@@ -897,12 +897,6 @@ struct CalcTests {
             crypto: Data(#"{"success":true,"target":"EUR","rates":{"BTC":20000}}"#.utf8),
             expected: "USD=1 EUR=0.9 BTC=nil complete=false")
         expectSnapshotThrows("no quotes", fiat: Data(#"{"success":true,"source":"USD","quotes":{}}"#.utf8))
-        // A cached snapshot that prices no coin predates them, whatever its `fetchedAt` claims
-        let coinless = CurrencyRates(base: "USD", rates: ["EUR": 0.9], fetchedAt: clock.now)
-        check(
-            "a coin-less snapshot is rejected on load", expected: "false",
-            got: "\(CurrencyFeed.pricesCoins(coinless))")
-        check("the fixture prices coins", expected: "true", got: "\(CurrencyFeed.pricesCoins(fx))")
         expectSnapshotThrows(
             "feed reported failure",
             fiat: Data(#"{"success":false,"source":"USD","quotes":{"USDEUR":0.9}}"#.utf8))
@@ -1521,7 +1515,7 @@ struct CalcTests {
         expectDisplay("3 workdays in hours", "24 hr")
         expectNil("5 from 10")
 
-        // A conversion mid-expression, which used to need parentheses
+        // A conversion mid-expression, with no parentheses needed
         expectDisplay("10kg to lb + 3lb", "25.04622622 lb")
         expectDisplay("10kg to lb - 1lb", "21.04622622 lb")
         expectDisplay("100 km/h to mph + 3mph", "65.13711922 mph")

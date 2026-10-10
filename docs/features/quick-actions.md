@@ -40,8 +40,8 @@ selectable Markdown renderer with AI Chat.
   refuses a second while it lives; a generation token stops a task that finishes after being
   replaced — by a retranslate, say — from clearing the newer handle. Closing the panel cancels the
   run streaming into it, or a hidden stream would hold the slot and leave every shortcut dead.
-- **`Model/` stays Foundation-only.** `quick-action-test` compiles that folder standalone, which is
-  what keeps `FoundationModels`, `Translation` and `NaturalLanguage` in `Service/` and `UI/`.
+- **`FoundationModels`, `Translation` and `NaturalLanguage` stay in `Service/` and `UI/`**, because
+  `quick-action-test` compiles `Model/` standalone.
 - **Quick Actions route themselves.** `quickActionModel` is a second routing decision, defaulting to
   Apple Intelligence and falling back to chat's model. A shortcut pressed all day should not bill an
   API every time, and that is not a choice chat's default can make on its behalf.
@@ -125,7 +125,7 @@ takes the choice with it.
 `HotKeyManager.start` can prune a binding whose action was deleted while Blitz was off.
 
 **The pane draws its own `AliasField`.** The four are named in `SettingsTab.ownedCommands`, so
-Settings → Commands no longer draws theirs. Without it, `deleteCustomQuickAction` would be clearing an
+Settings → Commands does not draw theirs. Without it, `deleteCustomQuickAction` would be clearing an
 alias no surface could set.
 
 **Nothing is saved until it is on disk.** `commit` persists before it moves `actions`, and a write
@@ -257,9 +257,9 @@ Blitz asserts, so it is the part worth checking by hand.
 
 **A replacement that never lands says so, and keeps the reply.** Every tier can decline, and a shortcut
 that quietly did nothing is indistinguishable from a shortcut that is not bound. `DeliveryCompletion`
-now settles either way, so a delivery that returned early reports failure exactly once; Quick Actions
+settles either way, so a delivery that returned early reports failure exactly once; Quick Actions
 put the generated text on the clipboard and raise a HUD rather than dropping it. Snippets pass no
-failure handler, so automatic expansion stays silent as before.
+failure handler, so automatic expansion stays silent.
 
 ### Manual sweep
 

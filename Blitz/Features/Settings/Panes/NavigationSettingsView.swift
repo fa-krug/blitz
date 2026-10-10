@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Moving somewhere — a window, a menu item — rather than changing something. Two features,
-/// one switch, so the pane lives here rather than inside either of them.
+/// Moving to a window or menu item; two features, one switch, so the pane belongs to neither.
 struct NavigationSettingsView: View {
     @Environment(AppSettings.self) private var settings
 

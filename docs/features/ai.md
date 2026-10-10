@@ -160,11 +160,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   with no account is ready only when `account/read` explicitly says `requiresOpenaiAuth: false`.
 - **Codex runs Blitz's MCP servers and nothing else.** The app-server still launches with every
   feature flag off and a read-only, network-disabled sandbox, and every server request but one is
-  declined. What changed is the list: the servers the reader configured for their own Codex are
-  disabled by name at launch — which they were not before, so they used to start inside Blitz
-  threads — and the servers [MCP](mcp.md) supplies take their place when a chat has any, under
-  names of their own (`blitz-<handle>`) so that no table of the reader's merges into one. A
-  launch that cannot read the reader's list, or cannot address a name on it, does not start. A turn
+  declined. The servers the reader configured for their own Codex are disabled by name at launch,
+  so none of them starts inside a Blitz thread, and the servers [MCP](mcp.md) supplies take their
+  place when a chat has any, under names of their own (`blitz-<handle>`) so that no table of the
+  reader's merges into one. A launch that cannot read the reader's list, or cannot address a name on it, does not start. A turn
   that arms none keeps `approvalPolicy: "never"`; a turn that arms some uses `"untrusted"`, where
   a tool call becomes an elicitation Blitz answers from the reader's own trust setting.
 - **Tool calling is a decorator, except where the CLI is the client.** `AIToolLoopProvider` wraps a
@@ -178,10 +177,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   search, so `boundedContext` can never separate a stored call from its result.
 - **Every HTTP request uses a private ephemeral `URLSession` with no URL cache.** Provider traffic must
   not create a second credential or response cache on disk.
-- **`Model/` stays Foundation-only.** `ai-provider-test` compiles the shipped provider models and pins
-  endpoints, request bodies, stream parsing, persistence repair, Codex protocol framing and both
-  CLI routes' MCP launch encodings. Request
-  bodies are `AIRequestBody`'s, in `Model/`, precisely so a wrong shape fails a harness rather than a
+- **Wire shapes live in `Model/`, where a harness reaches them.** `ai-provider-test` compiles the
+  shipped provider models and pins endpoints, request bodies, stream parsing, persistence repair,
+  Codex protocol framing and both CLI routes' MCP launch encodings. Request bodies are
+  `AIRequestBody`'s, in `Model/`, precisely so a wrong shape fails a harness rather than a
   conversation. `installed-ai-test` runs the Claude, Grok, OpenCode and Cursor adapters against real
   subprocess stubs and pins their safety boundaries.
 - **Grok, OpenCode and Cursor are text transports, not agents, and so is Claude with no server to
@@ -235,8 +234,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   reason, rather than leaving them waiting on a process that is gone.
 - **Quick AI's lifetime is decided on the way in.** Pop to Root forgets the screen and the query;
   whether the next summon resumes the transcript is Settings → AI's `Quick AI opens to`, applied in
-  `QuickAICoordinator.applyOpenPolicy` on the way into `.ai`. That used to be Pop to Root's job by
-  accident — it fires on every hide, so a chat never survived Escape — and deciding at open time from
+  `QuickAICoordinator.applyOpenPolicy` on the way into `.ai`. It is not Pop to Root's job, because
+  that fires on every hide, so no chat would survive Escape; and deciding at open time from
   a timestamp leaves one clock instead of two racing over the same state, and a verdict that still
   holds after a relaunch. A reply still streaming is never reset out from under the reader — it was
   asked for — and the transcript is saved regardless, so the old conversation is one ⌘K → Chat
@@ -292,8 +291,7 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 `.cursor` and `.api`.
 The first needs no connection at all. The next five name a model from an installed command and carry
 no credential. `.api` points at one `AIConnection`; `AIProviderKind` exposes four named presets plus a
-custom OpenAI-compatible route. Decoding still accepts the old `.chatGPT` spelling and writes it back
-as `.codex`, so an existing selection survives the rename.
+custom OpenAI-compatible route.
 
 | Setting | Transport | Default base URL |
 | --- | --- | --- |
@@ -523,12 +521,11 @@ Two palette modes carry Quick AI, and neither changes the shell's rules:
 | `.aiHistory` | `ChatHistoryScreen` | `ChatHistoryList` + preview, bucketed by day like Clipboard |
 
 Chat History backs out to Quick AI; both are sub-screens, so the header shows the back chevron.
-Quick AI keeps the `command:ai-chat` id it shipped with while it was the only chat, so a hotkey,
-alias or fallback order recorded then still reaches it with nothing migrated; the window's command
-is the new id. The search field is the composer: Return submits, or stops a streaming response, and the footer pill
+Quick AI's command is `command:quick-ai`; the window's is `command:ai-chat-window`. The search field
+is the composer: Return submits, or stops a streaming response, and the footer pill
 reads Send `↵` / Stop `↵` to match. The model switcher is a `HeaderMenuButton` — the
 active label, glyph and disclosure chevron layered over `BarButton` — which is also what Clipboard's
-type filter is now, so the two header menus hover and open identically. Its menu is the palette's
+type filter is, so the two header menus hover and open identically. Its menu is the palette's
 fourth `OpenMenu` case, `.topTrailing` like the type filter, and it opens on the selected model. Each
 row leads with the vendor's mark — `AIBrand` resolves it from a native connection's provider, or for
 OpenRouter and OpenAI-compatible endpoints from the model id (`anthropic/claude-…`, `deepseek-chat`,
@@ -548,7 +545,7 @@ them until an unrelated render or a window exit/re-enter recomputed hover. It di
 the menu, as a native menu's click-away does.
 
 Seven more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
-`ChatGPTSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AIChatSurfacesState` (which
+`CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AIChatSurfacesState` (which
 owns every live `AIChatState`), `MCPSettingsStore` and `MCPServerManager`. `AIChatCoordinator` — the
 window, and every chat action either surface sends — is the nineteenth feature coordinator,
 `MCPCoordinator` the twentieth and `QuickAICoordinator` the twenty-first.
@@ -643,8 +640,8 @@ Grok's `models` output is the catalog, but a signed-out CLI still exits 0 and pr
 "You are not authenticated." — that banner is the auth check, not the exit status. Cursor's
 `status --format json` gates `--list-models`.
 
-`ChatGPTSubscriptionManager` retains its historical type name but now owns only the installed Codex
-app-server lifecycle and discovered account metadata. Production never sets `CODEX_HOME`, so the
+`CodexSubscriptionManager` owns the installed Codex app-server lifecycle and discovered account
+metadata. Production never sets `CODEX_HOME`, so the
 server uses the same login and credential store as the user's normal Codex command. Blitz supplies
 only a private working directory. The server stops after ten idle minutes, when AI is switched off or
 when the app terminates, and restarts on demand. Account state, model availability and rate-limit

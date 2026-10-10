@@ -57,8 +57,7 @@ enum WindowLayoutGeometry {
         let anchor = WindowLayoutAnchor.named(horizontal: horizontal, vertical: vertical)
         let origin = anchor.placement.place(size, in: box).origin
 
-        // The residual stays exact: a centred anchor on an odd free space lands on a half point,
-        // and rounding here would move the window by one. `resolve` rounds the composed frame.
+        // Unrounded: a half-point centre rounded here moves the window; `resolve` rounds the whole.
         return Capture(
             widthFraction: size.width / box.width, heightFraction: size.height / box.height,
             anchor: anchor,

@@ -96,7 +96,7 @@ struct ExtensionStoreDetailView: View {
             Label("Failed", systemImage: "exclamationmark.triangle")
                 .font(metrics.typography.rowTrailing)
                 .foregroundStyle(.orange)
-                .help(message)
+                .tooltip(message, alignment: .trailing)
                 .fixedSize()
         case .available:
             EmptyView()

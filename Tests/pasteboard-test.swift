@@ -1,6 +1,4 @@
-// Standalone test for clipboard capture and paste, compiling the real sources rather than copies.
-// Every case drives `NSPasteboard.withUniqueName()`: writing to `.general` would land in the
-// reader's own running Blitz as a genuine copy.
+// Every case uses `NSPasteboard.withUniqueName()`: `.general` would reach the reader's Blitz.
 import AppKit
 
 @main

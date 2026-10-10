@@ -206,7 +206,7 @@ final class HyperKeyTap: HealthCheckable {
         }
     }
 
-    /// F18 carries fn like any function key, and a `flagsChanged` saying so reads as a real fn press.
+    /// F18 carries fn like any function key, and a `flagsChanged` saying so reads as a fn press.
     private static let functionKeyFlagRaw = CGEventFlags.maskSecondaryFn.rawValue
 
     private func hyperized(_ flagsRaw: UInt64) -> UInt64 {
@@ -421,7 +421,7 @@ final class HyperKeyTap: HealthCheckable {
         let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
         for event in [down, up] {
-            // The session source still carries the chord we injected, and a modified Escape is eaten.
+            // The session source still carries our injected chord, and a modified Escape is eaten.
             event?.flags = []
             event?.setIntegerValueField(.eventSourceUserData, value: Self.syntheticTag)
             event?.post(tap: .cghidEventTap)

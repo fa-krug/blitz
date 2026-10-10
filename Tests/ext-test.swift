@@ -389,7 +389,7 @@ struct ExtensionTests {
         check("dropdown options", prefs["mode"]?.options.count == 2)
         check("dropdown default", prefs["mode"]?.effectiveDefault == .string("b"))
 
-        // Raycast dereferences `preference.name` unconditionally, so a bare path crashes the command.
+        // Raycast dereferences `preference.name` unconditionally, so a bare path crashes it.
         let picked = prefs["editor"]?.runtimeValue(nil)?.jsonValue as? [String: Any]
         check(
             "an app picker resolves to an Application", picked?["name"] as? String == "Terminal",
@@ -1520,7 +1520,7 @@ struct ExtensionTests {
         runtime.shutdown()
     }
 
-    /// sql.js loads through `WebAssembly.instantiate`, whose promise never settled on the JS thread.
+    /// sql.js loads through `WebAssembly.instantiate`, whose promise must settle on the JS thread.
     @MainActor
     static func webAssemblyChecks() async {
         let (runtime, host, recorder) = makeRuntime()
@@ -1550,7 +1550,7 @@ struct ExtensionTests {
         runtime.shutdown()
     }
 
-    /// sql.js overflowed a GCD worker's 512 KB stack in the parser, so `__blitzCompile` got nothing.
+    /// sql.js overflows a GCD worker's 512 KB stack in the parser, leaving `__blitzCompile` empty.
     @MainActor
     static func deepNestingChecks() async {
         let (runtime, host, recorder) = makeRuntime()
@@ -1585,8 +1585,7 @@ struct ExtensionTests {
         runtime.shutdown()
     }
 
-    /// `withAccessToken` hands React an async component, which only renders while the promise it
-    /// suspended on comes back rather than being remade every attempt (#519).
+    /// `withAccessToken`'s async component renders only if its suspended promise is reused (#519).
     @MainActor
     static func asyncComponentChecks() async {
         let (runtime, _, recorder) = makeRuntime()
@@ -1650,7 +1649,7 @@ struct ExtensionTests {
         await runtime.stop(session: "sAsync")
     }
 
-    /// Raycast's `swift:` wrapper chmods its bundled helper before spawning it: store zips ship it 644.
+    /// Raycast's `swift:` wrapper chmods its helper before spawning it: store zips ship it 644.
     @MainActor
     static func swiftHelperChecks() async {
         let helper = FileManager.default.temporaryDirectory

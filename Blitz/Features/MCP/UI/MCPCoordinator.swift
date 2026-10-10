@@ -38,7 +38,7 @@ final class MCPCoordinator {
     /// The Codex helper keeps what it was launched with, so a server taken away is taken from it.
     private func dropWithdrawnServers(besides withdrawn: UUID? = nil) {
         let offered = store.enabledServers.filter { $0.trust != .never && $0.id != withdrawn }
-        core.chatGPTSubscription.dropWithdrawnServers(
+        core.codexSubscription.dropWithdrawnServers(
             keeping: isActive ? Set(offered.map(\.slug)) : [])
     }
 

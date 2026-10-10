@@ -17,7 +17,7 @@ entries and a still-registered shortcut moves nothing.
 - **Nothing in this feature touches `backingScaleFactor`.** All three of `NSScreen.frame`, `visibleFrame`
   and AX coordinates are in points, so mixed-DPI correctness is automatic.
 - **`WindowCommand.swift`, `WindowPlacementEngine.swift`, `WindowActionMemory.swift` and `SpaceGesture.swift`
-  stay Foundation + CoreGraphics and pure** — no AX, no `NSScreen`, no clock (`WindowActionMemory`
+  stay pure** — no AX, no `NSScreen`, no clock (`WindowActionMemory`
   takes `now` as a parameter, `SpaceGesture` takes `timestamp`). Every `AXUIElement` call and the
   Cocoa↔AX flip live in `Service/`; every `CGEvent` call lives in `SpaceSwitcher.swift`.
 - **`AXWindowAccess` is the one AX layer**, shared by the mover, the layout runner and
@@ -164,7 +164,7 @@ cycle state is never hidden inside the geometry. Its rules, in order:
 
 `cycleLength` comes from `WindowPlacementEngine.cycleLength(for:screens:cycle:)`, so the memory holds
 no opinion about what a step means: 1 covers cycling switched off *and* a command that never cycles,
-which is why `WindowActionMemory` no longer reads the catalog at all.
+which is why `WindowActionMemory` never reads the catalog.
 
 Two details carry their weight:
 
@@ -196,7 +196,7 @@ so a repeat press stays idempotent unless asked otherwise:
 The two are deliberately exclusive rather than composable: a 12-press chain over two displays is not a
 shortcut any more, and Raycast's own setting is the same single choice. `Half` carries the (axis, edge)
 pair that makes both modes one expression — a slot's edge decides which side a ⅓ hugs, so the four
-halves are no longer four hand-written fraction cases.
+halves share one expression rather than four hand-written fraction cases.
 
 Growth is bounded three ways: an LRU cap of 64, an `NSWorkspace.didTerminateApplicationNotification`
 observer (the house `NotificationToken` RAII idiom) dropping a quit app's keys, and lazy invalidation
@@ -359,9 +359,10 @@ and every shortcut stays editable afterwards.
 ## Wiring
 
 - **`AppEntry.Kind.windowCommand`** — entries are `window-command:<id>`, published by
-  `AppIndex.setWindowCommandsVisible(_:)` between the system-action and custom-command slices.
-  `LauncherView.rows` mirrors that position with a "Window Management" section; the slice order is the
-  flat-selection invariant, so the two must move together.
+  `AppIndex.setWindowCommandsVisible(_:)` after the room slice and before the custom sizes, which
+  share its section. `LauncherList.kindOrder` mirrors that position with a "Window Management"
+  section; the slice order in `AppIndex.publishEntries` is the flat-selection invariant, so the two
+  must move together.
 - **`HotKeyAction.windowCommand(id:)`** — persisted under
   `hotkey.windowCommand.<raw-id>`, matching the shared `HotKeyAction.defaultsKey` convention. Unlike
   custom commands there is no bound-ID index to maintain: the catalog is fixed, so `HotKeyManager.start`
@@ -386,7 +387,7 @@ and every shortcut stays editable afterwards.
 
 ## Testing
 
-`Tests/window-command-test.swift` (500 assertions) covers the catalog, the AX-space convention lock,
+`Tests/window-command-test.swift` covers the catalog, the AX-space convention lock,
 tiling on divisible and non-divisible screens, off-origin and negative-coordinate displays, gap
 arithmetic including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display
 moves and wrapping, both cycling modes including the strip walk, its wrap and a run of real presses
@@ -398,7 +399,7 @@ negative dimensions, off-screen results, non-determinism and, at step 0, drift o
 on each) and `WindowShortcutPresetPlan`: a fresh apply, a repeat apply, a replaced user key, a
 displaced command and an unrelated one left alone, plus when `matching` names a preset.
 
-`Tests/space-gesture-test.swift` (121 assertions) covers the other pure half: the fixed-point encoding
+`Tests/space-gesture-test.swift` covers the other pure half: the fixed-point encoding
 and its ±1 floor, both field tables and the sign convention shared between them, the ended-only fling
 on the augmented path, the payload's size, record offsets and every scalar in it, and the big-endian
 framing of the field-4205 record.

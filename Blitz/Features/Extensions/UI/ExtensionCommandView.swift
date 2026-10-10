@@ -179,7 +179,7 @@ struct ExtensionToastPill: View {
         } label: {
             Text(action.title)
         }
-        .help(caps.map { "\(action.title)  \($0)" } ?? action.title)
+        .tooltip(caps.map { "\(action.title)  \($0)" } ?? action.title)
     }
 
     private func button(

@@ -183,9 +183,6 @@ struct AIProviderTests {
             !AIModelCapabilities.appleIntelligence.tools,
             "the on-device model reaches nothing, so it is offered nothing to reach with")
         expect(
-            !AIModelCapabilities.chatGPT.tools,
-            "and the hosted ChatGPT route declines tools by design")
-        expect(
             AIModelCapabilities.codex.tools && AIModelCapabilities.claudeCommand.tools,
             "the two CLI routes are offered servers, which their own client runs")
         expect(!AIModelCapabilities.none.tools, "an unconfigured route offers nothing either")
@@ -1018,11 +1015,12 @@ struct AIProviderTests {
                 && !AIModelSelection.codex(model: "gpt-5", effort: nil).isOnDevice,
             "only the on-device selection reads as on device")
 
-        let legacy = Data(#"{"chatGPT":{"model":"gpt-5","effort":"high"}}"#.utf8)
+        let codex = AIModelSelection.codex(model: "gpt-5", effort: "high")
+        let codexData = try? JSONEncoder().encode(codex)
         expect(
-            (try? JSONDecoder().decode(AIModelSelection.self, from: legacy))
-                == .codex(model: "gpt-5", effort: "high"),
-            "the old ChatGPT selection migrates to the installed Codex route")
+            codexData.flatMap { try? JSONDecoder().decode(AIModelSelection.self, from: $0) }
+                == codex,
+            "a Codex selection survives a round trip with its effort")
 
         let suite = "AIProviderTests.onDevice"
         let defaults = isolatedDefaults(suite)

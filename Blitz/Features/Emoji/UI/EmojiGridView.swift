@@ -10,7 +10,7 @@ struct EmojiGridSection: Identifiable {
 }
 
 enum EmojiGrid {
-    /// The palette has a fixed metric width, so cells can be square without a measuring render pass.
+    /// The palette has a fixed metric width, so cells can be square without a measuring pass.
     static func cellSize(columns: EmojiGridColumns, metrics: InterfaceMetrics) -> CGFloat {
         let count = CGFloat(columns.rawValue)
         let contentWidth = metrics.size.panelWidth - metrics.size.emojiGridInset * 2

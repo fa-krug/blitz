@@ -10,8 +10,9 @@ verifying a change is [testing.md](testing.md).
   once, to fetch SwiftTerm.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen), and for linting:
   `brew install swiftlint`.
-- Node, for the generators and for the two stub servers `run-tests.sh` drives. It is the only
-  scripting runtime here — building the app still needs none of it.
+- Node, for the data generators, the extension runtime build (with `pnpm`), the settings-search
+  check in `lint.sh`, and the stub servers in `Tests/ai-fixtures/` and `Tests/ext-fixtures/` that
+  `run-tests.sh` drives. It is the only scripting runtime here — building the app needs none of it.
 
 ## First-time setup
 
@@ -45,13 +46,13 @@ Xcode, prefix with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (t
 `@State`/`@FocusState` macros need Xcode's macOS platform).
 
 `Blitz.xcodeproj` is committed and generated from `project.yml` via XcodeGen — after changing
-project settings in `project.yml`, run `xcodegen generate` and commit the result. There is no
-`Package.swift`, and `Bundle.module` must never be used in Blitz's own code.
+project settings in `project.yml`, run `xcodegen generate` and commit the result. Blitz itself has no
+`Package.swift`.
 
 **SwiftTerm is the one SwiftPM package**, declared under `packages:` in `project.yml`, and
 `Blitz.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is committed so every
 build resolves the same source. It is pinned to a revision on SwiftTerm's `main`
-(`15fed4fd7ca7b0a8c77dd380412b18a5ce8600b5`, 2026-10-05) rather than a tag: the first version that
+(`15fed4fd7ca7b0a8c77dd380412b18a5ce8600b5`) rather than a tag: the first version that
 compiles its Metal shader from Swift source at run time — instead of needing Xcode's optional Metal
 Toolchain at build time — is not tagged yet. Move to the next tagged release once there is one.
 `Package.resolved` also pins the packages SwiftTerm's own manifest names (`swift-argument-parser`,
@@ -72,8 +73,9 @@ clipboard history, calculator history, launch ranking and frequent emoji; Notes 
 a folder is chosen),
 `~/Library/Caches/<id>/` (exchange rates, the update check, staged downloads), the opt-in
 `~/.config/blitz-dev/settings.json` (`blitz` on stable), the `SMAppService`
-login item, and the Accessibility / Input Monitoring (TCC) grants — so a local build can neither read
-nor clobber an installed app's state, and both run side by side.
+login item, and the TCC grants — Accessibility, Automation, Calendars, Reminders, Contacts, Camera
+and Bluetooth — so a local build can neither read nor clobber an installed app's state, and both run
+side by side.
 
 **What earns a place in Caches is refetchable, and nothing else.** Anything the user would notice the
 loss of goes in Application Support: `~/Library/Caches` is excluded from Time Machine and the system
@@ -146,13 +148,26 @@ already-running server does not re-read `.compile`.
 ## Linting
 
 ```sh
-./Scripts/lint.sh          # lint the whole project
+./Scripts/lint.sh          # lint the whole project, then check the settings-search catalog
 ./Scripts/lint.sh --fix    # auto-correct the mechanical subset first
 ```
 
-[SwiftLint](https://github.com/realm/SwiftLint) is the only code-quality tool here. `.swiftlint.yml` at
-the repo root excludes the generated files and the two off-limits files in `DesignSystem/Scrolling/`.
-The comment policy in [standards.md](standards.md#comments) is deliberately not among its rules.
+[SwiftLint](https://github.com/realm/SwiftLint) with `.swiftlint.yml` at the repo root, which excludes
+the generated files and the two off-limits files in `DesignSystem/Scrolling/`. The config sticks to
+rules that catch defects and stays quiet about style, which is the formatter's business. It does not
+lint comments: the comment policy in [standards.md](standards.md#comments) is deliberately not among
+its rules. Two choices worth knowing:
+
+- `empty_count` is **disabled**. `PaletteRowIndex` has a `count` but no `isEmpty`, so the rule's
+  rewrite of `count == 0` to `isEmpty` does not compile on it.
+- `force_try` is an error; `force_cast` only warns, because the AX bridges cast a `CFTypeRef` to
+  `AXUIElement` or `AXValue` after checking its `CFGetTypeID`, and `as?` on a CF type does not
+  compile.
+
+`line_length` warns at 130 characters, a backstop above the formatter's 110-character code line; a
+comment's own cap is 100. Errors block, warnings do not. No workflow runs this script;
+CodeRabbit runs SwiftLint on each PR but not the settings-search check, so run it locally before you
+open one.
 
 ## Formatting
 
@@ -162,41 +177,39 @@ The comment policy in [standards.md](standards.md#comments) is deliberately not 
 ```
 
 `swift-format` from the Xcode toolchain — the same binary sourcekit-lsp formats with, so ⌘S in VS Code
-and this script cannot disagree. `.swift-format` at the repo root tunes it to this tree; without it the
-stock config defaults to 2-space indent and rewrites all 200 files.
+and this script cannot disagree. `.swift-format` at the repo root tunes it to this tree — 4-space
+indent, a 110-character line for code, existing line breaks respected; without it the stock config
+defaults to 2-space indent and rewrites every file.
 
 Every `*.generated.swift` file is excluded: formatting one is hand-editing it, and the next
 `node Scripts/gen-emoji.js` would revert it. swift-format also refuses any file that does not parse, so
 a failure from either command is a syntax error rather than a tooling problem — and it is why ⌘S looks
 like it does nothing while a file is mid-edit with unbalanced braces.
 
-**Think twice before leaning on this.** A formatter was rejected here on measured evidence, and that
-stands: running it over the tree touched 68 files, and 67 of those changed more than whitespace.
-
-The config sticks to rules that catch defects and stays quiet about style, because **there is no
-formatter**, on measured evidence. Formatting is
-Xcode's re-indent (⌃I), as it always has been. Two consequences worth knowing:
-
-- `empty_count` is **disabled**, and `isEmpty`-style rewrites are unsafe here generally:
-  `LauncherRankingRecord` and `PaletteRowIndex` have a `count` that is a hit count, not a collection
-  count. A rule that rewrites `count > 0` to `!isEmpty` on them does not compile.
-- `force_try` is an error; `force_cast` only warns, because the AX and AppKit bridges have four
-  legitimate ones.
-
-Errors block, warnings do not. No CI runs this script; CodeRabbit runs SwiftLint on each PR but not
-the settings-search check, so run it locally before you open one.
+**It restructures code, not only whitespace**, so it is not part of the bar in
+[testing.md](testing.md#definition-of-done). Run it on the files you touched and read the diff, rather
+than over the whole tree in a change about something else.
 
 ## Generated data
 
-Three Swift files are emitted by scripts and must never be hand-edited. Each downloads its source, so
-run them online, then commit the result:
+These files are emitted by scripts and must never be hand-edited. The three data generators download
+their sources, so run them online; commit every result:
 
 ```sh
 node Scripts/gen-emoji.js            # -> Blitz/Features/Emoji/Model/EmojiData.generated.swift
                                      #    + Blitz/Resources/EmojiKeywords/<language>.txt
 node Scripts/gen-currencies.js       # -> Blitz/Features/Calculator/Model/CurrencyData.generated.swift
 node Scripts/gen-countries.js        # -> Blitz/Features/Calculator/Model/CountryZoneData.generated.swift
+
+cd Scripts/raycast-runtime && pnpm install
+node gen-enums.mjs                   # -> Scripts/raycast-runtime/src/api/enums.generated.js
+node build.mjs                       # -> Blitz/Resources/RaycastRuntime.generated.js
 ```
+
+`gen-enums.mjs` reads the `@raycast/api` type definitions, so it needs re-running only after that
+devDependency moves; `build.mjs` bundles the runtime and runs after any change under
+`Scripts/raycast-runtime/src/`. The runtime is committed so building the app never needs Node — see
+[extensions.md](features/extensions.md#working-on-the-runtime).
 
 `gen-emoji.js` also writes one CLDR keyword pack per language in its `KEYWORD_LOCALES`; adding a
 language is one line there. Pass a directory to keep the downloads between runs:

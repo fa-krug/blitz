@@ -318,13 +318,13 @@ struct RootPaletteView: View {
         keyHandlers(
             stateObservers(
                 PaletteSurface(palette: self)
-                    // The panel has no title bar, so this thin top margin is the only place left to grab it.
+                    // No title bar, so this thin top margin is the only place left to grab it.
                     .overlay(alignment: .top) { topDragStrip }
-                    // Never conditionally mounted: unmounting strands SwiftUI's hover target and eats clicks.
+                    // Always mounted: unmounting strands SwiftUI's hover target and eats clicks.
                     .overlay {
                         Color.black.opacity(0.001)
                             .contentShape(Rectangle())
-                            // Not a tap: a drifting press must still dismiss, the way a native menu's does.
+                            // Not a tap: a drifting press must still dismiss, like a native menu.
                             .gesture(DragGesture(minimumDistance: 0).onChanged { _ in closeMenus() })
                             .onRightClick { closeMenus() }
                             .allowsHitTesting(menuOpen)
@@ -356,7 +356,7 @@ struct RootPaletteView: View {
                         RoundedRectangle(cornerRadius: metrics.radius.panel, style: .continuous))))
     }
 
-    /// Everything a keystroke or a step of the selection changes; `PaletteSurface` is its only reader.
+    /// Everything a keystroke or selection step changes; `PaletteSurface` is its only reader.
     fileprivate var surface: some View {
         // Resolve the screen once per render, so the flat index can't drift from the rows.
         let screen = screen
@@ -459,7 +459,7 @@ struct RootPaletteView: View {
         emojiObservers(content)
             // Every show bumps focusToken so the search field refocuses.
             .modifier(FocusTokenObserver {
-                // The key re-bump lands after the pending field took the caret, so it re-asserts it.
+                // The key re-bump lands after the pending field took the caret, so re-assert it.
                 if focusPendingArgument() {
                     vm.pendingArgumentEntryID = nil
                     return
@@ -486,7 +486,7 @@ struct RootPaletteView: View {
                 if menuOpen { closeMenus() }
                 land()
                 searchFocused = !screen.hidesSearchField
-                // Every way out of the Uninstall screen: back chevron, bare backspace, a fresh summon.
+                // Every way out of Uninstall: back chevron, bare backspace, a fresh summon.
                 if vm.mode != .uninstall { uninstall.cancel() }
                 // Entering with no query is the blank screen's own request for recents.
                 if vm.mode == .fileSearch {
@@ -677,9 +677,9 @@ struct RootPaletteView: View {
                 guard !isCollapsed else { return .handled }
                 let screen = screen
                 guard !screen.rows.isEmpty || screen.actsWithoutRows else { return .handled }
-                // An error calc card is the selection but has no actions — don't open an empty panel.
+                // An error calc card is selected but has no actions: don't open an empty panel.
                 guard screen.hasPrimaryAction(at: selection(in: screen)) else { return .handled }
-                // Same for a menu the footer doesn't offer: ⌘K opens exactly what the bar advertises.
+                // Nor a menu the footer doesn't offer: ⌘K opens exactly what the bar shows.
                 guard screen.hasActions(at: selection(in: screen)) else { return .handled }
                 toggleActions()
                 return .handled
@@ -908,8 +908,7 @@ struct RootPaletteView: View {
             }
     }
 
-    /// The field's own text, floored for the caret and capped so the strip stays on screen.
-    /// Empty, that is the prompt where one is drawn — which is what seats the strip right after it.
+    /// The text, or the prompt while empty, floored for the caret and capped to stay on screen.
     private func searchFieldWidth(for accessory: PaletteHeaderAccessory, prompt: String) -> CGFloat {
         let font = metrics.typography.searchFieldNSFont
         let text = vm.query.isEmpty ? prompt : vm.query
@@ -953,7 +952,7 @@ struct RootPaletteView: View {
                         .allowsHitTesting(false)
                 }
             }
-            // The prompt used to carry this; without it the field would be unlabelled.
+            // The placeholder is drawn by hand, so without this the field would be unlabelled.
             .accessibilityLabel(Text(prompt))
             // Never branches on query — that tore down the field editor mid-keystroke once.
             .overlay {
@@ -1464,7 +1463,7 @@ struct RootPaletteView: View {
     private func activateMenuItem(_ index: Int) {
         guard let content = menuContent, (0..<content.rowCount).contains(index) else { return }
         guard content.isSelectable(index) else { return }
-        // Before the action: one opening a window must find the palette key again, or nothing hides it.
+        // Before the action: one opening a window must find the palette key, or nothing hides it.
         closeMenus()
         // A mouse click on a row takes the caret with it; menus close back into the field.
         if argumentFocused == nil { searchFocused = true }

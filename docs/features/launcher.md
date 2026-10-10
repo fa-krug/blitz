@@ -23,8 +23,8 @@ earliest scope wins).
   over one row is how somebody ends up with Notes on and its shortcut dead. Everything the table does
   not name belongs to Settings › Commands and answers to that switch.
 - **The ranking lives in pure files.** `Model/LauncherMatch.swift` (the scorer),
-  `Model/LauncherOrder.swift` (the comparator) and `Model/LauncherSuggestions.swift` are
-  Foundation-only and pure, so `fuzz-test` compiles the shipped code. Changing a rule means changing
+  `Model/LauncherOrder.swift` (the comparator) and `Model/LauncherSuggestions.swift` read nothing
+  but their arguments, so `fuzz-test` compiles the shipped code. Changing a rule means changing
   [Ranking](#ranking), never adding a tuning constant.
 - **`Model/EntryNaming.swift` is the only place a name is decided, for every kind alike.** A producer
   fills `EntryNaming.Sources` — title, alternate titles, subtitle, keywords — and `profile(for:)`
@@ -36,10 +36,10 @@ earliest scope wins).
   `publishEntries` runs on the main actor whenever any unrelated slice changes.
 - **The fields stay separate.** Which field matched is half of what the comparator reads — an exact
   subtitle, an exact alternate title and a keyword hit are three different rules.
-- **`Model/SearchScopes.swift`, `Model/LauncherRankingStore.swift`,
-  `Model/LauncherQueryHistory.swift` and `Model/LauncherQueryHistoryStore.swift` are pure too** — the
-  ranking store takes its clock via `now` and both stores their path via `fileURL`, for
-  `scopes-test`, `ranking-test` and `query-history-test`.
+- **The stores take their environment as parameters.** `Model/LauncherRankingStore.swift` takes its
+  clock via `now`, and it and `Model/LauncherQueryHistoryStore.swift` their path via `fileURL`, so
+  `ranking-test` and `query-history-test` never touch the real files; `scopes-test` covers
+  `Model/SearchScopes.swift`.
 
 ## Search scopes
 
@@ -50,8 +50,8 @@ bundle, stored tilde-abbreviated so the UI reads cleanly and a settings backup s
 
 Enumeration descends **one subfolder deep** — a scope's own `.app` children, plus any inside an
 immediate subfolder, are indexed. That catches vendor-folder installs like
-`/Applications/Blackmagic Design/DaVinci Resolve.app` without the folder needing its own scope
-(#256). The walk stays bounded rather than fully recursive: an `.app` bundle is a leaf except for
+`/Applications/Blackmagic Design/DaVinci Resolve.app` without the folder needing its own scope.
+The walk stays bounded rather than fully recursive: an `.app` bundle is a leaf except for
 its `Contents/Applications` and `Contents/Developer/Applications` folders, where Xcode ships
 Instruments, Icon Composer and Simulator, and a subfolder nested deeper than one level still needs
 its own scope.
@@ -258,25 +258,27 @@ shows its first `AppIndex.searchResultLimit` (50) visible rows, cut after visibi
 never takes a slot, because the results list lays out every row on each keystroke. `matches(_:)` itself
 keeps its wider limit, since Settings filters its own lists through it.
 
-`LauncherScreen` therefore separates the two jobs the empty query used to do at once: `showSections`
+`LauncherScreen` therefore keeps the empty query's two jobs apart: `showSections`
 draws the headers, `pinsFavorites` pins the Favorites prefix and hands out the ⌘-digit slots. A category
 listing takes the first only. Opening a row from one records the visit but not the word — a category
 word is not a search for the row that ran, and learning it would rank that row under `s`.
 
 ### Contextual commands
 
-A **contextual** command is one the query itself supplies the target for, so it exists only while a
-query resolves and never sits in the index. `CommandCatalog.contextual` names them, `all` filters
-them out, and `LauncherScreen` offers the row per keystroke — ahead of the ranked matches, because
-nothing the index holds answers a typed address better. There is one today: typing a web address or
-a bare host puts **Open in Browser** on top, and activating it hands the URL to the system's default
-handler through `AppLauncher.open`.
+A **query-driven** command is one the typed text is the input for, so it is built where it is
+offered and never sits in the index. `CommandID.isQueryDriven` names three — **Open in Browser**,
+**Run Shell Command** and **Search Web** — `CommandCatalog.all` filters them out, and
+`CommandCatalog.isQueryDriven(_:)` is how the launcher asks it of a row. The last two are
+[fallbacks](#fallbacks); Open in Browser is the **contextual** one, which `LauncherScreen` offers per
+keystroke ahead of the ranked matches, because nothing the index holds answers a typed address
+better. Typing a web address or a bare host puts it on top, and activating it hands the URL to the
+system's default handler through `AppLauncher.open`.
 
 The shape a query has to have is `QuicklinkDestination.detect` returning `.web`, reused rather than
 re-written so `github.com` and `https://…` mean the same thing here as they do in a quicklink. The
 entry is an ordinary `.command`, so `VisibilityStore` still gates it — Commands off hides the row —
 and its `url` carries the destination instead of the catalog's `blitz://` placeholder. Nothing
-learns from it and nothing pins it: `LauncherCoordinator.launch` records no visit for a contextual
+learns from it and nothing pins it: `LauncherCoordinator.launch` records no visit for a query-driven
 row, since a pasted URL is not a term any row should rank under; and ⇧⌘F and ⇧⌘H are both refused,
 because a favorite — or a hidden-item key — the empty query can never resolve is dead state a backup
 would then carry.
@@ -292,7 +294,7 @@ row leads because it recognised the query; a fallback trails because nothing did
 
 `Fallback` (`Launcher/Model/`) is the whole vocabulary — `.builtin(Builtin)` for the seven shipped
 destinations and `.quicklink(UUID)` for a user's own. `Builtin` exists rather than a bare `CommandID`
-so `FallbackCoordinator.run` is **exhaustive**: a sixth built-in cannot compile without saying where
+so `FallbackCoordinator.run` is **exhaustive**: another built-in cannot compile without saying where
 its query goes. `Fallback.id` is deliberately the row's own `AppEntry.id`, which is what lets a stored
 order name a live row across a rename or a reinstall.
 
@@ -469,7 +471,7 @@ drops a `.shellCommand` search before it touches the list.
 Application Support with the ranking store's shape: detached, chained writes, and `flush()` for
 whoever reads the file back. **Remember search history** in General settings
 (`launcherSavesSearchHistory`, `search.savesHistory` in `settings.json`, carried by a settings
-backup) is on by default. Off keeps searches in memory for the session, as before, and deletes the
+backup) is on by default. Off keeps searches in memory for the session only, and deletes the
 file at once; a store opened with it off deletes a file left behind too. **Search history — Clear…**
 beside Learned ranking empties the list and the file. The history travels with a backup's Launcher
 Learning as `learning/queries.json`, but only while it is being saved: a history kept in memory must
@@ -507,67 +509,7 @@ off (`launcherShowsSuggestions`, carried by a settings backup). `HotKeyManager.r
 
 ## System actions
 
-`SystemActionCatalog` is a Foundation-only inventory of the macOS actions Blitz exposes. Its
-stable entry IDs, labels, symbols and confirmation policy are covered by
-`Tests/system-action-test.swift`; platform side effects live separately in `SystemActionRunner`.
-`SystemActionCoordinator.runSystemAction(id:)` remains the one execution funnel — shared by palette activation and a
-global hotkey — hiding the floating palette before any confirmation or value dialog and surfacing
-permission-aware failures. With the palette closed it targets the frontmost app, so Hide Others and
-Quit All act on the same window a palette launch would have.
-
-System actions occupy their own launcher section and their own Settings pane. The empty-query publication
-order is applications, System Settings, quicklinks, snippets, system actions, window commands, custom
-commands, then built-in commands; the sectioned view filters in that same order so the visible rows remain
-identical to the flat selection index.
-Search, favorites, visibility and learned ranking work through the normal `AppEntry` path, and every
-action is bindable to a global shortcut from Settings › System Actions
-(see [hotkeys.md](hotkeys.md)).
-
-Public AppKit, CoreAudio and workspace APIs are preferred. Actions without a stable public macOS API
-use fixed system tools, Apple Events, Accessibility, or a dynamically resolved Bluetooth power API.
-Those routes run only on explicit activation. Automation, Accessibility or Bluetooth permission is
-requested at first use, and denial produces an alert linking to the relevant System Settings pane.
-Toggle System Appearance changes macOS; Blitz follows it only while its own Appearance is System.
-
-Restart, Shut Down, Log Out, Empty Trash and Quit All Applications confirm before execution: ↵ runs
-the action, Escape cancels. **Empty Trash follows Finder's own "Show warning before emptying the
-Trash"** (Finder ▸ Settings ▸ Advanced) rather than overriding it: with the box off it runs without a
-dialog. `SystemActionRunner.finderWarnsBeforeEmptyingTrash` reads `com.apple.finder`'s
-`WarnOnEmptyTrash` at call time, and an absent key counts as on, because Finder writes it only once
-the box is changed. Every dialog is Blitz's own: confirmations, failure reports and the Set
-Volume slider all render through `DialogController` rather than an `NSAlert`
-(see [ui.md](../ui.md#dialogs--hud)). Each confirmation carries the action's own icon — Restart shows
-`arrow.clockwise`, Empty Trash `trash.slash` — so the dialog is recognizably about the row that
-opened it. Volume and mute actions also show Blitz's transient volume HUD, since macOS only draws
-its own for real media keys. Volume Up/Down walk a 5% grid (`VolumeLevel.stepped`, covered by
-`Tests/volume-test.swift`): an off-grid level snaps to the next line rather than past it, so from 37%
-up lands on 40% and down on 35%, and repeated presses stay on round numbers.
-
-An action whose effect is invisible reports back through a pill (`MessageHUDController`, the same one
-Custom Commands and Snippets confirm through) rather than finishing silently:
-`SystemActionRunner.run` returns a `SystemActionFeedback` naming the state it landed in
-(`Trash Emptied`, `Hidden Files Shown`, `Dark Appearance`, `Bluetooth Off`, `3 Disks Ejected`), and
-`AppCore` shows it with a `DialogTone` derived from the feedback's `isNoOp` flag: `.success` when
-something actually changed, `.neutral` when there was nothing to do, shown as the glyph trailing the
-message rather than a per-action icon, since the message already names the state. Actions that are
-their own confirmation, such as Show Desktop, Hide Others,
-Quit All and the power actions, return nothing. Volume and mute are the one case that stays on the
-palette's own box HUD, since that one has an actual level and number to show, not just a message.
-
-**Nothing-to-do is an outcome, not a failure.** Empty Trash asks Finder for `count items of trash`
-first and reports `Trash Is Already Empty`, because Finder raises an error when told to empty an empty
-Trash. The count deliberately goes through Finder instead of reading `~/.Trash` directly: that folder
-is TCC-protected, so an unprivileged read fails in a way indistinguishable from "empty", which would
-silently skip a real empty. Eject All Disks, Dismiss Notifications and Unhide All Apps report the same
-way when there is nothing to act on. Volume and mute fall back to the output's preferred stereo channels when the device exposes
-no master element (common on HDMI), and Toggle Mute parks the level at zero when there is no mute
-control at all. Multi-disk ejection takes every external or ejectable volume — a dock's fixed-media
-HDD reports as neither ejectable nor removable, so external alone qualifies — while excluding
-internal, network and root volumes, treats a sibling volume that the same physical eject already
-unmounted as done, counts a volume whose eject errored but whose mount is gone as ejected, and
-reports remaining failures together.
-Preference-backed toggles refuse to write when the current value can't be read, and notification
-dismissal matches Accessibility subroles rather than English labels.
+Their catalog, funnel, confirmations and feedback are in [system-actions.md](system-actions.md).
 
 ## Window commands
 
@@ -706,6 +648,21 @@ contents alone, so a path-only key served the bitmap decoded first for the rest 
 `AppIndex.scan` reads the stamp off-main into `AppEntry.iconStamp`, `EntryIcon.file` carries it, and
 because it is part of `iconKey` the re-scan on the next palette open re-decodes exactly the apps
 whose icon moved.
+
+## Opening a row
+
+**The ⌘K menu's Open row is the palette's ↵.** `AppActionsMenu` takes the screen's
+`activateSelection` as its primary action rather than calling `LauncherCoordinator.launch` itself,
+so the row carries the typed argument values, records the query in search history, and stops at an
+unfilled argument field exactly as the key does.
+
+**A refused open says so.** The palette hides before an open, so a refusal that went unreported
+would look like nothing happened. `AppLauncher.launch` throws what Launch Services refused, and
+`AppLauncher.open` and `openSettingsPane(bundleID:)` return whether macOS took the URL; on a
+refusal `LauncherCoordinator` — an application, a System Settings pane, Open in Browser — and
+`FallbackCoordinator`'s Search the Web call `AppCore.reportOpenFailure`, which raises a
+**Couldn’t Open “…”** failure dialog with the row's glyph and the system's reason where there is one.
+Clipboard and Apple Shortcuts report through the same call.
 
 ## Favorites
 

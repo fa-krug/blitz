@@ -50,7 +50,7 @@ struct CodexTurnTests {
             expect(false, "the custom provider stub installs")
             return
         }
-        let manager = ChatGPTSubscriptionManager(supportDirectory: server.root)
+        let manager = CodexSubscriptionManager(supportDirectory: server.root)
         defer {
             manager.stop()
             server.tearDown()
@@ -80,7 +80,7 @@ struct CodexTurnTests {
             expect(false, "the custom provider stub installs")
             return
         }
-        let manager = ChatGPTSubscriptionManager(supportDirectory: server.root)
+        let manager = CodexSubscriptionManager(supportDirectory: server.root)
         defer {
             manager.stop()
             server.tearDown()
@@ -99,7 +99,7 @@ struct CodexTurnTests {
                 expect(false, "the \(mode) stub installs")
                 continue
             }
-            let checked = ChatGPTSubscriptionManager(supportDirectory: server.root)
+            let checked = CodexSubscriptionManager(supportDirectory: server.root)
             await checked.refresh().value
             expect(
                 checked.phase == .signedOut && !checked.isConnected && checked.models.isEmpty,
@@ -108,7 +108,7 @@ struct CodexTurnTests {
 
             let stops = { server.received.split(separator: "\n").count { $0 == "stdin-closed" } }
             let checkStopped = await server.awaitCondition { stops() == 1 }
-            let cold = ChatGPTSubscriptionManager(supportDirectory: server.root)
+            let cold = CodexSubscriptionManager(supportDirectory: server.root)
             let attempt = await reply(from: cold)
             expect(
                 attempt.error?.contains("codex login") == true && cold.phase == .signedOut,
@@ -123,7 +123,7 @@ struct CodexTurnTests {
     }
 
     private static func reply(
-        from manager: ChatGPTSubscriptionManager
+        from manager: CodexSubscriptionManager
     ) async -> (text: String, error: String?) {
         let stream = manager.turns.stream(
             AIRequest(messages: [AIMessage(role: .user, text: "Hello")]),
@@ -303,7 +303,7 @@ struct CodexTurnTests {
             expect(false, "the stub app-server installs")
             return
         }
-        let manager = ChatGPTSubscriptionManager(supportDirectory: server.root)
+        let manager = CodexSubscriptionManager(supportDirectory: server.root)
         setenv("TC_STUB_LIST_DELAY", "300", 1)
         defer {
             unsetenv("TC_STUB_LIST_DELAY")
@@ -354,7 +354,7 @@ struct CodexTurnTests {
             expect(false, "the stub app-server installs")
             return
         }
-        let manager = ChatGPTSubscriptionManager(supportDirectory: server.root)
+        let manager = CodexSubscriptionManager(supportDirectory: server.root)
         defer {
             manager.stop()
             server.tearDown()
@@ -572,7 +572,7 @@ struct CodexTurnTests {
         expect(server.interrupts == 1, "the turn's second name spends no second interrupt")
     }
 
-    /// A second chat's turn used to end the first with "A newer request replaced this response."
+    /// A second chat's turn must never end the first as "A newer request replaced this response."
     static func twoChatsStreamSideBySide() async {
         guard let server = StubServer(mode: "parallel") else {
             expect(false, "the stub app-server installs")

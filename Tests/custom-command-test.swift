@@ -88,20 +88,12 @@ struct CustomCommandTests {
                 && store.commands.first?.requiresConfirmation == true
                 && store.commands.first?.showsConfirmation == true
                 && store.commands.first?.opensTerminal == true)
-        let storedFlags = Data(
-            #"[{"id":"\#(UUID().uuidString)","name":"Old","command":"/usr/bin/true","#
-                .appending(#""showsOutput":true,"runsInTerminal":true}]"#).utf8)
-        let decoded = try? JSONDecoder().decode([CustomCommand].self, from: storedFlags)
-        check(
-            "a stored runsInTerminal key is ignored and showsOutput reads as opensTerminal",
-            decoded?.first?.opensTerminal == true)
-        let encoded = (try? JSONEncoder().encode(decoded ?? []))
+        let terminal = CustomCommand(name: "Term", command: "/usr/bin/true", opensTerminal: true)
+        let encoded = (try? JSONEncoder().encode([terminal]))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] }
         check(
-            "opensTerminal is written under the showsOutput key",
-            encoded?.first?["showsOutput"] as? Bool == true
-                && encoded?.first?["opensTerminal"] == nil
-                && encoded?.first?["runsInTerminal"] == nil)
+            "opensTerminal is written under its own key",
+            encoded?.first?["opensTerminal"] as? Bool == true)
         check(
             "import trims an argument name and keeps its optionality",
             store.commands.first?.arguments == [
@@ -118,19 +110,6 @@ struct CustomCommandTests {
         check(
             "a blank argument is dropped without losing the command",
             store.commands.first?.arguments == [CustomCommandArgument(name: "Kept")])
-
-        // A command stored before arguments existed must still decode.
-        let legacy = Data(
-            """
-            [{"id":"\(UUID().uuidString)","name":"Legacy","command":"/usr/bin/true"}]
-            """.utf8)
-        defaults.set(legacy, forKey: "customCommands")
-        check(
-            "a record written before arguments existed still loads",
-            CustomCommandStore(defaults: defaults).commands.first?.name == "Legacy")
-        check(
-            "a record written before the enabled flag loads as enabled",
-            CustomCommandStore(defaults: defaults).commands.first?.isEnabled == true)
 
         // MARK: Batch add
 
@@ -247,7 +226,7 @@ struct CustomCommandTests {
             "a folder yields its script commands in name order and nothing else",
             RaycastScriptImport.scan(directory: scriptDirectory).map(\.name) == ["First", "Second"])
 
-        // The whole run, through `"$@"`: an imported script reads its value as data, never as syntax.
+        // The whole run, through `"$@"`: an imported script reads its value as data, not syntax.
         try? Data("#!/bin/bash\n# @raycast.title Echo\nprintf '%s' \"$1\"\n".utf8).write(
             to: scriptDirectory.appendingPathComponent("echo.sh"))
         let imported = RaycastScriptImport.scan(directory: scriptDirectory).first { $0.name == "Echo" }

@@ -777,7 +777,7 @@ struct WindowCommandTests {
                     cycle: .displays, originScreenID: 99))!.frame,
             expected[1], "an unplugged origin counts from the host")
 
-        // One full lap of real presses visits every slot exactly once, from either starting display.
+        // One full lap of real presses visits every slot exactly once, from either display.
         for start in [onLeft, onRight] {
             for command in [WindowCommand.ID.leftHalf, .rightHalf] {
                 let lap = presses(command, length(command, .displays, both), from: start, on: both)
@@ -1100,13 +1100,13 @@ struct WindowCommandTests {
                                 if rect.intersection(host.visibleFrame).isNull {
                                     problems.append("off-screen frame: \(label)")
                                 }
-                                // Determinism, and no drift when a command is applied twice at step 0.
+                                // Deterministic, with no drift when applied twice at step 0.
                                 if WindowPlacementEngine.placement(for: input)?.frame != rect {
                                     problems.append("non-deterministic: \(label)")
                                 }
                                 var repeated = input
                                 repeated.windowFrame = rect
-                                // Only step 0 is meant to be idempotent: a cycle exists to move the window.
+                                // Only step 0 is idempotent: a cycle exists to move the window.
                                 if step == 0,
                                     let again = WindowPlacementEngine.placement(for: repeated)?.frame,
                                     command != .makeLarger, command != .makeSmaller, command != .moveLeft,

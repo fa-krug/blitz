@@ -48,7 +48,7 @@ struct InstalledAITests {
             try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
             try "#!/bin/sh\n".write(to: cli, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
-            // The shape `mise activate fish` takes: PATH set only when interactive, after a greeting.
+            // `mise activate fish`'s shape: PATH set only when interactive, after a greeting.
             try """
             echo 'Welcome to fish'
             if status is-interactive
@@ -393,7 +393,7 @@ struct InstalledAITests {
         expect(
             fixture.read("claude-prompt.log").hasPrefix(#"{""#),
             "Claude's turn arrives as one stream-json user message")
-        // `--bare` reads neither OAuth nor the keychain, so it refuses the sign-in this route reuses.
+        // `--bare` reads neither OAuth nor the keychain, so it refuses the sign-in reused here.
         expect(!arguments.contains("--bare"), "Claude never runs with --bare")
         expect(
             arguments.contains("--effort") && arguments.contains("xhigh"),

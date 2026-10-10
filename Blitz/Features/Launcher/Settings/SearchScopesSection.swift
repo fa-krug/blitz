@@ -51,7 +51,7 @@ struct SearchScopesSection: View {
         panel.prompt = "Add"
         panel.message = "Choose folders or applications to include in the launcher."
         // Blitz is an accessory app, so the panel opens behind the frontmost app without this.
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return }
         settings.searchScopes = SearchScopes.normalize(
             settings.searchScopes + panel.urls.map(\.path))

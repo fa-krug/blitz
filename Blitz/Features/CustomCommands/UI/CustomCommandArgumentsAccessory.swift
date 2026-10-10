@@ -25,7 +25,7 @@ enum CustomCommandArgumentsAccessory {
             width: InlineArgumentFields.totalWidth(for: arguments, hasIcon: true, metrics: metrics),
             fieldNames: arguments.map(\.id),
             firstIncompleteField: firstOwed(),
-            // Identity per row, so "which fields were left unanswered" starts clean on the next one.
+            // Identity per row, so "which fields were left unanswered" starts clean on the next.
             view: AnyView(
                 InlineArgumentFields(
                     arguments: arguments, icon: .symbol(command.symbol), value: value,

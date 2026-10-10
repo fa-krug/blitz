@@ -36,8 +36,8 @@
 - **A `.file` entry references the file where it lies and never copies it.** Its absolute path is
   the `text` column, so the trigram index finds it by name or by folder for free, and `imagePath`
   stays nil — which is what keeps `prune`, `deleteBlob` and `owns` from ever reaching a file
-  Blitz did not write. `kind` is a plain `TEXT` column, so the case cost no migration; an older
-  build simply fails to decode the row.
+  Blitz did not write. `kind` is a plain `TEXT` column, so the case needs no schema
+  change.
 - **A colour is parsed from the text on demand, never stored.** `ColorValue` is the single parser
   behind the clipboard's swatches and the launcher's colour card, so the two can never disagree
   about what counts as a colour or what it converts to.
@@ -88,7 +88,7 @@ pasteboard and the poller skips anything carrying it.
 
 `stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
 `isCapturing` flag that `prepareForBlitzPasteboardMutation` reads — so a paste Blitz performs
-itself no longer drains the pasteboard into history either.
+itself does not drain the pasteboard into history either.
 
 Existing clips survive being switched off, since a history is captured rather than authored and
 nothing else can put it back. **Clear history stays live with the feature off** —
@@ -252,9 +252,14 @@ The ⌘K menu carries these beside the paste rows; the chords need the expanded 
 | Edit Text… | ⌥⌘E | text | A multi-line prompt, saved with ⌘↵ since Return types a newline |
 | Save as Snippet… | — | text, snippets on | Opens the Snippets editor on a new snippet holding the text |
 | Open Link / Compose Email | ⌘O | links, addresses | The default browser, or a `mailto:` for the mail app |
-| Open | ⌘O | files | The file in its own app, as before |
+| Open | ⌘O | files | The file in its own app |
 | Send to AI | ⌘J | every entry, AI on | Text becomes a new chat's draft; an image or a file is attached |
 | Share… | — | every entry | The system share sheet: text as a string, links as URLs, files as files |
+
+The palette hides before ⌘O, so an open macOS refuses — a moved file, a link no app takes — raises
+**Couldn’t Open “…”** through `AppCore.reportOpenFailure` rather than doing nothing (see
+[launcher.md](launcher.md#opening-a-row)). Copying a colour closes the palette too, so it confirms
+with a **Copied color** pill.
 
 **A title names the row and nothing else.** The list row and the ⌘K header show it in place of the
 content, the preview still shows the content with the title as an Information row, and pasting,
@@ -371,7 +376,7 @@ Oklab is private to it: `oklch()` is the one thing it exists for. A neutral is s
 all, since `atan2` over two rounding errors still names a direction.
 
 The notations are a menu of their own under the launcher card, and **nowhere else** — a history
-entry's ⌘K stays the actions it always was, since converting a colour is not something you reach
+entry's ⌘K keeps its own actions, since converting a colour is not something you reach
 for while browsing what you copied. **There is no submenu** either, the palette's menu being one
 level deep, so each row states its value through `PopoverMenuItem.detail`, never `shortcut`, which
 renders one keycap per character. The rows carry `PopoverMenuIcon.blank`, a run of rows under one
@@ -463,12 +468,13 @@ returns false, the coordinator raises a HUD, and the row survives — history is
 happened, and the recorded path is still the answer to "where was it?". The preview says so in
 place, and the Path row keeps showing where the file used to be.
 
-`FilePreviewThumbnailer` is the row tile and the preview still. `QLThumbnailGenerator` is the only
-thing that renders a *content* thumbnail for any type — a video's poster frame, a PDF's first page
-— and with `representationTypes: .all` it falls back to the type icon itself, so every file paints
-something through one path. It copies `ImageThumbnail`'s shape exactly: two byte-bounded caches
-split at 128px, cost measured as the real bitmap footprint, and `purgePreviews()` called from
-`PaletteWindowController.hide()` beside the other two.
+`FilePreviewThumbnail` (`Platform/Images/FilePreviewThumbnail.swift`) is the row tile and the
+preview still. `QLThumbnailGenerator` is the only thing that renders a *content* thumbnail for any
+type — a video's poster frame, a PDF's first page — and with `representationTypes: .all` it falls
+back to the type icon itself, so every file paints something through one path. It is built on the
+same `ThumbnailCache` as `ImageThumbnail`: two byte-bounded caches split at 128px, cost measured as
+the real bitmap footprint, and `purgePreviews()` called from `PaletteWindowController.hide()` beside
+the other two.
 
 **The player's teardown is the part with a lifetime to get wrong.** `orderOut` leaves the SwiftUI
 tree mounted, so `onDisappear` never fires on hide — which is exactly why `hide()` already has to

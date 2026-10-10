@@ -71,7 +71,7 @@ final class SnippetCoordinator {
             return
         }
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(

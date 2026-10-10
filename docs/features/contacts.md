@@ -31,7 +31,6 @@ email or open in Contacts; the same list is a **fallback** for any launcher quer
 - **Marks live on `ContactsStore`, not `AppSettings`.** Contact identifiers are machine-specific, so
   they stay out of the backup, as reminder lists and calendars do. They store inclusions: a card is
   in root search only once someone asked for it, and an address book of thousands never floods it.
-- **`Model/` stays Foundation-only**; `contacts-test` compiles the shipped sources.
 
 ## The pure layer
 

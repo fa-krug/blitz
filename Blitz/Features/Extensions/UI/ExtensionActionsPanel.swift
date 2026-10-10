@@ -108,7 +108,7 @@ struct ExtensionActionsPanel: View {
                     // Index-as-id is stable: a panel's rows never reorder while it is open.
                     ForEach(items.indices, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 0) {
-                            // Inside the first row's target, so revealing that row brings the title.
+                            // Inside the first row's target, so revealing it brings the title.
                             if index == 0 { headerLabel }
                             rowBoundary(before: index)
                             ExtensionActionRow(
@@ -123,7 +123,7 @@ struct ExtensionActionsPanel: View {
                 }
                 .padding(.horizontal, panel.listInset)
             }
-            // A margin, not padding: a revealed end row keeps its inset instead of meeting the edge.
+            // A margin, not padding: a revealed end row keeps its inset off the edge.
             .contentMargins(.vertical, panel.listInset, for: .scrollContent)
             .frame(height: extent.viewport + panel.listInset * 2)
             .scrollBounceBehavior(extent.content > extent.viewport ? .always : .basedOnSize)

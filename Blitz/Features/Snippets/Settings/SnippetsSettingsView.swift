@@ -167,7 +167,7 @@ struct SnippetsSettingsView: View {
                         "This removes \(record.fileURL.lastPathComponent) from your snippets folder.",
                     symbol: PaletteMode.snippets.systemImage, confirmTitle: "Delete")
             else { return }
-            // Not swallowed: the store records it in `operationError`, which this pane shows inline.
+            // Not swallowed: the store records it in `operationError`, which this pane shows.
             try? await snippetsStore.delete(id: record.id)
         }
     }

@@ -1,7 +1,7 @@
 # Custom commands
 
-Custom commands let users add a searchable name and a shell command in **Settings → Custom
-Commands**. They appear in the launcher's Custom Commands section, share the normal fuzzy ranking,
+Custom commands let users add a searchable name and a shell command in **Settings → Commands**,
+below the built-in commands. They appear in the launcher's Custom Commands section, share the normal fuzzy ranking,
 and run from Return, a favorite slot, or an optional global shortcut. A command may declare
 [arguments](#arguments) it is asked for first, and may [open in a terminal](#open-in-terminal) of
 Blitz's own, which stays open as the user's shell once the command finishes.
@@ -156,14 +156,10 @@ window opens **before the first byte**, output appears as it is printed, and onc
 finishes the same terminal stays open as the user's own login shell. It is a real terminal, not a
 log: `vim`, `htop`, `less`, `ssh` and a `sudo` password prompt all work in it.
 
-It replaced two surfaces that each did half of that: a log window that drew colour but no screen,
-whose typed input could not reach a prompt reading `/dev/tty`; and a hand-off of a `.command` script
-to the user's terminal app, which lost how the run ended. Blitz no longer opens an external terminal
-app for anything.
+Blitz opens no external terminal app for anything: a hand-off of a `.command` script would lose how
+the run ended, and a log window could not let typed input reach a prompt reading `/dev/tty`.
 
-The option is `opensTerminal` in Swift, stored under the old `showsOutput` key, so a command that
-used to show its output now opens a terminal. A stored `runsInTerminal` from the removed option is
-ignored; there is no migration.
+The option is stored as `opensTerminal`.
 
 #### Why a pty, and why a controlling one
 
@@ -190,8 +186,8 @@ fork, and the child only:
 
 - **resets every signal to its default and empties the mask.** A dispatch worker thread blocks
   nearly every signal, and zsh hands the mask it was born with to every command it forks — so a
-  shell spawned from one runs commands that never see SIGINT, and Stop always fell through to the
-  kill. The harness found that against the log window this replaced, and it holds just the same.
+  shell spawned from one runs commands that never see SIGINT, and Stop would always fall through to
+  the kill.
 - **closes every descriptor from 3 up**, so a descriptor some library left without close-on-exec
   never reaches the user's shell. The harness opens one and checks the child's `/dev/fd`.
 - `chdir`s to the folder and `execve`s, or `_exit(127)`s.
@@ -201,7 +197,7 @@ window closes.
 
 The terminal starts with **the kernel's own `termios` defaults** — read off a throwaway `openpty` —
 plus `IUTF8`, so a canonical backspace erases a whole character rather than one byte of it. A
-zeroed `termios` was the old trap: it makes NUL the end-of-file character, so a typed ⌃D arrived as
+zeroed `termios` is the trap: it makes NUL the end-of-file character, so a typed ⌃D arrives as
 text. The harness asserts `eof = ^D`, `intr = ^C` and `iutf8`.
 
 The environment is Blitz's own plus `TERM=xterm-256color` and `COLORTERM=truecolor`. `LANG` is
@@ -235,8 +231,8 @@ exec "${SHELL:-/bin/zsh}" -l
   ⌃C while the wrapper survives it, reports 130 and still opens the shell.
 - **`-i +m` under Load shell environment.** `-i` makes zsh read `.zshrc`; `+m` keeps job control
   off. Plain `-i` turns job control on, so the interactive zsh takes the terminal's foreground process
-  group for itself and leaves the shell exec'd after it outside the foreground — the
-  `zsh: suspended (tty output)` the old `.command` hand-off showed. The harness's
+  group for itself and leaves the shell exec'd after it outside the foreground — a
+  `zsh: suspended (tty output)`. The harness's
   regression test resolves an rc-file alias with the flag on, then types a line into the shell that
   follows and waits for its answer.
 - **The status comes back as a private OSC marker**, `ESC ] 6973 ; <nonce> ; <status> BEL`, and is

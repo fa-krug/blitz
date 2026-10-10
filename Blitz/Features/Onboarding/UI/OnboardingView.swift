@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import SwiftUI
 
 /// The first-launch wizard, built from the app's own controls; re-runnable as the Welcome Tour.
@@ -12,7 +11,6 @@ struct OnboardingView: View {
     @Environment(HotKeyManager.self) private var hotKeys
 
     @State private var accessibilityTrusted = Permissions.isAccessibilityTrusted()
-    private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     static let width: CGFloat = 520
     /// Only until the first layout measures the real one, which is what the window then takes.
@@ -55,9 +53,12 @@ struct OnboardingView: View {
             accessibilityTrusted = Permissions.isAccessibilityTrusted()
             spotlight.refresh()
         }
-        .onReceive(refreshTimer) { _ in
-            let trusted = Permissions.isAccessibilityTrusted()
-            if trusted != accessibilityTrusted { accessibilityTrusted = trusted }
+        .task {
+            while !Task.isCancelled {
+                let trusted = Permissions.isAccessibilityTrusted()
+                if trusted != accessibilityTrusted { accessibilityTrusted = trusted }
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
         // Coming back from System Settings is what activates Blitz again.
         .onReceive(

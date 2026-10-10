@@ -77,7 +77,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
         self.reasoningOptions = reasoningOptions
     }
 
-    /// A preset pointed away from its own API is a gateway, and only a gateway takes a thinking field.
+    /// A preset pointed away from its own API is a gateway; only a gateway takes a thinking field.
     var takesThinkingField: Bool {
         provider.apiShape == .openAICompatible
             && baseURL.trimmingCharacters(in: .whitespacesAndNewlines) != provider.defaultBaseURL
@@ -113,8 +113,6 @@ struct AIModelCapabilities: Equatable, Sendable {
 
     static let none = AIModelCapabilities(
         images: false, documents: false, webSearch: false, tools: false)
-    static let chatGPT = AIModelCapabilities(
-        images: true, documents: false, webSearch: true, tools: false)
     static let codex = AIModelCapabilities(
         images: true, documents: false, webSearch: true, tools: true)
     /// Pictures ride in its stream-json input; its own client runs Blitz's MCP servers.
@@ -216,7 +214,6 @@ enum AIModelSelection: Codable, Equatable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case appleIntelligence
         case codex
-        case chatGPT
         case claude
         case grok
         case openCode
@@ -236,9 +233,8 @@ enum AIModelSelection: Codable, Equatable, Hashable, Sendable {
             self = .appleIntelligence
             return
         }
-        if container.contains(.codex) || container.contains(.chatGPT) {
-            let key: CodingKeys = container.contains(.codex) ? .codex : .chatGPT
-            let value = try container.nestedContainer(keyedBy: ValueKeys.self, forKey: key)
+        if container.contains(.codex) {
+            let value = try container.nestedContainer(keyedBy: ValueKeys.self, forKey: .codex)
             self = .codex(
                 model: try value.decode(String.self, forKey: .model),
                 effort: try value.decodeIfPresent(String.self, forKey: .effort))

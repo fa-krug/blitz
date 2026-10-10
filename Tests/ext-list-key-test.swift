@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The rules a control that drops a list applies to a key press. Split from the view so the case
-/// that broke in the app — ⌫ never reaching the query — is checked here rather than by hand.
+/// A list-dropping control's key rules, split from the view so ⌫ reaching the query is tested.
 enum ExtensionListKeyTests {
     static func run(check: (String, Bool, String?) -> Void) {
         print("\n# list keys, closed")
@@ -53,8 +52,7 @@ enum ExtensionListKeyTests {
             resolve(.leftArrow) == .ignored && resolve(.rightArrow) == .ignored, nil)
 
         print("\n# the bug this type exists for")
-        // Measured from the running app: the ⌫ key arrives as U+007F, not as SwiftUI's `.delete`
-        // (U+0008), so matching the named constant alone deleted nothing at all.
+        // Measured in the app: ⌫ arrives as U+007F, not SwiftUI's `.delete` (U+0008).
         let real = resolve(KeyEquivalent("\u{7F}"), characters: "\u{7F}")
         check("the ⌫ the app really sends deletes", real == .deleteBackward, describe(real))
         let named = resolve(.delete, characters: "\u{8}")

@@ -52,8 +52,7 @@ final class SettingsNavigationState {
         flashing = nil
     }
 
-    /// Released only once the pulse is over: it keys the pane's task, so clearing it early would
-    /// cancel the very task doing the revealing.
+    /// Released after the pulse: it keys the pane's task, so clearing it early cancels the reveal.
     func clear(_ request: SettingsScrollRequest) {
         guard scrollRequest == request else { return }
         scrollRequest = nil

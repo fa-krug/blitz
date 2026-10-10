@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The extension's search-bar dropdown, drawn as a header control. Not `HeaderMenuButton`: the
-/// choice it states carries an extension's own icon, which `PopoverMenuIcon` cannot name.
+/// The search-bar dropdown; not `HeaderMenuButton`, whose icon can't name an extension's own.
 struct ExtensionSearchAccessoryButton: View {
     @Environment(\.metrics) private var metrics
     /// Room for a long choice beside its icon and tick, without a form field's 360pt sprawl.
@@ -33,7 +32,9 @@ struct ExtensionSearchAccessoryButton: View {
             }
             .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .help("\(accessory.tooltip ?? accessory.placeholder ?? "Filter")  ⌘P")
+        .tooltip(
+            isOpen ? nil : "\(accessory.tooltip ?? accessory.placeholder ?? "Filter")  ⌘P",
+            alignment: .trailing, edge: .bottom)
     }
 
     private var icon: ExtensionImage.Resolved? {

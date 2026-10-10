@@ -1,13 +1,13 @@
 import Foundation
 
-/// What the Search Screenshots field means: an optional `date:` prefix, then filename or text terms.
+/// The Search Screenshots field: an optional `date:` prefix, then filename or text terms.
 struct ScreenshotQuery: Equatable, Sendable {
     enum DateRange: String, CaseIterable, Sendable {
         case today
         case yesterday
         case week
 
-        /// Spotlight's own day literals, so no clock is injected; `week` is today and the six before.
+        /// Spotlight's day literals, so no clock is injected; `week` is today and the six before.
         var spotlightClause: String {
             let stamp = ScreenshotQuery.dateAttribute
             switch self {
@@ -44,7 +44,7 @@ struct ScreenshotQuery: Equatable, Sendable {
             .joined(separator: " && ")
     }
 
-    /// Hidden folders and `~/Library` hold app caches and containers, never a capture worth finding.
+    /// Hidden folders and `~/Library` hold caches and containers, never a capture worth finding.
     static func isEligible(_ path: String, homeDirectory: URL) -> Bool {
         let library = homeDirectory.standardizedFileURL.path + "/Library/"
         guard !path.hasPrefix(library) else { return false }

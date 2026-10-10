@@ -1120,8 +1120,7 @@ final class ClipboardStore {
         db = nil
     }
 
-    /// Streams an import into the file off-main; a staged blob moves into `imagesDirectory`,
-    /// which is what makes `owns` true and lets retention reclaim it later.
+    /// Streams an import off-main; a blob in `imagesDirectory` is owned, so retention frees it.
     nonisolated static func importStoredItems(
         inDatabaseAt url: URL, adoptingImagesInto imagesDirectory: URL? = nil,
         _ items: some Sequence<ClipboardItem>
@@ -1180,8 +1179,7 @@ final class ClipboardStore {
         return hasher.finalize()
     }
 
-    /// Keeps the staged blob's name, so importing one backup twice lands on the same path — and
-    /// the row dedupes on it rather than minting a second copy of every image.
+    /// Keeps the staged blob's name, so a backup imported twice dedupes, never copying images.
     nonisolated private static func adoptionTarget(
         _ item: ClipboardItem, in directory: URL?
     ) -> ClipboardItem {

@@ -2,7 +2,7 @@ import Foundation
 
 /// A `Grid`'s layout props: the tile shape and how an item's content sits inside it.
 struct ExtensionGridLayout: Equatable, Sendable {
-    /// Space between a tile's border and its content. Raycast scales it with the tile, so this does.
+    /// Space between a tile's border and its content; Raycast scales it with the tile, so we do.
     enum Inset: String, Sendable {
         case zero
         case small = "sm"

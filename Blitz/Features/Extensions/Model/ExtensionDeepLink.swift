@@ -1,7 +1,6 @@
 import Foundation
 
-/// An `extensions` deep link: `raycast://extensions/<owner>/<extension>/<command>?arguments={…}`.
-/// `blitz://` mirrors it so our own links never depend on Raycast winning the scheme.
+/// `raycast://extensions/<owner>/<ext>/<command>`, mirrored as `blitz://` so ours always route.
 struct ExtensionDeepLink: Sendable, Equatable {
     let ownerOrAuthor: String?
     let extensionName: String

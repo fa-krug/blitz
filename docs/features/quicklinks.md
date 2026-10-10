@@ -12,12 +12,12 @@ every shortcut without re-registering.
 
 The pane's library lists **read-only rows**, and each opens the quicklink's own page — the pane's
 `navigation.page`, its UUID — as an extension's row does. A row is the icon, name and link, then
-badges for what used to be controls: a pin, an eye-slash when hidden from root search, the alias as a
+badges that mirror the page's controls: a pin, an eye-slash when hidden from root search, the alias as a
 chip, the shortcut as key caps, and a dimmed label when disabled. The page holds the live controls —
 the Enabled switch, the alias field and the shortcut recorder — beside Edit… (the editor sheet,
 which still owns pin and root-search visibility) and Delete…; Back returns to the row. A row with no
 AppKit control is cheap, so the library is a `LazyVStack` in one `Form` row (`SettingsPageRows`):
-the pane opens in ~125 ms instead of ~200 and scrolls inside a frame at any size — see
+the pane opens without building a control per row and scrolls inside a frame at any size — see
 [ui.md](../ui.md#settings). A lazy row may not be built yet, so a search result naming a
 quicklink narrows the pane's filter onto it rather than scrolling to it. The library is its own view
 holding the filter's state, so a keystroke re-renders that section rather than the whole `Form`, and
@@ -28,8 +28,9 @@ it filters once per render.
 - **Quicklinks are authored data, and their store never deletes.** A database that will not open is
   **reported, never discarded** — `ClipboardStore`'s delete-and-recreate is only sound because history is
   regenerable, and a link library is not. The database lives in **Application Support**, not Caches.
-- **`Model/` stays Foundation-only (plus SQLite3) and pure** for `quicklink-test` — the home directory is
-  injected, never read. `Service/QuicklinkLauncher` owns every `NSWorkspace` call.
+- **`Service/QuicklinkLauncher` owns every `NSWorkspace` call**, so `quicklink-test` compiles
+  `Model/` (Foundation plus SQLite3) standalone. `QuicklinkDestination` takes the home directory as a
+  parameter, defaulting to the real one, so the harness can pin it.
 - **Drawing an argument field reads nothing.** The header's chips come from
   `SnippetTemplateEngine.declaredArguments(in:)`, a parse of the template alone, so moving the
   selection never touches the clipboard or the frontmost app's selection. Only opening does.
@@ -133,8 +134,8 @@ where the field stays a filter with its prompt intact and the row below already 
 so the field appears whenever the link reads `{selection}` and the setting is `.ask`. Left empty it
 changes nothing — a selection the frontmost app *does* expose is still used — and only a typed value
 replaces it. So it is never owed: `QuicklinkCoordinator.requiresValue` keeps it out of the first
-incomplete field, and ↵ opens a selected-text link at once instead of focusing the empty chip first. That is the one behavioural difference from the two-screen form it replaced, and it is
-what lets the strip be drawn without capturing anything.
+incomplete field, and ↵ opens a selected-text link at once instead of focusing the empty chip first. That
+is what lets the strip be drawn without capturing anything.
 
 `openQuicklink(id:forcingDefaultApp:values:)` is the single funnel, and it captures the expansion
 context on **every** call rather than holding one across a session, so `{clipboard}`, `{selection}` and
@@ -147,8 +148,9 @@ its values through `LauncherScreen.argumentValues(for:)` into the same funnel, s
 takes a detour. **Only a shortcut whose values are still missing lands on Search Quicklinks**, on that
 row, with its first empty chip focused — carried across by `PaletteState.pendingArgumentEntryID` and
 `commandArguments`, both set after the show because `prepare` clears them. One argument surface, whether
-the row is reached from root search, from Search Quicklinks or from a hotkey. A ⌘↵ "open with default
-app" override survives that trip on `pendingDefaultAppOverride`, keyed by the quicklink it applies to.
+the row is reached from root search, from Search Quicklinks or from a hotkey. A one-shot handler — ⌘↵'s
+system default, or an app from the Open With section — survives that trip as a `HandlerOverride` on
+`pendingHandlerOverride`, keyed by the quicklink it applies to.
 
 **A launcher fallback fills the first argument.** Declaring a placeholder is exactly what puts a
 quicklink in the `Use “…” with…` section (see [launcher.md](launcher.md#fallbacks));
@@ -297,11 +299,6 @@ prepared statements, an `isolated deinit`):
 Tags are one `tags TEXT` column, one tag per line, `NULL` for none — normalization folds a line
 break inside a tag, so the split is lossless.
 
-`CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so a new column arrives as an unchecked
-`ALTER TABLE … ADD COLUMN … DEFAULT` right after the schema, which fails harmlessly once the column is
-there. That appends it physically, so the prepared statements **name their columns in the struct's
-order** rather than the table's, and the row reader stays a straight top-to-bottom read.
-
 Editing preserves the UUID, and with it the quicklink's shortcut, favorite slot, visibility and
 learned ranking. Deleting goes through `AppCore`, which unwinds all four before removing the row.
 Duplicating takes a **new** identity, so the copy can't inherit the original's shortcut.
@@ -332,7 +329,7 @@ missing shows the quicklink's screen with the supplied fields already filled (se
 
 `QuicklinkArchive` is a versioned JSON document (`{"version": 1, "quicklinks": [...]}`), pretty-printed
 with ISO 8601 dates so it can be hand-edited; a bare array decodes too, and only `name` and `link` are
-required — `tags` is an optional array, so a file written before tags imports untagged. Duplicate detection is by **name or destination** — either match means the user already has
+required — `tags` is an optional array, so a file without them imports untagged. Duplicate detection is by **name or destination** — either match means the user already has
 it — compared against the existing library _and_ against the rest of the incoming file, so one file
 can't import its own duplicates. Skipped entries are counted and reported in the summary. An import
 takes a fresh identity for every entry, so it can never collide with a shortcut an existing quicklink

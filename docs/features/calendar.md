@@ -55,8 +55,8 @@ camera preview, and individual events as searchable launcher entries.
   queries the window a model names, up to `CalendarToolCatalog.maxSpanDays`, on the calendars switched
   on here; it never widens `span` or touches the snapshot every surface reads. An event a chat adds is
   confirmed in Blitz's own dialog first. See [Chat tools](#chat-tools).
-- **`Model/` stays Foundation-only**; `calendar-test` compiles the shipped sources. EventKit lives in
-  `Service/CalendarStore.swift` and nothing EventKit-shaped leaves it.
+- **EventKit lives in `Service/CalendarStore.swift` and nothing EventKit-shaped leaves it**, so
+  `calendar-test` compiles the shipped `Model/` sources without it.
 
 ## The pure layer
 

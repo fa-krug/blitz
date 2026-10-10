@@ -3,8 +3,7 @@ import SwiftUI
 struct FeatureCommandsSection: View {
     let owner: SettingsTab
     let anchor: SettingsAnchor
-    /// Commands the pane draws elsewhere; excluded here rather than listed there, so a command
-    /// added to `ownedCommands` later still shows up without a second edit.
+    /// Drawn elsewhere; excluded here, not listed there, so a new owned command shows up unasked.
     var excluding: Set<CommandID> = []
 
     var body: some View {

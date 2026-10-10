@@ -9,15 +9,15 @@ struct ExtensionRefreshIndicator: View {
         case .active:
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .foregroundStyle(.secondary)
-                .help("Refreshes in the background")
+                .tooltip("Refreshes in the background", alignment: .trailing)
         case .idle:
             Image(systemName: "antenna.radiowaves.left.and.right.slash")
                 .foregroundStyle(.tertiary)
-                .help("Background refresh is off — enable it from Actions")
+                .tooltip("Background refresh is off — enable it from Actions", alignment: .trailing)
         case .failed(let message):
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-                .help(message)
+                .tooltip(message, alignment: .trailing)
         }
     }
 }

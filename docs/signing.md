@@ -83,13 +83,13 @@ Accessibility grant. Each entitlement in `Blitz/Blitz.entitlements` earns its pl
 | `com.apple.security.cs.allow-jit` | JavaScriptCore cannot JIT, and every extension command runs on the interpreter |
 | `com.apple.security.automation.apple-events` | Every Apple event is refused with `-1743` and no prompt — Get Info, the Finder selection an extension reads, the System Events–driven system actions, and every browser tab read (`{browser-tab}`, a quicklink focusing an open tab, an extension's `getFrontmostBrowserTab`) all die silently |
 | `com.apple.security.device.camera` | The camera prompt never appears and access resolves as denied |
-| `com.apple.security.personal-information.calendars` | `requestFullAccessToEvents()` returns `false` in milliseconds with no dialog, and Blitz never appears under System Settings › Calendars |
+| `com.apple.security.personal-information.calendars` | `requestFullAccessToEvents()` and `requestFullAccessToReminders()` return `false` in milliseconds with no dialog, and Blitz never appears under System Settings › Calendars or Reminders |
+| `com.apple.security.personal-information.addressbook` | The Contacts prompt never appears and `requestAccess(for: .contacts)` resolves as denied |
 
 **A usage string is not enough under the hardened runtime.** `tccd` checks the matching entitlement
 *before* it prompts, and without it logs "requires entitlement … but it is missing" and denies on the
-spot — no dialog, no error, status still `.notDetermined`. A grant saved before the hardened runtime
-arrived keeps working, since `tccd` does not re-check it, which is why this surfaces only on fresh
-installs. Adding a protected resource therefore means adding its usage string *and* its entitlement.
+spot — no dialog, no error, status still `.notDetermined`. An existing grant keeps working, since
+`tccd` does not re-check it, so a missing entitlement surfaces only on a fresh install. Adding a protected resource therefore means adding its usage string *and* its entitlement.
 
 `RESOURCE_ENTITLEMENTS` in `Scripts/verify-signature.sh` maps every protected resource's usage string
 to its entitlement, including resources Blitz does not use. That grants nothing — only
@@ -97,8 +97,8 @@ to its entitlement, including resources Blitz does not use. That grants nothing 
 is there so a future feature that adds the usage string but forgets the entitlement fails the release
 instead of shipping a prompt that can never appear.
 
-Nothing else is needed: the only `dlopen` is Apple's own IOBluetooth, so library validation is left
-on, and `node`, `ray` and shell commands are separate processes it never reaches. Bluetooth has no
+Nothing else is needed: the only library `dlopen` loads is Apple's own IOBluetooth — the other
+`dlsym` lookups resolve symbols already in the process — so library validation is left on, and `node`, `ray` and shell commands are separate processes it never reaches. Bluetooth has no
 hardened-runtime entitlement.
 
 `./Scripts/verify-signature.sh <path-to-.app>` asserts all of this — the runtime flag on the app *and*
@@ -118,10 +118,9 @@ It deliberately omits the `notarized` keyword — that resolves a ticket through
 network, and the updater verifies in a cache directory Gatekeeper has never assessed, so an offline
 Mac would refuse a bundle the chain already proves is ours.
 
-Every self-signed release already shipped this requirement, so each installed copy updates to a
-Developer ID build on its own. That first update changes the app's designated requirement, which the
-existing Accessibility and Input Monitoring grants no longer match, so both are granted once more;
-after that, renewals and updates keep them.
+Users' TCC grants — Accessibility, Automation, Calendars, Reminders, Contacts, Camera, Bluetooth —
+are tied to the app's designated requirement, which names the same team, so certificate renewals and
+updates keep them.
 
 ## Quarantine (separate from signing)
 

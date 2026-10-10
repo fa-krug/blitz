@@ -273,7 +273,7 @@ final class LauncherCoordinator {
         case .createRoom:
             core.roomCoordinator.createRoom()
         case .createQuicklink:
-            // Read before the hide: with the palette closed, a shortcut runs over the frontmost app.
+            // Read before the hide: with the palette closed, a shortcut runs over the front app.
             let covered =
                 paletteCoordinator.isVisible
                 ? windowController.previousApp : NSWorkspace.shared.frontmostApplication

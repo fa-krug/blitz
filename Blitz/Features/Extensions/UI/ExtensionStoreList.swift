@@ -135,14 +135,14 @@ private struct ExtensionStoreRow: View {
             Label("Failed", systemImage: "exclamationmark.triangle")
                 .font(metrics.typography.rowTrailing)
                 .foregroundStyle(.orange)
-                .help(message)
+                .tooltip(message, alignment: .trailing)
                 .fixedSize()
         case .available:
             if let downloads = listing.downloadCount, downloads > 0 {
                 Label(ExtensionListing.abbreviate(downloads), systemImage: "arrow.down.circle")
                     .font(metrics.typography.rowTrailing)
                     .foregroundStyle(.tertiary)
-                    .help("\(downloads.formatted()) installs")
+                    .tooltip("\(downloads.formatted()) installs", alignment: .trailing)
                     .fixedSize()
             }
         }

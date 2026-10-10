@@ -67,7 +67,7 @@ struct Room: Codable, Hashable, Identifiable, Sendable {
         return left != right ? left > right : precedes(lhs, rhs)
     }
 
-    // Hand-written, so an added field keeps stored rooms and older backups readable.
+    // Hand-written, so a minimal payload carrying only the required keys decodes.
     private enum CodingKeys: String, CodingKey {
         case id, name, windows, layout, layoutsByDisplay, lastEnteredAt
     }

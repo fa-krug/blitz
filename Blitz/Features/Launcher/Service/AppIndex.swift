@@ -466,7 +466,7 @@ final class AppIndex {
     private let ranking: LauncherRankingStore
     private let aliases: AliasStore
     private var settings: AppSettings?
-    /// Fired after every scan, even an unchanged one: LaunchServices can trail a deletion by seconds.
+    /// Fired after every scan, even an unchanged one: LaunchServices can lag a deletion by seconds.
     @ObservationIgnored var onScan: (() -> Void)?
 
     init(ranking: LauncherRankingStore, aliases: AliasStore) {

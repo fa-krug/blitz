@@ -284,7 +284,7 @@ struct QuicklinkTests {
         expect(!restored.isEnabled, "the enabled flag survives")
     }
 
-    /// The bound column order must match the read order, and an older table must gain new columns.
+    /// The bound column order must match the read order.
     static func readsADatabaseWrittenElsewhere() {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -295,7 +295,8 @@ struct QuicklinkTests {
             CREATE TABLE quicklinks(
               id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, link TEXT NOT NULL,
               open_with TEXT, icon TEXT, in_root_search INTEGER NOT NULL DEFAULT 1,
-              pinned_at REAL, created_at REAL NOT NULL
+              pinned_at REAL, created_at REAL NOT NULL, is_enabled INTEGER NOT NULL DEFAULT 1,
+              favicon BLOB, tags TEXT
             );
             INSERT INTO quicklinks(id, name, link, open_with, icon, in_root_search, created_at)
               VALUES('\(id.uuidString)', 'Jira', 'https://jira.example.com', NULL, 'ticket', 0, 1000);
@@ -312,14 +313,8 @@ struct QuicklinkTests {
         expect(row.openWithBundleID == nil, "a null open-with reads as none")
         expect(!row.showsInRootSearch, "the root-search flag lines up")
         expect(!row.isPinned, "a null pin stamp reads as unpinned")
-        expect(row.isEnabled, "a table written before is_enabled loads its rows as enabled")
-        expect(row.favicon == nil, "a table written before favicon loads its rows without one")
-        expect(row.tags.isEmpty, "a table written before tags loads its rows untagged")
-
-        // A second open must find the column already there rather than adding it twice.
-        let reopened = QuicklinkStore(directory: dir)
-        reopened.load()
-        expect(reopened.quicklinks.count == 1, "the migrated table reopens cleanly")
+        expect(row.isEnabled, "a row written without is_enabled takes the column default")
+        expect(row.favicon == nil && row.tags.isEmpty, "null favicon and tags read as none")
     }
 
     /// Quicklinks are authored data, so an unreadable database is reported, never recreated.
@@ -785,10 +780,10 @@ struct QuicklinkTests {
         expect(
             QuicklinkArchive.merge(decoded, into: []).additions.first?.tags == ["work", "docs"],
             "an import keeps the tags of what it adds")
-        let legacy = Data(#"[{"name":"Old","link":"https://old.test"}]"#.utf8)
+        let minimal = Data(#"[{"name":"Bare","link":"https://bare.test"}]"#.utf8)
         expect(
-            (try? QuicklinkArchive.decode(legacy))?.first?.tags == [],
-            "a file written before tags imports untagged")
+            (try? QuicklinkArchive.decode(minimal))?.first?.tags == [],
+            "a minimal hand-written file imports untagged")
     }
 
     static func tabURLMatching() {

@@ -239,7 +239,7 @@ final class AIChatCoordinator {
         guard let selection,
             let provider = try? AIProviderFactory.make(
                 selection: selection, settings: core.aiSettings,
-                subscription: core.chatGPTSubscription, installedAI: core.installedAI,
+                subscription: core.codexSubscription, installedAI: core.installedAI,
                 toolServers: servers)
         else { return nil }
         let request = AIRequest(
@@ -452,7 +452,7 @@ final class AIChatCoordinator {
     /// ⌘V stages a file, read off-main; false hands the chord back to the field editor.
     func attachPastedFile(files: [URL], to chat: AIChatState) -> Bool {
         let pasteboard = NSPasteboard.general
-        // A copied text selection often carries a TIFF too; only a board with no string is a picture.
+        // Copied text often carries a TIFF too; only a board with no string is a picture.
         let pasted =
             files.isEmpty && pasteboard.string(forType: .string) == nil
             ? pasteboard.availableType(from: [.png, .tiff]).flatMap { pasteboard.data(forType: $0) }
@@ -489,7 +489,7 @@ final class AIChatCoordinator {
         panel.allowsMultipleSelection = true
         panel.prompt = "Attach"
         panel.message = "Choose images, PDFs or text files to send with your next message."
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return }
         attach(files: panel.urls, to: chat)
     }
@@ -561,7 +561,7 @@ final class AIChatCoordinator {
     var isModelCatalogLoading: Bool {
         core.aiSettings.enabledInstalledProviders.contains { kind in
             switch kind {
-            case .codex: core.chatGPTSubscription.phase == .starting
+            case .codex: core.codexSubscription.phase == .starting
             case .claude, .grok, .openCode, .cursor:
                 core.installedAI.status(for: kind).phase == .checking
             }
@@ -570,7 +570,7 @@ final class AIChatCoordinator {
 
     var modelGroups: [AIModelOptionGroup] {
         AIModelOption.availableGroups(
-            settings: core.aiSettings, subscription: core.chatGPTSubscription,
+            settings: core.aiSettings, subscription: core.codexSubscription,
             installedAI: core.installedAI)
     }
 
@@ -602,7 +602,7 @@ final class AIChatCoordinator {
         }
         return try AIProviderFactory.make(
             selection: selection, settings: core.aiSettings,
-            subscription: core.chatGPTSubscription, installedAI: core.installedAI,
+            subscription: core.codexSubscription, installedAI: core.installedAI,
             toolServers: toolServers)
     }
 
@@ -669,7 +669,7 @@ final class AIChatCoordinator {
     func selectModel(_ option: AIModelOption, in chat: AIChatState) {
         let selection = AIModelOption.withDefaultEffort(
             option.selection, settings: core.aiSettings,
-            subscription: core.chatGPTSubscription, installedAI: core.installedAI)
+            subscription: core.codexSubscription, installedAI: core.installedAI)
         chat.setModel(selection)
         core.aiSettings.select(selection)
     }
@@ -677,7 +677,7 @@ final class AIChatCoordinator {
     func reasoningEfforts(for chat: AIChatState) -> [ChatGPTSubscription.Effort] {
         AIModelOption.efforts(
             for: model(for: chat), settings: core.aiSettings,
-            subscription: core.chatGPTSubscription, installedAI: core.installedAI)
+            subscription: core.codexSubscription, installedAI: core.installedAI)
     }
 
     func selectedReasoningTitle(for chat: AIChatState) -> String {

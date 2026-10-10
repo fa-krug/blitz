@@ -66,7 +66,7 @@ final class ExtensionCoordinator {
             return
         }
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(
@@ -199,7 +199,7 @@ final class ExtensionCoordinator {
 
     func confirmUninstall(_ owner: InstalledExtension) {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(
@@ -364,7 +364,7 @@ final class ExtensionCoordinator {
         core.showMessage(message, tone: tone)
     }
 
-    /// A command with no screen to fail on says why, and a missing preference opens where it is set.
+    /// A command with no screen to fail on says why; a missing preference opens where it is set.
     func reportFailure(_ failure: ExtensionFailure, of owner: InstalledExtension) {
         showHUD(failure.headline, tone: .danger)
         if failure.reason == .missingPreferences { showExtensionSettings(for: owner) }
@@ -372,7 +372,7 @@ final class ExtensionCoordinator {
 
     /// The dialog outranks the palette, so a view command keeps its screen behind it.
     func confirmExtensionAlert(_ alert: ExtensionAlert) async -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         return await core.confirm(
             title: alert.title, message: alert.message,
             symbol: alert.isDestructive ? "exclamationmark.triangle" : "questionmark.circle",

@@ -15,7 +15,7 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   process resident, no tool named to any model. `aiEnabled` off does the same, because chat is the
   only consumer. That reaches the Codex helper too, which keeps what it was launched with until it
   exits: when MCP goes off, or a server it runs is removed, set to Never Allow or signed out of,
-  `ChatGPTSubscriptionManager.dropWithdrawnServers` stops it between turns rather than leave the
+  `CodexSubscriptionManager.dropWithdrawnServers` stops it between turns rather than leave the
   server process and any lent token in it for its ten idle minutes; a change made mid-turn leaves it
   to the next turn's relaunch or that idle stop. Both flags and `mcpServers`
   are excluded from settings backups — a server list is a source of executable code and a
@@ -110,10 +110,8 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   than merge. The boundary fails closed: a listing that exits non-zero or is not a JSON array of
   named servers refuses the launch, since reading it as empty would start every one of them, and
   so does a name with a dot or `=`, which `-c` splits and so cannot switch off. The Providers row
-  and the failed turn both say why. Claude's `--strict-mcp-config` does it in one flag. This is
-  what closes the leak the route shipped with: its launch flags never touched `mcp_servers`, so
-  every server in `~/.codex/config.toml` used to start inside a Blitz thread, invisible because
-  `CodexTurnRunner` ignored the items.
+  and the failed turn both say why. Claude's `--strict-mcp-config` does it in one flag. Without
+  it, every server in `~/.codex/config.toml` would start inside a Blitz thread.
 - **Every Codex tool call asks Blitz, read-only ones included.** Left alone, the app-server runs
   a tool its server annotates `readOnlyHint: true` without raising an elicitation, even under
   `approvalPolicy: "untrusted"` — and that annotation is the server's own claim. So each server is
@@ -126,7 +124,8 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   the server out, because it is never passed.
 - **Blitz exposes nothing back.** A server request — sampling, elicitation, roots — is declined
   with a JSON-RPC error. The client advertises no capabilities in `initialize`.
-- **`Model/` stays Foundation-only.** `mcp-test` compiles the shipped models and pins the framing,
+- **The protocol lives in `Model/`, where a harness reaches it.** `mcp-test` compiles the shipped
+  models and pins the framing,
   handles, tool names, output flattening, trust and addressing; `mcp-stdio-test` drives a real
   subprocess. `mcp-oauth-test` pins OAuth parsing, PKCE, endpoint binding, callback lifetime,
   dynamic and supplied client registration, refresh coalescing, redirects and bounded 401 recovery.
@@ -268,7 +267,7 @@ the tools and undoes the launch-level disabling, which is why it is not used. A 
 `mcpServer/elicitation/request`, decoded by `CodexElicitation` and answered `accept` or `decline`.
 The question names the tool by `_meta.tool_name` when Codex sends it, since the latest item started
 on that server is a different call whenever two run at once; only without it does that item's name
-stand in. Every other server request is declined as it always was. `item/started` and
+stand in. Every other server request is declined. `item/started` and
 `item/completed` for an `mcpToolCall` become `.toolCall` and `.toolResult`.
 
 `ClaudeMCPLaunch` writes the same list as the CLI's own `mcpServers` record, into a file because
@@ -313,7 +312,8 @@ Stopped.
 
 ## Settings
 
-`MCPSettingsSection` is a section inside Settings → AI, the way `AICommandSection` is. Each row leads
+`MCPSettingsSection` is a section inside Settings → AI, the way `FeatureCommandsSection(owner: .ai, …)`
+is. Each row leads
 with the handle, because that is the half a reader has to type, then the live status and the
 transport. `MCPServerEditor` reaches `MCPCoordinator` through its environment. The editor holds name,
 HTTP or command, Header or OAuth authentication, optional client ID/secret, one Sign In / Cancel / Sign Out button and live

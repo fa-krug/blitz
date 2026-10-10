@@ -180,7 +180,7 @@ struct ExtensionSearchAccessoryTests {
             reloaded.preference(extension: "sample", key: "editor")
                 == .string("/Applications/Editor.app"))
 
-        // A store written before dropdowns held anything: the missing key must cost nothing.
+        // A store with no accessory section: the missing key must cost nothing.
         storage.setLocalStorage(extension: "older", key: "kept", value: .string("value"))
         storage.setPreference(extension: "older", key: "token", value: .string("secret"))
         storage.flush()

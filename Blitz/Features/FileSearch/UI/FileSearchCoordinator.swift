@@ -92,7 +92,7 @@ final class FileSearchCoordinator {
         Paster.pasteFile(result.url, previousApp: previous)
     }
 
-    /// `session` is whichever list the row came from; Search Screenshots keeps a session of its own.
+    /// `session` is the list the row came from; Search Screenshots keeps a session of its own.
     func trash(_ result: FileSearchResult, from session: FileSearchSession? = nil) {
         let session = session ?? self.session
         Task {

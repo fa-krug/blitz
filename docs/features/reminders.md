@@ -50,7 +50,6 @@ whose **Open** shows it in Reminders.
   a create or update lands straight away and the transcript shows the call, while a completion is
   still confirmed first. An update changes the reminder in place by id, so moving a due date never
   leaves a second copy behind. See [Chat tools](#chat-tools).
-- **`Model/` stays Foundation-only**; `reminders-test` compiles the shipped sources.
 
 ## The pure layer
 

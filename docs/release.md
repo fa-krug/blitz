@@ -43,13 +43,14 @@ and `NOTARY_API_ISSUER_ID`. Without them the workflow stops at the step that nee
 ## Notarized
 
 A downloaded copy opens on first launch after macOS's usual "downloaded from the internet"
-confirmation — no "unverified developer" block and no `xattr` step. The first
-update from a self-signed release asks for Accessibility and Input Monitoring once more — see
-[signing.md](signing.md#what-the-updater-trusts).
+confirmation — no "unverified developer" block and no `xattr` step. An update keeps the user's
+permission grants, because the requirement they match pins the team rather than the certificate —
+see [signing.md](signing.md#what-the-updater-trusts).
 
 ## Pull request review
 
-CodeRabbit reviews every PR against `.coderabbit.yaml`: it runs SwiftLint with `.swiftlint.yml`,
-annotates the diff and applies the pre-merge checks. It is a reviewer, not a gate — it neither runs
-the harnesses nor builds the app, so the whole bar in [testing.md](testing.md#definition-of-done) is
-run locally before a PR is opened.
+The release workflow is the repository's only one: nothing runs on a pull request. CodeRabbit
+reviews every PR against `.coderabbit.yaml`: it runs SwiftLint with `.swiftlint.yml`, annotates the
+diff and applies the pre-merge checks. It is a reviewer, not a gate — it neither runs the harnesses
+nor builds the app, so the whole bar in [testing.md](testing.md#definition-of-done) is run locally
+before a PR is opened.

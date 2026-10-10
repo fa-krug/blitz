@@ -2,7 +2,6 @@ import CoreGraphics
 import Foundation
 
 /// A user-defined window command: one size at one position, applied to the focused window.
-/// See docs/features/window-management.md#custom-sizes.
 struct CustomWindowSize: Codable, Hashable, Identifiable, Sendable {
     static let entryIDPrefix = "window-size:"
     static let sfSymbol = "macwindow.and.cursorarrow"
@@ -89,21 +88,6 @@ struct CustomWindowSize: Codable, Hashable, Identifiable, Sendable {
         self.height = height
         self.anchor = anchor
         self.offset = offset
-    }
-
-    // Hand-written, so an added field keeps stored sizes and older backups readable.
-    private enum CodingKeys: String, CodingKey {
-        case id, name, width, height, anchor, offset
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        width = try container.decode(Dimension.self, forKey: .width)
-        height = try container.decode(Dimension.self, forKey: .height)
-        anchor = try container.decode(WindowLayoutAnchor.self, forKey: .anchor)
-        offset = try container.decodeIfPresent(Offset.self, forKey: .offset) ?? .zero
     }
 
     var entryID: String { Self.entryIDPrefix + id.uuidString.lowercased() }

@@ -10,7 +10,7 @@ struct AIModelOption: Identifiable {
 
     @MainActor
     static func availableGroups(
-        settings: AISettingsStore, subscription: ChatGPTSubscriptionManager,
+        settings: AISettingsStore, subscription: CodexSubscriptionManager,
         installedAI: InstalledAIManager
     ) -> [AIModelOptionGroup] {
         let enabled = settings.enabledInstalledProviders
@@ -133,11 +133,11 @@ struct AIModelOption: Identifiable {
         return groups
     }
 
-    /// The model list only names a route; the effort it comes with is the one that route defaults to.
+    /// The model list only names a route; its effort is the one that route defaults to.
     @MainActor
     static func withDefaultEffort(
         _ selection: AIModelSelection, settings: AISettingsStore,
-        subscription: ChatGPTSubscriptionManager, installedAI: InstalledAIManager
+        subscription: CodexSubscriptionManager, installedAI: InstalledAIManager
     ) -> AIModelSelection {
         let model = selection.model
         let effort: String?
@@ -159,7 +159,7 @@ struct AIModelOption: Identifiable {
     @MainActor
     static func efforts(
         for selection: AIModelSelection?, settings: AISettingsStore,
-        subscription: ChatGPTSubscriptionManager, installedAI: InstalledAIManager
+        subscription: CodexSubscriptionManager, installedAI: InstalledAIManager
     ) -> [ChatGPTSubscription.Effort] {
         guard let selection else { return [] }
         let model = selection.model

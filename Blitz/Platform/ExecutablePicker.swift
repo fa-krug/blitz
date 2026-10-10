@@ -1,6 +1,6 @@
 import AppKit
 
-/// The open panel a Settings row uses to pick a command, hidden folders shown: `~/.local/bin` is one.
+/// The panel a Settings row picks a command with; hidden folders show: `~/.local/bin` is one.
 @MainActor
 enum ExecutablePicker {
     static func choose(message: String, startingAt directory: URL) -> URL? {
@@ -15,7 +15,7 @@ enum ExecutablePicker {
         panel.message = message
         panel.directoryURL = directory
         // Blitz is an accessory app, so the panel opens behind the frontmost app without this.
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }

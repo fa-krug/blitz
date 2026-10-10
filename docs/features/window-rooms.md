@@ -39,7 +39,7 @@ under its MIT licence; [NOTICE.md](../../NOTICE.md) lists the adapted files.
 - **Window work runs one at a time, in order.** `RoomCoordinator.inTurn` chains every enter and
   every restore: two passes at once would each hide what the other just showed.
 - **The runner never touches `WindowActionMemory`**, exactly as layouts do not.
-- **`Model/` stays Foundation + CoreGraphics.** Screens arrive as `WindowLayoutScreen`, windows as
+- **`Model/` sees no AX element and no `NSScreen`.** Screens arrive as `WindowLayoutScreen`, windows as
   handle-based `RoomLiveWindow`s, minimum sizes as a dictionary; `window-room-test` compiles the
   shipped files.
 

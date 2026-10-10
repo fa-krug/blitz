@@ -12,7 +12,7 @@ contradicts the code is a defect, so fix it in the commit that made it wrong.
 | [standards.md](standards.md) | How code here is written: posture, naming, style, concurrency, performance budgets, comments | a convention changes, or a check is added |
 | [testing.md](testing.md) | How to verify a change: the definition of done, the harnesses, purity checks, budgets, the manual sweep | a harness moves, or a budget changes |
 | [development.md](development.md) | The local loop: setup, build, dev channel, editor, format/lint, generated data | the local toolchain changes |
-| [release.md](release.md) | How a build reaches a user: the push-to-`main` release, its two secrets, PR review | the pipeline changes |
+| [release.md](release.md) | How a build reaches a user: the push-to-`main` release, its five secrets, PR review | the pipeline changes |
 | [signing.md](signing.md) | The local self-signed identity, the Developer ID release identity and its secrets, the hardened runtime, what the updater trusts, quarantine | the signing setup changes |
 | [ui.md](ui.md) | The design system: tokens, panel chrome, row grammar, glass, dialogs and HUDs | a token or a presentation rule changes |
 
@@ -24,7 +24,10 @@ open with an `## Invariants` section; read it before changing anything in that a
 
 [palette](features/palette.md) ·
 [launcher](features/launcher.md) ·
+[settings](features/settings.md) ·
+[onboarding](features/onboarding.md) ·
 [AI providers and chat](features/ai.md) ·
+[MCP servers](features/mcp.md) ·
 [quick actions](features/quick-actions.md) ·
 [clipboard](features/clipboard.md) ·
 [calculator](features/calculator.md) ·
@@ -39,9 +42,11 @@ open with an `## Invariants` section; read it before changing anything in that a
 [menu search](features/menu-search.md) ·
 [notes](features/notes.md) ·
 [snippets](features/snippets.md) ·
+[text injection](features/text-injection.md) ·
 [quicklinks](features/quicklinks.md) ·
 [Apple Shortcuts](features/apple-shortcuts.md) ·
 [hotkeys](features/hotkeys.md) ·
+[system actions](features/system-actions.md) ·
 [navigation](features/navigation.md) ·
 [window management](features/window-management.md) ·
 [window layouts](features/window-layouts.md) ·

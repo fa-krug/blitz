@@ -48,7 +48,7 @@ struct RoomWindow: Codable, Hashable, Sendable {
                 height: unitFrame.height * visible.height))
     }
 
-    // Hand-written, so an added field keeps stored rooms and older backups readable.
+    // Hand-written, so a minimal payload carrying only the required keys decodes.
     private enum CodingKeys: String, CodingKey {
         case bundleID, appName, title, windowID, unitFrame, cell
     }

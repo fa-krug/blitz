@@ -22,7 +22,7 @@ enum FileSearchQuery {
         return (matches + types + excludes).joined(separator: " && ")
     }
 
-    /// Both, because macOS stamps `kMDItemLastUsedDate` on few opens now, and Spotlight sorts on one.
+    /// Both: macOS stamps `kMDItemLastUsedDate` on few opens, and Spotlight sorts on one.
     enum RecentStamp: String, CaseIterable, Sendable {
         case changed = "kMDItemFSContentChangeDate"
         case used = "kMDItemLastUsedDate"

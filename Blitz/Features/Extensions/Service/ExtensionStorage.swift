@@ -16,8 +16,7 @@ final class ExtensionStorage {
 
         init() {}
 
-        /// Each section decodes on its own: one absent key must not take an extension's whole
-        /// store — API keys included — down with it, since a failed decode resets the file.
+        /// Per section: an absent key must not fail a decode, which resets the file and API keys.
         init(from decoder: Decoder) throws {
             let store = try decoder.container(keyedBy: CodingKeys.self)
             localStorage =

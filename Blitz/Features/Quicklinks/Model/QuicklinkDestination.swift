@@ -57,7 +57,7 @@ enum QuicklinkDestination: Hashable, Sendable {
         return absolutePath(trimmed, homeDirectory: homeDirectory) == nil
     }
 
-    /// A URL of the link's kind for Launch Services, placeholders blanked; nil for a templated path.
+    /// A URL of the link's kind for Launch Services, placeholders blanked; nil for a template path.
     static func handlerProbe(_ link: String, homeDirectory: String = NSHomeDirectory()) -> URL? {
         let blanked = link.replacing(#/\{[^{}]*\}/#, with: "")
         switch detect(blanked, homeDirectory: homeDirectory) {

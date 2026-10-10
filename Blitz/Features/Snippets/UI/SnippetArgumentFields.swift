@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The `{argument}` values a snippet still needs; reference semantics let the caller read them back.
+/// The `{argument}` values a snippet still needs; a class, so the caller can read them back.
 @MainActor
 @Observable
 final class SnippetArgumentsState {

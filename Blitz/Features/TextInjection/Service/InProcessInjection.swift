@@ -13,7 +13,7 @@ extension InjectableTextView {
             value: string, selectedRange: selection, keyword: expectedKeyword)
     }
 
-    /// Replaces `range` and leaves the caret where the text asks, undoable in the view's own manager.
+    /// Replaces `range`, caret where the text asks, undoable in the view's own undo manager.
     @MainActor
     func inject(_ injected: InjectedText, over range: NSRange) {
         // The argument prompt runs modally mid-expansion, so take the caret back before writing.

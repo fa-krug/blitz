@@ -225,7 +225,7 @@ struct SettingsHistoryTests {
 
     // MARK: - Revealing a section
 
-    /// Picking the same result twice has to scroll and pulse again, not compare equal and do nothing.
+    /// Picking the same result twice must scroll and pulse again, not compare equal and stop.
     static func revealingRecordsANewRequestEachTime() {
         let navigation = SettingsNavigationState(tab: .general)
         expect(navigation.scrollRequest == nil, "a fresh window has nothing to reveal")

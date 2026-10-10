@@ -105,7 +105,7 @@ struct Quicklink: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
-    // Hand-written, so an added field keeps old exports importable and imports stay minimal.
+    // Hand-written, so a hand-edited import needs only `name` and `link`.
     private enum CodingKeys: String, CodingKey {
         case id, name, link, openWithBundleID, iconSymbol, favicon, isEnabled, showsInRootSearch
         case pinnedAt, createdAt, tags

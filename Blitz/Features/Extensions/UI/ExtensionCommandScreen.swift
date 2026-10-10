@@ -285,7 +285,7 @@ struct ExtensionCommandScreen: PaletteScreen {
         case .unsupported:
             return nil
         }
-        return AnyView(ExtensionLoadingIndicator())
+        return AnyView(ExtensionLoadingIndicator(tooltipEdge: .bottom))
     }
 
     /// Its choices as a palette menu, so the arrows, ↵, Escape and the click-away come free.

@@ -30,7 +30,6 @@ controller and footer are all that stay in [calendar.md](calendar.md).
 - **`AVCaptureSession` is not `Sendable`, and only `CaptureBox` crosses that line.** The blocking
   calls — `startRunning`, `stopRunning`, and the begin/commit around a device swap — run in
   `Task.detached` behind that one `@unchecked Sendable` box, which is private to `CameraSession.swift`.
-  There is no second actor.
 
 ## How it is put together
 

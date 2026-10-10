@@ -1,6 +1,6 @@
 import Foundation
 
-/// Ordered user favorites, persisted separately from learned usage so neither can rewrite the other.
+/// Ordered favorites, persisted apart from learned usage so neither can rewrite the other.
 @MainActor
 @Observable
 final class PinnedEmojiStore {

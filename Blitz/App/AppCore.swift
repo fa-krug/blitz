@@ -80,7 +80,7 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var mcp = MCPServerManager(oauth: mcpOAuth)
     let quickActionSettings = QuickActionSettingsStore()
     let customQuickActions = CustomQuickActionStore()
-    let chatGPTSubscription = ChatGPTSubscriptionManager()
+    let codexSubscription = CodexSubscriptionManager()
     let installedAI = InstalledAIManager()
     @ObservationIgnored private var appliedLaunchRevisions: [InstalledAIKind: Int] = [:]
 
@@ -312,7 +312,7 @@ final class AppCore {
             fileSearchCoordinator.applyPolicy()
             notesCoordinator.applyEnabled()
             installedAI.launchSettings = { [aiSettings] in aiSettings.launch(for: $0) }
-            chatGPTSubscription.launchSettings = { [aiSettings] in aiSettings.launch(for: .codex) }
+            codexSubscription.launchSettings = { [aiSettings] in aiSettings.launch(for: .codex) }
             aiChatCoordinator.applyEnabled()
             mcpCoordinator.applyEnabled()
             customQuickActions.onChange = { [weak self] _ in
@@ -612,7 +612,7 @@ final class AppCore {
         snippetListener.stop()
         snippetsStore.stop()
         aiChats.reset()
-        chatGPTSubscription.stop()
+        codexSubscription.stop()
         mcpOAuth.stop()
         mcp.stop()
         installedAI.stop()
@@ -627,8 +627,8 @@ final class AppCore {
         for kind in InstalledAIKind.allCases where appliedLaunchRevisions[kind] != revisions[kind] {
             guard enabled.contains(kind) else { continue }
             if kind == .codex {
-                chatGPTSubscription.stop()
-                chatGPTSubscription.refresh()
+                codexSubscription.stop()
+                codexSubscription.refresh()
             } else {
                 installedAI.refresh(kind: kind)
             }
@@ -644,11 +644,11 @@ final class AppCore {
         var tasks: [Task<Void, Never>] = []
         if enabledKinds.contains(.codex) {
             tasks.append(
-                chatGPTSubscription.phase == .idle
-                    ? chatGPTSubscription.refresh()
-                    : chatGPTSubscription.currentRefreshTask())
+                codexSubscription.phase == .idle
+                    ? codexSubscription.refresh()
+                    : codexSubscription.currentRefreshTask())
         } else {
-            chatGPTSubscription.stop()
+            codexSubscription.stop()
         }
         tasks.append(installedAI.ensure(enabledKinds: enabledKinds))
         return Task { for task in tasks { await task.value } }
@@ -663,7 +663,7 @@ final class AppCore {
             throw AIProviderError.unavailable("Choose a model in Settings \u{2192} Quick Actions.")
         }
         return try AIProviderFactory.make(
-            selection: selection, settings: aiSettings, subscription: chatGPTSubscription,
+            selection: selection, settings: aiSettings, subscription: codexSubscription,
             installedAI: installedAI,
             guardrails: .permissiveContentTransformations)
     }
@@ -674,7 +674,7 @@ final class AppCore {
             throw AIProviderError.unavailable("Choose a model in Settings \u{2192} AI.")
         }
         return try AIProviderFactory.make(
-            selection: selection, settings: aiSettings, subscription: chatGPTSubscription,
+            selection: selection, settings: aiSettings, subscription: codexSubscription,
             installedAI: installedAI, guardrails: .permissiveContentTransformations)
     }
 

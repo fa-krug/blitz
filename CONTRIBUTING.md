@@ -29,10 +29,12 @@ Check existing [issues](https://github.com/fa-krug/blitz/issues) and
 ## Before submitting
 
 - The whole bar in [`docs/testing.md`](docs/testing.md#definition-of-done) passes — harnesses, lint,
-  purity, a clean build. Engine changes come with new cases. CI only releases, so **run
-  `./Scripts/run-tests.sh`, `./Scripts/lint.sh` and a build locally**. CodeRabbit reviews every PR
-  and flags lint violations on the diff, but it does not run the harnesses or build the app.
-- Leak-tested and memory-measured. Numbers in the PR.
+  purity, a clean build. Engine changes come with new cases. The repository's one workflow
+  releases each push to `main` and runs nothing on a PR, so **run `./Scripts/run-tests.sh`,
+  `./Scripts/lint.sh` and a build locally**. CodeRabbit reviews every PR and flags lint violations
+  on the diff, but it does not run the harnesses or build the app.
+- Leak-tested. A change that touches caches, images, the index or other long-lived memory is also
+  memory-measured, with the numbers in the PR.
 - You actually used the app, on your path and the ones next to it.
 - Rebased on `main`, squashed into logical commits.
 - Anything in [`docs/`](docs/) your change makes wrong is fixed.
@@ -49,7 +51,8 @@ Check existing [issues](https://github.com/fa-krug/blitz/issues) and
 - **Visual change → side-by-side before/after video. Mandatory.** Same window size, same actions.
   An "after"-only clip doesn't count; stills don't substitute.
 - Non-visual → say what you tested.
-- Include the memory numbers, idle and peak.
+- Include the memory numbers when the change touches long-lived memory — the template's four
+  readings.
 - Flag anything surprising, and any tradeoff you made on purpose.
 
 ## Code style
@@ -57,8 +60,8 @@ Check existing [issues](https://github.com/fa-krug/blitz/issues) and
 Read [`AGENTS.md`](AGENTS.md) first — the posture, the Non-negotiables and the naming and comment rules
 are all there, and they apply to a human contributor exactly as they do to an agent.
 [`docs/standards.md`](docs/standards.md) is the full version: architecture, naming, Swift style,
-concurrency and the performance budgets. [`docs/ui.md`](docs/ui.md) before any new view or restyle. Look before "fixing" something that looks
-wrong — it may be deliberate.
+concurrency and the performance budgets. [`docs/ui.md`](docs/ui.md) before any new view or restyle.
+Look before "fixing" something that looks wrong — it may be deliberate.
 
 Two things that are only about contributing, and so are not in those docs:
 

@@ -214,7 +214,7 @@ enable keystroke listening.
 its _modifying_ tap, and the same one clipboard pasting needs. Input Monitoring is deliberately not
 used: `CGPreflightListenEventAccess()` reports success whenever Accessibility is granted, so a second
 permission would show as permanently granted while never appearing in System Settings, which cannot be
-managed or revoked. It is managed where it always was, in **Settings → Permissions**.
+managed or revoked. It is managed in **Settings → Permissions**.
 
 Runtime status is explicit:
 
@@ -298,7 +298,7 @@ The feature switch — which carries keyword-monitoring consent — is likewise 
 `MessageHUDController` is shared rather than snippet-specific. It takes a message and a `DialogTone`
 (defaulting to `.success`), the same tone vocabulary `DialogController`'s dialogs use, so a
 custom command confirms a run through the same panel and the same tint rules; system actions'
-success/info feedback uses it too (see [launcher.md](launcher.md#system-actions)). Its leading
+success/info feedback uses it too (see [system-actions.md](system-actions.md#feedback)). Its leading
 trailing glyph, after the message, carries the tint. Its capsule uses `Theme.frosted(in:)`, the same
 whitish-tinted glass as the rest of the app's floating controls (see [ui.md](../ui.md#liquid-glass)).
 
@@ -373,7 +373,7 @@ and Blitz's own marker type — and restores by rewriting the snapshot whole.
 **The loan carries no other flavour of the old clipboard.** Keeping the original item's shape and
 swapping only its `.string` would leave `public.html`, `public.rtf` and the rest describing the
 *previous* copy, and a rich-text editor prefers those: ChatGPT's ProseMirror composer takes Chromium's
-`text/html` over its `text/plain`, so a snippet pasted over an HTML-bearing clipboard inserted the
+`text/html` over its `text/plain`, so a snippet pasted over an HTML-bearing clipboard would insert the
 previous copy instead. A representation Blitz cannot rewrite to mean the expansion is one it must
 not lend, and the whitelist of text-bearing UTIs it *could* rewrite would never be complete. Rewriting
 the snapshot therefore clears before a fallible write — the risk a same-shape loan bought off — which
@@ -405,7 +405,7 @@ into the prompt and clicking **Expand** is the reader finishing the expansion, n
 The flag clears the buffer on both edges, so argument text can never trigger a nested expansion.
 Delivery then settles exactly once either way:
 Quick Actions raise a HUD and keep the reply on the clipboard, while snippets pass no failure handler
-and stay as silent as before, because a speculative expansion that declined is not news.
+and stay silent, because a speculative expansion that declined is not news.
 
 ## External edits and conflicts
 

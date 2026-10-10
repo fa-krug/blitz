@@ -81,8 +81,7 @@ final class QuicklinkCoordinator {
 
     // MARK: - Opening
 
-    /// The one funnel for every open, so neither the switch nor the missing values can be bypassed.
-    /// `values` are the header's argument fields; anything still missing sends the row back to them.
+    /// The one funnel for every open; a value still missing sends the row back to its field.
     func openQuicklink(
         id: UUID, forcingDefaultApp: Bool = false, openingWith bundleID: String? = nil,
         values: [String: String] = [:]
@@ -131,7 +130,7 @@ final class QuicklinkCoordinator {
             target: target, clipboardHistory: clipboardHistory(), browserTab: browserTab,
             calculate: core.calculatorCoordinator.placeholderEvaluator())
 
-        // An unreadable selection is missing, not empty: substitute the clipboard, or take the field.
+        // An unreadable selection is missing, not empty: use the clipboard, or take the field.
         if context.selection.isEmpty, SnippetTemplateEngine.usesSelection(quicklink.link) {
             switch settings.quicklinkSelectionFallback {
             case .clipboard:
@@ -182,7 +181,7 @@ final class QuicklinkCoordinator {
         return arguments
     }
 
-    /// Search Quicklinks is the one argument surface, so a shortcut with values missing lands there.
+    /// Search Quicklinks is the one argument surface, so a shortcut missing values lands there.
     private func promptForArguments(_ quicklink: Quicklink, values: [String: String]) {
         paletteCoordinator.showPalette(mode: .quicklinks)
         // After the show: `prepare` runs inside it and would clear everything set beforehand.
@@ -307,7 +306,7 @@ final class QuicklinkCoordinator {
         }
     }
 
-    /// Opens the Quicklinks pane with the editor showing `quicklink`; nil is a new one, named `name`.
+    /// Opens the Quicklinks editor on `quicklink`; nil is a new one, named `name`.
     func editQuicklink(_ quicklink: Quicklink?, name: String = "") {
         core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name)
         settingsCoordinator.showSettings(tab: .quicklinks)

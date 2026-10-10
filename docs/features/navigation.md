@@ -21,7 +21,7 @@ launcher and a still-recorded shortcut for either does nothing.
   anew — `WindowSwitchCoordinator.load()`, through `PaletteCoordinator.onScreenOpening` — and a
   screen restored inside the Pop to Root window lists today's windows, not an empty snapshot.
 - **Nothing in `Model/` knows what a window is.** `WindowSwitchEntry` takes `appRank` as a number
-  someone else measured, so `WindowSwitchOrder` and `WindowSwitchQuery` stay Foundation-only and the
+  someone else measured, so `WindowSwitchOrder` and `WindowSwitchQuery` need no AX and the
   harness compiles the shipped sources.
 - **The order is total.** `(isMinimized, appRank, appName, handle)` — so a sweep that enumerated apps
   in a different order sorts identically, and minimized windows are always one run at the end rather

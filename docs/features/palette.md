@@ -13,8 +13,8 @@ The command palette is a borderless floating `NSPanel` hosting SwiftUI; see
 - **The flat `selection` index must match the visible row order exactly**, including the inline
   calculator card at index 0 when present. Selection is the single source of truth for highlight and
   activation. `Features/PaletteRowIndex.swift` is that mapping — sections, their starts, and the
-  section-jump and page maths over them — and stays **Foundation-only and pure**, no SwiftUI, no
-  AppKit, so `palette-selection-test` compiles the shipped type rather than a copy. Section headers
+  section-jump and page maths over them — and is **pure**, so `palette-selection-test` compiles the
+  shipped type rather than a copy. Section headers
   are not selectable and never consume an index.
 - **A menu owns native text input while it is open.** Its panel becomes key so the menu field gets an
   AppKit field editor; the palette field stays mounted and inert beneath it.
@@ -117,7 +117,7 @@ every screen but the clipboard, which lands past its pins
 own fields), or the selected row declares arguments, in which case it walks those fields first (see
 below); every other mode stays off the ring, and is reached by a command or a global hotkey, with
 Uninstall only from a launcher app's Actions menu, scoped to that app. Chat is skipped whole when
-`aiEnabled` is off, which leaves the launcher ↔ clipboard flip the ring replaced.
+`aiEnabled` is off, which leaves a launcher ↔ clipboard flip.
 
 ### Navigation
 
@@ -175,7 +175,7 @@ still there to be cleared by the next press. A bare backspace in an empty field 
 is the step Escape would have taken had that screen been reached by typing its name. ⌘⎋ skips the
 whole stack for that same root search from any depth.
 
-`EscapeKeyBehavior` (General settings) can trade the walk back for the old behavior: under
+`EscapeKeyBehavior` (General settings) can trade the walk for a close: under
 `closeAndPopToRoot` an empty field closes the window and resets it immediately, whatever Pop to Root
 Search says. Clearing the query is still the first press either way.
 
@@ -366,8 +366,8 @@ setting (`AppSettings.openOnCursorScreen`, on by default):
 
 **Neither case may use `NSScreen.main`**, which is documented as the screen of the window with keyboard
 focus — the frontmost app's, wherever the user last clicked. It therefore follows the user across
-displays, which is the wrong answer for both settings and made the off case do exactly what turning it
-off was meant to stop ([#270](https://github.com/abue-ammar/tinycast/issues/270)). The menu-bar display
+displays, which is the wrong answer for both settings and would make the off case do exactly what turning it
+off is meant to stop. The menu-bar display
 is the one whose `frame.origin` is `.zero`, which is what `primary` looks for.
 
 The cursor hit test is `NSMouseInRect(mouse, screen.frame, false)`, **not** `CGRect.contains`. A mouse
@@ -392,7 +392,7 @@ Drawing it in SwiftUI pins it to the layout instead: measured ink is identical i
 against a two-backing-pixel step for the real prompt. It is a **background**, not an overlay, so the
 caret still draws over it, and it carries `allowsHitTesting(false)` so clicking the placeholder still
 lands the caret. `PaletteMode.placeholder` is still the one source of the strings; the field takes an
-explicit `accessibilityLabel` because the prompt used to supply it.
+explicit `accessibilityLabel` because there is no prompt to supply it.
 
 This is the same class of bug as the freeze below — both come from the cell/field-editor swap.
 

@@ -98,32 +98,6 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         guard entryID.hasPrefix(entryIDPrefix) else { return nil }
         return UUID(uuidString: String(entryID.dropFirst(entryIDPrefix.count)))
     }
-
-    // Hand-written, so an added field keeps stored commands and older backups readable.
-    private enum CodingKeys: String, CodingKey {
-        case id, name, command, isEnabled, loadsShellEnvironment, requiresConfirmation
-        case showsConfirmation, arguments, workingDirectory, iconSymbol
-        case opensTerminal = "showsOutput"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        command = try container.decode(String.self, forKey: .command)
-        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
-        loadsShellEnvironment =
-            try container.decodeIfPresent(Bool.self, forKey: .loadsShellEnvironment) ?? false
-        requiresConfirmation =
-            try container.decodeIfPresent(Bool.self, forKey: .requiresConfirmation) ?? false
-        showsConfirmation =
-            try container.decodeIfPresent(Bool.self, forKey: .showsConfirmation) ?? false
-        arguments =
-            try container.decodeIfPresent([CustomCommandArgument].self, forKey: .arguments) ?? []
-        opensTerminal = try container.decodeIfPresent(Bool.self, forKey: .opensTerminal) ?? false
-        workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
-        iconSymbol = try container.decodeIfPresent(String.self, forKey: .iconSymbol)
-    }
 }
 
 extension String {

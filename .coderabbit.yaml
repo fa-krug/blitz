@@ -58,7 +58,6 @@ reviews:
     - "!Blitz/blitz.icon/**"
     - "!Tests/ai-fixtures/*.txt"
     - "!**/node_modules/**"
-    - "!**/package-lock.json"
     - "!**/pnpm-lock.yaml"
     - "!build/**"
     - "!**/*.png"
@@ -87,19 +86,23 @@ reviews:
         - Respect intentional Blitz conventions even when they differ from generic Swift advice.
 
         Concurrency (Swift 6 strict; concurrency violations are defects):
-        - @MainActor is the default. Flag any new custom actor or global actor; the app has one actor.
+        - @MainActor is the default and the home of state. Flag a new global actor, or an actor
+          that holds app state. A private actor is fine where it replaces a lock plus
+          @unchecked Sendable.
         - Heavy or IO work (file scans, image decode, SQLite, shell, JSON of real size) must run
           off-main as a nonisolated (usually static) function driven by Task.detached.
           Flag it on MainActor.
         - Types crossing an isolation boundary must be Sendable.
         - Flag @unchecked Sendable, nonisolated(unsafe) and @preconcurrency without a clear
           one-line reason.
-        - Flag new MainActor.assumeIsolated; it traps at runtime.
+        - MainActor.assumeIsolated and DispatchQueue.main.async are allowed only inside callbacks
+          guaranteed to run on main (queue: .main observers, event taps on the main run loop) or
+          for an AppKit next-turn re-assert, each with a one-line reason comment. Flag any other
+          use, and any use offered as the fix for a race or ordering problem of unknown cause.
         - Ignore @available(*, unavailable) on init(coder:); that is the house idiom.
         - Do not silence strict-concurrency diagnostics merely to make code compile.
         - Flag DispatchQueue, DispatchGroup, DispatchSemaphore, OperationQueue, completion
           handlers and performSelector where async/await is appropriate.
-        - DispatchQueue.main.async is never an ordering fix.
         - Every long-lived Task is stored and cancelled in stop() or deinit. Flag fire-and-forget
           tasks that can outlive their owner.
         - Flag loops that never check Task.isCancelled where cancellation matters.
@@ -122,8 +125,9 @@ reviews:
         - SMAppService for login items; Swift Concurrency over callbacks.
         - No #available/@available(macOS …) gates, version flags, compatibility shims,
           migration code or "just in case" fallbacks. Suggest deleting obsolete compatibility code.
-        - Carbon is allowed only for global hotkeys (RegisterEventHotKey) and TIS input sources;
-          raw C pointers are decoded to plain values before crossing into actor code.
+        - Carbon is allowed for global hotkeys (RegisterEventHotKey), TIS input sources, and the
+          kVK_ key codes and modifier masks; raw C pointers are decoded to plain values before
+          crossing into actor code.
 
         Memory and speed:
         - Resident memory must stay under 100 MB and return to baseline after the palette closes.
@@ -139,13 +143,19 @@ reviews:
 
         Architecture and ownership:
         - AppCore is the sole owner of long-lived state. Flag any new singleton or static let shared.
-        - Views reach a feature through its coordinator via @Environment, never through AppCore.
+        - Views read @Environment(AppCore.self) and use it to locate a feature's coordinator
+          (core.quicklinkCoordinator…); every action goes through that coordinator. Flag a view
+          that mutates a store directly.
         - AppEntry.Kind is the only source of an entry's category. Flag category logic that
           parses IDs.
         - Networking uses a private URLSessionConfiguration.ephemeral session with
           urlCache = nil (copy CurrencyRateStore). Flag URLSession.shared.
         - Dialogs go through DialogController, reports through HUDPresenter. Flag NSAlert,
-          NSSlider, NSPopover and SwiftUI .alert, .confirmationDialog and .popover.
+          .alert and .confirmationDialog anywhere. On the palette and its borderless surfaces,
+          flag NSMenu, NSPopover, .contextMenu and SwiftUI .popover; menus there are PopoverMenu.
+          Settings and the AI Chat window are stock titled windows and may use SwiftUI .popover,
+          Menu and context menus. The system share picker (Platform/SharePicker.swift) is the one
+          sanctioned system popover on the palette.
         - Anything newly persisted is keyed by Bundle.main.bundleIdentifier.
         - Type suffixes must match their responsibility (docs/standards.md#naming).
         - Flag protocols with one conformer, generics with one use and factories for one type.
@@ -159,11 +169,10 @@ reviews:
     - path: "Blitz/Features/*/Model/**"
       instructions: |
         Pure model layer, compiled directly by the test harnesses.
-        - Must not import AppKit, SwiftUI or Cocoa. This is a hard error.
-        - Every environment fact (clock, filesystem, home directory, rates, locale) is an
-          injected parameter. A defaulted parameter (now: Date = Date()) is fine.
-        - Flag new ambient reads of Date(), FileManager.default, NSHomeDirectory(),
-          Locale.current or UserDefaults that a harness cannot override.
+        - Must not import AppKit, SwiftUI or Cocoa. This is a hard error, and the only rule here.
+        - Where a harness needs to control an environment fact (clock, home directory, rates),
+          prefer an injected parameter; a defaulted one (now: Date = Date()) is fine. Do not flag
+          FileManager, Date() or other Foundation use that no harness needs to control.
         - Types crossing actors are Sendable value types. Prefer nonisolated pure functions.
 
     - path: "Blitz/App/**"
@@ -184,12 +193,14 @@ reviews:
 
     - path: "Blitz/Features/Extensions/**"
       instructions: |
-        Runs untrusted Raycast extensions in JavaScriptCore.
-        - Containment: every view, row, menu, geometry and sizing constant lives here. Flag
-          anything added to DesignSystem, Theme, or shared with another feature. Duplicating
-          layout here is the correct trade.
-        - Only Theme base tokens, InterfaceMetrics, PopoverMenuItem and Platform/ may be used
-          from outside.
+        Runs untrusted Raycast extensions in JavaScriptCore. Isolation is one-way.
+        - Extensions may use shared components (DesignSystem/, SectionHeader, EmptyResults,
+          armedHover and the like), Theme tokens, InterfaceMetrics and Platform/.
+        - Every extension-specific view, row, menu, geometry and sizing constant lives here.
+          Flag one lifted into DesignSystem or Theme, or anywhere another feature can build on
+          it. Duplicating layout here rather than sharing it is the correct trade.
+        - Another surface may render an extension view as an opaque box
+          (ExtensionArgumentsAccessory in LauncherScreen) but never reach inside one.
         - Treat all extension input as hostile: validate sizes, paths, URLs and types. Flag path
           traversal, unbounded payloads, and JS values trusted without checks.
         - JSContext/JSValue stay on their owning actor. Flag retain cycles between JS callbacks
@@ -235,11 +246,12 @@ reviews:
       instructions: |
         Standalone harnesses (one Swift file each, no XCTest) that compile shipped sources and
         run by ./Scripts/run-tests.sh.
-        - Tests must be deterministic: inject clocks and temp directories, no network, no sleeps
-          for timing.
+        - Tests must be deterministic: inject clocks and temp directories, no network. Flag a
+          sleep used as synchronisation where an await or a polled condition exists.
         - Check new behaviour has a covering case.
-        - Check a new harness is registered in Scripts/run-tests.sh.
-        - Performance harnesses must assert a budget.
+        - Check a new harness is registered with a run line in Scripts/run-tests.sh.
+        - Performance benchmarks (*-performance.swift) are timing-only and stay out of the
+          suite; check a new one is registered as `run index` in Scripts/run-tests.sh.
 
     - path: "Scripts/**/*.sh"
       instructions: |
@@ -260,9 +272,9 @@ reviews:
       instructions: |
         XcodeGen source of truth.
         - Check Blitz.xcodeproj was regenerated in the same PR.
-        - Keep Swift 6 language mode, strict concurrency, the macOS 26 deployment target and
-          zero third-party dependencies.
-        - Flag SwiftPM packages and Bundle.module.
+        - Keep Swift 6 language mode, strict concurrency and the macOS 26 deployment target.
+        - SwiftTerm is the one sanctioned SwiftPM package. Flag any other package, and check
+          Package.resolved moves with any change to SwiftTerm's pin.
 
     - path: ".github/workflows/**"
       instructions: |
@@ -276,6 +288,8 @@ reviews:
         Check the text matches the code in this PR.
         - Flag stale type names, paths and commands.
         - A code change that makes a doc wrong must fix that doc in the same PR.
+        - Docs describe what is, in the present tense. Flag narrated history ("used to",
+          "previously", incident numbers) and counts that will rot (line or type counts).
 
   finishing_touches:
     docstrings:
@@ -326,10 +340,11 @@ reviews:
         mode: error
         instructions: >-
           Fail if added Swift lines introduce ObservableObject, @Published,
-          @StateObject, @ObservedObject, @EnvironmentObject, MainActor.assumeIsolated,
-          URLSession.shared, NSAlert, or a new actor declaration.
-          Also fail if an added @unchecked Sendable or nonisolated(unsafe) has
-          no comment on the same or preceding line giving a reason. Otherwise pass.
+          @StateObject, @ObservedObject, @EnvironmentObject, URLSession.shared,
+          NSAlert or a @globalActor. Also fail if an added @unchecked Sendable,
+          nonisolated(unsafe), MainActor.assumeIsolated or DispatchQueue.main.async
+          has no comment on the same or preceding line giving a reason. Otherwise
+          pass.
 
       - name: XcodeGen project in sync
         mode: error
@@ -342,10 +357,11 @@ reviews:
       - name: Memory footprint reported
         mode: warning
         instructions: >-
-          Pass if the PR changes no Swift file under Blitz/. Otherwise pass
-          only if the description's "Memory footprint" section has values filled
-          in, or states plainly why measurement does not apply or was not done.
-          Fail if the section is missing or left as the empty template.
+          Pass if the PR touches no cache, image handling, index or other
+          long-lived memory under Blitz/, whatever its "Memory footprint" section
+          says (N/A is expected). Otherwise pass only if that section has values
+          filled in, or states plainly why measurement was not done. Fail if it
+          is missing or left as the empty template.
 
   tools:
     swiftlint:

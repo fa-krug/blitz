@@ -37,7 +37,7 @@ final class ContactsCoordinator {
         // Asking again is the only way back: Settings cannot add an app TCC has no record of.
         store.refreshAccess()
         guard !settings.contactsEnabled || store.access != .granted else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         Task {
             guard
                 await core.confirm(

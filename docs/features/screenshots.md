@@ -22,9 +22,9 @@ actions rather than drawing its own.
   keyed by the bundle id like every other store, and is read only to match a query and for Copy Text.
   The text-search switch is per Mac: it has no `settings.json` key and no backup field, because a file
   or an import must never start background recognition.
-- **`Model/` is Foundation plus SQLite3.** `ScreenshotQuery`, `ScreenshotFile` and
-  `ScreenshotTextStore` take the home directory, the capture location and the filesystem's answers as
-  parameters, which is what lets `screenshot-test` compile them standalone.
+- **`ScreenshotQuery`, `ScreenshotFile` and `ScreenshotTextStore` take the home directory and the
+  capture location as parameters**, which is what lets `screenshot-test` run them against a scratch
+  folder.
 
 ## Finding captures
 

@@ -129,8 +129,7 @@ enum SnippetTemplateEngine {
             ))
     }
 
-    /// The `{argument}`s a template declares, in written order — what a form has to ask for.
-    /// One with a `default=` answers itself, so it is not among them, exactly as expansion decides.
+    /// The `{argument}`s a form must ask for, in order; one with a `default=` answers itself.
     static func declaredArguments(in text: String) -> [MissingArgument] {
         var declared: [MissingArgument] = []
         var seen = Set<String>()
@@ -734,7 +733,7 @@ enum SnippetTemplateEngine {
         return ParsedToken(command: String(command).lowercased(), parameters: parameters)
     }
 
-    /// Runs to the next `key=`, so an unquoted `format=MMM d, yyyy` keeps the spaces Raycast writes.
+    /// Runs to the next `key=`, so an unquoted `format=MMM d, yyyy` keeps Raycast's spaces.
     private static func takeBareValue(_ remainder: inout Substring) -> String? {
         var index = remainder.startIndex
         var end = remainder.startIndex

@@ -9,7 +9,7 @@ enum AppLauncher {
             at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
-    /// Hands the URL to whatever the system registers for its scheme — the default browser, for web.
+    /// Hands the URL to whatever the system registers for its scheme, e.g. the default browser.
     @MainActor
     @discardableResult
     static func open(_ url: URL) -> Bool {

@@ -33,7 +33,7 @@ final class WindowShortcutPresetCoordinator {
                     message: replacementMessage(plan.overwritten, preset: preset),
                     symbol: "keyboard", confirmTitle: "Replace")
             else { return }
-            // A settings.json reload can rebind while the dialog waits; never replace an unseen key.
+            // A settings.json reload can rebind while the dialog waits; never replace unseen keys.
             current = currentBindings()
             plan = WindowShortcutPresetPlan(preset: preset, current: current)
             guard Set(plan.overwritten).isSubset(of: confirmed) else { return await apply(preset) }

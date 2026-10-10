@@ -10,8 +10,8 @@ any `.application` entry; it opens the `.uninstall` palette sub-screen scoped to
   the feature; `removeItem` must never appear here. That is what makes display-name attribution
   tolerable — a false positive costs a drag back, not the user's data — so a "delete permanently" option
   would have to drop name matching in the same commit.
-- **The deciding half stays Foundation-only and pure** for `uninstall-test`, with every environment fact
-  injected: the scanner hands the rules directory **names**, never URLs, and hands the classifier a
+- **The deciding half is pure** for `uninstall-test`, with every environment fact injected: the
+  scanner hands the rules directory **names**, never URLs, and hands the classifier a
   `PathFacts`.
 - **`UninstallScanner` detects Full Disk Access and never requests it.** The probe is silent and
   promptless; this feature asks for no permission and never escalates privilege.
