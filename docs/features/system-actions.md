@@ -1,9 +1,10 @@
 # System actions
 
-A fixed catalog of macOS actions — lock, sleep, restart, media keys, volume, Show Desktop, Toggle
-System Appearance, Stage Manager, Trash, Eject All Disks, hidden files, hide/unhide/quit apps,
-Dismiss Notifications, Bluetooth — run from the launcher or a global shortcut. They have their own
-launcher section and their own Settings pane, **Settings › System Actions**.
+A fixed catalog of macOS actions — lock, sleep, restart, media keys, volume, microphone mute, Show
+Desktop, Toggle System Appearance, Stage Manager, Trash, Eject All Disks, hidden files,
+hide/unhide/quit apps, Dismiss Notifications, Bluetooth — run from the launcher or a global
+shortcut. They have their own launcher section and their own Settings pane, **Settings › System
+Actions**.
 
 ## Invariants
 
@@ -49,10 +50,11 @@ macOS; Blitz follows it only while its own Appearance is System.
 ## Feedback
 
 An action whose effect is invisible reports back: `SystemActionRunner.run` returns a
-`SystemActionFeedback` naming the state it landed in (`Trash Emptied`, `Hidden Files Shown`,
-`Dark Appearance`, `Bluetooth Off`, `3 Disks Ejected`), and the coordinator shows it through
-`core.showMessage` — `.success` when something changed, `.neutral` when `isNoOp`. Actions that are
-their own confirmation — Show Desktop, Hide Others, Quit All, the power actions — return nothing.
+`SystemActionFeedback` naming the state it landed in (`Trash Emptied`, `Hidden Files Shown`, `Dark
+Appearance`, `Bluetooth Off`, `Microphone Muted`, `3 Disks Ejected`), and the coordinator shows it
+through `core.showMessage` — `.success` when something changed, `.neutral` when `isNoOp`. Actions
+that are their own confirmation — Show Desktop, Hide Others, Quit All, the power actions — return
+nothing.
 
 Empty Trash asks Finder for `count items of trash` first and reports `Trash Is Already Empty`,
 because Finder raises an error when told to empty an empty Trash. The count goes through Finder
@@ -72,6 +74,18 @@ rather than past it, so from 37% up lands on 40% and down on 35%. `VolumeLevel.s
 the HUD and the slider so one level never draws two icons. Volume and mute fall back to the output's
 preferred stereo channels when the device has no master element (common on HDMI), and Toggle Mute
 parks the level at zero when there is no mute control at all.
+
+## Microphone mute
+
+**Toggle Microphone Mute** flips the native CoreAudio mute control of whatever the default input is
+at that moment, and touches neither input gain nor the output. `MicrophoneMuteRunner` resolves the
+device once per activation and runs off the main actor; CoreAudio applies a property write
+asynchronously, so it reads the control back for up to 500 ms and reports `Microphone Muted` or
+`Microphone Unmuted` through the message pill only once the device confirms it. A missing input, a
+device without a writable mute (controlled externally), a failed read or write, or a write that is
+never confirmed is reported as a failure rather than claimed. The coordinator ignores a second
+activation while one is pending, so a held hotkey cannot flip the microphone straight back. There is
+no mute fallback: parking input gain at zero would be the one change it promises not to make.
 
 ## The rest of the catalog
 
@@ -97,7 +111,9 @@ shortcut recorder (see [hotkeys.md](hotkeys.md)) and alias.
 | --- | --- |
 | `SystemActions/Model/SystemAction.swift` | `SystemAction`, its `ID`s and `Confirmation`, `SystemActionCatalog` |
 | `SystemActions/Model/VolumeLevel.swift` | the 5% grid, percentage text, the speaker symbol |
-| `SystemActions/Service/SystemActionRunner.swift` | every effect, `SystemActionFeedback`, `SystemActionFailure`, CoreAudio |
+| `SystemActions/Service/SystemActionRunner.swift` | every effect, `SystemActionFeedback`, output CoreAudio |
+| `SystemActions/Service/SystemActionFailure.swift` | the failure every effect throws, with its Settings pane |
+| `SystemActions/Service/MicrophoneMuteRunner.swift` | the default input's mute toggle and its confirmation |
 | `SystemActions/Service/VolumeState.swift` | the observable level the HUD and slider draw |
 | `SystemActions/UI/SystemActionCoordinator.swift` | the funnel: confirm, run, feedback, failure |
 | `SystemActions/Settings/SystemActionsSettingsView.swift` | the pane |
@@ -106,5 +122,8 @@ shortcut recorder (see [hotkeys.md](hotkeys.md)) and alias.
 
 `Tests/system-action-test.swift` pins the catalog: every ID once, unique non-empty names and
 symbols, stable entry IDs, and which actions confirm. `Tests/volume-test.swift` pins `VolumeLevel`'s
-stepping, clamping and symbols. The runner's effects need a real Mac and are in the manual sweep's
+stepping, clamping and symbols. `Tests/microphone-mute-test.swift` compiles `MicrophoneMuteRunner`
+against module-local stand-ins for the four CoreAudio calls, so no real device is touched: mute and
+unmute, a delayed apply, a default-input switch mid-toggle, and every failure path. The runner's
+other effects need a real Mac and are in the manual sweep's
 [System actions and window management](../testing.md#system-actions-and-window-management) section.

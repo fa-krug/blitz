@@ -102,7 +102,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
 | hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
-| system actions and dialogs | `system-action-test`, `volume-test`, `dialog-draft-test` |
+| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test` |
 | notes and snippets | `notes-*`, `snippets-test` |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-test`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
 | AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
@@ -762,6 +762,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Empty Trash confirms while Finder's "Show warning before emptying the Trash" is on, and runs
   without a dialog once it is off
 - Volume actions show the volume HUD; everything else shows the message pill
+- Toggle Microphone Mute, from the launcher and from a global hotkey with the palette closed, reports
+  Microphone Muted / Unmuted, silences and restores captured input, and leaves input gain and output
+  untouched; switch the default input and repeat
 - Holding a bound hotkey does **not** stack dialogs
 - Window commands move the window you were last in; cycle-on-repeat steps ½ → ⅓ → ⅔
 - "Top Half" lands flush with the top of the visible frame, on a secondary display too
