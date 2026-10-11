@@ -825,6 +825,8 @@ extends the latter at module scope, and running the callback in place is the who
 takes the modern Buffer API when all four allocators are present and otherwise calls the class
 without `new`. `EventEmitter.once` hands the emitter to its listener as `this`, like `on` does:
 bundled duplex streams read `this.allowHalfOpen` from an `end` listener registered that way.
+An emitter's listener map is created on first use, as in Node, because CoffeeScript-compiled
+libraries subclass `EventEmitter` without ever calling its constructor.
 
 **WebAssembly** — `compile`, `instantiate` and their streaming forms run through the synchronous
 `Module` and `Instance` constructors. JavaScriptCore settles the promise forms from a run-loop timer on

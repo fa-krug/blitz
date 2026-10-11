@@ -300,6 +300,22 @@ module.exports.default = () => {
 };
 `;
 
+// CoffeeScript-compiled libraries subclass EventEmitter without ever running its constructor.
+const lazyEmitterSource = `
+const { EventEmitter } = require("events");
+
+module.exports.default = () => {
+  const empty = Object.create(EventEmitter.prototype);
+  const untouched = [empty.emit("x"), empty.listenerCount("x"), empty.eventNames().length,
+    empty.listeners("x").length, empty.getMaxListeners()];
+  empty.off("x", () => {}).removeAllListeners("x").removeAllListeners();
+  const seen = [];
+  empty.on("x", (value) => seen.push(value));
+  empty.emit("x", 1);
+  globalThis.__lazyEmitter = { untouched, seen, names: empty.eventNames() };
+};
+`;
+
 // Bundled HTTP clients (axios) construct and probe a Response at module scope, before any component
 // mounts — a host-shaped constructor took the whole command down with them.
 const responseSource = `
@@ -1044,6 +1060,12 @@ export async function runFixtures() {
     check("once passes the emitter as receiver", JSON.stringify(result?.calls) === '[[true,"value",7,0]]', JSON.stringify(result?.calls));
     check("once stays chainable and fires once", result?.chained && result?.emitted && result?.repeated === false);
     check("once is removable by its original listener", result?.removedCalls === 0);
+  });
+
+  await run("EventEmitter without its constructor", lazyEmitterSource, "no-view", async (harness) => {
+    const result = harness.call("globalThis.__lazyEmitter");
+    check("every method tolerates missing state", JSON.stringify(result?.untouched) === "[false,0,0,0,10]", harness.state.failures.join(" | ") || JSON.stringify(result?.untouched));
+    check("the first listener creates the state", JSON.stringify(result?.seen) === "[1]" && JSON.stringify(result?.names) === '["x"]');
   });
 
   await run("Response takes the Web spec's constructor", responseSource, "no-view", async (harness) => {
