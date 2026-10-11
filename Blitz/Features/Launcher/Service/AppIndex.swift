@@ -324,6 +324,14 @@ extension AppEntry {
             bundleID: nil, kind: .windowRoom)
     }
 
+    /// The one row a window command draws: the launcher and its Settings row key on it alike.
+    init(_ command: WindowCommand) {
+        self.init(
+            id: command.entryID, name: command.name,
+            url: URL(string: "blitz://window-command/" + command.id.rawValue)!,
+            bundleID: nil, kind: .windowCommand)
+    }
+
     /// A custom size shares the window commands' kind and section, as custom Quick Actions do.
     init(_ size: CustomWindowSize) {
         self.init(
@@ -434,12 +442,7 @@ final class AppIndex {
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
     private static let allWindowCommandEntries: [AppEntry] = WindowCommandCatalog.all
-        .map { command in
-            AppEntry(
-                id: command.entryID, name: command.name,
-                url: URL(string: "blitz://window-command/" + command.id.rawValue)!,
-                bundleID: nil, kind: .windowCommand)
-        }
+        .map(AppEntry.init)
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
     private var discoveredEntries: [AppEntry] = []

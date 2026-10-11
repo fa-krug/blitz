@@ -778,6 +778,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   with the gap, hides other apps and parks their extra windows; quitting, `kill -9` then relaunching, and
   turning Window Management off each bring every window back.
   Repeat on two displays and with Reduce Motion on
+- Every window command, custom size, layout and room row in Settings ▸ Window Management has Add
+  Alias; an alias set there finds its entry from the launcher and shows the chip. Unticking the row,
+  or its section's Show in launcher switch, dims the field
 
 ### Quick AI and Quick Actions
 

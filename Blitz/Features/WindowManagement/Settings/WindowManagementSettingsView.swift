@@ -122,7 +122,9 @@ struct WindowManagementSettingsView: View {
         ForEach(WindowCommandCatalog.grouped(), id: \.group) { section in
             Section {
                 ForEach(section.commands) { command in
-                    WindowCommandSettingsRow(command: command, anchor: .windowCommands(in: section.group))
+                    WindowCommandSettingsRow(
+                        command: command, anchor: .windowCommands(in: section.group),
+                        showsInLauncher: settings.windowManagementShowInLauncher)
                 }
             } header: {
                 Text(section.group.title)
@@ -131,37 +133,32 @@ struct WindowManagementSettingsView: View {
     }
 }
 
-/// One command's shortcut recorder and visibility checkbox, shaped like the shortcuts row.
+/// One command's alias, shortcut recorder and visibility checkbox, shaped like the shortcuts row.
 private struct WindowCommandSettingsRow: View {
     let command: WindowCommand
     let anchor: SettingsAnchor
+    let showsInLauncher: Bool
     @Environment(VisibilityStore.self) private var visibility
 
     var body: some View {
+        let entry = AppEntry(command)
+        let isVisible = visibility.isItemVisible(entry)
         SettingsRow(title: command.name, anchor: anchor) {
             Image(systemName: command.sfSymbol)
         } trailing: {
+            // The ranker never sees a hidden entry, so an alias typed here would match nothing.
+            AliasField(entry: entry)
+                .settingsEnabled(showsInLauncher && isVisible)
+
             ShortcutRecorder(action: .windowCommand(id: command.id))
 
-            Toggle("", isOn: visibilityBinding)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .launcherVisibilityHelp()
-                .accessibilityLabel("Show \(command.name) in launcher")
+            Toggle(
+                "", isOn: Binding(get: { isVisible }, set: { visibility.setItemVisible($0, for: entry) })
+            )
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .launcherVisibilityHelp()
+            .accessibilityLabel("Show \(command.name) in launcher")
         }
-    }
-
-    /// `VisibilityStore` keys on the entry, so this builds the same entry `AppIndex` publishes.
-    private var entry: AppEntry {
-        AppEntry(
-            id: command.entryID, name: command.name,
-            url: URL(string: "blitz://window-command/" + command.id.rawValue)!, bundleID: nil,
-            kind: .windowCommand)
-    }
-
-    private var visibilityBinding: Binding<Bool> {
-        Binding(
-            get: { visibility.isItemVisible(entry) },
-            set: { visibility.setItemVisible($0, for: entry) })
     }
 }
