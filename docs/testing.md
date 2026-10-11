@@ -342,6 +342,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   and re-renders past Calculator History in the chosen format
 - Section headers appear in order: Favorites, Applications, System Settings, Quicklinks, Snippets,
   System Actions, Window Management, Custom Commands, Commands
+- `snippets` lists the whole Snippets section; `window` lists its ranked matches under Results with
+  the best on ↵, then the rest of Window Management and Window Layouts under their headers; ⌘↓
+  jumps from Results to the first of those sections
 - With a non-ASCII input source active, ⌘K opens Actions; ↑/↓ move it, ↵ activates, Escape closes it
 - In either ⌘K Actions panel, typing filters immediately in the bottom search band without changing
   the palette query; sections survive filtering, **No Results** is centred, and no dissolve covers the

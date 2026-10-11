@@ -19,6 +19,7 @@ struct FuzzTest {
         sensitivity()
         transliteration()
         naming()
+        categories()
         comparator()
         membership()
         denseIndex()
@@ -161,6 +162,40 @@ struct FuzzTest {
             command.keywords.map(\.string) == ["search brew", "brew search"])
         check("a subtitle equal to the title is dropped", profile("Zed", subtitle: "zed").subtitle == nil)
         check("an unbuilt entry matches nothing", SearchProfile.unnamed.title.isEmpty)
+    }
+
+    // MARK: - Category queries
+
+    static func categories() {
+        print("\n# category queries")
+        let names = ["Window Management", "Window Command", "Window Layouts", "Window Layout"]
+            .map(FuzzyMatch.Candidate.init)
+        func matching(_ raw: String) -> [String] {
+            names.filter(LauncherOrder.CategoryQuery(raw).matches).map(\.text)
+        }
+        for query in ["win", "window", "WINDOW", "ｗｉｎｄｏｗ", "wíndow", " \twindow\n"] {
+            check("'\(query)' finds both window categories", matching(query).count == names.count)
+        }
+        check(
+            "a partial category phrase narrows to management",
+            matching("window man") == ["window management"], "got \(matching("window man"))")
+        check(
+            "category whitespace is folded once",
+            matching("window \t\n man") == ["window management"])
+        check("a later word finds its category", matching("manage") == ["window management"])
+        check("a label finds the same category", matching("window com") == ["window command"])
+        check(
+            "a later layout word stays specific",
+            matching("lay") == ["window layouts", "window layout"], "got \(matching("lay"))")
+        for query in ["", " \t\n", "w", "wi", "ind", "wnd", "windowx", "window manager"] {
+            check("'\(query)' expands no categories", matching(query).isEmpty)
+        }
+        check(
+            "an exact short category is still valid",
+            LauncherOrder.CategoryQuery("AI").matches(FuzzyMatch.Candidate("AI")))
+        check(
+            "canonical category names share the launcher fold",
+            LauncherOrder.CategoryQuery(" \nＳＹＳＴＥＭ\tSettings ").name == "system settings")
     }
 
     // MARK: - The comparator, rule by rule
@@ -368,6 +403,7 @@ struct FuzzTest {
             Item(name: "Game Center", priority: 1), Item(name: "Sound", priority: 1),
             Item(name: "Blitz Settings"), Item(name: "Calculator History"),
             Item(name: "AI Chat", boosted: ["ai", "chat"]), Item(name: "Search Files"),
+            Item(name: "Switch Windows"),
             Item(name: "Search Notes"), Item(name: "Show Notes"), Item(name: "Set Volume"),
             Item(name: "Search", subtitle: "Brew"), Item(name: "Upgrade", subtitle: "Brew"),
             Item(name: "Signature Block", alternates: ["sig"])
@@ -409,7 +445,8 @@ struct FuzzTest {
             ("wx", "微信", "…as pinyin initials"), ("wyyyl", "网易云音乐", "…initials of a longer name"),
             ("telegram", "Телеграм", "a Cyrillic name typed in Latin"),
             ("sig", "Signature Block", "a snippet's keyword"),
-            ("brew", "Search", "an extension's title lists its commands")
+            ("brew", "Search", "an extension's title lists its commands"),
+            ("window", "Switch Windows", "an ordinary command still matches a category prefix")
         ]
         for test in cases {
             let ranked = rank(test.query, index)

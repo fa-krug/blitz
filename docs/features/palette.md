@@ -155,8 +155,8 @@ never while a menu, an argument field or an IME composition has the key.
 and `PaletteRowIndex.nextSectionStart(after:in:)` and `currentOrPreviousSectionStart(before:in:)`
 pick the landing row: ⌘↓ goes to the next section's first row, or the last row from inside the last
 section; ⌘↑ goes to the head of the current section, or the previous head when already on one. The
-launcher counts its lead card, Favorites, Meetings, Suggestions, each kind in `LauncherList.kindOrder`
-and the fallbacks; the clipboard breaks on `ClipboardList.sectionTitle`, Pinned and then each date
+launcher counts its lead card, Favorites, Meetings, Suggestions, Results, each kind in
+`LauncherList.kindOrder` and the fallbacks; the clipboard breaks on `ClipboardList.sectionTitle`, Pinned and then each date
 bucket; an extension list or grid on `ExtensionScreen.sectionCounts`; the emoji grid on its sections.
 A page is the number of result rows the list viewport shows — the expanded panel less the header and
 bottom bar, over the `InterfaceMetrics` row height — stepped through `PaletteRowIndex.page`, unless

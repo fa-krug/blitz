@@ -25,8 +25,6 @@ struct LauncherScreen: PaletteScreen {
     private let calc: CalcResult?
     /// The colour the query itself spells, if it spells one; nil for every other query.
     private let color: ColorValue?
-    /// Sections stand in for the ranked Results list, which a typed query collapses to.
-    private let showSections: Bool
     /// Only the empty query pins favorites — a category shows its sections without one of its own.
     private let pinsFavorites: Bool
     /// How many of `results` are pinned favorites; zero unless the section shows.
@@ -35,6 +33,8 @@ struct LauncherScreen: PaletteScreen {
     private let meetingCount: Int
     /// How many follow the meetings as Suggestions; zero unless the field is empty.
     private let suggestionCount: Int
+    /// How many lead under Results; whatever follows is grouped into its kind's section.
+    private let matchCount: Int
     /// The `Use "…" with` section, below every result; empty unless something is typed.
     private let fallbacks: [(fallback: Fallback, entry: AppEntry)]
     /// True while a shortcut's row is listed alone, under a query that was never typed.
@@ -68,15 +68,17 @@ struct LauncherScreen: PaletteScreen {
         }
         .flatMap { $0.name == vm.query ? $0 : nil }
         let ordered =
-            pinned.map { AppIndex.Results(entries: [$0]) }
+            pinned.map { AppIndex.Results(entries: [$0], matchCount: 1) }
             ?? appIndex.orderedResults(
                 query: vm.query, visibility: visibility, favorites: favorites, hotKeys: core.hotKeys)
         var results = ordered.entries
+        var matchCount = ordered.matchCount
         // A typed web address leads: nothing the index holds answers it better.
         if pinned == nil, let browser = CommandCatalog.openInBrowser(for: vm.query),
             visibility.isVisible(browser)
         {
             results.insert(browser, at: 0)
+            matchCount += 1
         }
         // No card over a pinned row: its fields hang off the selection, which must start on it.
         let calc =
@@ -95,11 +97,11 @@ struct LauncherScreen: PaletteScreen {
         self.fallbacks = fallbacks
         self.listsArgumentRow = pinned != nil
         self.color = color
-        self.showSections = pinsFavorites || AppEntry.Kind.named(by: vm.query) != nil
         self.pinsFavorites = pinsFavorites
         self.favoriteCount = pinsFavorites ? ordered.favoriteCount : 0
         self.meetingCount = pinsFavorites ? ordered.meetingCount : 0
         self.suggestionCount = pinsFavorites ? ordered.suggestionCount : 0
+        self.matchCount = matchCount
         if let calc {
             self.rows = [.calc(calc)] + entries
         } else if let color {
@@ -450,13 +452,11 @@ struct LauncherScreen: PaletteScreen {
 
     /// The card, then each section `LauncherList` draws, in its order, then the fallbacks.
     var sectionStarts: [Int] {
-        var counts = [results.count]
-        if showSections {
-            let pinned = favoriteCount + meetingCount + suggestionCount
-            let kinds = Dictionary(grouping: results.dropFirst(pinned), by: \.kind)
-            counts = [favoriteCount, meetingCount, suggestionCount]
-                + LauncherList.kindOrder.map { kinds[$0]?.count ?? 0 }
-        }
+        let leading = favoriteCount + meetingCount + suggestionCount + matchCount
+        let kinds = Dictionary(grouping: results.dropFirst(leading), by: \.kind)
+        let counts =
+            [favoriteCount, meetingCount, suggestionCount, matchCount]
+            + LauncherList.kindOrder.map { kinds[$0]?.count ?? 0 }
         let index = PaletteRowIndex(
             hasCalculator: leadCard != nil, sectionCounts: counts + [fallbacks.count])
         return index.sectionStarts
@@ -557,7 +557,7 @@ struct LauncherScreen: PaletteScreen {
             favoriteCount: favoriteCount,
             meetingCount: meetingCount,
             suggestionCount: suggestionCount,
-            showSections: showSections,
+            matchCount: matchCount,
             scroll: scroll,
             card: leadCard,
             cardSelected: isCardSelected(selection),
