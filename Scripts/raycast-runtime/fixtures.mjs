@@ -266,6 +266,40 @@ export default function Command() {
 }
 `;
 
+// Bundled safe-buffer only takes the modern Buffer API when all four allocators exist; otherwise it
+// calls the class without `new`. Bundled duplex streams read `this.allowHalfOpen` in a `once` listener.
+const bufferEventSource = `
+const { Buffer } = require("buffer");
+const { EventEmitter } = require("events");
+
+module.exports.default = () => {
+  const SafeBuffer = Buffer.from && Buffer.alloc && Buffer.allocUnsafe && Buffer.allocUnsafeSlow
+    ? Buffer : function (size) { return Buffer(size); };
+  const first = SafeBuffer.allocUnsafeSlow(4);
+  const second = SafeBuffer.allocUnsafeSlow(4);
+  first[0] = 91;
+  const emitter = new EventEmitter();
+  const calls = [];
+  const chained = emitter.once("ready", function (...args) {
+    calls.push([this === emitter, ...args, emitter.listenerCount("ready")]);
+    emitter.emit("ready", "recursive");
+  }) === emitter;
+  const emitted = emitter.emit("ready", "value", 7);
+  const repeated = emitter.emit("ready", "again");
+  let removedCalls = 0;
+  function removed() { removedCalls++; }
+  emitter.once("removed", removed).removeListener("removed", removed);
+  emitter.emit("removed");
+  globalThis.__bufferEvents = {
+    selected: Buffer.isBuffer(new SafeBuffer(4)),
+    bytes: Array.from(second),
+    independent: first.buffer !== second.buffer,
+    empty: Buffer.allocUnsafeSlow(0).length === 0,
+    calls, chained, emitted, repeated, removedCalls,
+  };
+};
+`;
+
 // Bundled HTTP clients (axios) construct and probe a Response at module scope, before any component
 // mounts — a host-shaped constructor took the whole command down with them.
 const responseSource = `
@@ -1000,6 +1034,16 @@ export async function runFixtures() {
       "ERR_INVALID_URL_SCHEME",
     ];
     expected.forEach((value, index) => check(`shim ${index}: ${value}`, markdown[index] === value, markdown[index]));
+  });
+
+  await run("safe-buffer and EventEmitter.once", bufferEventSource, "no-view", async (harness) => {
+    const result = harness.call("globalThis.__bufferEvents");
+    check("safe-buffer selects the modern Buffer API", result?.selected === true, harness.state.failures.join(" | "));
+    check("allocUnsafeSlow is zero-filled", JSON.stringify(result?.bytes) === "[0,0,0,0]");
+    check("allocUnsafeSlow allocations are independent", result?.independent === true && result?.empty === true);
+    check("once passes the emitter as receiver", JSON.stringify(result?.calls) === '[[true,"value",7,0]]', JSON.stringify(result?.calls));
+    check("once stays chainable and fires once", result?.chained && result?.emitted && result?.repeated === false);
+    check("once is removable by its original listener", result?.removedCalls === 0);
   });
 
   await run("Response takes the Web spec's constructor", responseSource, "no-view", async (harness) => {
