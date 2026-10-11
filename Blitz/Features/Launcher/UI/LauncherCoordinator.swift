@@ -189,8 +189,14 @@ final class LauncherCoordinator {
         case .quickAI:
             core.quickAICoordinator.show()
         case .aiChat:
+            // Read first: hiding the palette can hand key status back to the chat it covered.
+            let fromPalette = paletteCoordinator.isVisible
             dismissPalette()
-            core.aiChatCoordinator.showWindow()
+            if fromPalette {
+                core.aiChatCoordinator.showWindow()
+            } else {
+                core.aiChatCoordinator.toggleWindow()
+            }
         case .fixGrammar:
             core.quickActionCoordinator.run(.fixGrammar)
         case .rewrite:

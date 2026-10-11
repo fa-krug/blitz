@@ -78,6 +78,12 @@ final class AIChatCoordinator {
         }
     }
 
+    /// Key, not visible: a chat open behind another app comes forward rather than closing.
+    func toggleWindow() {
+        guard !closeWindowIfKey() else { return }
+        showWindow()
+    }
+
     /// The window's views read these through the coordinator, never through `AppCore`.
     var history: ChatHistoryStore { core.chatHistory }
     var aiSettings: AISettingsStore { core.aiSettings }

@@ -403,8 +403,11 @@ already holds it, and Continue in AI Chat (`⌘J`) takes it to the window either
 ### AI Chat
 
 The `AI Chat` command (`command:ai-chat-window`, `HotKeyAction.command(.aiChat)`) opens a titled
-`AppWindowController` window owned by `AIChatCoordinator`, autosaved as `AIChatWindow`. It is built the
-way Settings is — an `AIChatSplitViewController` with a native sidebar item, here collapsible, and a
+`AppWindowController` window owned by `AIChatCoordinator`, autosaved as `AIChatWindow`. Its shortcut
+toggles: `toggleWindow` closes the window when it is key, as Escape would, and one open behind
+another app comes forward instead. The palette row always opens it, since `LauncherCoordinator`
+reads whether the palette was up before hiding it can hand key status back to the chat. It is built
+the way Settings is — an `AIChatSplitViewController` with a native sidebar item, here collapsible, and a
 unified toolbar whose title is the open chat's — so it takes the system's own sidebar, toolbar and
 menus rather than the palette's scrim. `AIChatWindowChrome` owns the toolbar — the sidebar toggle
 and New Chat as two round buttons at the sidebar's trailing edge, then Find in Chat and Actions
@@ -597,6 +600,9 @@ window, and every chat action either surface sends — is the nineteenth feature
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
 - Collapse the sidebar with the toolbar button; ⌘N and ⌘Q (Close Window) still work, and ⌘Q with
   Settings in front closes Settings instead.
+- Press the AI Chat shortcut twice: the window opens, then closes; with it open behind another app,
+  the shortcut brings it forward. Summon the palette over the open window and run AI Chat: it stays
+  open.
 - Escape with the composer focused closes AI Chat; reopening shows the draft, and a reply that was
   streaming has kept going. With a sidebar filter typed, the first Escape clears it, the second
   closes; a rename field and Find in Chat each cancel before a further Escape closes.
