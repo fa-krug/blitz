@@ -151,7 +151,10 @@ the window the user was actually in.
 its values through `LauncherScreen.argumentValues(for:)` into the same funnel, so a filled row never
 takes a detour. **Only a shortcut whose values are still missing lands on Search Quicklinks**, on that
 row, with its first empty chip focused — carried across by `PaletteState.pendingArgumentEntryID` and
-`commandArguments`, both set after the show because `prepare` clears them. One argument surface, whether
+`commandArguments`, both set after the show because `prepare` clears them. The screen's
+`landingSelection` reads that id, so the show's own reset lands on the row rather than the top, and the
+coordinator finds the row in the same filtered list the screen draws (`QuicklinkStore.listed`), since
+a screen restored on re-summon keeps its query and tag. One argument surface, whether
 the row is reached from root search, from Search Quicklinks or from a hotkey. A one-shot handler — ⌘↵'s
 system default, or an app from the Open With section — survives that trip as a `HandlerOverride` on
 `pendingHandlerOverride`, keyed by the quicklink it applies to.

@@ -85,6 +85,14 @@ final class QuicklinkStore {
     /// A disabled quicklink is offered nowhere, so every surface lists this, not `quicklinks`.
     var enabled: [Quicklink] { quicklinks.filter(\.isEnabled) }
 
+    /// Search Quicklinks' rows for a query and tag, so a prompt finds its row where it is drawn.
+    func listed(matching query: String, tag: String?) -> [Quicklink] {
+        let query = query.trimmingCharacters(in: .whitespaces)
+        return enabled.filter { quicklink in
+            (tag.map(quicklink.hasTag) ?? true) && (query.isEmpty || quicklink.matches(query))
+        }
+    }
+
     func quicklink(id: UUID) -> Quicklink? {
         quicklinks.first { $0.id == id }
     }

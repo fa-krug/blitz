@@ -14,6 +14,7 @@ struct QuicklinkCoordinatorTests {
         try await clipboardFallback()
         try await combinedArguments()
         try await plainLink()
+        try await promptOnRestoredScreen()
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }
@@ -124,6 +125,23 @@ struct QuicklinkCoordinatorTests {
         fixture.coordinator.openQuicklink(id: fixture.link.id)
         await waitForOpen()
         expect(QuicklinkLauncher.opened.first?.link == fixture.link.link, "a plain link opens as is")
+    }
+
+    static func promptOnRestoredScreen() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        fixture.palette.restoresScreen = true
+        fixture.core.palette.query = "wiki"
+        fixture.coordinator.openQuicklink(id: fixture.link.id)
+        try await Task.sleep(for: .milliseconds(1))
+        expect(
+            fixture.core.palette.selection == 0,
+            "a restored screen's query decides which row the prompt selects")
+        fixture.core.palette.query = ""
+        fixture.core.palette.quicklinkTagFilter = "missing"
+        fixture.coordinator.openQuicklink(id: fixture.link.id)
+        try await Task.sleep(for: .milliseconds(1))
+        expect(fixture.core.palette.selection == 0, "a row the filter hides falls back to the top")
     }
 
     static func waitForOpen() async {
@@ -278,6 +296,8 @@ final class PaletteCoordinator {
     let window: PaletteWindowController
     let state: PaletteState
     var shows = 0
+    /// A re-summon inside the pop-to-root window keeps the screen as it was left.
+    var restoresScreen = false
     init(window: PaletteWindowController, state: PaletteState) {
         self.window = window
         self.state = state
@@ -286,6 +306,7 @@ final class PaletteCoordinator {
     func showPalette(mode: PaletteMode) {
         shows += 1
         window.isVisible = true
+        guard !restoresScreen else { return }
         state.selection = 0
         state.query = ""
         state.quicklinkTagFilter = nil

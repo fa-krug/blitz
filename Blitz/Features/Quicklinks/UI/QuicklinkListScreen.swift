@@ -23,14 +23,16 @@ struct QuicklinkListScreen: PaletteScreen {
         self.vm = vm
         self.openActions = openActions
         self.openArgumentOptions = openArgumentOptions
-        let query = vm.query.trimmingCharacters(in: .whitespaces)
-        let tag = vm.quicklinkTagFilter
-        rows = store.enabled.filter { quicklink in
-            (tag.map(quicklink.hasTag) ?? true) && (query.isEmpty || quicklink.matches(query))
-        }
+        rows = store.listed(matching: vm.query, tag: vm.quicklinkTagFilter)
     }
 
     var primaryActionTitle: String { "Open Quicklink" }
+
+    /// A prompt for one row opens on that row, so the show's reset can't move it back to the top.
+    var landingSelection: Int {
+        guard let pending = vm.pendingArgumentEntryID else { return 0 }
+        return rows.firstIndex { $0.entryID == pending } ?? 0
+    }
 
     private func quicklink(at selection: Int) -> Quicklink? {
         rows.indices.contains(selection) ? rows[selection] : nil

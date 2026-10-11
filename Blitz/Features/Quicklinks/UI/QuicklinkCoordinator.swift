@@ -187,7 +187,9 @@ final class QuicklinkCoordinator {
     private func promptForArguments(_ quicklink: Quicklink, values: [String: String]) {
         paletteCoordinator.showPalette(mode: .quicklinks)
         // After the show: `prepare` runs inside it and would clear everything set beforehand.
-        core.palette.selection = store.enabled.firstIndex(of: quicklink) ?? 0
+        let rows = store.listed(
+            matching: core.palette.query, tag: core.palette.quicklinkTagFilter)
+        core.palette.selection = rows.firstIndex { $0.id == quicklink.id } ?? 0
         for (name, value) in values {
             core.palette.commandArguments[PaletteState.argumentKey(quicklink.entryID, name)] = value
         }

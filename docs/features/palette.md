@@ -93,8 +93,9 @@ Where a reset leaves the highlight is the screen's to say too. Every reset — a
 new filter — goes through `RootPaletteView.land()`, which reads `landingSelection`, so handlers that
 fire in one update agree whatever order they run in. `onAppear` lands as well, for a summon that beats
 the launch-time prewarm: that one builds the view after `prepare` has run, so no handler sees the reset. The landing is row 0 on
-every screen but the clipboard, which lands past its pins
-([clipboard.md](clipboard.md#pinned-entries)).
+every screen but two: the clipboard lands past its pins
+([clipboard.md](clipboard.md#pinned-entries)), and Search Quicklinks lands on the row a prompt names
+([quicklinks.md](quicklinks.md#arguments)).
 
 | Mode | Screen | Inner list |
 | --- | --- | --- |
@@ -265,7 +266,9 @@ field instead of the search field. A custom command or Smart Reminder has no scr
 also sets `argumentEntryID`, which lists that row alone in root search while the query is its name.
 Both are set **after** `showPalette`, since `prepare` clears them. A summon from hidden re-bumps
 `focusToken` a turn after the panel goes key, which would put the caret back in the search field, so
-the pending id survives until that bump re-asserts the field, or until focus leaves the ring.
+the pending id survives until that bump re-asserts the field, or until focus leaves the ring. Both
+the focus and the clear wait a turn: every `land()` the show fired reads the id first, and no search
+refocus from a mode change can take the caret back.
 
 The flat `selection` index is the single source of truth for highlight / activation and **must always
 match the visible row order**, including the card at index 0 when present — the calculator's (see
