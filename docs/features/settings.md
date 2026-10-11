@@ -90,8 +90,8 @@ Most panes live in their feature's `Settings/` folder. The ones with no feature 
 `Features/Settings/Panes/`:
 
 - **General** — the launcher's shortcut (`ShortcutRecorder(action: .togglePalette)` under Global
-  Shortcuts), launch at login, the menu-bar item, Pop to Root, Escape behaviour, input-source
-  switching, the Welcome Tour, the calculator's number format, and search behaviour.
+  Shortcuts), launch at login, the menu-bar item, automatic update checks, Pop to Root, Escape
+  behaviour, input-source switching, the Welcome Tour, the calculator's number format, and search behaviour.
 - **Appearance** — Theme (`AppAppearance`; `.system` maps to a `nil` `NSApp.appearance` so AppKit
   follows macOS), Interface Size, window mode, favorites in compact mode, following the cursor across
   displays, and dragging the palette.

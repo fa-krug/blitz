@@ -1,7 +1,7 @@
 # Updates
 
-Blitz checks this repo's GitHub Releases once a day, offers the newest release in a native window
-with its release notes, installs it and relaunches. There is no Sparkle and no appcast: the public
+By default Blitz checks this repo's GitHub Releases once a day, offers the newest release in a native
+window with its release notes, installs it and relaunches. There is no Sparkle and no appcast: the public
 release list is the feed.
 
 ## Invariants
@@ -39,8 +39,13 @@ release list is the feed.
   have found the desktop idle. The window itself still appears at most once per version per launch:
   `announcedVersion` is set the moment an offer lands, so re-offering can never turn into nagging.
   Readiness is asked again at the click.
-- **Nothing about updates is persisted in `AppSettings`.** The feature owns one cache file, so no
-  `AppSettingsKey` and no `SettingsBackupCoverage` entry exist for it.
+- **Automatic checking is optional; Check for Updates never is.** Settings ▸ General ▸
+  Automatically check for updates (`automaticallyCheckForUpdates`, default on) is the one update
+  preference in `AppSettings`; it rides in settings backups and in settings.json as
+  `general.automaticallyCheckForUpdates`. Turning it off cancels the pump *and* any automatic request
+  in flight, so neither a late response nor the cached release can raise the window, and
+  `presentIfAvailable` refuses while it is off. Release metadata and the skipped version stay in the
+  feature's own cache file.
 - **The window shows the changelog and nothing else.** A body may carry install instructions below
   `<!-- blitz:install -->`, and `ReleaseNotes.summary` — the single reader of that marker, called
   where the feed is parsed so the cache holds the cut text too — drops them. CI publishes GitHub's
@@ -89,6 +94,12 @@ It holds `lastCheckedAt`, the newest release seen, and the version the user dism
 measured from `lastCheckedAt`, so relaunching never re-asks GitHub; the interval is 24 h, dropping to
 2 h after a failed attempt, and the first check waits 30 s so it never lands in the login rush. The
 request carries a `User-Agent`, which the GitHub API rejects requests without.
+
+`UpdateCoordinator.applyAutomaticChecking()` starts or stops the pump from the preference, at launch
+and whenever it changes — from the pane or from settings.json. Turning it back on resumes the same
+schedule, startup delay and cached check time included, and never repeats an announcement this
+launch already made. `stop()` cancels the pump only: a manual check runs on its caller's task and
+finishes either way. The `update-check-test` harness drives the store against a held fetch.
 
 **Later means skip.** It records the version, so that release stops asking; a newer one still asks.
 Check for Updates ignores the record and always offers whatever is newer than what is running.
