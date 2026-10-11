@@ -381,6 +381,7 @@ struct LauncherScreen: PaletteScreen {
         case .restart: return restart(at: selection)
         case .copyFile: return copyDeepLink(at: selection)
         case .configure: return configure(at: selection)
+        case .edit: return editQuicklink(at: selection)
         case .favoriteSlot(let index): return launchFavorite(at: index)
         case .copyCalculation: return copyCalculation(at: selection)
         case .openInApp, .showDetails:
@@ -404,6 +405,15 @@ struct LauncherScreen: PaletteScreen {
     private func copyDeepLink(at selection: Int) -> Bool {
         guard let app = entry(at: selection), let link = app.deepLink else { return false }
         core.launcherCoordinator.copyDeepLink(link)
+        return true
+    }
+
+    /// ⌘E — mirrors the Edit Quicklink row.
+    private func editQuicklink(at selection: Int) -> Bool {
+        guard let app = entry(at: selection), app.kind == .quicklink,
+            let quicklink = quicklink(for: app)
+        else { return false }
+        core.quicklinkCoordinator.editQuicklink(quicklink)
         return true
     }
 
@@ -498,16 +508,34 @@ struct LauncherScreen: PaletteScreen {
 
     /// ⇧⌘H — the row leaves the list for good, so the highlight takes the place it vacated.
     private func hideFromSearch(at selection: Int) -> Bool {
-        guard let app = entry(at: selection), app.canHideFromSearch,
-            !CommandCatalog.isQueryDriven(app), let index = results.firstIndex(of: app)
+        guard let app = entry(at: selection), !CommandCatalog.isQueryDriven(app),
+            let index = results.firstIndex(of: app), let undo = hide(app)
         else { return false }
-        visibility.setItemVisible(false, for: app)
         select(row: min(index, max(reorderedResults().entries.count - 1, 0)))
+        let title = app.hidesThroughRootSearchSwitch ? "Hidden from Root Search" : "Hidden from Search"
         core.showBanner(
-            title: "Hidden from Search", detail: app.name, symbol: "eye.slash",
-            actionTitle: "Undo"
-        ) { [visibility] in visibility.setItemVisible(true, for: app) }
+            title: title, detail: app.name, symbol: "eye.slash", actionTitle: "Undo", action: undo)
         return true
+    }
+
+    /// Writes whatever Settings shows for this kind, and returns the write that takes it back.
+    private func hide(_ app: AppEntry) -> (() -> Void)? {
+        switch app.kind {
+        case .quicklink:
+            guard let id = Quicklink.id(fromEntryID: app.id) else { return nil }
+            let coordinator = core.quicklinkCoordinator
+            coordinator.setQuicklinkShowsInRootSearch(false, id: id)
+            return { coordinator.setQuicklinkShowsInRootSearch(true, id: id) }
+        case .customCommand:
+            guard let id = CustomCommand.id(fromEntryID: app.id) else { return nil }
+            let coordinator = core.customCommandCoordinator
+            coordinator.setCustomCommandShowsInRootSearch(false, id: id)
+            return { coordinator.setCustomCommandShowsInRootSearch(true, id: id) }
+        default:
+            guard app.canHideFromSearch else { return nil }
+            visibility.setItemVisible(false, for: app)
+            return { [visibility] in visibility.setItemVisible(true, for: app) }
+        }
     }
 
     /// The list reorders under an action; keep the highlight and the scroll on the row that moved.

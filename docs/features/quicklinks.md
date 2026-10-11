@@ -256,6 +256,11 @@ disagree. **Pinned means the top of the Quicklinks section**, not above Applicat
 position in root search would need a second `AppEntry.Kind`, which the kind invariant forbids for one
 feature. The Search Quicklinks screen gives pins their own section, like the clipboard's.
 
+A root-search row's ⌘K menu adds **Edit Quicklink** (`⌘E`), opening the same editor as Search
+Quicklinks, and **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
+writing `VisibilityStore` — the editor's switch is its undo besides the banner's, and the row stays in
+Search Quicklinks.
+
 ## Search Quicklinks
 
 `PaletteMode.quicklinks` is a sub-screen reached from the `Search Quicklinks` command. It is shaped
@@ -264,10 +269,13 @@ the selected quicklink's glyph over an Information block (name, link, the app it
 shortcut, when it was created). Like Calculator History it stays out of the Tab cycle and exits via the
 back chevron or a bare backspace.
 Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
-**Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate,
-New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (menu only, and
-only for a resolved path), and Delete (`⌘⌫`). ⌘N works with no rows as well — the empty library's
-hint names it — and opens the editor named after the search text.
+**Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate (`⌘D`),
+New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Show in Finder (`⌘F`, only for a resolved path), and Delete
+(`⌘⌫`). Every chord runs the same `QuicklinkCoordinator` call as its row — `editQuicklink` and
+`showQuicklinkInFinder` step the palette aside themselves — so the two can't drift. ⌘N works with
+no rows as well — the empty library's hint names it — and opens the editor named after the search
+text. Root-search visibility is not offered here: the launcher row hides itself, and the editor
+restores it.
 
 The Open With section lists the system default first, marked, then up to six more apps
 `NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked

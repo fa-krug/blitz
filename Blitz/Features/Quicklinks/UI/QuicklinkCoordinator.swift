@@ -312,6 +312,7 @@ final class QuicklinkCoordinator {
 
     /// Opens the Quicklinks editor on `quicklink`; nil is a new one, named `name`.
     func editQuicklink(_ quicklink: Quicklink?, name: String = "") {
+        if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
         core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name)
         settingsCoordinator.showSettings(tab: .quicklinks)
     }
@@ -326,6 +327,23 @@ final class QuicklinkCoordinator {
             core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: nil, browserTab: tab)
             settingsCoordinator.showSettings(tab: .quicklinks)
         }
+    }
+
+    /// Revealing needs a real path, which a template lacks until it expands.
+    static func revealablePath(of quicklink: Quicklink) -> String? {
+        guard !QuicklinkDestination.containsPlaceholder(quicklink.link),
+            case .path(let path)? = QuicklinkDestination.detect(quicklink.link)
+        else { return nil }
+        return path
+    }
+
+    /// False for a link that names no file or folder, which leaves ⌘F unhandled.
+    @discardableResult
+    func showQuicklinkInFinder(_ quicklink: Quicklink) -> Bool {
+        guard let path = Self.revealablePath(of: quicklink) else { return false }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        AppLauncher.showInFinder(URL(fileURLWithPath: path))
+        return true
     }
 
     @discardableResult

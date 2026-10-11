@@ -15,7 +15,8 @@ earliest scope wins).
   list disables beneath it — the guard sits in the one dispatch funnel, the way each feature switch
   already guards its own. The per-item "Show in launcher" switch on the item's page is the narrow
   tool: it hides one row and leaves that row's shortcut firing, and **Hide from Search** in the ⌘K
-  menu turns it off for the kinds whose pane can turn it back on. A new category must be wired into
+  menu turns it off for the kinds whose pane can turn it back on — **Hide from Root Search** for the
+  two whose editor carries its own switch instead. A new category must be wired into
   `VisibilityStore.allowsHotKey`, or its chords keep running while its pane reads off.
 - **One command, one pane, one switch.** `SettingsTab.ownedCommands` is the whole table of which pane
   lists a command's shortcut, alias and launcher checkbox. A feature that names its commands there
@@ -729,9 +730,12 @@ favorite, alias and learned ranking survive the round trip, and its shortcut kee
 The row is offered only where Settings can undo it, and `KindDescriptor.canHideFromSearch` is that
 rule — per kind, and a new `Kind` case has to answer it to compile. Applications, System Settings,
 Commands, Quick Actions, System Actions, Window Commands, Window Layouts, Rooms and extension commands each
-draw a per-row checkbox in their pane, so they carry it. Custom commands, quicklinks and snippets do
-not: their panes list a record with its own switches, not a launcher checkbox — a hide nothing in
-Settings can visibly undo is a trap, not a shortcut.
+draw a per-row checkbox in their pane, so they carry it. Snippets do not: their pane lists a record
+with its own switches, not a launcher checkbox — a hide nothing in Settings can visibly undo is a
+trap, not a shortcut. Quicklinks and custom commands differ: each editor has its own **Show in root
+search** switch, so `AppEntry.hidesThroughRootSearchSwitch` offers **Hide from Root Search** on
+them, and `hideFromSearch(at:)` clears that `showsInRootSearch` flag through the feature's
+coordinator instead of writing `VisibilityStore`; the banner's Undo sets it back.
 `AppActionsMenu` adds the query-driven guard the favorites row already uses: a typed URL lives only
 for its query and has no preference to write.
 

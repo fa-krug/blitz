@@ -48,6 +48,10 @@ enum PaletteShortcut: Equatable {
     case edit
     /// ⌥⌘E, the row's content itself.
     case editContent
+    /// ⌘D.
+    case duplicate
+    /// ⌘F, for a screen whose ⌘↵ already does something else.
+    case showInFinder
     /// ⌘., which AppKit binds to `cancelOperation:`, so it arrives as a token instead of a key.
     case pin
     /// ⌘1…⌘0, matched by key code in the panel and handed over as a slot.
@@ -71,6 +75,7 @@ enum PaletteShortcut: Equatable {
         if command, !shift, matches("i") { return .showDetails }
         if control, matches("x") { return shift ? .deleteAll : .delete }
         if command, shift, matches("f") { return .toggleFavorite }
+        if command, matches("f"), !option, !control { return .showInFinder }
         if command, shift, matches("h") { return .hideFromSearch }
         if control, shift, matches("q") { return option ? .forceQuit : .quit }
         if command, matches("r") { return .restart }
@@ -79,6 +84,7 @@ enum PaletteShortcut: Equatable {
         if command, shift, matches(",") { return .configure }
         if command, matches("j") { return .continueInChat }
         if command, matches("e"), !shift, !control { return option ? .editContent : .edit }
+        if command, matches("d"), !shift, !option, !control { return .duplicate }
         return nil
     }
 
@@ -87,7 +93,7 @@ enum PaletteShortcut: Equatable {
         switch self {
         case .copyFile, .copyName, .copyPath, .copyText, .pasteFile, .quickLook, .openInApp,
             .showDetails, .toggleFavorite, .hideFromSearch, .quit, .forceQuit, .restart, .configure,
-            .edit, .editContent:
+            .edit, .editContent, .duplicate, .showInFinder:
             true
         case .commandDelete, .delete, .deleteAll, .pin, .favoriteSlot, .continueInChat, .newItem,
             .settings, .copyCalculation:
@@ -99,7 +105,7 @@ enum PaletteShortcut: Equatable {
         switch self {
         case .delete, .deleteAll, .copyFile, .copyName, .copyPath, .copyText, .copyCalculation,
             .quickLook, .openInApp, .showDetails, .toggleFavorite, .hideFromSearch, .newItem, .settings,
-            .configure, .edit, .editContent:
+            .configure, .edit, .editContent, .duplicate, .showInFinder:
             true
         case .commandDelete, .pasteFile, .quit, .forceQuit, .restart, .pin, .favoriteSlot,
             .continueInChat:

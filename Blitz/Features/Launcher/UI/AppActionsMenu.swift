@@ -50,13 +50,21 @@ enum AppActionsMenu {
                     onResetRanking()
                 })
         }
-        if isPersistent, app.canHideFromSearch {
+        if isPersistent, app.canHideFromSearch || app.hidesThroughRootSearchSwitch {
+            let title = app.hidesThroughRootSearchSwitch ? "Hide from Root Search" : "Hide from Search"
             items.append(
                 PopoverMenuItem(
-                    title: "Hide from Search", systemImage: "eye.slash", shortcut: "⇧⌘H",
-                    action: onHideFromSearch))
+                    title: title, systemImage: "eye.slash", shortcut: "⇧⌘H", action: onHideFromSearch))
         }
         items += configurationItems(app: app, core: core)
+        if app.kind == .quicklink, let quicklink = core.quicklinks.quicklink(entryID: app.id) {
+            items.append(
+                PopoverMenuItem(
+                    title: "Edit Quicklink", systemImage: "pencil", startsSection: true, shortcut: "⌘E"
+                ) {
+                    core.quicklinkCoordinator.editQuicklink(quicklink)
+                })
+        }
         if running, app.kind == .application {
             items.append(
                 PopoverMenuItem(

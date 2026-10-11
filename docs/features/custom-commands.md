@@ -63,6 +63,11 @@ to the flat palette selection while allowing edits to invalidate fuzzy results w
 
 The command text is deliberately not searchable. Only the user-facing name enters fuzzy matching.
 
+`showsInRootSearch == false` keeps a command out of that slice — and with it its alias, whose field
+on the command's page dims — while its shortcut still runs it. The editor's **Show in root search**
+switch writes it, and so does the launcher row's **Hide from Root Search** (`⇧⌘H`); the Settings row
+marks a hidden command with `eye.slash`.
+
 ## Execution contract
 
 `ShellCommandRunner` executes asynchronously with:

@@ -751,7 +751,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Undo banners
 
 - Hide from Search (⇧⌘H) on a launcher row hides it without asking, keeps the palette open on the
-  same query, and the banner's **Undo** brings the row back
+  same query, and the banner's **Undo** brings the row back; on a quicklink or custom command it
+  reads Hide from Root Search, and the row's editor shows **Show in root search** off until Undo
 - Move to Trash in File Search moves the file without asking; **Undo** restores it to where it was
 - Complete Reminder (⌘↵) ticks the reminder off; **Undo** unticks it in Reminders.app too
 - Hovering a banner holds it past its five seconds; leaving lets it fade

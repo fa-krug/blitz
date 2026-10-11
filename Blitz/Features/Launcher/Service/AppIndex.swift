@@ -267,6 +267,9 @@ struct AppEntry: Identifiable, Hashable, Sendable {
 
     var canHideFromSearch: Bool { kind.descriptor.canHideFromSearch }
 
+    /// Kinds whose editor carries its own Show in root search switch, which is a hide's undo.
+    var hidesThroughRootSearchSwitch: Bool { kind == .quicklink || kind == .customCommand }
+
     var canDragOut: Bool { kind.descriptor.canDragOut }
 
     /// What this row draws, and the only thing any icon path needs to ask.
@@ -513,7 +516,7 @@ final class AppIndex {
 
     /// Replaces the command slice without rescanning, so Settings edits land at once.
     func setCustomCommands(_ commands: [CustomCommand]) {
-        let entries = commands.filter(\.isEnabled).map(AppEntry.init)
+        let entries = commands.filter { $0.isEnabled && $0.showsInRootSearch }.map(AppEntry.init)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         guard entries != customCommandEntries else { return }
         customCommandEntries = entries

@@ -70,6 +70,11 @@ final class CustomCommandCoordinator {
         store.setEnabled(enabled, id: id)
     }
 
+    /// The launcher's Hide from Root Search and its Undo; the editor's switch writes it on save.
+    func setCustomCommandShowsInRootSearch(_ shows: Bool, id: UUID) {
+        store.setShowsInRootSearch(shows, id: id)
+    }
+
     func deleteCustomCommand(id: UUID) {
         guard let command = store.command(id: id) else { return }
         removeCustomCommandReferences(ids: [id], entryIDs: [command.entryID])
