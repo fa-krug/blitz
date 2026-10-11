@@ -611,6 +611,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Enabling shows the consent dialog **before** the Accessibility prompt
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
+- A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
+  field first** rather than doing nothing
 - Editing a snippet file externally reloads it
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
