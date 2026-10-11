@@ -452,8 +452,9 @@ screens hold (see [palette.md](palette.md)).
   one without resolving an icon per arrow key. Header accessory symbols use the same 14pt Medium
   monochrome treatment; their menus use the same extension-owned transition, anchored to the control.
 - **Feedback** — `showToast` replaces the current toast, a glass pill that takes the footer menu button's place and is
-  lit by its style's colour. Hovering turns its mark into an ×, and clicking anywhere but its button dismisses it and
-  gives the menu button back. The pill draws the toast's `primaryAction` and `secondaryAction`; a failure toast
+  lit by its style's colour. It fills only the width beside the footer's action group: a long toast truncates its
+  message first, then its title, and its buttons never truncate. Hovering turns its mark into an ×, and clicking
+  anywhere but its button dismisses it and gives the menu button back. The pill draws the toast's `primaryAction` and `secondaryAction`; a failure toast
   without a primary action offers **Copy** (title and message) instead. Toast buttons also appear as the last
   section of ⌘K, and their `shortcut`s fire while the toast is up. With the palette hidden a toast is a HUD, and an
   animated one that later turns into success or failure shows that outcome as a second HUD. An action handler that
