@@ -747,7 +747,8 @@ whatever else wants the press on a row that offers no such menu item.
 
 Application and System Settings results expose **Show in Finder** in their ⌘K Actions menu and on
 **⌘↵**. Synthetic command results have no filesystem location, so neither the menu row nor the
-shortcut is available for them. `AppEntry.canRevealInFinder` is the one rule both the menu row and
+shortcut is available for them. On the calculator card ⌘↵ instead puts the answer in the search bar
+([calculator.md](calculator.md#result-and-rendering)). `AppEntry.canRevealInFinder` is the one rule both the menu row and
 the key handler read, so the advertised chord can't drift from the behavior.
 
 ## Copy Deeplink

@@ -603,6 +603,13 @@ the list (flat selection index 0, shifting rows by one) and Enter copies the ans
 `CalculatorHistoryStore`; ⇧⌘↵ copies the whole calculation. The palette closes on a copy, so each one
 confirms with a **Copied result** / **Copied calculation** / **Copied expression** pill.
 
+⌘↵ (**Put Answer in Search Bar**) records the answer too, then `PaletteState.rewriteQuery` makes its
+copy text the query with the caret after it, so the next step chains on: `2^10`, ⌘↵, ` * 2`. Only a
+`canChain` answer offers it. `CalcEngine` clears the flag on every `CalcDateTime` and `CalcTimeZone`
+answer, because a clock typed back reads as local time; `CalcQuantity` clears it on a boolean and
+`CalcPercent` on a ratio. In Calculator History ⌘↵ on a stored entry still copies its expression, and
+the history search also matches an entry's ungrouped answer, so the rewritten query finds its row.
+
 ## Number format
 
 General ▸ Calculator ▸ Number format is `System` by default, reading the decimal and grouping

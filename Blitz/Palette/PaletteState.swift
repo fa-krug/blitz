@@ -38,6 +38,8 @@ final class PaletteState {
     var resetToken = UUID()
     /// Bumped when an action reorders the list, so the highlight scrolls back into view.
     var followToken = UUID()
+    /// Bumped when an action rewrites the query, so the field lands with the caret after it.
+    private(set) var queryRewriteToken = UUID()
     /// AppKit binds ⌘. to `cancelOperation:`, so the field editor eats it before `onKeyPress`.
     private(set) var pinChordToken = UUID()
     /// Bumped when AppKit resolves ⌘1…⌘0 to a slot index from the physical number row.
@@ -175,6 +177,11 @@ final class PaletteState {
 
     func notePinChord() {
         pinChordToken = UUID()
+    }
+
+    func rewriteQuery(_ text: String) {
+        query = text
+        queryRewriteToken = UUID()
     }
 
     func noteMenuPresentation() {
