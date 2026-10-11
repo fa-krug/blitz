@@ -46,6 +46,9 @@ fixed system tools, Apple Events (off the main actor, since a cold Finder answer
 Accessibility, or a dynamically resolved Bluetooth power API. Toggle System Appearance changes
 macOS; Blitz follows it only while its own Appearance is System.
 
+Restart and Shut Down pass System Events `with state saving preference`, so they follow macOS's
+"Reopen windows when logging back in" box; without it the system always saves window state.
+
 ## Feedback
 
 An action whose effect is invisible reports back: `SystemActionRunner.run` returns a
