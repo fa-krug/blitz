@@ -693,6 +693,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 - Open Camera shows the panel already live, mirrored; the camera light goes out the moment the panel
   closes, by Escape, click-away or a photo
+- With Open Camera or the join card up, changing a video effect in Control Center leaves the preview
+  live; the next click outside both the panel and system UI closes it, and running Open Camera again
+  hands Esc and ↵ back to it
 - The first run asks for camera access once, before any panel appears; after a denial the stage
   offers **Open Privacy Settings**
 - Taking a photo closes the panel and puts a PNG on the clipboard that pastes as the mirrored frame

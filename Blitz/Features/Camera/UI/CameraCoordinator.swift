@@ -4,7 +4,7 @@ import SwiftUI
 /// Owns the standalone camera surface: one panel at a time, and the camera stops with it.
 @MainActor
 @Observable
-final class CameraCoordinator: NSObject, NSWindowDelegate {
+final class CameraCoordinator {
     /// What the open panel is for: a photo to the clipboard, or reading a QR code.
     enum Mode {
         case photo
@@ -42,7 +42,12 @@ final class CameraCoordinator: NSObject, NSWindowDelegate {
 
     /// The camera settles first: a panel over a starting session shows a black stage.
     func show(_ mode: Mode = .photo) async {
-        guard !opening, panel == nil else { return }
+        // A panel system UI left without key takes it back, so ↵ and Esc reach it again.
+        if let panel {
+            panel.makeKey()
+            return
+        }
+        guard !opening else { return }
         opening = true
         defer { opening = false }
         self.mode = mode
@@ -56,8 +61,7 @@ final class CameraCoordinator: NSObject, NSWindowDelegate {
     func close() {
         guard let closing = panel else { return }
         panel = nil
-        closing.delegate = nil
-        closing.onKey = nil
+        closing.onAction = nil
         scanTask?.cancel()
         scanTask = nil
         let closingSession = session
@@ -137,10 +141,9 @@ final class CameraCoordinator: NSObject, NSWindowDelegate {
         let hosting = NSHostingView(rootView: CameraView(coordinator: self))
         hosting.setFrameSize(hosting.fittingSize)
         let panel = CameraPanel(content: hosting)
-        panel.delegate = self
-        panel.onKey = { [weak self] key in
+        panel.onAction = { [weak self] action in
             guard let self else { return }
-            switch (key, mode) {
+            switch (action, mode) {
             case (.cancel, _): close()
             case (.primary, .photo): takePhoto()
             case (.primary, .scan): activateScanned()
@@ -153,13 +156,5 @@ final class CameraCoordinator: NSObject, NSWindowDelegate {
             panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
         }
-    }
-
-    // MARK: - NSWindowDelegate
-
-    /// Click-away closes rather than leaving a camera running behind another window.
-    func windowDidResignKey(_ notification: Notification) {
-        guard let panel, notification.object as? NSWindow === panel else { return }
-        close()
     }
 }
