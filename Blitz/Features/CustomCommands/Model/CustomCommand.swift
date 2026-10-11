@@ -39,6 +39,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     var command: String
     /// Off keeps the command and everything attached to it, but nothing may offer or run it.
     var isEnabled: Bool
+    /// Off keeps it out of root search, alias included, while its shortcut still runs it.
+    var showsInRootSearch: Bool
     /// Sources the shell config so aliases resolve; opt-in, a heavy one costing more.
     var loadsShellEnvironment: Bool
     var requiresConfirmation: Bool
@@ -54,7 +56,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
 
     init(
         id: UUID = UUID(), name: String, command: String, isEnabled: Bool = true,
-        loadsShellEnvironment: Bool = false, requiresConfirmation: Bool = false,
+        showsInRootSearch: Bool = true, loadsShellEnvironment: Bool = false,
+        requiresConfirmation: Bool = false,
         showsConfirmation: Bool = false, arguments: [CustomCommandArgument] = [],
         opensTerminal: Bool = false, workingDirectory: String? = nil,
         iconSymbol: String? = nil
@@ -63,6 +66,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         self.name = name
         self.command = command
         self.isEnabled = isEnabled
+        self.showsInRootSearch = showsInRootSearch
         self.loadsShellEnvironment = loadsShellEnvironment
         self.requiresConfirmation = requiresConfirmation
         self.showsConfirmation = showsConfirmation
@@ -185,6 +189,15 @@ final class CustomCommandStore {
         else { return }
         var updated = commands
         updated[index].isEnabled = enabled
+        commit(updated)
+    }
+
+    func setShowsInRootSearch(_ shows: Bool, id: UUID) {
+        guard let index = commands.firstIndex(where: { $0.id == id }),
+            commands[index].showsInRootSearch != shows
+        else { return }
+        var updated = commands
+        updated[index].showsInRootSearch = shows
         commit(updated)
     }
 

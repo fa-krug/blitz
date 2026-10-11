@@ -453,6 +453,16 @@ run quicklink-test         Blitz/Platform/BrowserTab.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
                            Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
+run quicklink-coordinator-test Blitz/Platform/BrowserTab.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
+                           Blitz/Features/Quicklinks/UI/QuicklinkCoordinator.swift \
+                           Blitz/Features/Quicklinks/UI/QuicklinkArgumentsAccessory.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift \
+                           Blitz/Features/Snippets/Model/SnippetTemplateEngine.swift
 run slow snippets-test     Blitz/Platform/NotificationToken.swift \
                            Blitz/Platform/HealthTicker.swift \
                            Blitz/Platform/BrowserTab.swift \

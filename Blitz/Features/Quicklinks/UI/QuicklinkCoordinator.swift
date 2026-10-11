@@ -129,6 +129,7 @@ final class QuicklinkCoordinator {
         var context = injector.captureExpansionContext(
             target: target, clipboardHistory: clipboardHistory(), browserTab: browserTab,
             calculate: core.calculatorCoordinator.placeholderEvaluator())
+        var selectionOwed = false
 
         // An unreadable selection is missing, not empty: use the clipboard, or take the field.
         if context.selection.isEmpty, SnippetTemplateEngine.usesSelection(quicklink.link) {
@@ -137,13 +138,14 @@ final class QuicklinkCoordinator {
                 context = context.replacingSelection(with: context.clipboard)
             case .ask:
                 let typed = values[Self.selectionArgument.name] ?? ""
+                selectionOwed = typed.isEmpty
                 if !typed.isEmpty { context = context.replacingSelection(with: typed) }
             }
         }
 
         let expansion = SnippetTemplateEngine.expand(
             text: quicklink.link, context: context, userArguments: values, encoding: encoding)
-        guard expansion.missingArguments.isEmpty else {
+        guard expansion.missingArguments.isEmpty, !selectionOwed else {
             pendingHandlerOverride = handler.map { (quicklink.id, $0) }
             promptForArguments(quicklink, values: values)
             return
@@ -164,7 +166,7 @@ final class QuicklinkCoordinator {
     static let selectionArgument = SnippetTemplateEngine.MissingArgument(
         name: "Selected Text", options: [])
 
-    /// Left empty, "Selected Text" still resolves at open, so it never holds ↵ or earns a red edge.
+    /// Left empty, "Selected Text" still resolves at open, so it never earns a red edge.
     static func requiresValue(_ argument: SnippetTemplateEngine.MissingArgument) -> Bool {
         argument.name != selectionArgument.name
     }
@@ -185,7 +187,9 @@ final class QuicklinkCoordinator {
     private func promptForArguments(_ quicklink: Quicklink, values: [String: String]) {
         paletteCoordinator.showPalette(mode: .quicklinks)
         // After the show: `prepare` runs inside it and would clear everything set beforehand.
-        core.palette.selection = store.enabled.firstIndex(of: quicklink) ?? 0
+        let rows = store.listed(
+            matching: core.palette.query, tag: core.palette.quicklinkTagFilter)
+        core.palette.selection = rows.firstIndex { $0.id == quicklink.id } ?? 0
         for (name, value) in values {
             core.palette.commandArguments[PaletteState.argumentKey(quicklink.entryID, name)] = value
         }
@@ -293,6 +297,19 @@ final class QuicklinkCoordinator {
         do { try store.setEnabled(enabled, id: id) } catch { report(error) }
     }
 
+    /// The saved link as written, placeholders and all: copying reads no selection or clipboard.
+    func copyQuicklink(id: UUID) {
+        guard settings.quicklinksEnabled, let quicklink = store.quicklink(id: id),
+            quicklink.isEnabled
+        else { return }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        guard Paster.copyPlainText(quicklink.link) else {
+            core.showMessage("Couldn’t copy link", tone: .danger)
+            return
+        }
+        core.showMessage("Copied link")
+    }
+
     func duplicateQuicklink(id: UUID) {
         do { _ = try store.duplicate(id: id) } catch { report(error) }
     }
@@ -308,6 +325,7 @@ final class QuicklinkCoordinator {
 
     /// Opens the Quicklinks editor on `quicklink`; nil is a new one, named `name`.
     func editQuicklink(_ quicklink: Quicklink?, name: String = "") {
+        if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
         core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name)
         settingsCoordinator.showSettings(tab: .quicklinks)
     }
@@ -322,6 +340,23 @@ final class QuicklinkCoordinator {
             core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: nil, browserTab: tab)
             settingsCoordinator.showSettings(tab: .quicklinks)
         }
+    }
+
+    /// Revealing needs a real path, which a template lacks until it expands.
+    static func revealablePath(of quicklink: Quicklink) -> String? {
+        guard !QuicklinkDestination.containsPlaceholder(quicklink.link),
+            case .path(let path)? = QuicklinkDestination.detect(quicklink.link)
+        else { return nil }
+        return path
+    }
+
+    /// False for a link that names no file or folder, which leaves ⌘F unhandled.
+    @discardableResult
+    func showQuicklinkInFinder(_ quicklink: Quicklink) -> Bool {
+        guard let path = Self.revealablePath(of: quicklink) else { return false }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        AppLauncher.showInFinder(URL(fileURLWithPath: path))
+        return true
     }
 
     @discardableResult

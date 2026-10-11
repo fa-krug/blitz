@@ -69,6 +69,13 @@ struct CustomCommandTests {
             store.command(id: added.id)?.command == "/usr/bin/true")
         store.setEnabled(true, id: added.id)
 
+        check("a new command shows in root search", store.command(id: added.id)?.showsInRootSearch == true)
+        store.setShowsInRootSearch(false, id: added.id)
+        check(
+            "hiding from root search is stored and leaves it enabled",
+            store.command(id: added.id)?.showsInRootSearch == false
+                && store.command(id: added.id)?.isEnabled == true)
+
         let expected = store.commands
         check(
             "commands survive a reload with their flags",
@@ -77,14 +84,15 @@ struct CustomCommandTests {
         // `replace` runs the import sanitizer, which must carry every flag through.
         store.replace(with: [
             CustomCommand(
-                name: "Imported", command: "/usr/bin/true", loadsShellEnvironment: true,
-                requiresConfirmation: true, showsConfirmation: true,
+                name: "Imported", command: "/usr/bin/true", showsInRootSearch: false,
+                loadsShellEnvironment: true, requiresConfirmation: true, showsConfirmation: true,
                 arguments: [CustomCommandArgument(name: "  Query  ", isOptional: true)],
                 opensTerminal: true)
         ])
         check(
             "import preserves every flag",
-            store.commands.first?.loadsShellEnvironment == true
+            store.commands.first?.showsInRootSearch == false
+                && store.commands.first?.loadsShellEnvironment == true
                 && store.commands.first?.requiresConfirmation == true
                 && store.commands.first?.showsConfirmation == true
                 && store.commands.first?.opensTerminal == true)
