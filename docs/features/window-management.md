@@ -178,12 +178,13 @@ Two details carry their weight:
 Rule 1 also delivers the "works for windows Blitz never moved" requirement: the capture happens in
 `WindowMover.perform` before a single write.
 
-**Cycling covers the four halves only**, and `WindowCycle` picks one of three modes, `.off` by default
-so a repeat press stays idempotent unless asked otherwise:
+**Cycling covers the four halves and Center Half only**, and `WindowCycle` picks one of three modes,
+`.off` by default so a repeat press stays idempotent unless asked otherwise:
 
 - **`.sizes`** — ½ → ⅓ → ⅔ in place. Top and Bottom Half cycle through _vertical_ thirds, which have no
   commands of their own (the Thirds group is horizontal), so they are expressed as fractions rather
-  than as other command IDs.
+  than as other command IDs. Center Half keeps its width centred, so its steps land exactly on
+  Center Third and Center Two Thirds.
 - **`.displays`** — every display contributes two half-slots to one strip, ordered left-to-right by
   `ordered(_:)`. Left and Top walk it backwards, Right and Bottom forwards, both wrapping, so one
   shortcut sweeps the whole desktop in one direction: on two displays, Left Half gives
@@ -191,7 +192,8 @@ so a repeat press stays idempotent unless asked otherwise:
   which `decide` carries as `originScreenID`: from the second press the window already sits on the
   display it was moved to, and counting from there would overshoot a slot. One display makes the
   mode a quiet no-op — a length of 1 — rather than a left/right flip in place, matching Next
-  Display's own single-display behaviour.
+  Display's own single-display behaviour. Center Half hugs no edge, so it has no slot on the strip
+  and stays put; Next Display already moves it.
 
 The two are deliberately exclusive rather than composable: a 12-press chain over two displays is not a
 shortcut any more, and Raycast's own setting is the same single choice. `Half` carries the (axis, edge)
@@ -387,13 +389,14 @@ and every shortcut stays editable afterwards.
 
 ## Testing
 
-`Tests/window-command-test.swift` covers the catalog, the AX-space convention lock,
-tiling on divisible and non-divisible screens, off-origin and negative-coordinate displays, gap
-arithmetic including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display
-moves and wrapping, both cycling modes including the strip walk, its wrap and a run of real presses
-across displays, restore recovery, every `WindowActionMemory` rule, and a fuzz sweep over every
-command × gap × screen × cycle × step × degenerate window frame checking for non-finite output,
-negative dimensions, off-screen results, non-determinism and, at step 0, drift on repeat.
+`Tests/window-command-test.swift` covers the catalog, the AX-space convention lock, tiling on
+divisible and non-divisible screens, off-origin and negative-coordinate displays, gap arithmetic
+including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display moves and
+wrapping, both cycling modes including the strip walk, its wrap and a run of real presses across
+displays, Center Half's centred size cycle and its exemption from the strip, restore recovery, every
+`WindowActionMemory` rule, and a fuzz sweep over every command × gap × screen × cycle × step ×
+degenerate window frame checking for non-finite output, negative dimensions, off-screen results,
+non-determinism and, at step 0, drift on repeat.
 
 `Tests/window-preset-test.swift` covers the preset tables (no key used twice, a commanding modifier
 on each) and `WindowShortcutPresetPlan`: a fresh apply, a repeat apply, a replaced user key, a
@@ -421,8 +424,9 @@ verification, particularly:
    the secondary display, then round-trip Next/Previous Display.
 3. Toggle Fullscreen on a window that accepts it and one that refuses it.
 4. Cycling, in both modes: under `.sizes`, three presses of Left Half, then drag the window and confirm
-   the next press restarts at ½. Under `.displays` on two monitors, four presses of Left Half must
-   visit every half-slot once and return to the first.
+   the next press restarts at ½; three presses of Center Half stay centred at ½, ⅓ and ⅔. Under
+   `.displays` on two monitors, four presses of Left Half must visit every half-slot once and return
+   to the first.
 5. Restore on a window Blitz has never moved, and after a custom size.
 6. **Space switching, on the real desktop with three or more Spaces.** Next and Previous each move
    exactly one Space with no visible slide, in and out of a fullscreen Space, and a held shortcut does
