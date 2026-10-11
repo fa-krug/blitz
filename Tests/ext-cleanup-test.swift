@@ -170,6 +170,44 @@ struct ExtensionCleanupTests {
         expect(!FileManager.default.isExecutableFile(atPath: text.path), "an ordinary asset stays data")
     }
 
+    /// Store bundles leave third-party packages external and ship them under `node_modules/`.
+    static func bundledDependenciesSurviveInstall() {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ext-install-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let source = base.appendingPathComponent("source", isDirectory: true)
+        let package = source.appendingPathComponent("node_modules/example", isDirectory: true)
+        let destination = base.appendingPathComponent("installed", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+            let manifest =
+                #"{"name":"fixture","title":"Fixture","commands":[{"name":"main","title":"Main","mode":"no-view"}]}"#
+            try Data(manifest.utf8).write(to: source.appendingPathComponent("package.json"))
+            try Data("module.exports = {};".utf8).write(to: source.appendingPathComponent("main.js"))
+            try Data("map".utf8).write(to: source.appendingPathComponent("main.js.map"))
+            try Data("module.exports = 42;".utf8).write(to: package.appendingPathComponent("index.js"))
+
+            let installed = try ExtensionCatalog.install(from: source, in: destination)
+            let copied = installed.directory.appendingPathComponent("node_modules/example/index.js")
+            expect(
+                (try? String(contentsOf: copied, encoding: .utf8)) == "module.exports = 42;",
+                "bundled dependencies survive the install")
+            expect(
+                !FileManager.default.fileExists(
+                    atPath: installed.directory.appendingPathComponent("main.js.map").path),
+                "source maps are still left behind")
+
+            try FileManager.default.removeItem(at: source.appendingPathComponent("node_modules"))
+            let replaced = try ExtensionCatalog.install(from: source, in: destination)
+            expect(
+                !FileManager.default.fileExists(
+                    atPath: replaced.directory.appendingPathComponent("node_modules").path),
+                "a reinstall without dependencies drops the old ones")
+        } catch {
+            expect(false, "install fixture failed: \(error)")
+        }
+    }
+
     /// Raycast Beta keeps extensions under `raycast-x`; checking only `raycast` missed it.
     static func bothRaycastChannelsAreSearched() {
         let roots = ExtensionCatalog.raycastExtensionRoots().map(\.path)
@@ -191,6 +229,7 @@ struct ExtensionCleanupTests {
         emptyAndMissingRootsAreSafe()
         workspaceIsSweptByItsOwnPrefix()
         executableAssetsAreRestored()
+        bundledDependenciesSurviveInstall()
 
         print(failures == 0 ? "Extension cleanup tests passed" : "\(failures) tests failed")
         exit(failures == 0 ? 0 : 1)

@@ -196,8 +196,10 @@ struct ExtensionTests {
         oauthUnitChecks()
         deepLinkChecks()
         nodeShimChecks()
+        fsErrorChecks()
         await runtimeChecks()
         await searchAccessoryRuntimeChecks()
+        await bundledModuleChecks()
         await nodeContractChecks()
         await webAssemblyChecks()
         await deepNestingChecks()
@@ -258,6 +260,39 @@ struct ExtensionTests {
             "os.loadavg returns three finite values",
             loadAverages?.count == 3
                 && loadAverages?.allSatisfy { $0.doubleValue.isFinite && $0.doubleValue >= 0 } == true)
+    }
+
+    static func fsErrorChecks() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-fs-errors-\(UUID().uuidString)")
+        let folder = directory.appendingPathComponent("folder").path
+        let file = directory.appendingPathComponent("file").path
+        let locked = directory.appendingPathComponent("locked").path
+        try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: file, contents: Data("x".utf8))
+        FileManager.default.createFile(
+            atPath: locked, contents: Data("x".utf8), attributes: [.posixPermissions: 0])
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func code(_ method: String, _ arguments: [Any]) -> String? {
+            let argsJSON =
+                (try? JSONSerialization.data(withJSONObject: arguments))
+                .flatMap { String(bytes: $0, encoding: .utf8) } ?? "[]"
+            let result = ExtensionNodeShims().perform(api: "fs", method: method, argsJSON: argsJSON)
+            guard let data = result.data(using: .utf8),
+                let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            return envelope["code"] as? String
+        }
+        let missing = directory.appendingPathComponent("missing").path
+        check("fs.readFile of a missing file is ENOENT", code("readFile", [missing]) == "ENOENT")
+        check("fs.readFile of a directory is EISDIR", code("readFile", [folder]) == "EISDIR")
+        check("fs.readRange of a directory is EISDIR", code("readRange", [folder, 0, 1]) == "EISDIR")
+        check("fs.readdir of a file is ENOTDIR", code("readdir", [file]) == "ENOTDIR")
+        check("fs.stat through a file is ENOTDIR", code("stat", [file + "/child", false]) == "ENOTDIR")
+        if geteuid() != 0 {
+            check("fs.readFile of an unreadable file is EACCES", code("readFile", [locked]) == "EACCES")
+        }
     }
 
     @MainActor
@@ -1416,6 +1451,51 @@ struct ExtensionTests {
                 ExtensionSearchAccessory(node: $0.activeRoot?.node("searchBarAccessory"))?.nodeID
             } == accessory.nodeID)
         await runtime.stop(session: "sAccessory")
+    }
+
+    /// Installed through the catalog, so the copy and the resolver are exercised together.
+    @MainActor
+    static func bundledModuleChecks() async {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ext-bundled-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let source = base.appendingPathComponent("source", isDirectory: true)
+        let package = source.appendingPathComponent("node_modules/bundled", isDirectory: true)
+        let (runtime, _, recorder) = makeRuntime()
+        defer { runtime.shutdown() }
+        do {
+            try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+            let manifest =
+                #"{"name":"fixture","title":"Fixture","commands":[{"name":"main","title":"Main","mode":"view"}]}"#
+            try Data(manifest.utf8).write(to: source.appendingPathComponent("package.json"))
+            let command = #"""
+                const React = require("react");
+                const { Detail } = require("@raycast/api");
+                const value = require("bundled");
+                module.exports.default = () => React.createElement(Detail, { markdown: String(value) });
+                """#
+            try Data(command.utf8).write(to: source.appendingPathComponent("main.js"))
+            try Data(#"{"exports":{".":"./index.js","./data":"./data.json"}}"#.utf8)
+                .write(to: package.appendingPathComponent("package.json"))
+            try Data(#"module.exports = require("bundled/data").value + 1;"#.utf8)
+                .write(to: package.appendingPathComponent("index.js"))
+            try Data(#"{"value":41}"#.utf8).write(to: package.appendingPathComponent("data.json"))
+            let installed = try ExtensionCatalog.install(
+                from: source, in: base.appendingPathComponent("installed"))
+            let file = installed.directory.appendingPathComponent("main.js")
+            try await runtime.boot(config: .current(supportDirectory: base))
+            await runtime.start(
+                session: "bundled", code: try String(contentsOf: file, encoding: .utf8), file: file,
+                mode: .view, context: launchContext())
+            await settle()
+            check(
+                "installed node_modules resolve in JavaScriptCore",
+                recorder.trees.last?.activeRoot?.string("markdown") == "42",
+                recorder.failures.joined(separator: "|"))
+            await runtime.stop(session: "bundled")
+        } catch {
+            check("bundled module fixture completes", false, String(describing: error))
+        }
     }
 
     @MainActor
