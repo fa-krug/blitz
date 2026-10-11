@@ -196,6 +196,7 @@ struct ExtensionTests {
         oauthUnitChecks()
         deepLinkChecks()
         nodeShimChecks()
+        fsErrorChecks()
         await runtimeChecks()
         await searchAccessoryRuntimeChecks()
         await bundledModuleChecks()
@@ -259,6 +260,39 @@ struct ExtensionTests {
             "os.loadavg returns three finite values",
             loadAverages?.count == 3
                 && loadAverages?.allSatisfy { $0.doubleValue.isFinite && $0.doubleValue >= 0 } == true)
+    }
+
+    static func fsErrorChecks() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-fs-errors-\(UUID().uuidString)")
+        let folder = directory.appendingPathComponent("folder").path
+        let file = directory.appendingPathComponent("file").path
+        let locked = directory.appendingPathComponent("locked").path
+        try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: file, contents: Data("x".utf8))
+        FileManager.default.createFile(
+            atPath: locked, contents: Data("x".utf8), attributes: [.posixPermissions: 0])
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func code(_ method: String, _ arguments: [Any]) -> String? {
+            let argsJSON =
+                (try? JSONSerialization.data(withJSONObject: arguments))
+                .flatMap { String(bytes: $0, encoding: .utf8) } ?? "[]"
+            let result = ExtensionNodeShims().perform(api: "fs", method: method, argsJSON: argsJSON)
+            guard let data = result.data(using: .utf8),
+                let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            return envelope["code"] as? String
+        }
+        let missing = directory.appendingPathComponent("missing").path
+        check("fs.readFile of a missing file is ENOENT", code("readFile", [missing]) == "ENOENT")
+        check("fs.readFile of a directory is EISDIR", code("readFile", [folder]) == "EISDIR")
+        check("fs.readRange of a directory is EISDIR", code("readRange", [folder, 0, 1]) == "EISDIR")
+        check("fs.readdir of a file is ENOTDIR", code("readdir", [file]) == "ENOTDIR")
+        check("fs.stat through a file is ENOTDIR", code("stat", [file + "/child", false]) == "ENOTDIR")
+        if geteuid() != 0 {
+            check("fs.readFile of an unreadable file is EACCES", code("readFile", [locked]) == "EACCES")
+        }
     }
 
     @MainActor

@@ -867,6 +867,10 @@ that as absence, like Node. Raycast's Visual Studio Code extension leans on the 
 always does) would otherwise pass `isFolderEntry` and reach `fileURLToPath`, which throws and takes
 the whole Search Recent Projects command down.
 
+A failed `readFile`, `readdir` or `stat` reports the path's real errno — `EPERM` or `EACCES` for a
+read macOS denies, `ENOTDIR`, `EISDIR` — rather than `ENOENT` for everything, so Browser Bookmarks
+can tell a browser profile it may not read from one that is not installed.
+
 A bundle that ships its own HTTP client rather than calling `fetch` — node-fetch travels inside
 `@raycast/utils`, and axios has a Node adapter — reaches the network through `http.request`, so the
 shim answers it: one request when the body ends, one response chunk when the bridge replies. The
