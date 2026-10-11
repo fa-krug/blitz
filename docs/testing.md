@@ -108,7 +108,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
-| updates, support, onboarding | `updates-test`, `support-test`, `onboarding-test` |
+| updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
 
 The subprocess harnesses bring their own stub servers from `Tests/ai-fixtures/`: `codex-stub.js`
 (`codex-turn-test`), `installed-cli-stub.js` (`installed-ai-test`) and `mcp-stub.js`
@@ -681,6 +681,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Auto Join on: the meeting opens itself at its start, **once** — dismiss it and it does not return.
   With confirm on and camera preview off, the dialog asks first
 - Arming Auto Join during a meeting already under way joins nothing
+- `Only join known meeting services` on: an event whose only link is a booking page or document
+  neither asks nor opens at its start, while a Zoom or Meet event beside it still joins; the join
+  card still offers both
 - Sleeping over a meeting's start and waking past it reloads the events; one still inside the window
   joins, one long past does not
 - Create Event writes to the default calendar and shows up on the card, the schedule and the launcher
@@ -786,6 +789,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   with the gap, hides other apps and parks their extra windows; quitting, `kill -9` then relaunching, and
   turning Window Management off each bring every window back.
   Repeat on two displays and with Reduce Motion on
+- Every window command, custom size, layout and room row in Settings ▸ Window Management has Add
+  Alias; an alias set there finds its entry from the launcher and shows the chip. Unticking the row,
+  or its section's Show in launcher switch, dims the field
 
 ### Quick AI and Quick Actions
 
@@ -831,6 +837,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A file whose `manifest.json` `format` was hand-edited is refused **with a message naming it**
 - Cancelling the save panel leaves nothing in `~/Library/Caches/de.fa-krug.blitz.dev/backup-staging/`
 - **`snippetsEnabled` is not in the exported file**, and importing does not enable snippets
+- General ▸ Automatically check for updates, on a stable build: off survives relaunch, no update
+  window appears on its own, and Check for Updates still answers; back on, checking resumes. A
+  backup round trip and a settings.json edit both carry the choice
 - Nothing in the extracted tree names a Keychain item, an extension, or an AI conversation
 
 ### Clean install

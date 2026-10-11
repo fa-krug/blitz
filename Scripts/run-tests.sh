@@ -622,6 +622,9 @@ run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
                            $L/SearchRelevance.swift
 run updates-test           Blitz/Features/Updates/Model/*.swift \
                            Blitz/Features/Updates/Service/BundleSignature.swift
+run update-check-test      Blitz/Features/Updates/Model/*.swift \
+                           Blitz/Features/Updates/Service/UpdateCheckStore.swift \
+                           Blitz/Platform/AppPaths.swift
 run support-test           Blitz/Features/Support/Model/*.swift
 run onboarding-test        Blitz/Features/Onboarding/Model/*.swift \
                            Blitz/Palette/PaletteMode.swift \

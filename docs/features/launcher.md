@@ -382,8 +382,9 @@ list filters by **membership only**, keeping the index's name order — re-ranki
 would move the row being edited out from under its own field editor. A pane with a hand-written row
 hands `AliasField` the key itself: Settings ▸ Quicklinks passes `Quicklink.entryID`, Settings ▸
 Commands passes `CustomCommand.entryID`, Settings ▸ Extensions passes `extension:<name>/<command>`,
-and each dims the field when the entry is hidden from launcher search, whose entry the ranker never
-sees.
+Settings ▸ Window Management passes each window command, custom size, layout and room's `AppEntry`
+(the same one `AppIndex` publishes), and each dims the field when the entry is hidden from launcher
+search, whose entry the ranker never sees.
 
 Aliases ride along in a settings backup (`launcherAliases`), and deleting what an alias points at —
 uninstalling an app, deleting a quicklink or custom command, uninstalling an extension — removes it
