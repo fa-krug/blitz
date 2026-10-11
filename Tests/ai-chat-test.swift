@@ -54,6 +54,7 @@ struct AIChatTests {
         renamesAndPinsSurviveSavesAndSpareRetention()
         transcriptsExportAndDropOnlyATrailingReply()
         await regenerateAsksTheSameQuestionAgain()
+        await requestsIdentifyTheirConversation()
         await aConversationIsLiveOnOneSurfaceAtATime()
         await everyStateReportsAFinishedReply()
         await reasoningFoldsIntoTheReplyAndIsNeverResent()
@@ -1344,6 +1345,37 @@ extension AIChatTests {
         expect(
             store.session(id: chat.session.id)?.messages.map(\.text) == ["Why?", "Second"],
             "the stored transcript holds only the new reply")
+    }
+
+    /// Codex resumes a chat's thread by this ID, so a new chat must never inherit another's.
+    static func requestsIdentifyTheirConversation() async {
+        let (store, directory) = temporaryStore("conversation-id")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: store)
+        let provider = ScriptedProvider(rounds: [
+            [.text("First"), .finished], [.text("Second"), .finished]
+        ])
+        let firstID = chat.session.id
+        chat.send("Research", using: provider)
+        await settle(chat)
+        chat.send("Elaborate", using: provider)
+        await settle(chat)
+        expect(
+            provider.requests.map(\.conversationID) == [firstID, firstID],
+            "follow-ups identify the same conversation")
+        let continued = provider.requests[0].continuing(
+            with: provider.requests[0].messages, tools: [])
+        expect(continued.conversationID == firstID, "tool rounds keep the conversation identity")
+        chat.startNewChat()
+        chat.send("Start again", using: provider)
+        await settle(chat)
+        expect(
+            provider.requests.last?.conversationID == chat.session.id
+                && chat.session.id != firstID,
+            "a new chat identifies itself, never the chat before it")
+        expect(
+            AIRequest(messages: []).conversationID == nil,
+            "a one-off generation belongs to no conversation")
     }
 
     /// Naming hangs off this hook, so a state made after it is set must be told too.

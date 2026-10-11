@@ -122,7 +122,7 @@ final class QuickAICoordinator {
     }
 
     func deleteChat(id: UUID) {
-        chats.delete(id: id)
+        chatCoordinator.removeChat(id: id)
     }
 
     func deleteAllChats() async {

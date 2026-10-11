@@ -8,6 +8,9 @@
 // `parallel` serves one thread per request and holds both replies until the harness releases them,
 // so two turns are live at once.
 //
+// `research` serves one thread per request too, and a follow-up recalls the source an earlier turn
+// on the same thread searched for: what a resumed thread has and a fresh one lacks.
+//
 // `api-auth`, `auth-required` and `auth-undetermined` answer `account/read` the way a custom
 // provider, a signed-out OpenAI route and a server without the `requiresOpenaiAuth` flag do.
 //
@@ -171,6 +174,8 @@ function toolPair(read) {
 let initialized = false;
 let threads = 0;
 let turns = 0;
+/** What each `research` thread found, which only a follow-up on that same thread can recall. */
+const research = new Map();
 
 /** Answers at once, then holds the second turn until `release` and finishes both. */
 function parallelTurn(message) {
@@ -198,6 +203,31 @@ function parallelTurn(message) {
     }
 }
 
+/** Searches once, then answers a follow-up only from what this thread itself searched. */
+function researchTurn(message) {
+    turns += 1;
+    const thread = message.params.threadId;
+    const turn = `turn-${turns}`;
+    const prompt = message.params.input.find((item) => item.type === "text")?.text;
+    record(`turn-params:${JSON.stringify(message.params)}`);
+    emit({ id: message.id, result: { turn: { id: turn } } });
+    emit({ method: "turn/started", params: { threadId: thread, turn: { id: turn } } });
+    let text;
+    if (prompt === "Find recent benchmarks") {
+        research.set(thread, `https://example.com/${thread}/benchmark`);
+        const item = { type: "webSearch", id: `search-${turns}`, query: "recent benchmarks" };
+        emit({ method: "item/started", params: { threadId: thread, item } });
+        emit({ method: "item/completed", params: { threadId: thread, item } });
+        text = "A model benchmark.";
+    } else {
+        text = research.get(thread) ?? "Please provide the source.";
+    }
+    emit({ method: "item/agentMessage/delta", params: { threadId: thread, delta: text } });
+    if (prompt === "Hold") return;
+    const status = prompt === "Fail" ? "failed" : "completed";
+    emit({ method: "turn/completed", params: { threadId: thread, turn: { id: turn, status } } });
+}
+
 const input = lines();
 for (;;) {
     const next = input.next();
@@ -217,8 +247,13 @@ for (;;) {
     } else if (method === "thread/start") {
         record(`thread-params:${JSON.stringify(message.params ?? {})}`);
         threads += 1;
-        const thread = MODE === "parallel" ? `thread-${threads}` : THREAD;
+        const thread = MODE === "parallel" || MODE === "research" ? `thread-${threads}` : THREAD;
         emit({ id: requestID, result: { thread: { id: thread } } });
+    } else if (method === "thread/inject_items") {
+        record(`history-params:${JSON.stringify(message.params ?? {})}`);
+        emit({ id: requestID, result: {} });
+    } else if (method === "turn/start" && MODE === "research") {
+        researchTurn(message);
     } else if (method === "turn/start" && MODE === "api-auth") {
         emit({ method: "turn/started", params: { threadId: THREAD, turn: { id: TURN } } });
         emit({ id: requestID, result: { turn: { id: TURN } } });

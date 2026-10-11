@@ -227,7 +227,7 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   shows its spinner meanwhile, and reopening it resumes the same live state. Only Stop, deleting the
   chat, turning AI off or quitting cut a reply short. A reply is the conversation's, which is
   `AppCore`'s, so closing the window cancels nothing either.
-  Codex chats run side by side too: each request gets its own ephemeral app-server thread, and
+  Codex chats run side by side too: each chat keeps its own ephemeral app-server thread, and
   `CodexTurnRunner` routes every notification and every tool-call question to its turn by
   `threadId`, so a Stop ends only its own. The app-server's server list is fixed at launch, so a
   turn armed with a different one relaunches it and ends the other chats' live threads with a
@@ -609,7 +609,8 @@ window, and every chat action either surface sends — is the nineteenth feature
   `AIToolLoopProvider`, regenerate, and `AIChatSurfacesState`'s one-live-place rule),
   `codex-turn-test` (the Stop path, driven against a stub app-server stalled where Stop races the
   turn ID, plus the MCP launch boundary, one launch for concurrent starts, the elicitation, the
-  rows, the call cap and a custom provider's access without an account),
+  rows, the call cap, a custom provider's access without an account, and when a chat's thread is
+  resumed and when it starts afresh),
   `installed-ai-test` (Claude/Grok/OpenCode/Cursor flags, prompt
   framing, streaming and cleanup, and Claude's private MCP configuration, control channel, round
   cap and managed-policy branch, a reader's variables against Blitz's own, and a set command
@@ -666,10 +667,21 @@ was never the process's to begin with. See [MCP](mcp.md) for what goes on the la
 
 `CodexTurnRunner` is the generation half behind `CodexInstalledProvider`.
 
-It creates an ephemeral thread for each request, injects prior user/assistant messages, and
-streams agent-message deltas, plus `item/started` for the reasoning and web-search items that feed the
-bubble's status line. System messages become developer instructions alongside Blitz's fixed
-boundary, which forbids every tool except the MCP tools an armed turn supplies. Cancellation interrupts the active turn, including one the server has started but
+A chat's request carries its `conversationID`, and the runner keeps that chat's ephemeral thread
+after a reply completes, because the thread holds what the transcript does not: the pages a web
+search read. The next request resumes it only when its history equals what the thread has seen and
+the model, the developer instructions and web search are unchanged, and only on the process that
+holds it, since a relaunched or crashed helper has forgotten it. Anything else starts a fresh
+thread and injects the supplied user/assistant history: a regenerated, failed or stopped reply, a
+transcript trimmed to the context budget, a changed model or setting, or a turn with an
+attachment, which is never kept. Titles and Quick Actions carry no ID and always start fresh. Deleting a chat drops its
+thread, and a reset, a relaunch or the idle shutdown drops them all; nothing of it is persisted.
+
+The runner streams agent-message deltas, plus `item/started` for the reasoning and web-search items
+that feed the bubble's status line. System messages become developer instructions alongside Blitz's
+fixed boundary, which permits only web search when it is on and the MCP tools an armed turn
+supplies, and tells a follow-up to search again rather than ask the reader for a link.
+Cancellation interrupts the active turn, including one the server has started but
 not yet named: Stop arms that thread, and whichever of `turn/started` or the `turn/start` response
 names the turn first spends a single `turn/interrupt` on it.
 

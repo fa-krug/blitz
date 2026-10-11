@@ -39,7 +39,8 @@ final class CodexAppServerClient {
     /// The command the last launch ran, kept after it stops so Settings can still name it.
     private(set) var executable: URL?
     private var process: Process?
-    private var processID: UUID?
+    /// Names the live process, so a thread kept from an earlier one is never resumed on this one.
+    private(set) var processID: UUID?
     private var input: FileHandle?
     private var outputBuffer = Data()
     private var stderrBuffer = Data()
