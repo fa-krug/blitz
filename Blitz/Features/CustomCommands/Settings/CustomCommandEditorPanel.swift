@@ -65,9 +65,13 @@ struct CustomCommandEditorPanel: View {
                     .settingsEditorTextArea(height: Theme.Size.editorTextHeight)
             }
 
-            Text("Example: /usr/bin/pmset displaysleepnow")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Example: /usr/bin/pmset displaysleepnow")
+                    .font(.caption.monospaced())
+                Text("Start with a #! line, such as #!/bin/bash, to run it in another interpreter.")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
 
             workingDirectoryField
 
@@ -76,7 +80,7 @@ struct CustomCommandEditorPanel: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 optionToggle(
                     "Load shell environment", isOn: $loadsShellEnvironment,
-                    detail: "Resolves aliases, functions and PATH. Slower to start.")
+                    detail: "Sources ~/.zshrc for aliases, functions and PATH. Slower to start.")
                 optionToggle(
                     "Needs confirmation", isOn: $requiresConfirmation,
                     detail: "Ask before running this command.")
