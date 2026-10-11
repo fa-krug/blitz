@@ -104,7 +104,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `dialog-draft-test` |
 | notes and snippets | `notes-*`, `snippets-test` |
-| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-test`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
 | AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |

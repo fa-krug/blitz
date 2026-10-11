@@ -129,6 +129,7 @@ final class QuicklinkCoordinator {
         var context = injector.captureExpansionContext(
             target: target, clipboardHistory: clipboardHistory(), browserTab: browserTab,
             calculate: core.calculatorCoordinator.placeholderEvaluator())
+        var selectionOwed = false
 
         // An unreadable selection is missing, not empty: use the clipboard, or take the field.
         if context.selection.isEmpty, SnippetTemplateEngine.usesSelection(quicklink.link) {
@@ -137,13 +138,14 @@ final class QuicklinkCoordinator {
                 context = context.replacingSelection(with: context.clipboard)
             case .ask:
                 let typed = values[Self.selectionArgument.name] ?? ""
+                selectionOwed = typed.isEmpty
                 if !typed.isEmpty { context = context.replacingSelection(with: typed) }
             }
         }
 
         let expansion = SnippetTemplateEngine.expand(
             text: quicklink.link, context: context, userArguments: values, encoding: encoding)
-        guard expansion.missingArguments.isEmpty else {
+        guard expansion.missingArguments.isEmpty, !selectionOwed else {
             pendingHandlerOverride = handler.map { (quicklink.id, $0) }
             promptForArguments(quicklink, values: values)
             return
@@ -164,7 +166,7 @@ final class QuicklinkCoordinator {
     static let selectionArgument = SnippetTemplateEngine.MissingArgument(
         name: "Selected Text", options: [])
 
-    /// Left empty, "Selected Text" still resolves at open, so it never holds ↵ or earns a red edge.
+    /// Left empty, "Selected Text" still resolves at open, so it never earns a red edge.
     static func requiresValue(_ argument: SnippetTemplateEngine.MissingArgument) -> Bool {
         argument.name != selectionArgument.name
     }

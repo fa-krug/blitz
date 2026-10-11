@@ -130,12 +130,16 @@ given the row's identity, so that memory starts clean on the next quicklink. The
 glyph, then the chips, right after the typed text — and `.besideSearchField` on Search Quicklinks,
 where the field stays a filter with its prompt intact and the row below already carries the glyph.
 
-**"Selected Text" is asked for up front, not after a failed read.** A chip cannot capture a selection,
-so the field appears whenever the link reads `{selection}` and the setting is `.ask`. Left empty it
-changes nothing — a selection the frontmost app *does* expose is still used — and only a typed value
-replaces it. So it is never owed: `QuicklinkCoordinator.requiresValue` keeps it out of the first
-incomplete field, and ↵ opens a selected-text link at once instead of focusing the empty chip first. That
-is what lets the strip be drawn without capturing anything.
+**"Selected Text" is offered up front, but owed only after a failed read.** A chip cannot capture a
+selection, so the field appears whenever the link reads `{selection}` and the setting is `.ask`. Left
+empty it changes nothing — a selection the frontmost app *does* expose is still used — and only a typed
+value replaces it. So ordinarily it is not owed: `QuicklinkCoordinator.requiresValue` keeps it optional,
+and ↵ opens a selected-text link at once instead of focusing the empty chip first, which is what lets
+the strip be drawn without capturing anything. When that read comes back empty and the chip is empty
+too, the open never runs with nothing in its place: it lands on Search Quicklinks like any other
+missing value, and while `pendingArgumentEntryID` names the row, `QuicklinkArgumentsAccessory` counts
+the chip as the first incomplete field, so the caret goes there. Values already typed and a one-shot
+handler survive the prompt.
 
 `openQuicklink(id:forcingDefaultApp:values:)` is the single funnel, and it captures the expansion
 context on **every** call rather than holding one across a session, so `{clipboard}`, `{selection}` and
@@ -350,4 +354,10 @@ one turns the feature on — the switch grants no permission class.
 
 ```sh
 ./Scripts/run-tests.sh quicklink-test
+./Scripts/run-tests.sh quicklink-coordinator-test
 ```
+
+`quicklink-coordinator-test` compiles the shipped `QuicklinkCoordinator` and
+`QuicklinkArgumentsAccessory` against inert stand-ins for the palette, the injector and
+`QuicklinkLauncher`, so it covers the open funnel — which values prompt, which open, and which field
+takes the caret — without opening or reading anything real.
