@@ -77,8 +77,8 @@ When a trailing operator keeps a conversion visible, its input is reconstructed 
 display rounding never feeds back into evaluation.
 
 `UnitDef` is an immutable, Sendable reference shared by its aliases and parsed values. The catalog
-stores 150 base definitions as compact text records rather than repeated construction code, then adds
-SI and transfer-rate prefixes once on first use, for 679 aliases. `CalcUnitCatalog` owns this data;
+stores 152 base definitions as compact text records rather than repeated construction code, then adds
+SI and transfer-rate prefixes once on first use, for 685 aliases. `CalcUnitCatalog` owns this data;
 `CalcUnits` owns conversion policy.
 
 Typed arithmetic precedes simple conversion so `1 / 20ms to hz` divides by a duration,
@@ -379,12 +379,23 @@ Order settles the collisions. Time zones run **last** among the named paths, aft
 currency, so `10 cordoba to usd` stays money and `1 cup to ml` stays volume. `cordoba` is the one
 word the zone and currency tables both claim.
 
+## Months and years
+
+As units, `mo` / `month` / `months` and `yr` / `year` / `years` are averages: the Gregorian year of
+365.2425 days and a month of one twelfth of that (30.436875 days). They take fractions, convert both
+ways and join quantity arithmetic: `3 months to days` is `91.310625 day`, `12 months to years` is
+`1 yr`, and a bare `3.5 years` auto-converts to days.
+
+Date arithmetic never uses the averages. `CalcDateTime` runs first and shifts by whole calendar
+months and years through the injected `Calendar`, so `31.1.26 + 1 month` clamps to 28 February.
+
 ## Timespans
 
 `145 mins to timespan` breaks a duration into the units that fit it (`2 hr 25 min`), with zero
-parts dropped. Weeks are the largest step on purpose: a month is not a fixed number of seconds, so
-carrying one would make the answer depend on which month you meant. Only a time unit converts, so
-`10 km to timespan` stays silent.
+parts dropped. Weeks are the largest step on purpose: a calendar month is not a fixed number of
+seconds, so carrying one would make the answer depend on which month you meant. A month or year
+*input* converts at its average, so `1 month to timespan` is `4 wk 2 day 10 hr 29 min 6 s`. Only a
+time unit converts, so `10 km to timespan` stays silent.
 
 ## Workdays
 
@@ -591,6 +602,13 @@ When the launcher or Calculator History query evaluates to a result the card is 
 the list (flat selection index 0, shifting rows by one) and Enter copies the answer + records it to
 `CalculatorHistoryStore`; ⇧⌘↵ copies the whole calculation. The palette closes on a copy, so each one
 confirms with a **Copied result** / **Copied calculation** / **Copied expression** pill.
+
+⌘↵ (**Put Answer in Search Bar**) records the answer too, then `PaletteState.rewriteQuery` makes its
+copy text the query with the caret after it, so the next step chains on: `2^10`, ⌘↵, ` * 2`. Only a
+`canChain` answer offers it. `CalcEngine` clears the flag on every `CalcDateTime` and `CalcTimeZone`
+answer, because a clock typed back reads as local time; `CalcQuantity` clears it on a boolean and
+`CalcPercent` on a ratio. In Calculator History ⌘↵ on a stored entry still copies its expression, and
+the history search also matches an entry's ungrouped answer, so the rewritten query finds its row.
 
 ## Number format
 

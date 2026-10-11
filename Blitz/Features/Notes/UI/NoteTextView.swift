@@ -101,13 +101,38 @@ final class NoteTextView: NSTextView, InjectableTextView {
         super.insertBacktab(sender)
     }
 
-    /// A formatting chord is always ours while rendering, even when it has nothing to do.
+    /// ⌘Z, ⇧⌘Z and, while rendering, a formatting chord are always ours, even with nothing to do.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard rendersMarkdown, window?.firstResponder === self, let action = Self.chord(for: event) else {
+        guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
+        if let redo = Self.undoChord(for: event) {
+            if !event.isARepeat { undoOrRedo(redo: redo) }
+            return true
+        }
+        guard rendersMarkdown, let action = Self.chord(for: event) else {
             return super.performKeyEquivalent(with: event)
         }
         if !event.isARepeat { perform(action) }
         return true
+    }
+
+    /// A non-activating panel never reaches the main menu's Edit items, so ⌘Z is answered here.
+    private func undoOrRedo(redo: Bool) {
+        breakUndoCoalescing()
+        if redo {
+            editorUndoManager?.redo()
+        } else {
+            editorUndoManager?.undo()
+        }
+    }
+
+    /// True for ⇧⌘Z, false for ⌘Z, nil for any other chord.
+    private static func undoChord(for event: NSEvent) -> Bool? {
+        guard event.charactersIgnoringModifiers?.lowercased() == "z" else { return nil }
+        switch event.modifierFlags.intersection([.command, .shift, .option, .control]) {
+        case [.command]: return false
+        case [.command, .shift]: return true
+        default: return nil
+        }
     }
 
     override func paste(_ sender: Any?) {

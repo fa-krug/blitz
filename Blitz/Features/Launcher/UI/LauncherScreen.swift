@@ -353,6 +353,9 @@ struct LauncherScreen: PaletteScreen {
             core.contactsCoordinator.call(contact)
             return true
         }
+        if case .calc(let result) = row(at: selection) {
+            return core.calculatorCoordinator.putAnswerInSearchBar(result)
+        }
         guard let app = entry(at: selection), app.canRevealInFinder else { return false }
         core.launcherCoordinator.showInFinder(app)
         return true

@@ -106,11 +106,14 @@ enum ShellCommandRunner {
         guard let directory = resolvedWorkingDirectory(workingDirectory) else {
             return ShellCommandResult(termination: .launchFailed(missingDirectory(workingDirectory)))
         }
+        guard let launch = launch(for: command) else {
+            return ShellCommandResult(termination: .launchFailed(unwritableScript))
+        }
+        defer { launch.removeScript() }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
         process.arguments = shellArguments(
-            command: command, arguments: arguments,
-            loadingShellEnvironment: loadingShellEnvironment)
+            launch, arguments: arguments, loadingShellEnvironment: loadingShellEnvironment)
         process.currentDirectoryURL = URL(fileURLWithPath: directory)
         // Lets a shell config skip slow sections when Blitz is the caller.
         process.environment = ProcessInfo.processInfo.environment.merging(["BLITZ": "1"]) { _, new in
@@ -148,32 +151,24 @@ enum ShellCommandRunner {
         workingDirectory: String? = nil, columns: Int = 80, rows: Int = 24
     ) -> TerminalSession {
         let nonce = UUID().uuidString
-        let directory = resolvedWorkingDirectory(workingDirectory)
-        let terminal = directory.flatMap {
-            PseudoTerminal.spawn(
+        guard let directory = resolvedWorkingDirectory(workingDirectory) else {
+            return failedTerminal(missingDirectory(workingDirectory))
+        }
+        guard let launch = launch(for: command) else { return failedTerminal(unwritableScript) }
+        guard
+            let terminal = PseudoTerminal.spawn(
                 executable: shell,
                 arguments: [
                     "-fc",
                     terminalScript(nonce: nonce, loadingShellEnvironment: loadingShellEnvironment),
-                    "blitz", command,
+                    launch.name, launch.command,
                 ] + arguments,
                 environment: terminalEnvironment(
                     inheriting: ProcessInfo.processInfo.environment, locale: .current),
-                workingDirectory: $0, columns: columns, rows: rows)
-        }
-
-        guard let terminal else {
-            let reason =
-                directory == nil
-                ? missingDirectory(workingDirectory) : "The shell could not be started."
-            return TerminalSession(
-                events: AsyncStream { continuation in
-                    continuation.yield(
-                        .commandFinished(ShellCommandResult(termination: .launchFailed(reason))))
-                    continuation.yield(.ended)
-                    continuation.finish()
-                },
-                send: { _ in }, resize: { _, _ in }, stop: {}, hangUp: {})
+                workingDirectory: directory, columns: columns, rows: rows)
+        else {
+            launch.removeScript()
+            return failedTerminal("The shell could not be started.")
         }
 
         let state = TerminalState()
@@ -183,7 +178,9 @@ enum ShellCommandRunner {
             terminal.hangUp()
         }
         queue.async {
-            drain(terminal, nonce: nonce, directory: directory ?? "", state: state, into: outbox)
+            drain(
+                terminal, nonce: nonce, directory: directory, script: launch, state: state,
+                into: outbox)
         }
         return TerminalSession(
             // A cancelled reader leaves nobody to show the shell, so it goes like a closed tab.
@@ -205,6 +202,17 @@ enum ShellCommandRunner {
             hangUp: hangUp)
     }
 
+    nonisolated private static func failedTerminal(_ reason: String) -> TerminalSession {
+        TerminalSession(
+            events: AsyncStream { continuation in
+                continuation.yield(
+                    .commandFinished(ShellCommandResult(termination: .launchFailed(reason))))
+                continuation.yield(.ended)
+                continuation.finish()
+            },
+            send: { _ in }, resize: { _, _ in }, stop: {}, hangUp: {})
+    }
+
     /// `trap :` and not `trap ''`: a handler resets on exec, so ⌃C still reaches the command.
     nonisolated static func terminalScript(nonce: String, loadingShellEnvironment: Bool) -> String {
         // Without `+m` an interactive zsh takes the terminal's foreground and leaves it stopped.
@@ -212,7 +220,7 @@ enum ShellCommandRunner {
         return """
             __blitz_command=$1; shift
             trap : INT
-            BLITZ=1 /bin/zsh \(flags) "$__blitz_command" blitz "$@"
+            BLITZ=1 /bin/zsh \(flags) "$__blitz_command" "$0" "$@"
             __blitz_status=$?
             trap - INT
             printf '\\e]\(markerCode);\(nonce);%d\\a' $__blitz_status
@@ -245,8 +253,8 @@ enum ShellCommandRunner {
 
     /// The one reader of the terminal, so the scanner needs no lock.
     nonisolated private static func drain(
-        _ terminal: PseudoTerminal, nonce: String, directory: String, state: TerminalState,
-        into outbox: TerminalOutbox
+        _ terminal: PseudoTerminal, nonce: String, directory: String, script: Launch,
+        state: TerminalState, into outbox: TerminalOutbox
     ) {
         // The kernel's spelling, or the first lookup reports `/tmp` moving to `/private/tmp`.
         let resolved = realpath(directory, nil).map { path in
@@ -267,6 +275,7 @@ enum ShellCommandRunner {
         var buffer = [UInt8](repeating: 0, count: readSize)
 
         func finishCommand(status: Int32) {
+            script.removeScript()
             guard let termination = state.finishCommand(status: status) else { return }
             outbox.post(.commandFinished(ShellCommandResult(termination: termination)))
         }
@@ -478,12 +487,41 @@ enum ShellCommandRunner {
         "The folder “\(path ?? "")” no longer exists."
     }
 
+    private static let unwritableScript = "The script could not be written."
+
+    /// What zsh is handed: the text and its `$0`, or for a `#!` command an `exec` of its file.
+    private struct Launch: Sendable {
+        let command: String
+        let name: String
+        let script: URL?
+
+        func removeScript() {
+            guard let script else { return }
+            try? FileManager.default.removeItem(at: script)
+        }
+    }
+
+    /// The kernel reads the `#!` line, so the text reaches the interpreter it names unparsed.
+    nonisolated private static func launch(for command: String) -> Launch? {
+        guard command.hasPrefix("#!") else {
+            return Launch(command: command, name: "blitz", script: nil)
+        }
+        let script = FileManager.default.temporaryDirectory
+            .appending(path: "blitz-command-script-\(UUID().uuidString)")
+        guard
+            FileManager.default.createFile(
+                atPath: script.path, contents: Data(command.utf8),
+                attributes: [.posixPermissions: 0o700])
+        else { return nil }
+        return Launch(command: #"exec "$0" "$@""#, name: script.path, script: script)
+    }
+
     /// Values follow as `$1`, `$2`, never spliced where zsh would re-parse them as syntax.
     nonisolated private static func shellArguments(
-        command: String, arguments: [String], loadingShellEnvironment: Bool
+        _ launch: Launch, arguments: [String], loadingShellEnvironment: Bool
     ) -> [String] {
         // zsh reads `.zshrc` only for interactive shells, so `-l` alone sees no aliases.
-        [loadingShellEnvironment ? "-ilc" : "-lc", command, "blitz"] + arguments
+        [loadingShellEnvironment ? "-ilc" : "-lc", launch.command, launch.name] + arguments
     }
 
     /// A temp file, not a `Pipe`: nothing drains a pipe until the command exits.
