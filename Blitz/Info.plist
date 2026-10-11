@@ -66,7 +66,7 @@
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Blitz uses automation to perform system actions you explicitly run, and to read or switch to a tab in Safari or a Chromium browser when a snippet, quicklink or extension asks for it.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Blitz shows a camera preview so you can check yourself, and take a photo to the clipboard.</string>
+	<string>Blitz shows a camera preview so you can check yourself, take a photo to the clipboard, or scan a QR code.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Blitz reads today's and tomorrow's events so you can join a meeting from the palette.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

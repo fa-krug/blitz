@@ -698,6 +698,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Taking a photo closes the panel and puts a PNG on the clipboard that pastes as the mirrored frame
 - With two cameras attached, Switch Camera swaps without the stage going black, and the next open
   starts on the camera switched to
+- Scan QR Code shows the hint until a code is in frame; a URL code offers Open on ↵ and Copy beside
+  it, a plain-text or `WIFI:` code offers only Copy, and either action closes the panel
+- Aiming at a second code replaces the first; closing a scan and opening Open Camera inside the fade
+  leaves no camera light behind once both panels are gone
 
 ### Reminders
 

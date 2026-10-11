@@ -647,8 +647,8 @@ leaves, and `fadeIn`/`fadeOut` for the panels; Reduce Motion removes all of it. 
 
 ## The camera preview panel
 
-`CameraPanel` is a borderless surface beside the dialog, shared by Open Camera and the calendar's
-join preview. It takes the same recipe — `panelScrim`, then `GlassEffectView`, then the clip — and the same optical lift a
+`CameraPanel` is a borderless surface beside the dialog, shared by Open Camera, Scan QR Code and
+the calendar's join preview. It takes the same recipe — `panelScrim`, then `GlassEffectView`, then the clip — and the same optical lift a
 dialog takes, but sits at `.floating` rather than `.dialog` so a failure report still lands on
 top of it.
 

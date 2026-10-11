@@ -609,7 +609,7 @@ id is what keeps "which pane owns this" out of the entry-ID namespace.
 Fourteen panes own commands today — AI, Quick Actions, File Search, Notes, Snippets, Navigation,
 Window Management, Clipboard, Emoji, Calendar, Reminders, Contacts, Quicklinks and Extensions. What
 is left in Settings › Commands is the set no feature switch governs: Calculator History, Open Camera,
-the three backup commands, Check for Updates, Show Welcome Tour, Blitz Settings, About, Support and
+Scan QR Code, the three backup commands, Check for Updates, Show Welcome Tour, Blitz Settings, About, Support and
 Quit.
 
 A pane's list is also its display order, so `CommandID`'s declaration order is grouped by owner.

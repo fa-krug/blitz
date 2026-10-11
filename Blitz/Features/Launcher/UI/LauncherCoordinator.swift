@@ -218,6 +218,9 @@ final class LauncherCoordinator {
         case .openCamera:
             dismissPalette()
             Task { await core.cameraCoordinator.show() }
+        case .scanQRCode:
+            dismissPalette()
+            Task { await core.cameraCoordinator.show(.scan) }
         case .define:
             core.dictionaryCoordinator.show()
         case .extensionStore:
