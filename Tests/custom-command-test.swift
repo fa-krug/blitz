@@ -21,6 +21,26 @@ struct CustomCommandTests {
             }
         }
 
+        // MARK: Root Search migration
+
+        let legacySuite = "de.fa-krug.blitz.custom-command-migration-tests"
+        let legacyDefaults = isolatedDefaults(legacySuite)
+        let legacy = CustomCommand(name: "Legacy", command: "/usr/bin/true", showsInRootSearch: false)
+        if let encoded = try? JSONEncoder().encode([legacy]),
+            var records = try? JSONSerialization.jsonObject(with: encoded) as? [[String: Any]]
+        {
+            records[0].removeValue(forKey: "showsInRootSearch")
+            legacyDefaults.set(
+                try? JSONSerialization.data(withJSONObject: records), forKey: "customCommands")
+        }
+        let migrated = CustomCommandStore(defaults: legacyDefaults).commands
+        check("a command saved before the flag still loads", migrated.map(\.name) == ["Legacy"])
+        check("a migrated command shows in root search", migrated.first?.showsInRootSearch == true)
+        check(
+            "the migration marks itself done",
+            legacyDefaults.bool(forKey: "customCommandsRootSearchMigrated"))
+        discardSuite(legacySuite, legacyDefaults)
+
         // MARK: Store
 
         let store = CustomCommandStore(defaults: defaults)

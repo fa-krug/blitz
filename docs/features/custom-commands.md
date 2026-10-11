@@ -42,6 +42,9 @@ bundle-scoped `UserDefaults`. Each command has a stable UUID. Its launcher entry
 `custom-command:<uuid>`, and its hotkey uses
 `hotkey.customCommand.<uuid>` plus the `boundCustomCommandIDs` index.
 
+Commands saved before `showsInRootSearch` existed are rewritten once on first load to carry
+`true`; `customCommandsRootSearchMigrated` marks it done, and the decoder itself stays strict.
+
 Editing preserves the UUID and therefore its alias, favorite, visibility, and hotkey references. The
 command's Settings page's **Enabled** switch is the only writer of `isEnabled`, so the editor panel
 carries the flag through a save rather than offering a second control for it. Deleting

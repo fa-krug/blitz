@@ -139,11 +139,30 @@ final class CustomCommandStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        Self.migrateRootSearchFlag(in: defaults)
         let decoded =
             defaults.data(forKey: Self.defaultsKey)
             .flatMap { try? JSONDecoder().decode([CustomCommand].self, from: $0) } ?? []
         commands = Self.sanitized(decoded)
         if commands != decoded { persist() }
+    }
+
+    private static let rootSearchMigrationKey = "customCommandsRootSearchMigrated"
+
+    /// One-time: commands saved before `showsInRootSearch` existed are shown in Root Search.
+    static func migrateRootSearchFlag(in defaults: UserDefaults) {
+        guard !defaults.bool(forKey: rootSearchMigrationKey) else { return }
+        if let data = defaults.data(forKey: defaultsKey),
+            var records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        {
+            for index in records.indices where records[index]["showsInRootSearch"] == nil {
+                records[index]["showsInRootSearch"] = true
+            }
+            if let migrated = try? JSONSerialization.data(withJSONObject: records) {
+                defaults.set(migrated, forKey: defaultsKey)
+            }
+        }
+        defaults.set(true, forKey: rootSearchMigrationKey)
     }
 
     func command(id: UUID) -> CustomCommand? {
