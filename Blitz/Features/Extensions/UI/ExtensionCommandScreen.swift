@@ -58,6 +58,7 @@ struct ExtensionCommandScreen: PaletteScreen {
     /// One ⌘K row and what it does: an `ActionPanel` action, a toast button or a failure's remedy.
     private struct MenuEntry {
         var item: ExtensionActionItem
+        var keyShortcut: ExtensionKeyShortcut?
         let run: () -> Void
     }
 
@@ -94,18 +95,20 @@ struct ExtensionCommandScreen: PaletteScreen {
                 var item = pair.1
                 item.shortcut = caps[index]
                 let handler = pair.0.handler
-                return MenuEntry(item: item) {
+                return MenuEntry(item: item, keyShortcut: pair.0.shortcut) {
                     if let handler { extensions.dispatch(handler: handler) }
                 }
             }
         for (index, action) in toastActions.enumerated() {
+            let keyShortcut = ExtensionKeyShortcut(action.shortcut)
             entries.append(
                 MenuEntry(
                     item: ExtensionActionItem(
                         title: action.title,
                         icon: ExtensionImage.Resolved(source: .symbol("bell")),
-                        shortcut: ExtensionKeyShortcut(action.shortcut)?.caps.joined(),
+                        shortcut: keyShortcut?.caps.joined(),
                         startsSection: index == 0 && !entries.isEmpty),
+                    keyShortcut: keyShortcut,
                     run: { extensions.runToastAction(token: action.token) }))
         }
         return entries
@@ -206,7 +209,12 @@ struct ExtensionCommandScreen: PaletteScreen {
                 AnyView(
                     ExtensionActionsPanel(
                         header: header, items: items, selection: menuSelection,
-                        onActivate: onActivate))
+                        onActivate: onActivate,
+                        shortcutRow: { key, modifiers in
+                            filtered.firstIndex {
+                                $0.keyShortcut?.matches(key: key, modifiers: modifiers) == true
+                            }
+                        }))
             },
             activate: { index in filtered[index].run() },
             clipPath: { bounds, metrics, _ in

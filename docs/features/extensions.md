@@ -441,7 +441,10 @@ screens hold (see [palette.md](palette.md)).
   the primary ↵ action and, outside a Form, the second is ⌘↵ unless another action declares
   `cmd+return` itself; the panel draws ↵ and ⌘↵ on the rows they fire (`ExtensionActionKeys`), and a
   Form draws ⌘↵ on its submit action alone. An action's own `shortcut` is matched against modified
-  keystrokes. An empty List or Grid acts through its `EmptyView`'s `actions`.
+  keystrokes with the panel open or closed; while it is open the panel's search field has focus, so
+  `ExtensionActionsPanel` matches the chord against its visible rows (a filtered-out action does not
+  fire) after the palette's own menu keys pass on it, and runs the hit as a click would, closing the
+  panel. An empty List or Grid acts through its `EmptyView`'s `actions`.
   `ExtensionCommandScreen.menuContent` hands the whole panel to the palette as a
   `PaletteMenuContent`, so the palette never learns the row type — and a row's handler is taken from
   the flattened `ExtensionAction` list rather than the drawn rows, so ↵ and the panel fire the same
