@@ -316,6 +316,21 @@ module.exports.default = () => {
 };
 `;
 
+// apple-passwords lazily requires `@raycast/api` through `createRequire`, which used to throw.
+const createRequireSource = `
+import { createRequire } from "module";
+import { Detail } from "@raycast/api";
+
+const requireFromHere = createRequire("/fixtures/package.json");
+
+export default function Command() {
+  const api = requireFromHere("@raycast/api");
+  const path = requireFromHere("node:path");
+  const parts = [String(api.Detail === Detail), path.join("a", "b"), requireFromHere.resolve("node:path")];
+  return <Detail markdown={parts.join("\\n")} />;
+}
+`;
+
 // Bundled HTTP clients (axios) construct and probe a Response at module scope, before any component
 // mounts — a host-shaped constructor took the whole command down with them.
 const responseSource = `
@@ -1066,6 +1081,13 @@ export async function runFixtures() {
     const result = harness.call("globalThis.__lazyEmitter");
     check("every method tolerates missing state", JSON.stringify(result?.untouched) === "[false,0,0,0,10]", harness.state.failures.join(" | ") || JSON.stringify(result?.untouched));
     check("the first listener creates the state", JSON.stringify(result?.seen) === "[1]" && JSON.stringify(result?.names) === '["x"]');
+  });
+
+  await run("createRequire resolves through the module registry", createRequireSource, "view", async (harness) => {
+    const markdown = findNode(harness.state.trees.at(-1), "Detail")?.props.markdown.split("\n") ?? [];
+    check("lazily requires @raycast/api", markdown[0] === "true", harness.state.failures.join(" | ") || markdown.join(","));
+    check("resolves a Node builtin", markdown[1] === "a/b", markdown[1]);
+    check("resolve names the request", markdown[2] === "node:path", markdown[2]);
   });
 
   await run("Response takes the Web spec's constructor", responseSource, "no-view", async (harness) => {

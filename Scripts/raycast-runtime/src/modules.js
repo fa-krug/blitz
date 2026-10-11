@@ -23,6 +23,12 @@ export function requireModule(name) {
   );
 }
 
+// apple-passwords lazily requires `@raycast/api` through it; the base path never matters here.
+const nodeRequire = (name) => requireModule(name);
+nodeRequire.resolve = (name) => String(name);
+nodeRequire.cache = {};
+nodeModules.module.createRequire = () => nodeRequire;
+
 /// Evaluate one CJS bundle. `filename`/`dirname` matter: extensions resolve bundled assets relative
 /// to `__dirname`, and `environment.assetsPath` points at the same directory.
 export function evaluateCommonJS(code, filename, dirname) {

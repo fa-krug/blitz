@@ -812,7 +812,8 @@ each async form reporting the child's real `pid` for `process.kill` — Timers p
 directions, plus `create*` streams that buffer until `end`), `http`/`https` (`request`, `get` and `Agent`, buffered over the same URLSession bridge
 as `fetch`), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
 `finished`, plus `stream/promises` and `stream/web`), `util`, `events`, `buffer`, `url`, `querystring`, `punycode`, `assert`,
-`string_decoder`, `timers`. Every other built-in resolves to a stub that throws only when used, so a
+`string_decoder`, `timers`, and `module`'s `createRequire`, whose `require` resolves through the
+same registry as a bundle's own — apple-passwords loads `@raycast/api` lazily that way. Every other built-in resolves to a stub that throws only when used, so a
 bundle that merely references `http2` or `domain` still loads. Those stubs are manufactured lazily,
 but each module still has to enumerate its members as own keys: esbuild's `__toESM` — what every
 namespace or named import compiles to — snapshots own keys instead of reading through the proxy, and
