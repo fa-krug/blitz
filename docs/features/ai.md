@@ -453,6 +453,9 @@ menu's own chords, and dies with the window.
   (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin and Delete.
   `AIChatActionsMenu` builds it per open from the chat's state, as an `NSMenu` hung under the
   toolbar button whether the click or ⌘K opened it.
+- **Escape closes the window** (`closesOnEscape`), the composer focused or not. An open menu, Find
+  in Chat or a rename takes Escape first, and the sidebar clears a non-empty filter before the next
+  Escape closes. Closing keeps the draft and leaves a reply streaming.
 
 - **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat, Pinned
   first and then bucketed by day like Clipboard. The open chat is the selected row. A new chat has
@@ -594,6 +597,9 @@ window, and every chat action either surface sends — is the nineteenth feature
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
 - Collapse the sidebar with the toolbar button; ⌘N and ⌘Q (Close Window) still work, and ⌘Q with
   Settings in front closes Settings instead.
+- Escape with the composer focused closes AI Chat; reopening shows the draft, and a reply that was
+  streaming has kept going. With a sidebar filter typed, the first Escape clears it, the second
+  closes; a rename field and Find in Chat each cancel before a further Escape closes.
 - Harnesses: `ai-provider-test` (endpoints, request bodies, stream decoding including leading
   think tags across content and SSE splits, persistence repair,
   Codex framing, on-device routing, the two MCP launch encodings and the two consent channels, the
