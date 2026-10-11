@@ -97,8 +97,8 @@ to its entitlement, including resources Blitz does not use. That grants nothing 
 is there so a future feature that adds the usage string but forgets the entitlement fails the release
 instead of shipping a prompt that can never appear.
 
-Nothing else is needed: the only library `dlopen` loads is Apple's own IOBluetooth — the other
-`dlsym` lookups resolve symbols already in the process — so library validation is left on, and `node`, `ray` and shell commands are separate processes it never reaches. Bluetooth has no
+Nothing else is needed: the only libraries `dlopen` loads are Apple's own IOBluetooth and the private
+`login` framework (Lock Screen) — the other `dlsym` lookups resolve symbols already in the process — so library validation is left on, and `node`, `ray` and shell commands are separate processes it never reaches. Bluetooth has no
 hardened-runtime entitlement.
 
 `./Scripts/verify-signature.sh <path-to-.app>` asserts all of this — the runtime flag on the app *and*

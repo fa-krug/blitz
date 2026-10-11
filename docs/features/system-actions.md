@@ -43,8 +43,10 @@ at call time; an absent key counts as on, because Finder writes it only once the
 
 Public AppKit, CoreAudio and workspace APIs are preferred. Actions with no stable public API use
 fixed system tools, Apple Events (off the main actor, since a cold Finder answers in seconds),
-Accessibility, or a dynamically resolved Bluetooth power API. Toggle System Appearance changes
-macOS; Blitz follows it only while its own Appearance is System.
+Accessibility, or dynamically resolved Bluetooth power and screen-lock APIs. **Lock Screen never
+synthesizes ⌃⌘Q**: a global hotkey fires on key-down, so its still-held modifiers would merge into
+the chord. Toggle System Appearance changes macOS; Blitz follows it only while its own Appearance
+is System.
 
 Restart and Shut Down pass System Events `with state saving preference`, so they follow macOS's
 "Reopen windows when logging back in" box; without it the system always saves window state.
