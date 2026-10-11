@@ -21,6 +21,10 @@ final class PalettePanel: NSPanel {
     var onHeaderFieldBoundaryArrow: ((HeaderFieldBoundary) -> Bool)?
     /// A bare space with the caret after the last character, before it is typed into the text.
     var onTrailingSpace: (() -> Bool)?
+    /// Set only while a menu is open; a press anywhere in the palette closes it.
+    var onDismissMenu: (() -> Void)?
+    /// The button whose press dismissed a menu, so its drag and release never reach SwiftUI.
+    private var dismissingMouseButton: Int?
     /// Arms hover from `sendEvent`, the one place both event streams pass through.
     weak var paletteState: PaletteState? {
         didSet {
@@ -168,6 +172,7 @@ final class PalettePanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        if consumeMenuDismissal(event) { return }
         switch event.type {
         case .mouseMoved: paletteState?.notePointerMoved(to: NSEvent.mouseLocation)
         // Keys and scrolling both slide rows under the pointer without it choosing any of them.
@@ -222,6 +227,27 @@ final class PalettePanel: NSPanel {
         }
         super.sendEvent(event)
     }
+
+    /// The whole press, not just its down: a release reaching a row beneath would activate it.
+    private func consumeMenuDismissal(_ event: NSEvent) -> Bool {
+        switch event.type {
+        case .leftMouseDown, .rightMouseDown:
+            dismissingMouseButton = nil
+            guard paletteState?.menuOpen == true, let onDismissMenu else { return false }
+            dismissingMouseButton = event.buttonNumber
+            onDismissMenu()
+            return true
+        case .leftMouseDragged, .rightMouseDragged, .leftMouseUp, .rightMouseUp:
+            guard dismissingMouseButton == event.buttonNumber else { return false }
+            if event.type == .leftMouseUp || event.type == .rightMouseUp {
+                dismissingMouseButton = nil
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
     init<Content: View>(rootView: Content) {
         super.init(
             contentRect: NSRect(

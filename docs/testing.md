@@ -352,6 +352,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A long menu opens with unchanged row insets; while scrolling, rows can reach the panel edges
 - A click in the palette but outside its menu closes only the menu; a click outside the palette
   closes both, regardless of the menu query; the next summon accepts typing immediately
+- Click the menu's search field, pause, then dismiss by clicking the other footer control: the next
+  click opens that control's menu once and leaves it open, even when the clicks form a double click.
+  A right click on a row while a menu is open closes the menu without opening one on the row
 - Footer menus are about 30pt wider; their row hover keeps the shared 10pt menu-row corner
 - Tab toggles launcher ↔ clipboard; bare Backspace on an empty query backs out of a sub-screen
 - Launching an app focuses it; escaping the palette returns focus to the app you came from
