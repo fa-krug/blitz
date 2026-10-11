@@ -136,7 +136,7 @@ Two host-call flavours:
 | `Service/ExtensionRuntime.swift` | the `JSContext`, host-function installation, timers, exception reporting |
 | `Service/ExtensionHostBridge.swift` | main-actor host APIs (clipboard, storage, cache, window, toasts, system, oauth) |
 | `Service/ExtensionNodeShims.swift` | the synchronous `fs` / `os` / `child_process` / `crypto` / `zlib` services |
-| `Service/ExtensionFetcher.swift` | `fetch` over `URLSession`, plus collecting async `exec` children and the shared PATH resolver |
+| `Service/ExtensionFetcher.swift` | `fetch` over `URLSession` or a Unix socket, plus collecting async `exec` children and the shared PATH resolver |
 | `Service/ExtensionWebSocketBridge.swift` | `URLSessionWebSocketTask` connections, opened and read from JS |
 | `Service/ExtensionNameResolver.swift` | `getaddrinfo`, which is how a `.local` name resolves |
 | `Service/ExtensionOAuthKeychain.swift` | secure OAuth token storage backed by macOS Keychain |
@@ -828,7 +828,7 @@ the descriptor calls `tar` unpacks through), `os`,
 each async form reporting the child's real `pid` for `process.kill` — Timers pauses that way),
 `crypto` (hashes, HMAC, PBKDF2, AES-CBC/ECB, random, UUID), `zlib` (gzip/zlib/raw deflate, both
 directions, plus `create*` streams that buffer until `end`), `http`/`https` (`request`, `get` and `Agent`, buffered over the same URLSession bridge
-as `fetch`), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
+as `fetch`, with `socketPath` for Unix-socket HTTP), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
 `finished`, plus `stream/promises` and `stream/web`), `util`, `events`, `buffer`, `url`, `querystring`, `punycode`, `assert`,
 `string_decoder`, `timers`, and `module`'s `createRequire`, whose `require` resolves through the
 same registry as a bundle's own — apple-passwords loads `@raycast/api` lazily that way. Every other built-in resolves to a stub that throws only when used, so a
@@ -893,6 +893,18 @@ follow-redirects inherits with `Writable.call(this)`, so `stream` hands out call
 A request calls it only for an `http.Agent` subclass, which is where axios-cookiejar-support's
 http-cookie-agent reads and writes its jar — Hide My Email is the reference case. URLSession folds
 repeated `Set-Cookie` headers into one line, so the response splits it back into Node's array.
+
+A `socketPath` option selects HTTP over a Unix socket — Docker's dockerode talks to its daemon that
+way, and Docker is the reference case. URLSession has no Unix-socket transport, so `ExtensionFetcher`
+runs `/usr/bin/curl --unix-socket` with its arguments as an argv array, never through a shell. It
+starts with `--disable` and `--noproxy '*'`, so neither `~/.curlrc` nor a proxy shapes the request,
+and `--compressed`, so the body arrives decoded like a URLSession one. The body lands in a private
+scratch directory, removed on return; the status and headers come back as `--write-out` JSON. The
+pipe drain and exit wait run on a Dispatch worker, so a slow daemon never holds a cooperative-pool
+thread, and cancelling the request terminates its curl. A request without `socketPath` never takes
+this path. Curl's exit 7 — nothing listening — becomes `socketUnavailable`, which the bridge also
+shows as a failure toast for a foreground command, once per socket until a request to it succeeds or
+the session ends, so a command polling a stopped daemon does not replay it on every retry.
 
 **WebSockets** — `WebSocket` is a global backed by `URLSessionWebSocketTask`. Swift owns the wire and
 the framing, and JS reads a socket by keeping one `receive` call outstanding, so an inbound message

@@ -125,7 +125,8 @@ on the pipe when it arrives.
 port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: concurrent runs
 from two checkouts would fail each other, and a sign-in in a running Blitz would fail the harness.
 Its Keychain scope is unique to each run and removed on completion. `ext-fetch-test` (inside
-`ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`.
+`ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`, and its Unix-socket ones
+from `Tests/ext-fixtures/unix-server.js` on a socket path unique to each run.
 
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the

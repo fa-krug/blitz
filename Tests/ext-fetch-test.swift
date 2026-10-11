@@ -101,8 +101,159 @@ enum ExtensionFetchTests {
             try await sharedRequests(url, stateFile: stateFile)
             let sharedReleased = await waitForState(stateFile) { $0.closed == $0.opened }
             expect(sharedReleased, "shared transport closes its connections when its owner releases it")
+            try await unixSocketChecks(in: directory)
         } catch {
             expect(false, "HTTP fixture: \(error)")
         }
+    }
+
+    private static func unixSocketChecks(in directory: URL) async throws {
+        let socketPath = "/tmp/blitz-\(UUID().uuidString).sock"
+        let stateFile = directory.appendingPathComponent("unix-state.json")
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("ext-fixtures/unix-server.js")
+        let server = Process()
+        server.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        server.arguments = ["node", fixture.path, stateFile.path, socketPath]
+        server.standardOutput = FileHandle.nullDevice
+        let exit = try server.runObservingExit()
+        defer {
+            if server.isRunning { server.terminate() }
+            exit.wait()
+            try? FileManager.default.removeItem(atPath: socketPath)
+        }
+        guard await waitForState(stateFile, matching: { $0.port != 0 }) else {
+            expect(false, "Unix HTTP fixture starts")
+            return
+        }
+        let fetcher = ExtensionFetcher()
+        func fetch(_ path: String, method: String = "GET", body: Data? = nil) async throws -> [String: Any] {
+            try await fetcher.request(
+                .object([
+                    "url": .string("http://unresolvable.invalid" + path),
+                    "socketPath": .string(socketPath), "method": .string(method),
+                    "headers": .object(["Authorization": .string("socket-token")]),
+                    "bodyBase64": body.map { .string($0.base64EncodedString()) } ?? .null
+                ]))
+        }
+        func body(of result: [String: Any]) -> Data {
+            Data(base64Encoded: result["bodyBase64"] as? String ?? "") ?? Data()
+        }
+
+        let payload = Data(repeating: 255, count: 100_000)
+        let posted = try await fetch("/containers/create?name=fixture", method: "POST", body: payload)
+        let echo = try JSONSerialization.jsonObject(with: body(of: posted)) as? [String: String]
+        expect(posted["status"] as? Int == 201, "Unix HTTP keeps the response status")
+        expect(
+            echo?["path"] == "/containers/create?name=fixture" && echo?["method"] == "POST",
+            "Unix HTTP keeps the API path, query and method")
+        expect(
+            echo?["body"] == String(repeating: "ff", count: payload.count),
+            "Unix HTTP sends a large binary request body")
+        expect(
+            echo?["authorization"] == "socket-token" && echo?["cookie"] == "",
+            "Unix HTTP carries request headers without keeping response cookies")
+        let headers = posted["headers"] as? [String: String]
+        expect(
+            headers?["x-socket-probe"] == "unix" && headers?["set-cookie"]?.contains("b=2") == true,
+            "Unix HTTP keeps response headers, repeated cookies included")
+        let binary = try await fetch("/binary")
+        expect(body(of: binary) == Data([0, 255, 1, 10]), "Unix HTTP decodes a compressed binary body")
+        let missing = try await fetch("/missing")
+        expect(
+            missing["status"] as? Int == 404 && !body(of: missing).isEmpty,
+            "Unix HTTP hands an error status and its body to the extension")
+        let empty = try await fetch("/empty")
+        expect(empty["status"] as? Int == 204 && body(of: empty).isEmpty, "Unix HTTP handles an empty body")
+        let head = try await fetch("/containers/json", method: "HEAD")
+        expect(head["status"] as? Int == 201 && body(of: head).isEmpty, "Unix HTTP handles HEAD")
+
+        try await unixSocketConcurrencyCheck(fetcher, socketPath: socketPath)
+        let cancelled = Task { _ = try await fetch("/hold") }
+        expect(await waitForState(stateFile) { $0.holding == 1 }, "Unix request starts before cancellation")
+        cancelled.cancel()
+        do {
+            try await cancelled.value
+            expect(false, "cancelled Unix request returns cancellation")
+        } catch {
+            expect(error is CancellationError, "cancelled Unix request returns cancellation")
+        }
+        let survivor = try await fetch("/images/json")
+        expect(survivor["status"] as? Int == 201, "Unix transport stays usable after a cancellation")
+        try await unixSocketRuntimeCheck(directory: directory, socketPath: socketPath)
+        expect(
+            await waitForState(stateFile) { $0.opened == $0.closed },
+            "Unix requests close their connections, the cancelled one included")
+
+        do {
+            _ = try await fetcher.request(
+                .object([
+                    "url": .string("http://localhost/containers/json"),
+                    "socketPath": .string(socketPath + ".missing")
+                ]))
+            expect(false, "a missing Unix socket fails rather than falling back to TCP")
+        } catch ExtensionFetcher.FetchError.socketUnavailable(let path) {
+            expect(path.hasSuffix(".missing"), "a missing Unix socket fails rather than falling back to TCP")
+        } catch {
+            expect(false, "a missing Unix socket reports socketUnavailable, not \(error)")
+        }
+    }
+
+    private static func unixSocketConcurrencyCheck(
+        _ fetcher: ExtensionFetcher, socketPath: String
+    ) async throws {
+        let spec = RenderValue.object([
+            "url": .string("http://localhost/slow"), "socketPath": .string(socketPath)
+        ])
+        let requests = (0..<(ProcessInfo.processInfo.activeProcessorCount * 2)).map { _ in
+            Task { _ = try await fetcher.request(spec) }
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        let clock = ContinuousClock()
+        let start = clock.now
+        await Task.detached {}.value
+        expect(
+            start.duration(to: clock.now) < .seconds(1),
+            "slow Unix requests leave the cooperative pool free")
+        for request in requests { try await request.value }
+    }
+
+    private static func unixSocketRuntimeCheck(directory: URL, socketPath: String) async throws {
+        let (runtime, host, recorder) = ExtensionTests.makeRuntime()
+        defer { runtime.shutdown() }
+        try await runtime.boot(config: .current(supportDirectory: directory))
+        let code = """
+            exports.default = async () => {
+              const assert = require("assert"), http = require("http");
+              const api = require("@raycast/api");
+              const body = await new Promise((resolve, reject) => {
+                const req = http.request({ socketPath: api.getPreferenceValues().socketPath,
+                  path: "/containers/json?all=1" }, (res) => {
+                  assert.equal(res.statusCode, 201);
+                  assert.equal(res.headers["set-cookie"].length, 2);
+                  const chunks = [];
+                  res.on("data", (chunk) => chunks.push(chunk));
+                  res.on("end", () => resolve(Buffer.concat(chunks).toString()));
+                });
+                req.on("error", reject);
+                req.end();
+              });
+              assert.equal(JSON.parse(body).path, "/containers/json?all=1");
+              await api.showHUD("Docker socket passed");
+            };
+            """
+        await runtime.start(
+            session: "socket", code: code, file: directory.appendingPathComponent("socket.js"),
+            mode: .noView,
+            context: ExtensionTests.launchContext(
+                mode: .noView, preferences: ["socketPath": .string(socketPath)]))
+        for _ in 0..<100 {
+            if recorder.finished || !recorder.failures.isEmpty { break }
+            await ExtensionTests.settle(20)
+        }
+        expect(
+            host.huds == ["Docker socket passed"],
+            "http.request in JavaScriptCore reaches a real Unix socket and reads its response")
+        await runtime.stop(session: "socket")
     }
 }

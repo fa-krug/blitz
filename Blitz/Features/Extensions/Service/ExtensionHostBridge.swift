@@ -133,6 +133,8 @@ final class ExtensionHostBridge: ExtensionHostAPI {
     private let clipboardStore: ClipboardStore
     private let fetcher: ExtensionFetcher
     private let sockets = ExtensionWebSocketBridge()
+    /// A command polling a stopped daemon would otherwise replay the same toast on every retry.
+    private var reportedSocketFailures: Set<String> = []
 
     init(clipboardStore: ClipboardStore, fetcher: ExtensionFetcher = ExtensionFetcher()) {
         self.clipboardStore = clipboardStore
@@ -159,7 +161,7 @@ final class ExtensionHostBridge: ExtensionHostAPI {
         case "window": return window(method: method, arguments: arguments)
         case "feedback": return try await feedback(method: method, arguments: arguments)
         case "system": return try await system(method: method, arguments: arguments)
-        case "fetch": return try await fetcher.request(arguments.first)
+        case "fetch": return try await fetch(arguments.first)
         case "websocket": return try await sockets.perform(method: method, arguments: arguments)
         case "dns": return await ExtensionNameResolver.resolve(arguments.first)
         case "proc" where method == "read": return try await ExtensionAsyncProcess.read(arguments)
@@ -179,6 +181,31 @@ final class ExtensionHostBridge: ExtensionHostAPI {
     /// Called wherever a command's context is discarded: nothing left open outlives its session.
     func sessionEnded() {
         sockets.closeAll()
+        reportedSocketFailures.removeAll()
+    }
+
+    // MARK: - Fetch
+
+    private func fetch(_ spec: RenderValue?) async throws -> [String: Any] {
+        let context = context
+        let name = context?.activeExtensionName
+        let socketPath = spec?.objectValue?["socketPath"]?.stringValue
+        do {
+            let response = try await fetcher.request(spec)
+            if let socketPath { reportedSocketFailures.remove(socketPath) }
+            return response
+        } catch ExtensionFetcher.FetchError.socketUnavailable(let path) {
+            try Task.checkCancellation()
+            if let context, self.context === context, context.activeExtensionName == name,
+                context.activeLaunchType != .background, reportedSocketFailures.insert(path).inserted
+            {
+                _ = context.present(
+                    toast: ExtensionToast(
+                        style: .failure, title: "Connection failed",
+                        message: "Start the local service or check its socket path: \(path)"))
+            }
+            throw ExtensionFetcher.FetchError.socketUnavailable(path)
+        }
     }
 
     // MARK: - Clipboard

@@ -19,10 +19,13 @@ final class ExtensionFetcher: Sendable {
 
     enum FetchError: LocalizedError {
         case badURL(String)
+        case socketUnavailable(String)
 
         var errorDescription: String? {
             switch self {
             case .badURL(let url): return "Invalid URL: \(url)"
+            case .socketUnavailable(let path):
+                return "Could not connect to the local service at \(path). Start its app or check the path."
             }
         }
     }
@@ -44,7 +47,12 @@ final class ExtensionFetcher: Sendable {
             request.httpBody = body
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) =
+            if let socketPath = fields["socketPath"]?.stringValue, !socketPath.isEmpty {
+                try await Self.unixSocketResponse(for: request, socketPath: socketPath)
+            } else {
+                try await session.data(for: request)
+            }
         let http = response as? HTTPURLResponse
         var headers: [String: String] = [:]
         for (key, value) in http?.allHeaderFields ?? [:] {
@@ -59,6 +67,94 @@ final class ExtensionFetcher: Sendable {
             "url": response.url?.absoluteString ?? urlString,
             "bodyBase64": data.base64EncodedString()
         ]
+    }
+
+    /// URLSession has no Unix-socket transport, so the system curl carries the request instead.
+    private nonisolated static func unixSocketResponse(
+        for request: URLRequest, socketPath: String
+    ) async throws -> (Data, URLResponse) {
+        try Task.checkCancellation()
+        guard let url = request.url, url.scheme == "http" || url.scheme == "https" else {
+            throw URLError(.unsupportedURL)
+        }
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: scratch, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let bodyFile = scratch.appendingPathComponent("response")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = try curlArguments(
+            for: request, url: url, socketPath: socketPath, scratch: scratch, output: bodyFile)
+        let report = Pipe()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = report
+        process.standardError = FileHandle.nullDevice
+
+        let written = try await withTaskCancellationHandler {
+            let exit = try process.runObservingExit()
+            if Task.isCancelled, process.isRunning { process.terminate() }
+            let written = try await drain(report, until: exit)
+            try Task.checkCancellation()
+            switch process.terminationStatus {
+            case 0: return written
+            case 7: throw FetchError.socketUnavailable(socketPath)
+            case 28: throw URLError(.timedOut)
+            default: throw URLError(.cannotConnectToHost)
+            }
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+
+        guard let metadata = try JSONSerialization.jsonObject(with: written) as? [String: Any],
+            let status = (metadata["info"] as? [String: Any])?["http_code"] as? Int,
+            let headers = metadata["headers"] as? [String: [String]],
+            let response = HTTPURLResponse(
+                url: url, statusCode: status, httpVersion: "HTTP/1.1",
+                headerFields: headers.mapValues { $0.joined(separator: ", ") })
+        else { throw URLError(.badServerResponse) }
+        let body = request.httpMethod == "HEAD" ? Data() : (try? Data(contentsOf: bodyFile)) ?? Data()
+        return (body, response)
+    }
+
+    /// `--disable` must come first, so a user's `~/.curlrc` never shapes an extension's request.
+    private nonisolated static func curlArguments(
+        for request: URLRequest, url: URL, socketPath: String, scratch: URL, output: URL
+    ) throws -> [String] {
+        let method = request.httpMethod ?? "GET"
+        var arguments = [
+            "--disable", "--silent", "--globoff", "--noproxy", "*", "--compressed",
+            "--speed-limit", "1", "--speed-time", "60", "--unix-socket", socketPath,
+            "--request", method, "--output", output.path,
+            "--write-out", #"{"info":%{json},"headers":%{header_json}}"#
+        ]
+        for (name, value) in request.allHTTPHeaderFields ?? [:] {
+            arguments += ["--header", value.isEmpty ? "\(name);" : "\(name): \(value)"]
+        }
+        if let body = request.httpBody {
+            let file = scratch.appendingPathComponent("request")
+            try body.write(to: file)
+            arguments += ["--data-binary", "@\(file.path)"]
+            if request.value(forHTTPHeaderField: "Content-Type") == nil {
+                arguments += ["--header", "Content-Type:"]
+            }
+        }
+        // Without `--head`, curl waits for the body a HEAD response never sends.
+        if method == "HEAD" { arguments.append("--head") }
+        return arguments + ["--url", url.absoluteString]
+    }
+
+    /// The read blocks until curl exits, so it runs on a Dispatch worker, not the cooperative pool.
+    private nonisolated static func drain(_ pipe: Pipe, until exit: ProcessExit) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(
+                    with: Result {
+                        defer { exit.wait() }
+                        return try pipe.fileHandleForReading.readToEnd() ?? Data()
+                    })
+            }
+        }
     }
 }
 
