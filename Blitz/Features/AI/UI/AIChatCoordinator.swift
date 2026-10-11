@@ -29,7 +29,7 @@ final class AIChatCoordinator {
         window = AppWindowController(
             title: "AI Chat", contentSize: Theme.Size.aiChatWindow,
             minimumSize: Theme.Size.aiChatWindowMinimum, resizable: true,
-            autosaveName: "AIChatWindow", activation: core.activationPolicy)
+            autosaveName: "AIChatWindow", activation: core.activationPolicy, closesOnEscape: true)
         chats.onReplyFinished = { [weak self] chat in self?.nameIfNeeded(chat) }
     }
 
@@ -78,6 +78,12 @@ final class AIChatCoordinator {
         }
     }
 
+    /// Key, not visible: a chat open behind another app comes forward rather than closing.
+    func toggleWindow() {
+        guard !closeWindowIfKey() else { return }
+        showWindow()
+    }
+
     /// The window's views read these through the coordinator, never through `AppCore`.
     var history: ChatHistoryStore { core.chatHistory }
     var aiSettings: AISettingsStore { core.aiSettings }
@@ -104,6 +110,15 @@ final class AIChatCoordinator {
             core.showMessage("That chat could not be opened.", tone: .danger)
             return
         }
+    }
+
+    /// The sidebar's filter is the view's own state, so ⌃⇥ walks every saved chat.
+    func openAdjacentChat(step: Int) {
+        guard
+            let target = history.conversations.pinnedFirst.adjacent(
+                to: chats.window.session.id, step: step)
+        else { return }
+        openChat(id: target.id)
     }
 
     /// Quick AI's ⌘J: the conversation, its staged files and the half-typed line all move over.
@@ -181,6 +196,12 @@ final class AIChatCoordinator {
                 title: "Delete chat?", message: "“\(title)” will be removed. This can't be undone.",
                 symbol: "trash", confirmTitle: "Delete")
         else { return }
+        removeChat(id: id)
+    }
+
+    /// Codex's retained thread goes too, so a deleted chat's research never outlives it.
+    func removeChat(id: UUID) {
+        core.codexSubscription.turns.discardConversation(id: id)
         chats.delete(id: id)
     }
 
@@ -192,6 +213,9 @@ final class AIChatCoordinator {
                     + "This can't be undone.",
                 symbol: "trash", confirmTitle: "Delete All")
         else { return }
+        for conversation in core.chatHistory.conversations where !conversation.isPinned {
+            core.codexSubscription.turns.discardConversation(id: conversation.id)
+        }
         chats.deleteAll()
     }
 
