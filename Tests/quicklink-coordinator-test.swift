@@ -15,6 +15,7 @@ struct QuicklinkCoordinatorTests {
         try await combinedArguments()
         try await plainLink()
         try await promptOnRestoredScreen()
+        try copying()
         try editing()
         try revealing()
         print("\(passes) passed, \(failures) failed")
@@ -144,6 +145,34 @@ struct QuicklinkCoordinatorTests {
         fixture.coordinator.openQuicklink(id: fixture.link.id)
         try await Task.sleep(for: .milliseconds(1))
         expect(fixture.core.palette.selection == 0, "a row the filter hides falls back to the top")
+    }
+
+    static func copying() throws {
+        for succeeds in [true, false] {
+            let fixture = try Fixture(link: "https://example.com/?q={argument}&selection={selection}")
+            defer { fixture.cleanUp() }
+            Paster.copies = []
+            Paster.succeeds = succeeds
+            fixture.window.isVisible = true
+            fixture.coordinator.copyQuicklink(id: fixture.link.id)
+            expect(Paster.copies == [fixture.link.link], "copying writes the saved template literally")
+            expect(!fixture.window.isVisible, "copying dismisses the palette")
+            expect(QuicklinkLauncher.opened.isEmpty, "copying never opens the destination")
+            expect(
+                fixture.core.messages == [succeeds ? "Copied link" : "Couldn’t copy link"],
+                "the confirmation reflects whether the pasteboard took the write")
+            expect(
+                fixture.core.tones == [succeeds ? .success : .danger],
+                "a refused write reads as a failure")
+        }
+        Paster.succeeds = true
+
+        let fixture = try Fixture(link: "https://example.com/")
+        defer { fixture.cleanUp() }
+        Paster.copies = []
+        fixture.settings.quicklinksEnabled = false
+        fixture.coordinator.copyQuicklink(id: fixture.link.id)
+        expect(Paster.copies.isEmpty, "a disabled feature copies nothing")
     }
 
     static func editing() throws {
@@ -351,6 +380,16 @@ final class PaletteCoordinator {
 }
 
 @MainActor
+enum Paster {
+    static var copies: [String] = []
+    static var succeeds = true
+    static func copyPlainText(_ text: String) -> Bool {
+        copies.append(text)
+        return succeeds
+    }
+}
+
+@MainActor
 enum AppLauncher {
     static var revealed: [URL] = []
     static func showInFinder(_ url: URL) { revealed.append(url) }
@@ -380,6 +419,7 @@ final class AppCore {
     }()
     var pendingQuicklinkEdit: QuicklinkEditRequest?
     var messages: [String] = []
+    var tones: [DialogTone] = []
     func showNotice(
         title: String, message: String, symbol: String, artwork: String? = nil, tone: DialogTone
     ) async {}
@@ -390,7 +430,10 @@ final class AppCore {
         title: String, message: String, symbol: String, artwork: String? = nil, confirmTitle: String
     ) async -> Bool { false }
     func reportBrowserTabFailure(_ failure: BrowserTabs.Failure, title: String) async {}
-    func showMessage(_ message: String, tone: DialogTone = .success) { messages.append(message) }
+    func showMessage(_ message: String, tone: DialogTone = .success) {
+        messages.append(message)
+        tones.append(tone)
+    }
 }
 
 enum BackupActions {

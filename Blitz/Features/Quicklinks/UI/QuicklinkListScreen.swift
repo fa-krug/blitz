@@ -86,6 +86,7 @@ struct QuicklinkListScreen: PaletteScreen {
         switch shortcut {
         case .edit: coordinator.editQuicklink(quicklink)
         case .duplicate: coordinator.duplicateQuicklink(id: quicklink.id)
+        case .copyPath: coordinator.copyQuicklink(id: quicklink.id)
         case .pin: coordinator.toggleQuicklinkPinned(id: quicklink.id)
         case .showInFinder: return coordinator.showQuicklinkInFinder(quicklink)
         // Deletion honours the "confirm before deleting" setting inside `AppCore`.
@@ -161,6 +162,13 @@ enum QuicklinkActionsMenu {
                 })
         }
         items += openWithItems(quicklink: quicklink, core: core, values: values)
+        items.append(
+            PopoverMenuItem(
+                title: "Copy Link", systemImage: "doc.on.clipboard", startsSection: true,
+                shortcut: "⌃⌘C"
+            ) {
+                core.quicklinkCoordinator.copyQuicklink(id: quicklink.id)
+            })
         items.append(
             PopoverMenuItem(
                 title: "Edit Quicklink", systemImage: "pencil", startsSection: true, shortcut: "⌘E"

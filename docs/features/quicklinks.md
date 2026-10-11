@@ -256,8 +256,8 @@ disagree. **Pinned means the top of the Quicklinks section**, not above Applicat
 position in root search would need a second `AppEntry.Kind`, which the kind invariant forbids for one
 feature. The Search Quicklinks screen gives pins their own section, like the clipboard's.
 
-A root-search row's ⌘K menu adds **Edit Quicklink** (`⌘E`), opening the same editor as Search
-Quicklinks, and **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
+A root-search row's ⌘K menu adds **Copy Link** (`⌃⌘C`, see [Search Quicklinks](#search-quicklinks)),
+**Edit Quicklink** (`⌘E`), opening the same editor as Search Quicklinks, and **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
 writing `VisibilityStore` — the editor's switch is its undo besides the banner's, and the row stays in
 Search Quicklinks.
 
@@ -269,13 +269,20 @@ the selected quicklink's glyph over an Information block (name, link, the app it
 shortcut, when it was created). Like Calculator History it stays out of the Tab cycle and exits via the
 back chevron or a bare backspace.
 Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
-**Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate (`⌘D`),
+**Open With** section, Copy Link (`⌃⌘C`), Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate (`⌘D`),
 New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Show in Finder (`⌘F`, only for a resolved path), and Delete
 (`⌘⌫`). Every chord runs the same `QuicklinkCoordinator` call as its row — `editQuicklink` and
 `showQuicklinkInFinder` step the palette aside themselves — so the two can't drift. ⌘N works with
 no rows as well — the empty library's hint names it — and opens the editor named after the search
 text. Root-search visibility is not offered here: the launcher row hides itself, and the editor
 restores it.
+
+**Copy Link** writes the saved destination to the clipboard, unmarked so it enters history, without
+opening it. Placeholders stay literal even when the header's fields hold values — it never reads the
+selection, the clipboard or a browser tab, and never expands the template. It closes the palette and
+says "Copied link" only once `Paster.copyPlainText` reports the pasteboard took the write, and
+"Couldn’t copy link" when it refused. ⌃⌘C is the palette's `copyPath` chord, so plain ⌘C still copies
+the search field's text.
 
 The Open With section lists the system default first, marked, then up to six more apps
 `NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked

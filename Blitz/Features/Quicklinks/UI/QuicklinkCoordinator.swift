@@ -297,6 +297,19 @@ final class QuicklinkCoordinator {
         do { try store.setEnabled(enabled, id: id) } catch { report(error) }
     }
 
+    /// The saved link as written, placeholders and all: copying reads no selection or clipboard.
+    func copyQuicklink(id: UUID) {
+        guard settings.quicklinksEnabled, let quicklink = store.quicklink(id: id),
+            quicklink.isEnabled
+        else { return }
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        guard Paster.copyPlainText(quicklink.link) else {
+            core.showMessage("Couldn’t copy link", tone: .danger)
+            return
+        }
+        core.showMessage("Copied link")
+    }
+
     func duplicateQuicklink(id: UUID) {
         do { _ = try store.duplicate(id: id) } catch { report(error) }
     }
