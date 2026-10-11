@@ -211,6 +211,8 @@ enum RaycastImportReader {
         var missing = 0
         for entry in entries {
             let createdAt = parseDate(entry["createdAt"] as? String, using: dateParser) ?? Date()
+            // Raycast keeps no pin date; unpinned, an old entry would fall to retention at once.
+            let pinnedAt = isPinned(entry["pinned"]) ? createdAt : nil
             let reps = (entry["items"] as? [[String: Any]] ?? [])
                 .flatMap { ($0["representations"] as? [[String: Any]]) ?? [] }
 
@@ -220,7 +222,7 @@ enum RaycastImportReader {
                 items.append(
                     ClipboardItem(
                         id: UUID(), kind: .text, text: text, imagePath: nil, createdAt: createdAt,
-                        sourceBundleID: nil))
+                        sourceBundleID: nil, pinnedAt: pinnedAt))
                 continue
             }
 
@@ -233,10 +235,19 @@ enum RaycastImportReader {
                     continue
                 }
                 items.append(
-                    ClipboardItem(imagePath: path, createdAt: createdAt, sourceBundleID: nil))
+                    ClipboardItem(
+                        id: UUID(), kind: .image, text: nil, imagePath: path, createdAt: createdAt,
+                        sourceBundleID: nil, pinnedAt: pinnedAt))
             }
         }
         return (items, missing)
+    }
+
+    /// Only a JSON Boolean counts: a bridged `1` is an `NSNumber` too.
+    private static func isPinned(_ value: Any?) -> Bool {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+        else { return false }
+        return number.boolValue
     }
 
     // MARK: - Helpers
