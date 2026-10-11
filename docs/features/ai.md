@@ -411,8 +411,8 @@ the way Settings is — an `AIChatSplitViewController` with a native sidebar ite
 unified toolbar whose title is the open chat's — so it takes the system's own sidebar, toolbar and
 menus rather than the palette's scrim. `AIChatWindowChrome` owns the toolbar — the sidebar toggle
 and New Chat as two round buttons at the sidebar's trailing edge, then Find in Chat and Actions
-alone at the window's — the title, and one key monitor for ⌘V, ⌘F, ⌘G / ⇧⌘G, ⌘K and the Actions
-menu's own chords, and dies with the window.
+alone at the window's — the title, and one key monitor for ⌘V, ⌘B, ⌃⇥ / ⌃⇧⇥, ⌘F, ⌘G / ⇧⌘G, ⌘K
+and the Actions menu's own chords, and dies with the window.
 
 - **Find in Chat** (⌘F): the system's `NSSearchToolbarItem`, as is. `ChatFindState` is one per
   window and steps match by match, not message by message:
@@ -461,7 +461,9 @@ menu's own chords, and dies with the window.
   Escape closes. Closing keeps the draft and leaves a reply streaming.
 
 - **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat, Pinned
-  first and then bucketed by day like Clipboard. The open chat is the selected row. A new chat has
+  first and then bucketed by day like Clipboard. The open chat is the selected row; ⌃⇥ / ⌃⇧⇥ open
+  the next or previous one, wrapping, over every saved chat whatever the filter shows, in the same
+  `pinnedFirst` order the sections are built from. ⌘B shows or hides the sidebar. A new chat has
   none until its first message saves it, so starting one or leaving an empty one never adds or
   drops a row under the pointer. A row shows a spinner while its reply streams, else a pin when
   pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
@@ -598,8 +600,9 @@ window, and every chat action either surface sends — is the nineteenth feature
   long equation shrinks to fit rather than running off the edge.
 - Return sends, ⇧↩ breaks the line, and a Japanese IME's Return confirms its text without sending.
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
-- Collapse the sidebar with the toolbar button; ⌘N and ⌘Q (Close Window) still work, and ⌘Q with
-  Settings in front closes Settings instead.
+- ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
+- Collapse the sidebar with the toolbar button or ⌘B; ⌘N and ⌘Q (Close Window) still work, and ⌘Q
+  with Settings in front closes Settings instead.
 - Press the AI Chat shortcut twice: the window opens, then closes; with it open behind another app,
   the shortcut brings it forward. Summon the palette over the open window and run AI Chat: it stays
   open.
@@ -612,7 +615,8 @@ window, and every chat action either surface sends — is the nineteenth feature
   shown-model and switched-off-route rules, and a tool's override from settings to launch),
   `ai-chat-test` (`ChatSession`, `MarkdownBlock` with its math delimiters, LaTeX subset and
   mid-stream hold-back, `ChatHistoryStore` with renames and pins,
-  `AIToolLoopProvider`, regenerate, and `AIChatSurfacesState`'s one-live-place rule),
+  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, and
+  `AIChatSurfacesState`'s one-live-place rule),
   `codex-turn-test` (the Stop path, driven against a stub app-server stalled where Stop races the
   turn ID, plus the MCP launch boundary, one launch for concurrent starts, the elicitation, the
   rows, the call cap, a custom provider's access without an account, and when a chat's thread is
