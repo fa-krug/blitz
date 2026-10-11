@@ -320,15 +320,6 @@ struct RootPaletteView: View {
                 PaletteSurface(palette: self)
                     // No title bar, so this thin top margin is the only place left to grab it.
                     .overlay(alignment: .top) { topDragStrip }
-                    // Always mounted: unmounting strands SwiftUI's hover target and eats clicks.
-                    .overlay {
-                        Color.black.opacity(0.001)
-                            .contentShape(Rectangle())
-                            // Not a tap: a drifting press must still dismiss, like a native menu.
-                            .gesture(DragGesture(minimumDistance: 0).onChanged { _ in closeMenus() })
-                            .onRightClick { closeMenus() }
-                            .allowsHitTesting(menuOpen)
-                    }
                     // The menu lives in its own window; this only reports the one to hang it from.
                     .background(
                         WindowReader {

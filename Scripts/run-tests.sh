@@ -227,6 +227,13 @@ run palette-placement-test Blitz/Platform/Appearance.swift \
                            Blitz/DesignSystem/InterfaceMetrics.swift \
                            Blitz/Features/Settings/InterfaceSize.swift \
                            Blitz/Palette/PalettePlacement.swift
+run palette-menu-click-test Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Platform/WindowLevel.swift \
+                           Blitz/Platform/NotificationToken.swift \
+                           Blitz/DesignSystem/Interaction/KeyboardFocus.swift \
+                           Blitz/Palette/PalettePanel.swift
 run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
 run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
 run keyboard-focus-test    Blitz/DesignSystem/Interaction/KeyboardFocus.swift

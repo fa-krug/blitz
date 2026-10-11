@@ -43,9 +43,13 @@ final class MenuPanel: NSPanel {
         super.resignKey()
         paletteState?.noteCommandHeld(false)
         guard onKeyDown != nil else { return }
+        let presentation = paletteState?.menuPresentationToken
         Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, onKeyDown != nil else { return }
+            // A stale resign must not close a menu reopened or re-keyed during the yield.
+            guard let self, onKeyDown != nil, !isKeyWindow,
+                paletteState?.menuPresentationToken == presentation
+            else { return }
             onResignKey?(parent?.isKeyWindow == true)
         }
     }
@@ -92,6 +96,7 @@ final class MenuPanelController {
         let root = AnyView(content.paletteEnvironment(core))
         setContent(root, clipPath: clipPath, in: panel)
         self.parent = parent
+        (parent as? PalettePanel)?.onDismissMenu = onDismiss
         panel.ignoresMouseEvents = false
         // Open disarmed: a menu opened by click lands under the pointer, which chose no row of it.
         core.palette.disarmHoverHighlight(pointerAt: NSEvent.mouseLocation)
@@ -193,6 +198,7 @@ final class MenuPanelController {
     }
 
     func hide() {
+        (parent as? PalettePanel)?.onDismissMenu = nil
         guard let panel else {
             cancelTransitions()
             return

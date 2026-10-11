@@ -545,12 +545,12 @@ unrecognised model keeps the generic sparkle. Provenance, the MIT notice and the
 are recorded in [`NOTICE.md`](../../NOTICE.md) — the CC0 on the Simple Icons project does not extend
 to the brands it depicts. The header's model switcher shows the selected model's mark the same way.
 
-The palette's click-away catcher is mounted permanently and only toggles `allowsHitTesting` with the
-open menu. Inserting it on open and removing it on close could strand SwiftUI's hover target on the
-header button underneath — AppKit kept delivering clicks, but neither the button nor the catcher saw
-them until an unrelated render or a window exit/re-enter recomputed hover. It dismisses on a
-`DragGesture(minimumDistance: 0)` rather than a tap, so a press that drifts a few points still closes
-the menu, as a native menu's click-away does.
+The palette's click-away lives in `PalettePanel.sendEvent`, not in a SwiftUI overlay. An overlay
+inserted on open and removed on close stranded SwiftUI's hover target on the header button
+underneath — AppKit kept delivering clicks, but neither the button nor the overlay saw them until an
+unrelated render recomputed hover — and one left mounted let part of the dismissing click replay into
+the rows. Consuming the whole press at the window avoids both; see
+[palette.md](palette.md#one-menu-at-a-time).
 
 Seven more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
 `CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AIChatSurfacesState` (which

@@ -155,8 +155,8 @@ never while a menu, an argument field or an IME composition has the key.
 and `PaletteRowIndex.nextSectionStart(after:in:)` and `currentOrPreviousSectionStart(before:in:)`
 pick the landing row: ⌘↓ goes to the next section's first row, or the last row from inside the last
 section; ⌘↑ goes to the head of the current section, or the previous head when already on one. The
-launcher counts its lead card, Favorites, Meetings, Suggestions, each kind in `LauncherList.kindOrder`
-and the fallbacks; the clipboard breaks on `ClipboardList.sectionTitle`, Pinned and then each date
+launcher counts its lead card, Favorites, Meetings, Suggestions, Results, each kind in
+`LauncherList.kindOrder` and the fallbacks; the clipboard breaks on `ClipboardList.sectionTitle`, Pinned and then each date
 bucket; an extension list or grid on `ExtensionScreen.sectionCounts`; the emoji grid on its sections.
 A page is the number of result rows the list viewport shows — the expanded panel less the header and
 bottom bar, over the `InterfaceMetrics` row height — stepped through `PaletteRowIndex.page`, unless
@@ -450,7 +450,7 @@ hangs `.bottomTrailing`, the app menu `.bottomLeading`, and everything drawn as 
 the clipboard type filter, the AI model and effort menus, an `options=` argument field's choices and
 a running command's `searchBarAccessory` dropdown — hangs `.belowHeaderTrailing`, under its own
 button. `menuContent` resolves the open case to one `PaletteMenuContent` — a row count, a row action
-and a view built on demand — so ↑/↓, plain ↵, Esc and the click-away catcher serve every menu without
+and a view built on demand — so ↑/↓, plain ↵, Esc and the click-away serve every menu without
 knowing which is up. A screen supplies its rows as a `PopoverMenuContent` through `actions(at:)` and
 the default `menuContent` wraps them; a screen whose rows the palette's menu can't express overrides
 `menuContent` and hands over its own view instead — `ExtensionCommandScreen` is the only one, for
@@ -461,10 +461,14 @@ and states where the highlight starts: the first row, except the pop-up-shaped m
 filter, the AI model and effort menus, an extension's search-bar dropdown — which open on the choice
 they already hold.
 
-**The click-away catcher answers either mouse button.** A left press arrives as a `DragGesture`, so a
-drifting press still dismisses the way a native menu's does; a right press arrives through
-`onRightClick`, whose `NSView` sits above the row catchers beneath it, so a right click on a row
-closes the open menu rather than reopening it on that row.
+**The palette window consumes a click-away press through its release.** While a menu is open,
+`PalettePanel.sendEvent` dismisses it on either mouse button's press and swallows the matching drag
+and release before SwiftUI sees them. A row or footer button beneath the menu never inherits half a
+click — a right click on a row closes the menu rather than reopening it there, and a footer button
+cannot open its own menu only to have the replayed release close it — while the next click reaches
+its control normally. No SwiftUI overlay takes part, so nothing is mounted over the rows on open.
+`MenuPanelController` installs the dismissal callback (`PalettePanel.onDismissMenu`) only while a
+menu is shown, and clears it in `hide()` before handing key status back to the palette.
 
 Every row closes the menu behind it — `activateMenuItem` is the one path, and a row that reorders the
 list under itself (Move Favorite Up/Down) is no exception, so no row ever runs against a rebuilt menu.
@@ -495,8 +499,11 @@ already-blurred, clipped panel, and no menu can be cropped by `RootPaletteView`'
 long it grows. The menu temporarily becomes key so its native `TextField` owns the caret and selection, while
 `MenuPanel` hands navigation and action shortcuts back to `RootPaletteView`. It restores key status
 to the palette when it closes. Resigning to the palette closes only the menu; resigning to another
-app closes the palette as well. `MenuPanel.sendEvent` also mirrors `PalettePanel`'s hover arming — rows
-light on real pointer movement, never on a scroll under a still cursor.
+app closes the palette as well. That resign is answered a turn later, so it first checks that the
+menu has not turned key again and that `PaletteState.menuPresentationToken` still names the same
+presentation — a stale callback never closes a reopened menu. `MenuPanel.sendEvent` also mirrors
+`PalettePanel`'s hover arming — rows light on real pointer movement, never on a scroll under a still
+cursor.
 
 The panel is a second SwiftUI hierarchy, so it observes nothing of `RootPaletteView`'s `@State`:
 `syncMenuPanel` pushes a rebuilt tree on every `openMenu` or `menuSelection` change, and

@@ -344,6 +344,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   and re-renders past Calculator History in the chosen format
 - Section headers appear in order: Favorites, Applications, System Settings, Quicklinks, Snippets,
   System Actions, Window Management, Custom Commands, Commands
+- `snippets` lists the whole Snippets section; `window` lists its ranked matches under Results with
+  the best on ↵, then the rest of Window Management and Window Layouts under their headers; ⌘↓
+  jumps from Results to the first of those sections
 - With a non-ASCII input source active, ⌘K opens Actions; ↑/↓ move it, ↵ activates, Escape closes it
 - In either ⌘K Actions panel, typing filters immediately in the bottom search band without changing
   the palette query; sections survive filtering, **No Results** is centred, and no dissolve covers the
@@ -354,6 +357,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A long menu opens with unchanged row insets; while scrolling, rows can reach the panel edges
 - A click in the palette but outside its menu closes only the menu; a click outside the palette
   closes both, regardless of the menu query; the next summon accepts typing immediately
+- Click the menu's search field, pause, then dismiss by clicking the other footer control: the next
+  click opens that control's menu once and leaves it open, even when the clicks form a double click.
+  A right click on a row while a menu is open closes the menu without opening one on the row
 - Footer menus are about 30pt wider; their row hover keeps the shared 10pt menu-row corner
 - Tab toggles launcher ↔ clipboard; bare Backspace on an empty query backs out of a sub-screen
 - Launching an app focuses it; escaping the palette returns focus to the app you came from
@@ -610,6 +616,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Enabling shows the consent dialog **before** the Accessibility prompt
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
+- A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
+  field first** rather than doing nothing
 - Editing a snippet file externally reloads it
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
