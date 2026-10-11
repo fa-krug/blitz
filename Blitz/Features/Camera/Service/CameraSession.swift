@@ -4,10 +4,11 @@ import AppKit
 /// `AVCaptureSession` is not `Sendable`, so the blocking calls go off main behind a box.
 @MainActor
 final class CameraSession {
-    /// What the session is built for; taking a photo costs a larger preset and an extra output.
+    /// What the session is built for; a photo or a scan costs a larger preset and an extra output.
     enum Purpose {
         case preview
         case capture
+        case scan
     }
 
     /// Settled before the panel opens, so it never swaps a stage out from under the user.
@@ -28,6 +29,7 @@ final class CameraSession {
     private let purpose: Purpose
     private var capture: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
+    private var codeMonitor: QRCodeMonitor?
     private var device: AVCaptureDevice?
     private var pendingPhoto: PhotoCapture?
 
@@ -56,6 +58,8 @@ final class CameraSession {
         // A reused session without an output of its own feeds a new preview layer no frames.
         self.capture = nil
         photoOutput = nil
+        codeMonitor?.finish()
+        codeMonitor = nil
         guard capture.isRunning else { return }
         // The camera light must go out with the panel, so this is never left to deallocation.
         let box = CaptureBox(session: capture)
@@ -63,6 +67,11 @@ final class CameraSession {
     }
 
     var hasMultipleDevices: Bool { Self.devices.count > 1 }
+
+    /// Nil until a `.scan` session has started; `stop()` ends whatever stream it last handed out.
+    func codes() -> AsyncStream<String>? {
+        codeMonitor?.codes()
+    }
 
     /// Only the input swaps: the session keeps running, so the stage never blanks to black.
     func switchToNextDevice() async {
@@ -108,16 +117,37 @@ final class CameraSession {
         guard let device = preferred, let input = try? AVCaptureDeviceInput(device: device)
         else { return nil }
         let capture = AVCaptureSession()
-        capture.sessionPreset = purpose == .capture ? .photo : .medium
+        capture.sessionPreset = Self.preset(for: purpose)
         guard capture.canAddInput(input) else { return nil }
         capture.addInput(input)
         self.device = device
-        guard purpose == .capture else { return capture }
-        let output = AVCapturePhotoOutput()
-        guard capture.canAddOutput(output) else { return capture }
-        capture.addOutput(output)
-        photoOutput = output
+        switch purpose {
+        case .preview:
+            break
+        case .capture:
+            let output = AVCapturePhotoOutput()
+            guard capture.canAddOutput(output) else { break }
+            capture.addOutput(output)
+            photoOutput = output
+        case .scan:
+            let monitor = QRCodeMonitor()
+            let output = AVCaptureVideoDataOutput()
+            output.alwaysDiscardsLateVideoFrames = true
+            output.setSampleBufferDelegate(monitor, queue: monitor.queue)
+            guard capture.canAddOutput(output) else { break }
+            capture.addOutput(output)
+            codeMonitor = monitor
+        }
         return capture
+    }
+
+    /// A scan needs more pixels than a preview to read a code held at arm's length.
+    private static func preset(for purpose: Purpose) -> AVCaptureSession.Preset {
+        switch purpose {
+        case .preview: .medium
+        case .capture: .photo
+        case .scan: .high
+        }
     }
 }
 

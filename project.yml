@@ -39,7 +39,7 @@ targets:
     platform: macOS
     sources:
       - path: Blitz
-        # The helper's own sources: compiling them in would link Vision and PDFKit into the app,
+        # The helper's own sources: compiling them in would run OCR and PDFKit in the app process,
         # which is the whole thing running recognition out of process avoids.
         excludes:
           - Features/Clipboard/Service/ClipboardTextExtractor.swift

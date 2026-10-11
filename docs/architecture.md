@@ -183,7 +183,7 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
 - **The camera surfaces** — a borderless, non-activating `CameraPanel` at `.floating`, in two
   shapes over one `CameraSession`: `CameraPreviewController`, owned by `CalendarCoordinator`, gates a
   join and doubles as auto join's confirmation; `CameraCoordinator`, owned by `AppCore`, is the
-  standalone `Open Camera` command. See [features/camera.md](features/camera.md) and
+  standalone `Open Camera` and `Scan QR Code` commands. See [features/camera.md](features/camera.md) and
   [features/calendar.md](features/calendar.md).
 - **HUDs** are separate, because a dialog asks and a HUD reports: `MessageHUDController` (the pill) and
   `VolumeHUDController` (the level box), both over a shared `HUDPresenter` that owns the
