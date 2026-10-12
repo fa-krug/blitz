@@ -77,8 +77,8 @@ When a trailing operator keeps a conversion visible, its input is reconstructed 
 display rounding never feeds back into evaluation.
 
 `UnitDef` is an immutable, Sendable reference shared by its aliases and parsed values. The catalog
-stores 150 base definitions as compact text records rather than repeated construction code, then adds
-SI and transfer-rate prefixes once on first use, for 679 aliases. `CalcUnitCatalog` owns this data;
+stores 155 base definitions as compact text records rather than repeated construction code, then adds
+SI and transfer-rate prefixes once on first use, for 685 aliases. `CalcUnitCatalog` owns this data;
 `CalcUnits` owns conversion policy.
 
 Typed arithmetic precedes simple conversion so `1 / 20ms to hz` divides by a duration,
@@ -412,8 +412,9 @@ consuming a token before parsing the right operand.
 
 A parenthesis, constant, function or spoken root starts an implicit product (`2 square root of 9` → 6).
 Adjacent numbers never do — `5 3` stays an app search — and unit and currency names keep their own
-operand positions. The tokenizer only folds a lone `x` after an operand, keeping names such as `max`
-and incomplete hexadecimal input such as `0x` out of arithmetic. The same rule covers typed values
+operand positions. The tokenizer only folds a lone `x` after an operand, keeping currency names such
+as `xof` and `xrp`, the `xor` operator, names such as `max` and incomplete hexadecimal input such as
+`0x` out of arithmetic. The same rule covers typed values
 (`$5(2)` → `10.00 USD`, `2(3)kg` → `6 kg`, matching `2*(3)kg`); adjacent quantities still use the
 composite `+` described above.
 
@@ -631,7 +632,9 @@ is an argument, as `CalcTokenizer` reads it, so a stored `max(1,234)` shows `max
 
 ## Additional units and transfer rates
 
-`MB/s` means megabytes per second; `Mbps` means megabits per second.
+`MB/s` and `MBps` mean megabytes per second; `Mbps` means megabits per second. The uppercase `B`
+marks a byte rate (`Bps`, `kBps` / `KBps`, `MBps`, `GBps`, `TBps`), so `500 Mbps in MBps` gives
+`62.5 MBps`, and a bare byte rate auto-converts to the matching bit rate.
 `100Mbps to MB/s` gives `12.5 MB/s`, and `1GB / 10MB/s to s` gives `100 s`.
 Binary rates such as `MiB/s` and bit amounts such as `kbit` also work.
 SI prefixes expand for meters, grams, seconds, hertz, newtons, joules, watts and pascals,

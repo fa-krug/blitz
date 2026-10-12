@@ -47,7 +47,9 @@ double-tap binding. When the launcher lands on ⌘Space while macOS still gives 
 Spotlight, the result line says so and points at Settings › General, which shows how to free it (see
 [hotkeys.md](hotkeys.md#taking-space-from-spotlight)). A clipboard record's representations are nested and its timestamps carry fractional
 seconds; only an `image/*` representation whose file still exists becomes an image clip, and the rest
-are counted as missing rather than dropped silently. Quicklinks land through `QuicklinkArchive.merge`,
+are counted as missing rather than dropped silently. A Boolean `pinned: true` keeps a text or image
+clip pinned, so an old entry is not pruned by retention the moment it lands; Raycast stores no pin
+date, so `pinnedAt` is the entry's `createdAt` and imported pins sort oldest first. Quicklinks land through `QuicklinkArchive.merge`,
 so they add to the library and never replace it. `{Query}` is rewritten to `{argument}`; an `openWith`
 app path (or a platform id in `openWithPlatforms`) resolves to a bundle ID the same way application
 hotkeys do. Raycast's ULID is discarded — each imported row gets a fresh UUID, as a JSON quicklink

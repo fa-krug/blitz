@@ -1,7 +1,7 @@
 # App launcher & root search
 
 `AppIndex.scan()` runs off-main, enumerates the user's search scopes, and dedups by bundle ID (the
-earliest scope wins).
+earliest scope wins; within one folder, the newest `CFBundleShortVersionString` does).
 
 ## Invariants
 
@@ -55,6 +55,16 @@ The walk stays bounded rather than fully recursive: an `.app` bundle is a leaf e
 its `Contents/Applications` and `Contents/Developer/Applications` folders, where Xcode ships
 Instruments, Icon Composer and Simulator, and a subfolder nested deeper than one level still needs
 its own scope.
+
+Directory symlinks work as scopes, subfolders, and embedded-app folders. App paths stay under the
+configured scope, not the resolved target. The scan skips links back to an ancestor directory to
+prevent cycles.
+
+Within one folder, bundles are listed newest `CFBundleShortVersionString` first, compared as numbers
+so `26.6` outranks `9.4`. A tie or an unreadable version falls back to Finder's name order. Because
+the scan keeps a bundle ID's first copy, two Xcodes in `/Applications` resolve to the newest, every
+scan, and the embedded apps follow their parent. Scope order still comes first: listing an older
+copy as its own earlier scope pins it.
 
 The defaults cover `/Applications` and `/System/Applications` plus their `Utilities` folders,
 `/System/Library/CoreServices/Applications`, the cryptex apps under
@@ -180,7 +190,9 @@ all 65 of them read English on every Mac, whatever language it is set to.
 A tag carrying a script is read under two more codes, because no one folder name covers it: a
 `zh-Hans-CN` Mac also reads `zh-Hans`, the folder most third-party apps ship, then `zh_CN`, the key
 Apple's own loctables use. A script-only `zh-Hans` maximizes to reach the same region. A tag without a
-script, every English one included, produces exactly the codes it always did.
+script otherwise keeps its exact, underscore and bare-language forms. Bokmål (`nb`) additionally
+reads `no` after `nb`, because Apple's Norwegian loctables use that key; an explicit `nb.lproj` still
+wins. Other languages, including Nynorsk (`nn`), gain no alias.
 
 The user's own language wins the **display name**, so a row reads the way Finder reads it. The rest,
 English included, ride along as alternate titles, matched as typed and never transliterated.
@@ -197,10 +209,12 @@ every file name as an alternate title. Reading the `en_GB` those bundles *do* ca
 repair: it relabels `Print Center` as `Print Centre`. Below the development region the walk carries on,
 so every language under it stays indexed as an alternate title. The region is canonicalized before it is
 matched, because `CFBundleDevelopmentRegion` still ships its pre-BCP-47 spelling — Safari's and
-Terminal's read `English`. `AppDisplayName.inInfo` reads the `-macos` variant of each key before the
-bare one, the way `CFBundle` does: Image Playground's loctable spells the bare `CFBundleDisplayName`
-`Playground` and only the suffixed key `Image Playground`. A non-English user finds their app by the
-name they see *and* by the English name the vendor advertises.
+Terminal's read `English`. Norwegian development regions resolve as Bokmål, and both `nb` and `no`
+translations are checked before falling back to the untranslated name. `AppDisplayName.inInfo` reads
+the `-macos` variant of each key before the bare one, the way `CFBundle` does: Image Playground's
+loctable spells the bare `CFBundleDisplayName` `Playground` and only the suffixed key
+`Image Playground`. A non-English user finds their app by the name they see *and* by the English
+name the vendor advertises.
 
 ### Non-Latin names
 
@@ -749,6 +763,12 @@ Application and System Settings results expose **Show in Finder** in their ⌘K 
 **⌘↵**. Synthetic command results have no filesystem location, so neither the menu row nor the
 shortcut is available for them. `AppEntry.canRevealInFinder` is the one rule both the menu row and
 the key handler read, so the advertised chord can't drift from the behavior.
+
+`AppLauncher.showInFinder` is every feature's reveal. `activateFileViewerSelecting` leaves the file
+viewer to bring itself forward, and macOS refuses that request while Blitz is `.regular` (an open
+Settings or About window) yet inactive, which the non-activating palette makes common. Only in that
+state does the reveal also open the viewer named by the global `NSFileViewer` default, Finder when it
+is unset, so every other reveal is exactly the one system call.
 
 ## Copy Deeplink
 
