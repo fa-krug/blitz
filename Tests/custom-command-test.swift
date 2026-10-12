@@ -21,6 +21,26 @@ struct CustomCommandTests {
             }
         }
 
+        // MARK: Root Search migration
+
+        let legacySuite = "de.fa-krug.blitz.custom-command-migration-tests"
+        let legacyDefaults = isolatedDefaults(legacySuite)
+        let legacy = CustomCommand(name: "Legacy", command: "/usr/bin/true", showsInRootSearch: false)
+        if let encoded = try? JSONEncoder().encode([legacy]),
+            var records = try? JSONSerialization.jsonObject(with: encoded) as? [[String: Any]]
+        {
+            records[0].removeValue(forKey: "showsInRootSearch")
+            legacyDefaults.set(
+                try? JSONSerialization.data(withJSONObject: records), forKey: "customCommands")
+        }
+        let migrated = CustomCommandStore(defaults: legacyDefaults).commands
+        check("a command saved before the flag still loads", migrated.map(\.name) == ["Legacy"])
+        check("a migrated command shows in root search", migrated.first?.showsInRootSearch == true)
+        check(
+            "the migration marks itself done",
+            legacyDefaults.bool(forKey: "customCommandsRootSearchMigrated"))
+        discardSuite(legacySuite, legacyDefaults)
+
         // MARK: Store
 
         let store = CustomCommandStore(defaults: defaults)
@@ -69,6 +89,13 @@ struct CustomCommandTests {
             store.command(id: added.id)?.command == "/usr/bin/true")
         store.setEnabled(true, id: added.id)
 
+        check("a new command shows in root search", store.command(id: added.id)?.showsInRootSearch == true)
+        store.setShowsInRootSearch(false, id: added.id)
+        check(
+            "hiding from root search is stored and leaves it enabled",
+            store.command(id: added.id)?.showsInRootSearch == false
+                && store.command(id: added.id)?.isEnabled == true)
+
         let expected = store.commands
         check(
             "commands survive a reload with their flags",
@@ -77,14 +104,15 @@ struct CustomCommandTests {
         // `replace` runs the import sanitizer, which must carry every flag through.
         store.replace(with: [
             CustomCommand(
-                name: "Imported", command: "/usr/bin/true", loadsShellEnvironment: true,
-                requiresConfirmation: true, showsConfirmation: true,
+                name: "Imported", command: "/usr/bin/true", showsInRootSearch: false,
+                loadsShellEnvironment: true, requiresConfirmation: true, showsConfirmation: true,
                 arguments: [CustomCommandArgument(name: "  Query  ", isOptional: true)],
                 opensTerminal: true)
         ])
         check(
             "import preserves every flag",
-            store.commands.first?.loadsShellEnvironment == true
+            store.commands.first?.showsInRootSearch == false
+                && store.commands.first?.loadsShellEnvironment == true
                 && store.commands.first?.requiresConfirmation == true
                 && store.commands.first?.showsConfirmation == true
                 && store.commands.first?.opensTerminal == true)
@@ -353,6 +381,33 @@ struct CustomCommandTests {
             injected.lastOutputLine == "; touch /tmp/blitz-should-not-exist"
                 && !FileManager.default.fileExists(atPath: "/tmp/blitz-should-not-exist"))
 
+        // MARK: Another interpreter
+
+        // The same text means `x` to zsh; only bash itself answers `y`.
+        let bashArray = await ShellCommandRunner.run("#!/bin/bash\na=(x y)\nprintf '%s' \"${a[1]}\"")
+        check("a #! line picks the interpreter that runs the text", bashArray.standardOutput == "y")
+
+        let scripted = await ShellCommandRunner.run(
+            "#!/bin/sh\nprintf '%s\\n' \"$0\" \"$1\"",
+            arguments: ["; touch /tmp/blitz-script-should-not-exist"])
+        let scriptedLines = scripted.standardOutput?.split(separator: "\n").map(String.init) ?? []
+        check(
+            "a #! script reads its value as data, never as syntax",
+            scriptedLines.last == "; touch /tmp/blitz-script-should-not-exist"
+                && !FileManager.default.fileExists(atPath: "/tmp/blitz-script-should-not-exist"))
+        check(
+            "a #! script's file is gone once it exits",
+            scriptedLines.count == 2 && !FileManager.default.fileExists(atPath: scriptedLines[0]))
+
+        let missingInterpreter = await ShellCommandRunner.run("#!/nope/bash\ntrue")
+        check(
+            "a missing interpreter is named in the failure",
+            missingInterpreter.termination == .exited(status: 127)
+                && missingInterpreter.standardError?.contains("/nope/bash") == true)
+
+        let plainName = await ShellCommandRunner.run("printf '%s' \"$0\"")
+        check("text without #! still runs as zsh with blitz as $0", plainName.standardOutput == "blitz")
+
         // MARK: Inline argument values
 
         let search = CustomCommand(
@@ -437,6 +492,20 @@ struct CustomCommandTests {
         check(
             "the command's status arrives through the marker, which never reaches the view",
             exitedTerminal.result == .exited(status: 7) && !exitedTerminal.output.contains("6973"))
+
+        let scriptTerminal = await record(
+            ShellCommandRunner.openTerminal(
+                command: "#!/bin/bash\nprintf 'interp:%s:%s:%s\\n' \"$BASH\" \"$0\" \"$1\"",
+                arguments: ["a; b"]))
+        let scriptPath =
+            scriptTerminal.output.components(separatedBy: "interp:/bin/bash:").last?
+            .components(separatedBy: ":").first ?? ""
+        check(
+            "a #! command runs in its interpreter under a terminal too, its value as data",
+            scriptTerminal.result == .exited(status: 0) && scriptTerminal.output.contains(":a; b\n"))
+        check(
+            "a #! terminal's file is gone once the command finishes",
+            !scriptPath.isEmpty && !FileManager.default.fileExists(atPath: scriptPath))
 
         var markerScanner = ShellMarkerScanner(code: 6973, nonce: "N")
         let markedBytes = Array("before\u{1B}]6973;N;7\u{07}after".utf8)

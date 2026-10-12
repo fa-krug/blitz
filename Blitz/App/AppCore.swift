@@ -96,7 +96,7 @@ final class AppCore {
         clipboardStore: clipboardStore, appIndex: appIndex, settings: settings,
         windowController: windowController, paletteCoordinator: paletteCoordinator,
         settingsCoordinator: settingsCoordinator,
-        showMessage: { [unowned self] in self.showMessage($0) }, core: self)
+        showMessage: { [unowned self] in self.showMessage($0, tone: $1) }, core: self)
     @ObservationIgnored private(set) lazy var quicklinkCoordinator = QuicklinkCoordinator(
         store: quicklinks, settings: settings,
         appIndex: appIndex, injector: textInjector, hotKeys: hotKeys, favorites: favorites,
@@ -370,7 +370,7 @@ final class AppCore {
             updateChecker.onUpdateAvailable = { [weak self] release in
                 self?.updateCoordinator.presentIfAvailable(release) ?? true
             }
-            updateChecker.start()
+            updateCoordinator.applyAutomaticChecking()
             supportReminders.onDue = { [weak self] in self?.supportCoordinator.presentIfDue() }
             supportReminders.start()
 
@@ -789,6 +789,9 @@ final class AppCore {
         track(
             { _ = $0.extensionsAutoUpdate },
             reproject: { $0.extensionCoordinator.applyAutoUpdate() })
+        track(
+            { _ = $0.automaticallyCheckForUpdates },
+            reproject: { $0.updateCoordinator.applyAutomaticChecking() })
         track({ _ = $0.snippetsFolder }, reproject: { $0.applySnippetsFolder() })
         track({ _ = $0.notesFolder }, reproject: { $0.applyNotesFolder() })
         track(

@@ -282,6 +282,15 @@ occurrence rather than per series — dismissing today's standup says nothing ab
 than inventing a second window is what keeps one knob, `joinWindowMinutes`, governing the card, the
 chord and auto join alike.
 
+**Only join known meeting services** (`autoJoinNamedProvidersOnly`, off by default) keeps auto join
+to the named providers. Any http(s) URL in an event's URL, location or notes counts as a `.generic`
+link, and that is as often a booking page, a document or a calendar's help link as a call — which is
+what placeholder events carry. The bare links are set aside **before** `carded` picks, not after:
+filtering the pick would let a placeholder starting a minute earlier hold the card's slot and starve
+the call beside it. The card, the chord and the menu bar still offer a bare link; only the
+unattended join skips it. It rides in backups and in settings.json as
+`calendar.autoJoinNamedProvidersOnly`, since it narrows auto join and grants nothing.
+
 The meeting is marked joined **before** the confirmation is raised, so declining does not re-ask a
 minute later.
 

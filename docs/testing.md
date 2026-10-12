@@ -102,13 +102,13 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
 | hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
-| system actions and dialogs | `system-action-test`, `volume-test`, `dialog-draft-test` |
+| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test` |
 | notes and snippets | `notes-*`, `snippets-test` |
-| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-test`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
 | AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
-| updates, support, onboarding | `updates-test`, `support-test`, `onboarding-test` |
+| updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
 
 The subprocess harnesses bring their own stub servers from `Tests/ai-fixtures/`: `codex-stub.js`
 (`codex-turn-test`), `installed-cli-stub.js` (`installed-ai-test`) and `mcp-stub.js`
@@ -338,11 +338,16 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - ⌃N/⌃P move the highlight as ↓/↑ do; ⌃F/⌃B step the emoji grid's selection, and the caret elsewhere
 - The highlight always sits on the row the footer pill describes
 - With a calculation typed, the calculator card is first and is selected first
+- ⌘↵ on a number, unit or money card puts the answer in the search bar with the caret after it, so
+  ` * 2` typed straight away extends it — from ⌘K too; a date or time card offers neither
 - With macOS set to a decimal-comma region (Italian), `2,3 + 1,5` answers `3,8`, `max(2,5; 3)`
   answers `3`, and ↵ pastes `3,8`; General ▸ Calculator ▸ Number format `English` restores `2.3 + 1.5`
   and re-renders past Calculator History in the chosen format
 - Section headers appear in order: Favorites, Applications, System Settings, Quicklinks, Snippets,
   System Actions, Window Management, Custom Commands, Commands
+- `snippets` lists the whole Snippets section; `window` lists its ranked matches under Results with
+  the best on ↵, then the rest of Window Management and Window Layouts under their headers; ⌘↓
+  jumps from Results to the first of those sections
 - With a non-ASCII input source active, ⌘K opens Actions; ↑/↓ move it, ↵ activates, Escape closes it
 - In either ⌘K Actions panel, typing filters immediately in the bottom search band without changing
   the palette query; sections survive filtering, **No Results** is centred, and no dissolve covers the
@@ -353,6 +358,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A long menu opens with unchanged row insets; while scrolling, rows can reach the panel edges
 - A click in the palette but outside its menu closes only the menu; a click outside the palette
   closes both, regardless of the menu query; the next summon accepts typing immediately
+- Click the menu's search field, pause, then dismiss by clicking the other footer control: the next
+  click opens that control's menu once and leaves it open, even when the clicks form a double click.
+  A right click on a row while a menu is open closes the menu without opening one on the row
 - Footer menus are about 30pt wider; their row hover keeps the shared 10pt menu-row corner
 - Tab toggles launcher ↔ clipboard; bare Backspace on an empty query backs out of a sub-screen
 - Launching an app focuses it; escaping the palette returns focus to the app you came from
@@ -559,6 +567,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   flipping it back re-renders without dirtying the note or touching undo
 - Edit one note, switch to a shorter note, then Undo and Redo: the new note remains intact and the app
   does not terminate
+- With rendering on and off, ⌘Z undoes and ⇧⌘Z redoes typing, deletion and paste while another app's
+  menu bar is visible; both update the footer count and autosave the restored source. Editing after
+  an undo discards redo
 - Marked-text input, emoji, combining marks, Copy, Cut, Paste, Select All, Undo, and Redo preserve
   exact source; ⌘F finds occurrences in the active note with rendering on and off, and Escape closes
   the find bar before hiding Notes
@@ -608,6 +619,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Enabling shows the consent dialog **before** the Accessibility prompt
 - Declining leaves the feature off and prompts for nothing
 - After enabling, a keyword expands in a text field; an argument-bearing snippet prompts then delivers
+- A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
+  field first** rather than doing nothing
 - Editing a snippet file externally reloads it
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
@@ -679,6 +692,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Auto Join on: the meeting opens itself at its start, **once** — dismiss it and it does not return.
   With confirm on and camera preview off, the dialog asks first
 - Arming Auto Join during a meeting already under way joins nothing
+- `Only join known meeting services` on: an event whose only link is a booking page or document
+  neither asks nor opens at its start, while a Zoom or Meet event beside it still joins; the join
+  card still offers both
 - Sleeping over a meeting's start and waking past it reloads the events; one still inside the window
   joins, one long past does not
 - Create Event writes to the default calendar and shows up on the card, the schedule and the launcher
@@ -696,6 +712,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 - Open Camera shows the panel already live, mirrored; the camera light goes out the moment the panel
   closes, by Escape, click-away or a photo
+- With Open Camera or the join card up, changing a video effect in Control Center leaves the preview
+  live; the next click outside both the panel and system UI closes it, and running Open Camera again
+  hands Esc and ↵ back to it
 - The first run asks for camera access once, before any panel appears; after a denial the stage
   offers **Open Privacy Settings**
 - Taking a photo closes the panel and puts a PNG on the clipboard that pastes as the mirrored frame
@@ -754,7 +773,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Undo banners
 
 - Hide from Search (⇧⌘H) on a launcher row hides it without asking, keeps the palette open on the
-  same query, and the banner's **Undo** brings the row back
+  same query, and the banner's **Undo** brings the row back; on a quicklink or custom command it
+  reads Hide from Root Search, and the row's editor shows **Show in root search** off until Undo
 - Move to Trash in File Search moves the file without asking; **Undo** restores it to where it was
 - Complete Reminder (⌘↵) ticks the reminder off; **Undo** unticks it in Reminders.app too
 - Hovering a banner holds it past its five seconds; leaving lets it fade
@@ -765,6 +785,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Empty Trash confirms while Finder's "Show warning before emptying the Trash" is on, and runs
   without a dialog once it is off
 - Volume actions show the volume HUD; everything else shows the message pill
+- Toggle Microphone Mute, from the launcher and from a global hotkey with the palette closed, reports
+  Microphone Muted / Unmuted, silences and restores captured input, and leaves input gain and output
+  untouched; switch the default input and repeat
 - Holding a bound hotkey does **not** stack dialogs
 - Lock Screen locks from a global hotkey with the palette closed, including a Hyper-key binding
 - Window commands move the window you were last in; cycle-on-repeat steps ½ → ⅓ → ⅔
@@ -779,6 +802,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   with the gap, hides other apps and parks their extra windows; quitting, `kill -9` then relaunching, and
   turning Window Management off each bring every window back.
   Repeat on two displays and with Reduce Motion on
+- Every window command, custom size, layout and room row in Settings ▸ Window Management has Add
+  Alias; an alias set there finds its entry from the launcher and shows the chip. Unticking the row,
+  or its section's Show in launcher switch, dims the field
 
 ### Quick AI and Quick Actions
 
@@ -824,6 +850,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A file whose `manifest.json` `format` was hand-edited is refused **with a message naming it**
 - Cancelling the save panel leaves nothing in `~/Library/Caches/de.fa-krug.blitz.dev/backup-staging/`
 - **`snippetsEnabled` is not in the exported file**, and importing does not enable snippets
+- General ▸ Automatically check for updates, on a stable build: off survives relaunch, no update
+  window appears on its own, and Check for Updates still answers; back on, checking resumes. A
+  backup round trip and a settings.json edit both carry the choice
 - Nothing in the extracted tree names a Keychain item, an extension, or an AI conversation
 
 ### Clean install

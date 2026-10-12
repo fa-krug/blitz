@@ -130,12 +130,16 @@ given the row's identity, so that memory starts clean on the next quicklink. The
 glyph, then the chips, right after the typed text — and `.besideSearchField` on Search Quicklinks,
 where the field stays a filter with its prompt intact and the row below already carries the glyph.
 
-**"Selected Text" is asked for up front, not after a failed read.** A chip cannot capture a selection,
-so the field appears whenever the link reads `{selection}` and the setting is `.ask`. Left empty it
-changes nothing — a selection the frontmost app *does* expose is still used — and only a typed value
-replaces it. So it is never owed: `QuicklinkCoordinator.requiresValue` keeps it out of the first
-incomplete field, and ↵ opens a selected-text link at once instead of focusing the empty chip first. That
-is what lets the strip be drawn without capturing anything.
+**"Selected Text" is offered up front, but owed only after a failed read.** A chip cannot capture a
+selection, so the field appears whenever the link reads `{selection}` and the setting is `.ask`. Left
+empty it changes nothing — a selection the frontmost app *does* expose is still used — and only a typed
+value replaces it. So ordinarily it is not owed: `QuicklinkCoordinator.requiresValue` keeps it optional,
+and ↵ opens a selected-text link at once instead of focusing the empty chip first, which is what lets
+the strip be drawn without capturing anything. When that read comes back empty and the chip is empty
+too, the open never runs with nothing in its place: it lands on Search Quicklinks like any other
+missing value, and while `pendingArgumentEntryID` names the row, `QuicklinkArgumentsAccessory` counts
+the chip as the first incomplete field, so the caret goes there. Values already typed and a one-shot
+handler survive the prompt.
 
 `openQuicklink(id:forcingDefaultApp:values:)` is the single funnel, and it captures the expansion
 context on **every** call rather than holding one across a session, so `{clipboard}`, `{selection}` and
@@ -147,7 +151,10 @@ the window the user was actually in.
 its values through `LauncherScreen.argumentValues(for:)` into the same funnel, so a filled row never
 takes a detour. **Only a shortcut whose values are still missing lands on Search Quicklinks**, on that
 row, with its first empty chip focused — carried across by `PaletteState.pendingArgumentEntryID` and
-`commandArguments`, both set after the show because `prepare` clears them. One argument surface, whether
+`commandArguments`, both set after the show because `prepare` clears them. The screen's
+`landingSelection` reads that id, so the show's own reset lands on the row rather than the top, and the
+coordinator finds the row in the same filtered list the screen draws (`QuicklinkStore.listed`), since
+a screen restored on re-summon keeps its query and tag. One argument surface, whether
 the row is reached from root search, from Search Quicklinks or from a hotkey. A one-shot handler — ⌘↵'s
 system default, or an app from the Open With section — survives that trip as a `HandlerOverride` on
 `pendingHandlerOverride`, keyed by the quicklink it applies to.
@@ -249,6 +256,11 @@ disagree. **Pinned means the top of the Quicklinks section**, not above Applicat
 position in root search would need a second `AppEntry.Kind`, which the kind invariant forbids for one
 feature. The Search Quicklinks screen gives pins their own section, like the clipboard's.
 
+A root-search row's ⌘K menu adds **Copy Link** (`⌃⌘C`, see [Search Quicklinks](#search-quicklinks)),
+**Edit Quicklink** (`⌘E`), opening the same editor as Search Quicklinks, and **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
+writing `VisibilityStore` — the editor's switch is its undo besides the banner's, and the row stays in
+Search Quicklinks.
+
 ## Search Quicklinks
 
 `PaletteMode.quicklinks` is a sub-screen reached from the `Search Quicklinks` command. It is shaped
@@ -257,10 +269,20 @@ the selected quicklink's glyph over an Information block (name, link, the app it
 shortcut, when it was created). Like Calculator History it stays out of the Tab cycle and exits via the
 back chevron or a bare backspace.
 Its ⌘K menu carries Open (`↵`), Open With Default App (`⌘↵`, only when a handler is saved), an
-**Open With** section, Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate,
-New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Hide/Show in Root Search, Show in Finder (menu only, and
-only for a resolved path), and Delete (`⌘⌫`). ⌘N works with no rows as well — the empty library's
-hint names it — and opens the editor named after the search text.
+**Open With** section, Copy Link (`⌃⌘C`), Edit (`⌘E`, the clipboard's and emoji picker's edit chord), Duplicate (`⌘D`),
+New Quicklink (`⌘N`), Pin/Unpin (`⌘.`), Show in Finder (`⌘F`, only for a resolved path), and Delete
+(`⌘⌫`). Every chord runs the same `QuicklinkCoordinator` call as its row — `editQuicklink` and
+`showQuicklinkInFinder` step the palette aside themselves — so the two can't drift. ⌘N works with
+no rows as well — the empty library's hint names it — and opens the editor named after the search
+text. Root-search visibility is not offered here: the launcher row hides itself, and the editor
+restores it.
+
+**Copy Link** writes the saved destination to the clipboard, unmarked so it enters history, without
+opening it. Placeholders stay literal even when the header's fields hold values — it never reads the
+selection, the clipboard or a browser tab, and never expands the template. It closes the palette and
+says "Copied link" only once `Paster.copyPlainText` reports the pasteboard took the write, and
+"Couldn’t copy link" when it refused. ⌃⌘C is the palette's `copyPath` chord, so plain ⌘C still copies
+the search field's text.
 
 The Open With section lists the system default first, marked, then up to six more apps
 `NSWorkspace.urlsForApplications(toOpen:)` names, each with its app icon. Launch Services is asked
@@ -350,4 +372,10 @@ one turns the feature on — the switch grants no permission class.
 
 ```sh
 ./Scripts/run-tests.sh quicklink-test
+./Scripts/run-tests.sh quicklink-coordinator-test
 ```
+
+`quicklink-coordinator-test` compiles the shipped `QuicklinkCoordinator` and
+`QuicklinkArgumentsAccessory` against inert stand-ins for the palette, the injector and
+`QuicklinkLauncher`, so it covers the open funnel — which values prompt, which open, and which field
+takes the caret — without opening or reading anything real.

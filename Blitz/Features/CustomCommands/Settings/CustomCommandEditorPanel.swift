@@ -9,6 +9,7 @@ struct CustomCommandEditorPanel: View {
     @Environment(AppCore.self) private var core
     @State private var name: String
     @State private var shellCommand: String
+    @State private var showsInRootSearch: Bool
     @State private var loadsShellEnvironment: Bool
     @State private var requiresConfirmation: Bool
     @State private var showsConfirmation: Bool
@@ -30,6 +31,7 @@ struct CustomCommandEditorPanel: View {
         self.command = command
         _name = State(initialValue: command?.name ?? "")
         _shellCommand = State(initialValue: command?.command ?? "")
+        _showsInRootSearch = State(initialValue: command?.showsInRootSearch ?? true)
         _loadsShellEnvironment = State(initialValue: command?.loadsShellEnvironment ?? false)
         _requiresConfirmation = State(initialValue: command?.requiresConfirmation ?? false)
         _showsConfirmation = State(initialValue: command?.showsConfirmation ?? false)
@@ -65,9 +67,13 @@ struct CustomCommandEditorPanel: View {
                     .settingsEditorTextArea(height: Theme.Size.editorTextHeight)
             }
 
-            Text("Example: /usr/bin/pmset displaysleepnow")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Example: /usr/bin/pmset displaysleepnow")
+                    .font(.caption.monospaced())
+                Text("Start with a #! line, such as #!/bin/bash, to run it in another interpreter.")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
 
             workingDirectoryField
 
@@ -75,8 +81,11 @@ struct CustomCommandEditorPanel: View {
 
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 optionToggle(
+                    "Show in root search", isOn: $showsInRootSearch,
+                    detail: "List this command alongside apps and other commands.")
+                optionToggle(
                     "Load shell environment", isOn: $loadsShellEnvironment,
-                    detail: "Resolves aliases, functions and PATH. Slower to start.")
+                    detail: "Sources ~/.zshrc for aliases, functions and PATH. Slower to start.")
                 optionToggle(
                     "Needs confirmation", isOn: $requiresConfirmation,
                     detail: "Ask before running this command.")
@@ -256,6 +265,7 @@ struct CustomCommandEditorPanel: View {
             id: command?.id ?? UUID(), name: name, command: shellCommand,
             // Its page owns the Enabled switch; an edit carries the flag rather than resetting it.
             isEnabled: command?.isEnabled ?? true,
+            showsInRootSearch: showsInRootSearch,
             loadsShellEnvironment: loadsShellEnvironment,
             requiresConfirmation: requiresConfirmation,
             showsConfirmation: showsConfirmation,

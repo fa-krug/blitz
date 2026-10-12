@@ -54,6 +54,7 @@ struct AIChatTests {
         renamesAndPinsSurviveSavesAndSpareRetention()
         transcriptsExportAndDropOnlyATrailingReply()
         await regenerateAsksTheSameQuestionAgain()
+        await requestsIdentifyTheirConversation()
         await aConversationIsLiveOnOneSurfaceAtATime()
         await everyStateReportsAFinishedReply()
         await reasoningFoldsIntoTheReplyAndIsNeverResent()
@@ -62,6 +63,7 @@ struct AIChatTests {
         referencesAreTheLinksAReplyCites()
         titlesAreCleanedAndNeverBeatARename()
         findWalksMatchesAndWraps()
+        chatStepsFollowTheSidebarAndWrap()
         citationsCloseTheSentenceThatCitedThem()
         toolScopeSwitchesServersPerChat()
         await usageIsKeptWithTheReplyThatReportedIt()
@@ -1346,6 +1348,37 @@ extension AIChatTests {
             "the stored transcript holds only the new reply")
     }
 
+    /// Codex resumes a chat's thread by this ID, so a new chat must never inherit another's.
+    static func requestsIdentifyTheirConversation() async {
+        let (store, directory) = temporaryStore("conversation-id")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: store)
+        let provider = ScriptedProvider(rounds: [
+            [.text("First"), .finished], [.text("Second"), .finished]
+        ])
+        let firstID = chat.session.id
+        chat.send("Research", using: provider)
+        await settle(chat)
+        chat.send("Elaborate", using: provider)
+        await settle(chat)
+        expect(
+            provider.requests.map(\.conversationID) == [firstID, firstID],
+            "follow-ups identify the same conversation")
+        let continued = provider.requests[0].continuing(
+            with: provider.requests[0].messages, tools: [])
+        expect(continued.conversationID == firstID, "tool rounds keep the conversation identity")
+        chat.startNewChat()
+        chat.send("Start again", using: provider)
+        await settle(chat)
+        expect(
+            provider.requests.last?.conversationID == chat.session.id
+                && chat.session.id != firstID,
+            "a new chat identifies itself, never the chat before it")
+        expect(
+            AIRequest(messages: []).conversationID == nil,
+            "a one-off generation belongs to no conversation")
+    }
+
     /// Naming hangs off this hook, so a state made after it is set must be told too.
     static func everyStateReportsAFinishedReply() async {
         let (store, directory) = temporaryStore("finished")
@@ -1520,6 +1553,28 @@ extension AIChatTests {
             !references.contains { $0.host == "example.com" },
             "a URL inside a code sample is not a source")
         expect(ChatReferences.extract(from: "No links here.").isEmpty, "plain prose cites nothing")
+    }
+
+    /// ⌃⇥ walks the sidebar's own order, so a pinned chat is next after the last one.
+    static func chatStepsFollowTheSidebarAndWrap() {
+        func conversation(pinned: Bool = false) -> ChatConversation {
+            ChatConversation(
+                id: UUID(), title: "", preview: "", createdAt: .distantPast,
+                updatedAt: .distantPast, messageCount: 2, isPinned: pinned)
+        }
+        let newest = conversation()
+        let pinned = conversation(pinned: true)
+        let oldest = conversation()
+        let ordered = [newest, pinned, oldest].pinnedFirst
+        expect(ordered.map(\.id) == [pinned.id, newest.id, oldest.id], "pins lead, recency holds")
+
+        expect(ordered.adjacent(to: pinned.id, step: 1) == newest, "a step goes one row down")
+        expect(ordered.adjacent(to: oldest.id, step: 1) == pinned, "the last row wraps to the top")
+        expect(ordered.adjacent(to: pinned.id, step: -1) == oldest, "the top wraps to the end")
+        expect(ordered.adjacent(to: UUID(), step: 1) == pinned, "an unsaved chat steps to the top")
+        expect(ordered.adjacent(to: UUID(), step: -1) == oldest, "or back to the bottom")
+        expect([pinned].adjacent(to: pinned.id, step: 1) == nil, "a lone chat stays where it is")
+        expect([ChatConversation]().adjacent(to: UUID(), step: 1) == nil, "no chats, no step")
     }
 
     static func findWalksMatchesAndWraps() {

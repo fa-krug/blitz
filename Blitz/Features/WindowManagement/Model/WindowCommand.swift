@@ -81,7 +81,7 @@ struct WindowCommand: Identifiable, Hashable, Sendable {
     let sfSymbol: String
     let kind: Kind
     let group: Group
-    /// Only the four halves honour `WindowCycle`; the rest ignore the step they are handed.
+    /// Only the five halves honour `WindowCycle`; the rest ignore the step they are handed.
     let cyclesOnRepeat: Bool
     /// False for the nudges, so the mover never writes `kAXSizeAttribute` for them.
     let resizes: Bool
@@ -113,7 +113,7 @@ enum WindowCommandCatalog {
     }
 
     static let cyclesOnRepeat: Set<WindowCommand.ID> = [
-        .leftHalf, .rightHalf, .topHalf, .bottomHalf
+        .leftHalf, .rightHalf, .topHalf, .bottomHalf, .centerHalf
     ]
 
     /// Nudges reposition without ever touching the size.

@@ -15,7 +15,8 @@ earliest scope wins; within one folder, the newest `CFBundleShortVersionString` 
   list disables beneath it — the guard sits in the one dispatch funnel, the way each feature switch
   already guards its own. The per-item "Show in launcher" switch on the item's page is the narrow
   tool: it hides one row and leaves that row's shortcut firing, and **Hide from Search** in the ⌘K
-  menu turns it off for the kinds whose pane can turn it back on. A new category must be wired into
+  menu turns it off for the kinds whose pane can turn it back on — **Hide from Root Search** for the
+  two whose editor carries its own switch instead. A new category must be wired into
   `VisibilityStore.allowsHotKey`, or its chords keep running while its pane reads off.
 - **One command, one pane, one switch.** `SettingsTab.ownedCommands` is the whole table of which pane
   lists a command's shortcut, alias and launcher checkbox. A feature that names its commands there
@@ -259,23 +260,35 @@ A query that *equals* a category's own name lists that whole category under its 
 order the section shows when the field is empty. Both words a kind already carries work — the section
 title and the singular label, `Snippets`/`Snippet`, `Window Management`/`Window Command` — read straight
 off `KindDescriptor` by `AppEntry.Kind.named(by:)`, so no category name is written a second time and a
-new `Kind` case gets its category word for free.
+new `Kind` case gets its category word for free. `System Settings` names both a category and an
+installed application; an entry whose display name equals the query joins the listing, so the app
+appears under Applications above the panes.
 
-**The trigger is exact equality, never a prefix or a fuzzy hit**, because a looser rule would take a word
-away from a real entry: `System Settings` names both a category and an installed application. That one
-collision is answered rather than avoided — an entry whose display name equals the query joins the
-listing, so the app appears under Applications above the panes. Since slice order is section order
-(`publishEntries`), `categoryListing` filters and then sorts within each kind's run, as the empty list
-does, and the sectioned view stays 1:1 with the flat selection. Visibility still applies downstream,
-and no `limit` does, matching the empty query. A ranked search is the one that is capped: the launcher
-shows its first `AppIndex.searchResultLimit` (50) visible rows, cut after visibility so a hidden entry
-never takes a slot, because the results list lays out every row on each keystroke. `matches(_:)` itself
-keeps its wider limit, since Settings filters its own lists through it.
+**A started category name only appends.** At three characters or more, a prefix at the start of
+either name or one of its words also takes the category in: `win` and `window` reach Window
+Management and Window Layouts, `window man` and `manage` Window Management alone.
+`LauncherOrder.CategoryQuery` reads the query through the shared fold and collapses its whitespace,
+so case, accents, full-width text and pasted whitespace behave alike; a mid-word substring or a fuzzy
+subsequence never expands a category, and shorter queries rank as usual. Such a query never reorders
+the ordinary search: its ranked matches, aliases included, lead under Results in relevance order, so
+↵ still opens the best one, and the started categories' remaining entries follow under their own
+section headers in usage order. `AppIndex.Results.matchCount` marks where the ranked rows end — every
+row for an ordinary search, none for an exact category name — which is the one fact `LauncherList`
+and `LauncherScreen.sectionStarts` need to draw and jump through the same layout for every query.
 
-`LauncherScreen` therefore keeps the empty query's two jobs apart: `showSections`
-draws the headers, `pinsFavorites` pins the Favorites prefix and hands out the ⌘-digit slots. A category
-listing takes the first only. Opening a row from one records the visit but not the word — a category
-word is not a search for the row that ran, and learning it would rank that row under `s`.
+Since slice order is section order (`publishEntries`), `categoryListing` and `categoryRemainder` filter
+and then sort within each kind's run, as the empty list does, and the sectioned view stays 1:1 with
+the flat selection. Visibility still applies downstream. Only the ranked rows are capped: the
+launcher shows the first `AppIndex.searchResultLimit` (50) visible matches, cut after visibility so a
+hidden entry never takes a slot, because the results list lays out every row on each keystroke. A
+category, whole or appended, stays uncapped, matching the empty query. `matches(_:)` itself keeps its
+wider limit, since Settings filters its own lists through it, and so also lists a started category's
+remaining entries after the real matches; the match memo is keyed on that limit too.
+
+Only the empty query pins favorites and hands out the ⌘-digit slots (`pinsFavorites`); a category
+query shows its headers without them. Opening a row records the visit, but the query is learned only
+when it did not name or start that row's category — a category word is not a search for the row that
+ran, and learning it would teach every window command the same term.
 
 ### Contextual commands
 
@@ -396,8 +409,9 @@ list filters by **membership only**, keeping the index's name order — re-ranki
 would move the row being edited out from under its own field editor. A pane with a hand-written row
 hands `AliasField` the key itself: Settings ▸ Quicklinks passes `Quicklink.entryID`, Settings ▸
 Commands passes `CustomCommand.entryID`, Settings ▸ Extensions passes `extension:<name>/<command>`,
-and each dims the field when the entry is hidden from launcher search, whose entry the ranker never
-sees.
+Settings ▸ Window Management passes each window command, custom size, layout and room's `AppEntry`
+(the same one `AppIndex` publishes), and each dims the field when the entry is hidden from launcher
+search, whose entry the ranker never sees.
 
 Aliases ride along in a settings backup (`launcherAliases`), and deleting what an alias points at —
 uninstalling an app, deleting a quicklink or custom command, uninstalling an extension — removes it
@@ -516,8 +530,8 @@ never suggested, however often they are opened:
    index, so it is never offered.
 
 A suggested entry leaves its kind section below, so no row appears twice. `AppIndex.Results` carries
-`favoriteCount`, `meetingCount` and `suggestionCount`, which `LauncherScreen` hands to `LauncherList`
-for its three leading headers. **Show suggestions** in Settings › General › Search turns the section
+`favoriteCount`, `meetingCount`, `suggestionCount` and, for a typed query, `matchCount`, which
+`LauncherScreen` hands to `LauncherList` for its leading headers. **Show suggestions** in Settings › General › Search turns the section
 off (`launcherShowsSuggestions`, carried by a settings backup). `HotKeyManager.revision` is part of
 `AppIndex`'s results key, because binding a shortcut takes an entry out of the section.
 
@@ -743,9 +757,12 @@ favorite, alias and learned ranking survive the round trip, and its shortcut kee
 The row is offered only where Settings can undo it, and `KindDescriptor.canHideFromSearch` is that
 rule — per kind, and a new `Kind` case has to answer it to compile. Applications, System Settings,
 Commands, Quick Actions, System Actions, Window Commands, Window Layouts, Rooms and extension commands each
-draw a per-row checkbox in their pane, so they carry it. Custom commands, quicklinks and snippets do
-not: their panes list a record with its own switches, not a launcher checkbox — a hide nothing in
-Settings can visibly undo is a trap, not a shortcut.
+draw a per-row checkbox in their pane, so they carry it. Snippets do not: their pane lists a record
+with its own switches, not a launcher checkbox — a hide nothing in Settings can visibly undo is a
+trap, not a shortcut. Quicklinks and custom commands differ: each editor has its own **Show in root
+search** switch, so `AppEntry.hidesThroughRootSearchSwitch` offers **Hide from Root Search** on
+them, and `hideFromSearch(at:)` clears that `showsInRootSearch` flag through the feature's
+coordinator instead of writing `VisibilityStore`; the banner's Undo sets it back.
 `AppActionsMenu` adds the query-driven guard the favorites row already uses: a typed URL lives only
 for its query and has no preference to write.
 
@@ -761,7 +778,8 @@ whatever else wants the press on a row that offers no such menu item.
 
 Application and System Settings results expose **Show in Finder** in their ⌘K Actions menu and on
 **⌘↵**. Synthetic command results have no filesystem location, so neither the menu row nor the
-shortcut is available for them. `AppEntry.canRevealInFinder` is the one rule both the menu row and
+shortcut is available for them. On the calculator card ⌘↵ instead puts the answer in the search bar
+([calculator.md](calculator.md#result-and-rendering)). `AppEntry.canRevealInFinder` is the one rule both the menu row and
 the key handler read, so the advertised chord can't drift from the behavior.
 
 `AppLauncher.showInFinder` is every feature's reveal. `activateFileViewerSelecting` leaves the file

@@ -77,8 +77,8 @@ When a trailing operator keeps a conversion visible, its input is reconstructed 
 display rounding never feeds back into evaluation.
 
 `UnitDef` is an immutable, Sendable reference shared by its aliases and parsed values. The catalog
-stores 155 base definitions as compact text records rather than repeated construction code, then adds
-SI and transfer-rate prefixes once on first use, for 685 aliases. `CalcUnitCatalog` owns this data;
+stores 157 base definitions as compact text records rather than repeated construction code, then adds
+SI and transfer-rate prefixes once on first use, for 691 aliases. `CalcUnitCatalog` owns this data;
 `CalcUnits` owns conversion policy.
 
 Typed arithmetic precedes simple conversion so `1 / 20ms to hz` divides by a duration,
@@ -379,12 +379,23 @@ Order settles the collisions. Time zones run **last** among the named paths, aft
 currency, so `10 cordoba to usd` stays money and `1 cup to ml` stays volume. `cordoba` is the one
 word the zone and currency tables both claim.
 
+## Months and years
+
+As units, `mo` / `month` / `months` and `yr` / `year` / `years` are averages: the Gregorian year of
+365.2425 days and a month of one twelfth of that (30.436875 days). They take fractions, convert both
+ways and join quantity arithmetic: `3 months to days` is `91.310625 day`, `12 months to years` is
+`1 yr`, and a bare `3.5 years` auto-converts to days.
+
+Date arithmetic never uses the averages. `CalcDateTime` runs first and shifts by whole calendar
+months and years through the injected `Calendar`, so `31.1.26 + 1 month` clamps to 28 February.
+
 ## Timespans
 
 `145 mins to timespan` breaks a duration into the units that fit it (`2 hr 25 min`), with zero
-parts dropped. Weeks are the largest step on purpose: a month is not a fixed number of seconds, so
-carrying one would make the answer depend on which month you meant. Only a time unit converts, so
-`10 km to timespan` stays silent.
+parts dropped. Weeks are the largest step on purpose: a calendar month is not a fixed number of
+seconds, so carrying one would make the answer depend on which month you meant. A month or year
+*input* converts at its average, so `1 month to timespan` is `4 wk 2 day 10 hr 29 min 6 s`. Only a
+time unit converts, so `10 km to timespan` stays silent.
 
 ## Workdays
 
@@ -412,9 +423,8 @@ consuming a token before parsing the right operand.
 
 A parenthesis, constant, function or spoken root starts an implicit product (`2 square root of 9` → 6).
 Adjacent numbers never do — `5 3` stays an app search — and unit and currency names keep their own
-operand positions. The tokenizer only folds a lone `x` after an operand, keeping currency names such
-as `xof` and `xrp`, the `xor` operator, names such as `max` and incomplete hexadecimal input such as
-`0x` out of arithmetic. The same rule covers typed values
+operand positions. The tokenizer only folds a lone `x` after an operand, keeping names such as `max`
+and incomplete hexadecimal input such as `0x` out of arithmetic. The same rule covers typed values
 (`$5(2)` → `10.00 USD`, `2(3)kg` → `6 kg`, matching `2*(3)kg`); adjacent quantities still use the
 composite `+` described above.
 
@@ -593,6 +603,13 @@ the list (flat selection index 0, shifting rows by one) and Enter copies the ans
 `CalculatorHistoryStore`; ⇧⌘↵ copies the whole calculation. The palette closes on a copy, so each one
 confirms with a **Copied result** / **Copied calculation** / **Copied expression** pill.
 
+⌘↵ (**Put Answer in Search Bar**) records the answer too, then `PaletteState.rewriteQuery` makes its
+copy text the query with the caret after it, so the next step chains on: `2^10`, ⌘↵, ` * 2`. Only a
+`canChain` answer offers it. `CalcEngine` clears the flag on every `CalcDateTime` and `CalcTimeZone`
+answer, because a clock typed back reads as local time; `CalcQuantity` clears it on a boolean and
+`CalcPercent` on a ratio. In Calculator History ⌘↵ on a stored entry still copies its expression, and
+the history search also matches an entry's ungrouped answer, so the rewritten query finds its row.
+
 ## Number format
 
 General ▸ Calculator ▸ Number format is `System` by default, reading the decimal and grouping
@@ -632,9 +649,7 @@ is an argument, as `CalcTokenizer` reads it, so a stored `max(1,234)` shows `max
 
 ## Additional units and transfer rates
 
-`MB/s` and `MBps` mean megabytes per second; `Mbps` means megabits per second. The uppercase `B`
-marks a byte rate (`Bps`, `kBps` / `KBps`, `MBps`, `GBps`, `TBps`), so `500 Mbps in MBps` gives
-`62.5 MBps`, and a bare byte rate auto-converts to the matching bit rate.
+`MB/s` means megabytes per second; `Mbps` means megabits per second.
 `100Mbps to MB/s` gives `12.5 MB/s`, and `1GB / 10MB/s to s` gives `100 s`.
 Binary rates such as `MiB/s` and bit amounts such as `kbit` also work.
 SI prefixes expand for meters, grams, seconds, hertz, newtons, joules, watts and pascals,

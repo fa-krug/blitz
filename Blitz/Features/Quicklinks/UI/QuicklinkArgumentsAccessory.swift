@@ -25,12 +25,16 @@ enum QuicklinkArgumentsAccessory {
         // Its own screen already shows the row the fields belong to, so the glyph would repeat it.
         let icon = placement == .afterQuery ? core.quicklinkCoordinator.icon(for: quicklink) : nil
         let value = { (name: String) in binding(quicklink: quicklink, name: name, vm: vm) }
+        // A prompt naming this row found no readable selection, so its field is owed after all.
+        let owedSelection =
+            vm.pendingArgumentEntryID == quicklink.entryID
+            ? QuicklinkCoordinator.selectionArgument.name : nil
         return PaletteHeaderAccessory(
             width: InlineArgumentFields.totalWidth(
                 for: arguments, hasIcon: icon != nil, metrics: metrics),
             fieldNames: arguments.map(\.id),
             firstIncompleteField: arguments.first {
-                !$0.isOptional && value($0.id).wrappedValue.isEmpty
+                (!$0.isOptional || $0.id == owedSelection) && value($0.id).wrappedValue.isEmpty
             }?.id,
             optionsMenu: { id in
                 guard let argument = arguments.first(where: { $0.id == id }),

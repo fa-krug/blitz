@@ -4,6 +4,8 @@ import AppKit
 @MainActor
 final class SystemActionCoordinator {
     private let paletteCoordinator: PaletteCoordinator
+    /// A held hotkey must not flip the microphone back before the device confirms the first press.
+    private var microphoneTogglePending = false
     @ObservationIgnored private lazy var volumeHUD = VolumeHUDController(settings: core.settings)
     /// Dialog and message-HUD presentation only — never for state this type owns.
     private unowned let core: AppCore
@@ -21,6 +23,12 @@ final class SystemActionCoordinator {
     }
 
     private func perform(_ action: SystemAction, previousApp: NSRunningApplication?) async {
+        let togglesMicrophone = action.id == .toggleMicrophoneMute
+        if togglesMicrophone {
+            guard !microphoneTogglePending else { return }
+            microphoneTogglePending = true
+        }
+        defer { if togglesMicrophone { microphoneTogglePending = false } }
         switch action.confirmation {
         case .computed:
             await quitAllApps()

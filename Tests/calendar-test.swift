@@ -36,6 +36,7 @@ struct CalendarTests {
         menuBarTitles()
         autoJoinFiresOnce()
         autoJoinRespectsArming()
+        autoJoinSkipsBareLinks()
         eventDrafts()
         meetingDetails()
         chatToolOffer()
@@ -480,7 +481,7 @@ struct CalendarTests {
 
     static func autoJoinFiresOnce() {
         let window = UpcomingWindow(leadMinutes: 5)
-        let policy = AutoJoinPolicy(armedAt: at(0))
+        let policy = AutoJoinPolicy(armedAt: at(0), namedProvidersOnly: false)
         let meeting = event(id: "standup", start: 60, minutes: 30)
         let start = at(60)
 
@@ -516,7 +517,7 @@ struct CalendarTests {
         let window = UpcomingWindow(leadMinutes: 5)
         let running = event(id: "running", start: 60, minutes: 60)
         // Armed a minute into a meeting that was already under way.
-        let policy = AutoJoinPolicy(armedAt: at(61))
+        let policy = AutoJoinPolicy(armedAt: at(61), namedProvidersOnly: false)
         expect(
             policy.meeting(from: [running], now: at(61), window: window, joined: []) == nil,
             "arming the switch mid-call does not yank you into the call")
@@ -525,6 +526,32 @@ struct CalendarTests {
             policy.meeting(from: [running, later], now: at(90), window: window, joined: [])?.id
                 == "later",
             "but the next meeting after arming is fair game")
+    }
+
+    static func autoJoinSkipsBareLinks() {
+        let window = UpcomingWindow(leadMinutes: 5)
+        let placeholder = event(id: "placeholder", start: 60)
+        let call = event(id: "call", start: 60, link: link("https://zoom.us/j/8901234567"))
+        let start = at(60)
+
+        expect(
+            AutoJoinPolicy(armedAt: at(0), namedProvidersOnly: false)
+                .meeting(from: [placeholder], now: start, window: window, joined: [])?.id
+                == "placeholder",
+            "a bare link still auto joins by default")
+        let namedOnly = AutoJoinPolicy(armedAt: at(0), namedProvidersOnly: true)
+        expect(
+            namedOnly.meeting(from: [placeholder], now: start, window: window, joined: []) == nil,
+            "named providers only leaves a bare link to the card")
+        expect(
+            namedOnly.meeting(from: [placeholder, call], now: start, window: window, joined: [])?.id
+                == "call",
+            "and a call beside it still joins")
+        let earlier = event(id: "earlier", start: 58)
+        expect(
+            namedOnly.meeting(from: [earlier, call], now: start, window: window, joined: [])?.id
+                == "call",
+            "a bare link the card would pick first does not shadow the call")
     }
 
     // MARK: - The event draft

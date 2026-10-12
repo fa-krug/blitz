@@ -55,7 +55,9 @@ struct CommandsSettingsView: View {
             FeatureSwitchSection(
                 anchor: .commandsCustomCommands,
                 enableTitle: "Enable custom commands",
-                enableSubtitle: "Run as you in /bin/zsh. Use full executable paths.",
+                enableSubtitle:
+                    "Run as you in /bin/zsh, or the interpreter a #! line names. "
+                    + "Use full executable paths.",
                 isEnabled: $settings.customCommandsEnabled,
                 showsInLauncher: $settings.customCommandsShowInLauncher)
 
@@ -153,6 +155,9 @@ private struct CustomCommandRow: View {
         ) {
             CustomCommandIcon(command: command)
         } trailing: {
+            if !command.showsInRootSearch {
+                SettingsHiddenBadge(help: "Hidden from root search")
+            }
             SettingsEntryBadges(
                 aliasKey: command.entryID, action: .customCommand(id: command.id))
         }
@@ -187,7 +192,9 @@ private struct CustomCommandPage: View {
                 LabeledContent {
                     // It reaches the ranker only through the launcher slice, so it dims with it.
                     AliasField(key: command.entryID, name: command.name)
-                        .settingsEnabled(command.isEnabled && settings.customCommandsShowInLauncher)
+                        .settingsEnabled(
+                            command.isEnabled && command.showsInRootSearch
+                                && settings.customCommandsShowInLauncher)
                 } label: {
                     Text("Alias")
                     Text("Type it in the launcher to put this command first.")

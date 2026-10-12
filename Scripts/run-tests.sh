@@ -227,6 +227,13 @@ run palette-placement-test Blitz/Platform/Appearance.swift \
                            Blitz/DesignSystem/InterfaceMetrics.swift \
                            Blitz/Features/Settings/InterfaceSize.swift \
                            Blitz/Palette/PalettePlacement.swift
+run palette-menu-click-test Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Platform/WindowLevel.swift \
+                           Blitz/Platform/NotificationToken.swift \
+                           Blitz/DesignSystem/Interaction/KeyboardFocus.swift \
+                           Blitz/Palette/PalettePanel.swift
 run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
 run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
 run keyboard-focus-test    Blitz/DesignSystem/Interaction/KeyboardFocus.swift
@@ -364,6 +371,8 @@ run ext-icon-test          Blitz/Platform/Appearance.swift \
                            Blitz/Features/Clipboard/Model/ColorValue.swift \
                            Blitz/Features/Clipboard/Model/ColorSpaces.swift
 run system-action-test     Blitz/Features/SystemActions/Model/SystemAction.swift
+run microphone-mute-test   Blitz/Features/SystemActions/Service/SystemActionFailure.swift \
+                           Blitz/Features/SystemActions/Service/MicrophoneMuteRunner.swift
 run volume-test            Blitz/Features/SystemActions/Model/VolumeLevel.swift
 run dialog-draft-test      Blitz/Windows/Dialog/FormDraftMemory.swift \
                            Blitz/Features/Calendar/Model/EventDraft.swift
@@ -444,6 +453,16 @@ run quicklink-test         Blitz/Platform/BrowserTab.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
                            Blitz/Features/Quicklinks/Model/RaycastQuicklinkImport.swift
+run quicklink-coordinator-test Blitz/Platform/BrowserTab.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
+                           Blitz/Features/Quicklinks/UI/QuicklinkCoordinator.swift \
+                           Blitz/Features/Quicklinks/UI/QuicklinkArgumentsAccessory.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift \
+                           Blitz/Features/Snippets/Model/SnippetTemplateEngine.swift
 run slow snippets-test     Blitz/Platform/NotificationToken.swift \
                            Blitz/Platform/HealthTicker.swift \
                            Blitz/Platform/BrowserTab.swift \
@@ -620,6 +639,9 @@ run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
                            $L/SearchRelevance.swift
 run updates-test           Blitz/Features/Updates/Model/*.swift \
                            Blitz/Features/Updates/Service/BundleSignature.swift
+run update-check-test      Blitz/Features/Updates/Model/*.swift \
+                           Blitz/Features/Updates/Service/UpdateCheckStore.swift \
+                           Blitz/Platform/AppPaths.swift
 run support-test           Blitz/Features/Support/Model/*.swift
 run onboarding-test        Blitz/Features/Onboarding/Model/*.swift \
                            Blitz/Palette/PaletteMode.swift \

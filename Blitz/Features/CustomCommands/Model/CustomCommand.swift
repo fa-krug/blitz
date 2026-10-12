@@ -39,6 +39,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
     var command: String
     /// Off keeps the command and everything attached to it, but nothing may offer or run it.
     var isEnabled: Bool
+    /// Off keeps it out of root search, alias included, while its shortcut still runs it.
+    var showsInRootSearch: Bool
     /// Sources the shell config so aliases resolve; opt-in, a heavy one costing more.
     var loadsShellEnvironment: Bool
     var requiresConfirmation: Bool
@@ -54,7 +56,8 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
 
     init(
         id: UUID = UUID(), name: String, command: String, isEnabled: Bool = true,
-        loadsShellEnvironment: Bool = false, requiresConfirmation: Bool = false,
+        showsInRootSearch: Bool = true, loadsShellEnvironment: Bool = false,
+        requiresConfirmation: Bool = false,
         showsConfirmation: Bool = false, arguments: [CustomCommandArgument] = [],
         opensTerminal: Bool = false, workingDirectory: String? = nil,
         iconSymbol: String? = nil
@@ -63,6 +66,7 @@ struct CustomCommand: Codable, Hashable, Identifiable, Sendable {
         self.name = name
         self.command = command
         self.isEnabled = isEnabled
+        self.showsInRootSearch = showsInRootSearch
         self.loadsShellEnvironment = loadsShellEnvironment
         self.requiresConfirmation = requiresConfirmation
         self.showsConfirmation = showsConfirmation
@@ -135,11 +139,30 @@ final class CustomCommandStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        Self.migrateRootSearchFlag(in: defaults)
         let decoded =
             defaults.data(forKey: Self.defaultsKey)
             .flatMap { try? JSONDecoder().decode([CustomCommand].self, from: $0) } ?? []
         commands = Self.sanitized(decoded)
         if commands != decoded { persist() }
+    }
+
+    private static let rootSearchMigrationKey = "customCommandsRootSearchMigrated"
+
+    /// One-time: commands saved before `showsInRootSearch` existed are shown in Root Search.
+    static func migrateRootSearchFlag(in defaults: UserDefaults) {
+        guard !defaults.bool(forKey: rootSearchMigrationKey) else { return }
+        if let data = defaults.data(forKey: defaultsKey),
+            var records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        {
+            for index in records.indices where records[index]["showsInRootSearch"] == nil {
+                records[index]["showsInRootSearch"] = true
+            }
+            if let migrated = try? JSONSerialization.data(withJSONObject: records) {
+                defaults.set(migrated, forKey: defaultsKey)
+            }
+        }
+        defaults.set(true, forKey: rootSearchMigrationKey)
     }
 
     func command(id: UUID) -> CustomCommand? {
@@ -185,6 +208,15 @@ final class CustomCommandStore {
         else { return }
         var updated = commands
         updated[index].isEnabled = enabled
+        commit(updated)
+    }
+
+    func setShowsInRootSearch(_ shows: Bool, id: UUID) {
+        guard let index = commands.firstIndex(where: { $0.id == id }),
+            commands[index].showsInRootSearch != shows
+        else { return }
+        var updated = commands
+        updated[index].showsInRootSearch = shows
         commit(updated)
     }
 

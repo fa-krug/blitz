@@ -320,15 +320,6 @@ struct RootPaletteView: View {
                 PaletteSurface(palette: self)
                     // No title bar, so this thin top margin is the only place left to grab it.
                     .overlay(alignment: .top) { topDragStrip }
-                    // Always mounted: unmounting strands SwiftUI's hover target and eats clicks.
-                    .overlay {
-                        Color.black.opacity(0.001)
-                            .contentShape(Rectangle())
-                            // Not a tap: a drifting press must still dismiss, like a native menu.
-                            .gesture(DragGesture(minimumDistance: 0).onChanged { _ in closeMenus() })
-                            .onRightClick { closeMenus() }
-                            .allowsHitTesting(menuOpen)
-                    }
                     // The menu lives in its own window; this only reports the one to hang it from.
                     .background(
                         WindowReader {
@@ -461,7 +452,8 @@ struct RootPaletteView: View {
             .modifier(FocusTokenObserver {
                 // The key re-bump lands after the pending field took the caret, so re-assert it.
                 if focusPendingArgument() {
-                    vm.pendingArgumentEntryID = nil
+                    // A turn later, so a `land()` in this same update still reads the row it names.
+                    Task { @MainActor in vm.pendingArgumentEntryID = nil }
                     return
                 }
                 searchFocused = !screen.hidesSearchField
@@ -525,6 +517,12 @@ struct RootPaletteView: View {
             }
             // ⌘. arrives as a token rather than a key press. See `PaletteState.pinChordToken`.
             .onChange(of: vm.pinChordToken) { performShortcut(.pin) }
+            .onChange(of: vm.queryRewriteToken) {
+                if menuOpen { closeMenus() }
+                searchFocused = true
+                // Next turn, past the refocus that selects all, so typing extends the answer.
+                Task { @MainActor in (hostWindow as? PalettePanel)?.moveFieldEditorCaretToEnd() }
+            }
             // ⌘1…⌘0 arrives as a slot index from AppKit keyCode matching.
             .onChange(of: vm.favoriteSlotToken) {
                 if let index = vm.favoriteSlotIndex { performShortcut(.favoriteSlot(index)) }
@@ -847,8 +845,10 @@ struct RootPaletteView: View {
         .frame(height: metrics.size.headerHeight)
         .padding(.top, metrics.size.headerPadding)
         .frame(maxWidth: .infinity)
-        // Set after the show, so the field it names is focused rather than the search field.
-        .onChange(of: vm.pendingArgumentEntryID) { focusPendingArgument() }
+        // Next turn, once the show's `land()` and search refocus are done, so neither undoes it.
+        .onChange(of: vm.pendingArgumentEntryID) {
+            Task { @MainActor in focusPendingArgument() }
+        }
         .onChange(of: aliasArgumentField) { focusAliasArgument() }
         .onChange(of: argumentFocused) { _, field in vm.noteEditingField(field != nil) }
         .onChange(of: quickAI.pendingAttachments.map(\.id)) { refreshAttachmentsMenu() }
@@ -1244,6 +1244,9 @@ struct RootPaletteView: View {
             let screen = screen
             let selection = selection(in: screen)
             if modifiers.contains([.command, .control]), screen.tertiary(at: selection) { return true }
+            if modifiers.contains([.command, .shift]), screen.perform(.copyCalculation, at: selection) {
+                return true
+            }
             if modifiers.contains(.command) { return screen.secondary(at: selection) }
             if modifiers.contains(.option) {
                 return screen.pasteKeepingWindowOpen(at: selection)

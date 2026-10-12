@@ -25,8 +25,6 @@ struct LauncherScreen: PaletteScreen {
     private let calc: CalcResult?
     /// The colour the query itself spells, if it spells one; nil for every other query.
     private let color: ColorValue?
-    /// Sections stand in for the ranked Results list, which a typed query collapses to.
-    private let showSections: Bool
     /// Only the empty query pins favorites — a category shows its sections without one of its own.
     private let pinsFavorites: Bool
     /// How many of `results` are pinned favorites; zero unless the section shows.
@@ -35,6 +33,8 @@ struct LauncherScreen: PaletteScreen {
     private let meetingCount: Int
     /// How many follow the meetings as Suggestions; zero unless the field is empty.
     private let suggestionCount: Int
+    /// How many lead under Results; whatever follows is grouped into its kind's section.
+    private let matchCount: Int
     /// The `Use "…" with` section, below every result; empty unless something is typed.
     private let fallbacks: [(fallback: Fallback, entry: AppEntry)]
     /// True while a shortcut's row is listed alone, under a query that was never typed.
@@ -68,15 +68,17 @@ struct LauncherScreen: PaletteScreen {
         }
         .flatMap { $0.name == vm.query ? $0 : nil }
         let ordered =
-            pinned.map { AppIndex.Results(entries: [$0]) }
+            pinned.map { AppIndex.Results(entries: [$0], matchCount: 1) }
             ?? appIndex.orderedResults(
                 query: vm.query, visibility: visibility, favorites: favorites, hotKeys: core.hotKeys)
         var results = ordered.entries
+        var matchCount = ordered.matchCount
         // A typed web address leads: nothing the index holds answers it better.
         if pinned == nil, let browser = CommandCatalog.openInBrowser(for: vm.query),
             visibility.isVisible(browser)
         {
             results.insert(browser, at: 0)
+            matchCount += 1
         }
         // No card over a pinned row: its fields hang off the selection, which must start on it.
         let calc =
@@ -95,11 +97,11 @@ struct LauncherScreen: PaletteScreen {
         self.fallbacks = fallbacks
         self.listsArgumentRow = pinned != nil
         self.color = color
-        self.showSections = pinsFavorites || AppEntry.Kind.named(by: vm.query) != nil
         self.pinsFavorites = pinsFavorites
         self.favoriteCount = pinsFavorites ? ordered.favoriteCount : 0
         self.meetingCount = pinsFavorites ? ordered.meetingCount : 0
         self.suggestionCount = pinsFavorites ? ordered.suggestionCount : 0
+        self.matchCount = matchCount
         if let calc {
             self.rows = [.calc(calc)] + entries
         } else if let color {
@@ -353,6 +355,9 @@ struct LauncherScreen: PaletteScreen {
             core.contactsCoordinator.call(contact)
             return true
         }
+        if case .calc(let result) = row(at: selection) {
+            return core.calculatorCoordinator.putAnswerInSearchBar(result)
+        }
         guard let app = entry(at: selection), app.canRevealInFinder else { return false }
         core.launcherCoordinator.showInFinder(app)
         return true
@@ -381,6 +386,8 @@ struct LauncherScreen: PaletteScreen {
         case .restart: return restart(at: selection)
         case .copyFile: return copyDeepLink(at: selection)
         case .configure: return configure(at: selection)
+        case .edit: return editQuicklink(at: selection)
+        case .copyPath: return copyQuicklink(at: selection)
         case .favoriteSlot(let index): return launchFavorite(at: index)
         case .copyCalculation: return copyCalculation(at: selection)
         case .openInApp, .showDetails:
@@ -404,6 +411,24 @@ struct LauncherScreen: PaletteScreen {
     private func copyDeepLink(at selection: Int) -> Bool {
         guard let app = entry(at: selection), let link = app.deepLink else { return false }
         core.launcherCoordinator.copyDeepLink(link)
+        return true
+    }
+
+    /// ⌘E — mirrors the Edit Quicklink row.
+    private func editQuicklink(at selection: Int) -> Bool {
+        guard let app = entry(at: selection), app.kind == .quicklink,
+            let quicklink = quicklink(for: app)
+        else { return false }
+        core.quicklinkCoordinator.editQuicklink(quicklink)
+        return true
+    }
+
+    /// ⌃⌘C — mirrors the Copy Link row.
+    private func copyQuicklink(at selection: Int) -> Bool {
+        guard let app = entry(at: selection), app.kind == .quicklink,
+            let quicklink = quicklink(for: app)
+        else { return false }
+        core.quicklinkCoordinator.copyQuicklink(id: quicklink.id)
         return true
     }
 
@@ -450,13 +475,11 @@ struct LauncherScreen: PaletteScreen {
 
     /// The card, then each section `LauncherList` draws, in its order, then the fallbacks.
     var sectionStarts: [Int] {
-        var counts = [results.count]
-        if showSections {
-            let pinned = favoriteCount + meetingCount + suggestionCount
-            let kinds = Dictionary(grouping: results.dropFirst(pinned), by: \.kind)
-            counts = [favoriteCount, meetingCount, suggestionCount]
-                + LauncherList.kindOrder.map { kinds[$0]?.count ?? 0 }
-        }
+        let leading = favoriteCount + meetingCount + suggestionCount + matchCount
+        let kinds = Dictionary(grouping: results.dropFirst(leading), by: \.kind)
+        let counts =
+            [favoriteCount, meetingCount, suggestionCount, matchCount]
+            + LauncherList.kindOrder.map { kinds[$0]?.count ?? 0 }
         let index = PaletteRowIndex(
             hasCalculator: leadCard != nil, sectionCounts: counts + [fallbacks.count])
         return index.sectionStarts
@@ -498,16 +521,34 @@ struct LauncherScreen: PaletteScreen {
 
     /// ⇧⌘H — the row leaves the list for good, so the highlight takes the place it vacated.
     private func hideFromSearch(at selection: Int) -> Bool {
-        guard let app = entry(at: selection), app.canHideFromSearch,
-            !CommandCatalog.isQueryDriven(app), let index = results.firstIndex(of: app)
+        guard let app = entry(at: selection), !CommandCatalog.isQueryDriven(app),
+            let index = results.firstIndex(of: app), let undo = hide(app)
         else { return false }
-        visibility.setItemVisible(false, for: app)
         select(row: min(index, max(reorderedResults().entries.count - 1, 0)))
+        let title = app.hidesThroughRootSearchSwitch ? "Hidden from Root Search" : "Hidden from Search"
         core.showBanner(
-            title: "Hidden from Search", detail: app.name, symbol: "eye.slash",
-            actionTitle: "Undo"
-        ) { [visibility] in visibility.setItemVisible(true, for: app) }
+            title: title, detail: app.name, symbol: "eye.slash", actionTitle: "Undo", action: undo)
         return true
+    }
+
+    /// Writes whatever Settings shows for this kind, and returns the write that takes it back.
+    private func hide(_ app: AppEntry) -> (() -> Void)? {
+        switch app.kind {
+        case .quicklink:
+            guard let id = Quicklink.id(fromEntryID: app.id) else { return nil }
+            let coordinator = core.quicklinkCoordinator
+            coordinator.setQuicklinkShowsInRootSearch(false, id: id)
+            return { coordinator.setQuicklinkShowsInRootSearch(true, id: id) }
+        case .customCommand:
+            guard let id = CustomCommand.id(fromEntryID: app.id) else { return nil }
+            let coordinator = core.customCommandCoordinator
+            coordinator.setCustomCommandShowsInRootSearch(false, id: id)
+            return { coordinator.setCustomCommandShowsInRootSearch(true, id: id) }
+        default:
+            guard app.canHideFromSearch else { return nil }
+            visibility.setItemVisible(false, for: app)
+            return { [visibility] in visibility.setItemVisible(true, for: app) }
+        }
     }
 
     /// The list reorders under an action; keep the highlight and the scroll on the row that moved.
@@ -557,7 +598,7 @@ struct LauncherScreen: PaletteScreen {
             favoriteCount: favoriteCount,
             meetingCount: meetingCount,
             suggestionCount: suggestionCount,
-            showSections: showSections,
+            matchCount: matchCount,
             scroll: scroll,
             card: leadCard,
             cardSelected: isCardSelected(selection),

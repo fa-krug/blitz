@@ -20,6 +20,31 @@ enum LauncherOrder {
         }
     }
 
+    /// A query read as a category name: exact, or a word-start prefix of at least three letters.
+    struct CategoryQuery: Sendable {
+        /// Folded and whitespace-collapsed, so it keys the exact-name lookup directly.
+        let name: String
+        private let query: FuzzyMatch.Query
+        /// Shorter, a prefix would expand a category on nearly every keystroke.
+        private static let prefixLength = 3
+
+        init(_ raw: String) {
+            name = FuzzyMatch.normalized(raw.split(whereSeparator: \.isWhitespace).joined(separator: " "))
+            query = FuzzyMatch.Query(name)
+        }
+
+        func matches(_ candidate: FuzzyMatch.Candidate) -> Bool {
+            guard !query.isEmpty, let match = FuzzyMatch.match(query, candidate: candidate) else {
+                return false
+            }
+            switch match.tier {
+            case .exact: return true
+            case .prefix, .wordStart: return match.queryLength >= Self.prefixLength
+            case .substring, .subsequence: return false
+            }
+        }
+    }
+
     struct Signals: Sendable {
         var alias: SearchText?
         var usage: LauncherUsage

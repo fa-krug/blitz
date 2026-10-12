@@ -74,7 +74,9 @@ final class LauncherCoordinator {
     ) {
         // A category word is no search for the row: learning it would rank the row under "s".
         if !CommandCatalog.isQueryDriven(app) {
-            let term = searchQuery.flatMap { AppEntry.Kind.named(by: $0) == nil ? $0 : nil }
+            let term = searchQuery.flatMap {
+                AppEntry.Kind.matching(by: LauncherOrder.CategoryQuery($0)).contains(app.kind) ? nil : $0
+            }
             ranking.visit(itemKey: app.preferenceKey, query: term)
         }
         // Commands dispatch before the palette hides: mode-switching commands keep it open.
@@ -189,8 +191,14 @@ final class LauncherCoordinator {
         case .quickAI:
             core.quickAICoordinator.show()
         case .aiChat:
+            // Read first: hiding the palette can hand key status back to the chat it covered.
+            let fromPalette = paletteCoordinator.isVisible
             dismissPalette()
-            core.aiChatCoordinator.showWindow()
+            if fromPalette {
+                core.aiChatCoordinator.showWindow()
+            } else {
+                core.aiChatCoordinator.toggleWindow()
+            }
         case .fixGrammar:
             core.quickActionCoordinator.run(.fixGrammar)
         case .rewrite:
