@@ -12,6 +12,8 @@ final class ExtensionNodeShims: @unchecked Sendable {
     private static let openableFlags =
         O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL | O_NOFOLLOW
     private static let openFileLimit = 256
+    /// Non-blocking, so probing a FIFO for its errno cannot hang the JS thread on a writer.
+    private static let probeFlags = O_RDONLY | O_NONBLOCK | O_CLOEXEC
 
     func closeFiles() {
         for handle in fileHandles.values { try? handle.close() }
@@ -157,7 +159,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
         case "readFile":
             let target = try path(0)
             guard let data = fileManager.contents(atPath: target) else {
-                throw ShimError.noEntry(target, "open")
+                throw readError("open", target)
             }
             return data.base64EncodedString()
 
@@ -182,7 +184,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
             let offset = max(0, (arguments[safe: 1] as? NSNumber)?.intValue ?? 0)
             let count = max(0, (arguments[safe: 2] as? NSNumber)?.intValue ?? 0)
             guard let handle = FileHandle(forReadingAtPath: target) else {
-                throw ShimError.noEntry(target, "open")
+                throw readError("open", target)
             }
             defer { try? handle.close() }
             try handle.seek(toOffset: UInt64(offset))
@@ -199,7 +201,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
         case "readdir":
             let target = try path(0)
             guard let names = try? fileManager.contentsOfDirectory(atPath: target) else {
-                throw ShimError.noEntry(target, "scandir")
+                throw readError("scandir", target)
             }
             return names.map { name -> [String: Any] in
                 let child = (target as NSString).appendingPathComponent(name)
@@ -330,12 +332,28 @@ final class ExtensionNodeShims: @unchecked Sendable {
         }
     }
 
-    private func fileError(_ syscall: String, _ path: String? = nil) -> ShimError {
-        let code = errno
+    private func fileError(
+        _ syscall: String, _ path: String? = nil, code: Int32 = errno
+    ) -> ShimError {
         let name = Self.errorNames[code] ?? "EIO"
         let target = path.map { " '\($0)'" } ?? ""
         return ShimError.failed(
             "\(name): \(String(cString: strerror(code))), \(syscall)\(target)", name)
+    }
+
+    /// FileManager's nil read hides the errno, so reopen the path to learn why it failed.
+    private func readError(_ syscall: String, _ path: String) -> ShimError {
+        let descriptor = Darwin.open(path, Self.probeFlags)
+        guard descriptor >= 0 else {
+            return errno == ENOENT ? .noEntry(path, syscall) : fileError(syscall, path)
+        }
+        defer { Darwin.close(descriptor) }
+        var status = Darwin.stat()
+        let isDirectory =
+            Darwin.fstat(descriptor, &status) == 0 && status.st_mode & S_IFMT == S_IFDIR
+        if syscall == "scandir", !isDirectory { return fileError(syscall, path, code: ENOTDIR) }
+        if syscall == "open", isDirectory { return fileError(syscall, path, code: EISDIR) }
+        return .noEntry(path, syscall)
     }
 
     private static let errorNames: [Int32: String] = [
@@ -345,12 +363,11 @@ final class ExtensionNodeShims: @unchecked Sendable {
     ]
 
     private func stat(path: String, followLinks: Bool) throws -> [String: Any] {
-        let attributes =
-            followLinks
-            ? try? fileManager.attributesOfItem(
-                atPath: URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
-            : try? fileManager.attributesOfItem(atPath: path)
-        guard let attributes else { throw ShimError.noEntry(path, "stat") }
+        let target =
+            followLinks ? URL(fileURLWithPath: path).resolvingSymlinksInPath().path : path
+        guard let attributes = try? fileManager.attributesOfItem(atPath: target) else {
+            throw readError("stat", path)
+        }
 
         let type = attributes[.type] as? FileAttributeType
         func milliseconds(_ key: FileAttributeKey) -> Double {

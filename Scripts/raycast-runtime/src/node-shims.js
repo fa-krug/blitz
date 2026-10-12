@@ -1148,7 +1148,7 @@ function runAsync(spec, options, callback, label) {
 
 // Bundles ship their own HTTP client — node-fetch travels inside `@raycast/utils` — and drive
 // `http.request` instead of global `fetch`. One request, buffered both ways, over the same
-// URLSession bridge `fetch` uses: no sockets, no streaming, no keep-alive.
+// bridge `fetch` uses: no streaming, no keep-alive, and a Unix socket only through `socketPath`.
 class IncomingMessage extends PassThrough {
   constructor(raw) {
     super();
@@ -1224,6 +1224,7 @@ class ClientRequest extends EventEmitter {
       this.path = target.pathname + target.search;
     }
     this.method = String(options.method ?? "GET").toUpperCase();
+    this.socketPath = options.socketPath;
     this.writable = true;
     this.writableEnded = false;
     this._headers = new Map();
@@ -1305,6 +1306,7 @@ class ClientRequest extends EventEmitter {
       const raw = await hostCall("fetch", "request", [
         {
           url: this.url,
+          ...(this.socketPath ? { socketPath: this.socketPath } : {}),
           method: this.method,
           headers: this.getHeaders(),
           bodyBase64: body === null ? null : body.toString("base64"),
@@ -1819,7 +1821,7 @@ export const nodeModules = {
   readline: unsupportedModule("readline"),
   tty: { isatty: () => false },
   vm: unsupportedModule("vm"),
-  module: { createRequire: () => requireStub, builtinModules: [] },
+  module: { builtinModules: [] },
   constants: {},
   cluster: { isPrimary: true, isMaster: true },
   inspector: {},
@@ -1827,10 +1829,6 @@ export const nodeModules = {
   async_hooks: { AsyncLocalStorage, AsyncResource },
   diagnostics_channel: diagnosticsChannel,
 };
-
-function requireStub(name) {
-  throw new Error(`createRequire is not supported in Blitz extensions (tried to load "${name}").`);
-}
 
 // Every remaining Node builtin resolves to a refuse-on-use stub. Bundles reference the whole
 // long tail (http2, domain, repl, …) from dependencies that only touch them on paths an

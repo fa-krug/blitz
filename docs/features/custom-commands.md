@@ -488,7 +488,10 @@ and deletable like any other, and nothing keeps pointing back at the folder afte
 
 `Model/RaycastScriptImport.swift` does the parsing, and stays Foundation-only like the rest of
 `Model/`. The scan is non-recursive and skips hidden files, matching Raycast's own script directories,
-and runs on a detached task because it opens every file in the folder.
+and runs on a detached task because it opens every file in the folder. A symlinked script imports
+under the link's own path, so the command follows the link if its target moves — Raycast's
+`enabled-commands` folder is exactly such a folder of links. A dangling link or a link to a folder is
+skipped.
 
 A file becomes a command only when it has **both** a shebang and an `@raycast.title`. Both are
 mandatory in Raycast's own format, so anything failing either is a helper script the user keeps

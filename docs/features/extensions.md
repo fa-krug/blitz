@@ -48,12 +48,13 @@ produces, rendered natively into the palette. No Electron, no browser, no Node.j
 
 ## How it works
 
-A Raycast extension command is a **single prebuilt CommonJS file** that keeps `react`,
-`react/jsx-runtime`, `@raycast/api` and the Node built-ins external. Blitz supplies exactly those,
-runs the bundle, and renders the React tree it produces:
+A Raycast extension command is a **prebuilt CommonJS file** that keeps `react`,
+`react/jsx-runtime`, `@raycast/api` and the Node built-ins external. Blitz supplies those, resolves
+any third-party packages the bundle ships under `node_modules/`, runs it, and renders the React tree
+it produces:
 
 ```
-  <command>.js  (esbuild output, deps inlined)
+  <command>.js  (esbuild output, deps inlined or in node_modules/)
         │  require("@raycast/api"), require("react"), require("node:fs"), …
         ▼
   RaycastRuntime.generated.js          ← in the app bundle; React 19 + react-reconciler
@@ -135,7 +136,7 @@ Two host-call flavours:
 | `Service/ExtensionRuntime.swift` | the `JSContext`, host-function installation, timers, exception reporting |
 | `Service/ExtensionHostBridge.swift` | main-actor host APIs (clipboard, storage, cache, window, toasts, system, oauth) |
 | `Service/ExtensionNodeShims.swift` | the synchronous `fs` / `os` / `child_process` / `crypto` / `zlib` services |
-| `Service/ExtensionFetcher.swift` | `fetch` over `URLSession`, plus collecting async `exec` children and the shared PATH resolver |
+| `Service/ExtensionFetcher.swift` | `fetch` over `URLSession` or a Unix socket, plus collecting async `exec` children and the shared PATH resolver |
 | `Service/ExtensionWebSocketBridge.swift` | `URLSessionWebSocketTask` connections, opened and read from JS |
 | `Service/ExtensionNameResolver.swift` | `getaddrinfo`, which is how a `.local` name resolves |
 | `Service/ExtensionOAuthKeychain.swift` | secure OAuth token storage backed by macOS Keychain |
@@ -267,7 +268,8 @@ screens hold (see [palette.md](palette.md)).
   too. `isShowingDetail` splits the screen into rows plus a detail pane and drops each row's
   subtitle, but **not its accessories**: the API only advises an extension against sending them in
   this mode, and Raycast draws the ones it is sent, so suppressing them here would lose a row its
-  whole signal. `ExtensionScreen.Item`
+  whole signal. As in Raycast, they keep their full width and the title is what truncates.
+  `ExtensionScreen.Item`
   carries both the flat `selection` index and the scroll id, and is the `ForEach` identity of the row
   and the grid cell alike — see the scroll-id rule in [ui.md](../ui.md#rows-selection-hover).
   A matching `selectedItemId` seeds the palette highlight when the screen first appears.
@@ -440,15 +442,19 @@ screens hold (see [palette.md](palette.md)).
   the primary ↵ action and, outside a Form, the second is ⌘↵ unless another action declares
   `cmd+return` itself; the panel draws ↵ and ⌘↵ on the rows they fire (`ExtensionActionKeys`), and a
   Form draws ⌘↵ on its submit action alone. An action's own `shortcut` is matched against modified
-  keystrokes. An empty List or Grid acts through its `EmptyView`'s `actions`.
+  keystrokes with the panel open or closed; while it is open the panel's search field has focus, so
+  `ExtensionActionsPanel` matches the chord against its visible rows (a filtered-out action does not
+  fire) after the palette's own menu keys pass on it, and runs the hit as a click would, closing the
+  panel. An empty List or Grid acts through its `EmptyView`'s `actions`.
   `ExtensionCommandScreen.menuContent` hands the whole panel to the palette as a
   `PaletteMenuContent`, so the palette never learns the row type — and a row's handler is taken from
   the flattened `ExtensionAction` list rather than the drawn rows, so ↵ and the panel fire the same
   one without resolving an icon per arrow key. Header accessory symbols use the same 14pt Medium
   monochrome treatment; their menus use the same extension-owned transition, anchored to the control.
 - **Feedback** — `showToast` replaces the current toast, a glass pill that takes the footer menu button's place and is
-  lit by its style's colour. Hovering turns its mark into an ×, and clicking anywhere but its button dismisses it and
-  gives the menu button back. The pill draws the toast's `primaryAction` and `secondaryAction`; a failure toast
+  lit by its style's colour. It fills only the width beside the footer's action group: a long toast truncates its
+  message first, then its title, and its buttons never truncate. Hovering turns its mark into an ×, and clicking
+  anywhere but its button dismisses it and gives the menu button back. The pill draws the toast's `primaryAction` and `secondaryAction`; a failure toast
   without a primary action offers **Copy** (title and message) instead. Toast buttons also appear as the last
   section of ⌘K, and their `shortcut`s fire while the toast is up. With the palette hidden a toast is a HUD, and an
   animated one that later turns into success or failure shows that outcome as a second HUD. An action handler that
@@ -511,8 +517,9 @@ an app's exact title past three characters still wins by rule 3.
 
 Extensions live in `~/Library/Application Support/<bundle id>/extensions/<name>/`, keyed by bundle id
 like everything else, so a Debug build never shares installs with a release channel. A directory holds
-`package.json`, `assets/` and one `<command>.js` per command — byte-for-byte the layout Raycast's own
-build produces.
+`package.json`, `assets/`, one `<command>.js` per command and, when the build left its dependencies
+external, a `node_modules/` of pre-built packages — byte-for-byte the layout Raycast's own build
+produces.
 
 Settings → Extensions offers four routes, under **Install New**:
 
@@ -530,8 +537,15 @@ Settings → Extensions offers four routes, under **Install New**:
 4. **Add from folder** — pick any directory with a manifest and built command files, e.g. an extension
    you just ran `ray build` in.
 
-Only `package.json`, the built commands and `assets/` are copied — never `node_modules` or the
-multi-megabyte `.js.map` Raycast writes beside each bundle.
+Only `package.json`, the built commands, `assets/` and any `node_modules/` are copied — never the
+multi-megabyte `.js.map` Raycast writes beside each bundle. **`node_modules/` has to survive**: some
+store bundles leave third-party packages external and ship them pre-built beside the commands, and
+Color Picker failed every command with `Cannot find module 'colorjs.io'` while the install dropped
+them. The runtime resolves them as Node's CommonJS `require` does — `main`, the `require`/`node`/
+`default` conditions of an `exports` map and its patterns, relative files, JSON, nested packages and
+cycles — but never above the extension's own directory, and the provided registry (React,
+`@raycast/api`, the built-ins) always wins over a shipped copy. A failed load is not cached, so the
+next `require` retries it. The cache lives in the JS context, which goes with the run.
 
 **The Installed list is one plain row per extension, and its settings open on their own page.** An
 import can bring in hundreds, and a `Form` realizes every row it is handed, so a row holds no AppKit
@@ -630,7 +644,8 @@ external source maps and type check.
 
 `-e dist` also type-checks, so an extension that does not compile fails at the build rather than
 at the copy. An extension without `ray` falls back to its own build script and installs from the
-source, which is the only contract such an extension offers. Lifecycle scripts are skipped on purpose: the
+source, which is the only contract such an extension offers — minus its `node_modules`, which there
+is the dev install rather than shipped dependencies. Lifecycle scripts are skipped on purpose: the
 build script is the contract, a `postinstall` is code nobody asked to run. The package manager is
 `Automatic` by default, which takes the first of pnpm, Bun, Yarn and npm that is installed — a GUI app
 inherits none of a login shell's `PATH`, so `ExtensionPackageManager.searchPaths` is where they are
@@ -738,10 +753,13 @@ Refresh is opt-in per command: off until the first manual run or the Settings to
 (Settings › Extensions › the command › Background refresh), which also shows the last refresh and the
 last error. The launcher row carries the state too: a dot while refresh is on, its dimmed twin
 while it is off, a warning with the error as its tooltip when the last background run failed, and
-the Actions menu offers Enable / Disable Background Refresh plus Refresh Now. The override lives in
-`extension-commands.json` — derived state, so no backup carries it — and uninstall removes an
-extension's records with everything else. Deliberately not in `extension-data/<name>.json`: drawing a
-launcher row reads every command's metadata, and that file holds the extension's whole `Cache`.
+the Actions menu offers Enable / Disable Background Refresh plus Refresh Now. Refresh Now never
+queues: while another command holds the runtime it shows a HUD saying so, since a deferred run could
+fire long after the click, when a foreground command finally closes, with nothing to show it ran.
+The override lives in `extension-commands.json` — derived state, so no backup carries it — and
+uninstall removes an extension's records with everything else. Deliberately not in
+`extension-data/<name>.json`: drawing a launcher row reads every command's metadata, and that file
+holds the extension's whole `Cache`.
 
 The scheduler is one loop doing date math, not one timer per command: close ticks run as a single
 batch, installs share a deterministic phase so they don't re-fire in lockstep after sleep, and a wakeup
@@ -752,8 +770,8 @@ with nothing due costs a comparison. Three guards keep it cheap:
 - A hung run dies before its successor is due, and a background run shows no toast, HUD, alert or
   window call, since those would fire on a timer.
 
-`ExtensionRefreshPolicy` is where the parsing, due dates and backoff live, driven by
-`Tests/ext-refresh-test.swift`; `Tests/ext-metadata-test.swift` covers the store behind it. Menu-bar
+`ExtensionRefreshPolicy` is where the parsing, due dates, backoff and Refresh Now's refusals live,
+driven by `Tests/ext-refresh-test.swift`; `Tests/ext-metadata-test.swift` covers the store behind it. Menu-bar
 commands run on their own lane in `ExtensionMenuBarManager` but read the same policy — `nextDue`,
 its failure backoff and its per-command phase — measured from the same `lastRun`, with a ten-second
 interval floor instead of sixty.
@@ -810,9 +828,10 @@ the descriptor calls `tar` unpacks through), `os`,
 each async form reporting the child's real `pid` for `process.kill` — Timers pauses that way),
 `crypto` (hashes, HMAC, PBKDF2, AES-CBC/ECB, random, UUID), `zlib` (gzip/zlib/raw deflate, both
 directions, plus `create*` streams that buffer until `end`), `http`/`https` (`request`, `get` and `Agent`, buffered over the same URLSession bridge
-as `fetch`), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
+as `fetch`, with `socketPath` for Unix-socket HTTP), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
 `finished`, plus `stream/promises` and `stream/web`), `util`, `events`, `buffer`, `url`, `querystring`, `punycode`, `assert`,
-`string_decoder`, `timers`. Every other built-in resolves to a stub that throws only when used, so a
+`string_decoder`, `timers`, and `module`'s `createRequire`, whose `require` resolves through the
+same registry as a bundle's own — apple-passwords loads `@raycast/api` lazily that way. Every other built-in resolves to a stub that throws only when used, so a
 bundle that merely references `http2` or `domain` still loads. Those stubs are manufactured lazily,
 but each module still has to enumerate its members as own keys: esbuild's `__toESM` — what every
 namespace or named import compiles to — snapshots own keys instead of reading through the proxy, and
@@ -820,6 +839,13 @@ a member it cannot see arrives as `undefined`, which `class … extends` reports
 `TypeError: The superclass is not a constructor` at import time, naming nothing. `async_hooks` hands
 out a real `AsyncLocalStorage` and `AsyncResource` rather than a stub for the same reason: undici
 extends the latter at module scope, and running the callback in place is the whole of it here.
+
+`Buffer.allocUnsafeSlow` exists, zero-filled like `allocUnsafe`, because bundled `safe-buffer` only
+takes the modern Buffer API when all four allocators are present and otherwise calls the class
+without `new`. `EventEmitter.once` hands the emitter to its listener as `this`, like `on` does:
+bundled duplex streams read `this.allowHalfOpen` from an `end` listener registered that way.
+An emitter's listener map is created on first use, as in Node, because CoffeeScript-compiled
+libraries subclass `EventEmitter` without ever calling its constructor.
 
 **WebAssembly** — `compile`, `instantiate` and their streaming forms run through the synchronous
 `Module` and `Instance` constructors. JavaScriptCore settles the promise forms from a run-loop timer on
@@ -849,6 +875,10 @@ that as absence, like Node. Raycast's Visual Studio Code extension leans on the 
 always does) would otherwise pass `isFolderEntry` and reach `fileURLToPath`, which throws and takes
 the whole Search Recent Projects command down.
 
+A failed `readFile`, `readdir` or `stat` reports the path's real errno — `EPERM` or `EACCES` for a
+read macOS denies, `ENOTDIR`, `EISDIR` — rather than `ENOENT` for everything, so Browser Bookmarks
+can tell a browser profile it may not read from one that is not installed.
+
 A bundle that ships its own HTTP client rather than calling `fetch` — node-fetch travels inside
 `@raycast/utils`, and axios has a Node adapter — reaches the network through `http.request`, so the
 shim answers it: one request when the body ends, one response chunk when the bridge replies. The
@@ -863,6 +893,18 @@ follow-redirects inherits with `Writable.call(this)`, so `stream` hands out call
 A request calls it only for an `http.Agent` subclass, which is where axios-cookiejar-support's
 http-cookie-agent reads and writes its jar — Hide My Email is the reference case. URLSession folds
 repeated `Set-Cookie` headers into one line, so the response splits it back into Node's array.
+
+A `socketPath` option selects HTTP over a Unix socket — Docker's dockerode talks to its daemon that
+way, and Docker is the reference case. URLSession has no Unix-socket transport, so `ExtensionFetcher`
+runs `/usr/bin/curl --unix-socket` with its arguments as an argv array, never through a shell. It
+starts with `--disable` and `--noproxy '*'`, so neither `~/.curlrc` nor a proxy shapes the request,
+and `--compressed`, so the body arrives decoded like a URLSession one. The body lands in a private
+scratch directory, removed on return; the status and headers come back as `--write-out` JSON. The
+pipe drain and exit wait run on a Dispatch worker, so a slow daemon never holds a cooperative-pool
+thread, and cancelling the request terminates its curl. A request without `socketPath` never takes
+this path. Curl's exit 7 — nothing listening — becomes `socketUnavailable`, which the bridge also
+shows as a failure toast for a foreground command, once per socket until a request to it succeeds or
+the session ends, so a command polling a stopped daemon does not replay it on every retry.
 
 **WebSockets** — `WebSocket` is a global backed by `URLSessionWebSocketTask`. Swift owns the wire and
 the framing, and JS reads a socket by keeping one `receive` call outstanding, so an inbound message
@@ -927,7 +969,8 @@ node build.mjs --dev       # unminified, React in development mode (better error
 Then the tests, fastest first:
 
 ```sh
-# 1. JS-only fixtures, in a bare `vm` context (the closest thing Node has to JavaScriptCore)
+# 1. JS-only fixtures, in a bare `vm` context (the closest thing Node has to JavaScriptCore);
+#    they end with modules-fixtures.mjs, the node_modules resolver against a real directory tree
 node fixtures.mjs
 
 # 2. any prebuilt extension, printing the render tree it produces

@@ -77,8 +77,8 @@ When a trailing operator keeps a conversion visible, its input is reconstructed 
 display rounding never feeds back into evaluation.
 
 `UnitDef` is an immutable, Sendable reference shared by its aliases and parsed values. The catalog
-stores 152 base definitions as compact text records rather than repeated construction code, then adds
-SI and transfer-rate prefixes once on first use, for 685 aliases. `CalcUnitCatalog` owns this data;
+stores 157 base definitions as compact text records rather than repeated construction code, then adds
+SI and transfer-rate prefixes once on first use, for 691 aliases. `CalcUnitCatalog` owns this data;
 `CalcUnits` owns conversion policy.
 
 Typed arithmetic precedes simple conversion so `1 / 20ms to hz` divides by a duration,

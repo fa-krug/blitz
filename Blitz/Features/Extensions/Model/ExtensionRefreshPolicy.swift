@@ -64,6 +64,15 @@ enum ExtensionRefreshPolicy {
         min(max(interval, 15), 120)
     }
 
+    /// Why Refresh Now can't start, or nil when it can; the runtime holds one command at a time.
+    static func refreshNowRefusal(
+        foregroundRunning: Bool, refreshingCommand: String?, command: String
+    ) -> String? {
+        if refreshingCommand == command { return "Already refreshing." }
+        guard foregroundRunning || refreshingCommand != nil else { return nil }
+        return "Another extension command is running. Try again when it finishes."
+    }
+
     /// Launcher dot for a scheduled command: active, dimmed when off, or the last background error.
     static func indicator(
         schedulable: Bool, backgroundEnabled: Bool, lastError: String?

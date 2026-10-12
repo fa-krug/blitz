@@ -111,7 +111,7 @@ struct ExtensionToastPill: View {
         HStack(spacing: 0) {
             mark.frame(width: metrics.size.menuButton, height: metrics.size.menuButton)
             HStack(spacing: metrics.spacing.md) {
-                Text(toast.title).foregroundStyle(Theme.Colors.textPrimary)
+                Text(toast.title).foregroundStyle(Theme.Colors.textPrimary).layoutPriority(1)
                 if let message = toast.message, !message.isEmpty {
                     Text(message).foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -143,7 +143,6 @@ struct ExtensionToastPill: View {
             .padding(.trailing, metrics.spacing.xl)
         }
         .frame(height: metrics.size.menuButton)
-        .fixedSize()
         .background { glow }
         .overlay {
             Capsule().strokeBorder(
@@ -186,6 +185,7 @@ struct ExtensionToastPill: View {
         action: @escaping () -> Void, @ViewBuilder label: () -> some View
     ) -> some View {
         Button(action: action, label: label)
+            .fixedSize()
             .buttonStyle(.plain)
             .fontWeight(.semibold)
             .foregroundStyle(Theme.Colors.textPrimary)

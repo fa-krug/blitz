@@ -125,7 +125,8 @@ on the pipe when it arrives.
 port, never the shipped `4962`. A fixed port is the same mistake as a fixed path: concurrent runs
 from two checkouts would fail each other, and a sign-in in a running Blitz would fail the harness.
 Its Keychain scope is unique to each run and removed on completion. `ext-fetch-test` (inside
-`ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`.
+`ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`, and its Unix-socket ones
+from `Tests/ext-fixtures/unix-server.js` on a socket path unique to each run.
 
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
@@ -559,6 +560,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   rendered note and is styled at once
 - The derived title of an Untitled note shows no Markdown markers
 - A narrow window wraps list items under their text, not under the marker
+- A bullet, task or numbered item whose first word is wider than the window keeps a whole marker on
+  its first line of text, and its checkbox toggles where it is drawn
 - With Render Markdown **off**, the note is fully literal (markers visible, links inert, task syntax
   plain) and Return, Tab, Delete, and formatting-looking shortcuts keep native plain-text behavior;
   flipping it back re-renders without dirtying the note or touching undo
@@ -786,6 +789,7 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Microphone Muted / Unmuted, silences and restores captured input, and leaves input gain and output
   untouched; switch the default input and repeat
 - Holding a bound hotkey does **not** stack dialogs
+- Lock Screen locks from a global hotkey with the palette closed, including a Hyper-key binding
 - Window commands move the window you were last in; cycle-on-repeat steps ½ → ⅓ → ⅔
 - "Top Half" lands flush with the top of the visible frame, on a secondary display too
 - A command with the Notes window focused places Notes, not the app behind it

@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 import CoreAudio
 import Darwin
 
@@ -33,15 +32,17 @@ enum SystemActionRunner {
     {
         switch id {
         case .lockScreen:
-            try postKey(keyCode: CGKeyCode(kVK_ANSI_Q), flags: [.maskControl, .maskCommand])
+            try lockScreen()
         case .sleep:
             try await runProcess("/usr/bin/pmset", arguments: ["sleepnow"])
         case .sleepDisplays:
             try await runProcess("/usr/bin/pmset", arguments: ["displaysleepnow"])
         case .restart:
-            try await runAppleScript("tell application \"System Events\" to restart")
+            try await runAppleScript(
+                "tell application \"System Events\" to restart with state saving preference")
         case .shutDown:
-            try await runAppleScript("tell application \"System Events\" to shut down")
+            try await runAppleScript(
+                "tell application \"System Events\" to shut down with state saving preference")
         case .logOut:
             try await runAppleScript("tell application \"System Events\" to log out")
         case .showScreenSaver:
@@ -326,20 +327,18 @@ enum SystemActionRunner {
         }
     }
 
-    private static func postKey(keyCode: CGKeyCode, flags: CGEventFlags) throws {
-        guard Permissions.ensureAccessibility() else {
-            throw SystemActionFailure(
-                "Allow Blitz to control your Mac in Accessibility settings, then try again.",
-                settings: .accessibility)
+    /// A synthetic ⌃⌘Q from a key-down hotkey merges with the still-held modifiers and misses.
+    private static func lockScreen() throws {
+        let path = "/System/Library/PrivateFrameworks/login.framework/Versions/Current/login"
+        guard let handle = dlopen(path, RTLD_NOW) else {
+            throw SystemActionFailure("Screen locking is unavailable on this Mac.")
         }
-        let source = CGEventSource(stateID: .combinedSessionState)
-        guard let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
-            let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
-        else { throw SystemActionFailure("macOS could not create the keyboard event.") }
-        down.flags = flags
-        up.flags = flags
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        defer { dlclose(handle) }
+        typealias LockScreen = @convention(c) () -> Int32
+        guard let symbol = dlsym(handle, "SACLockScreenImmediate") else {
+            throw SystemActionFailure("This macOS version does not expose screen locking.")
+        }
+        _ = unsafeBitCast(symbol, to: LockScreen.self)()
     }
 
     private static func postMediaKey(_ key: Int32) throws {

@@ -5,6 +5,7 @@
 
 import { createHarness, bootConfig, describeTree } from "./test.mjs";
 import { transformSync } from "esbuild";
+import { runModuleFixtures } from "./modules-fixtures.mjs";
 
 let passes = 0;
 let failures = 0;
@@ -266,6 +267,71 @@ export default function Command() {
 }
 `;
 
+// Bundled safe-buffer only takes the modern Buffer API when all four allocators exist; otherwise it
+// calls the class without `new`. Bundled duplex streams read `this.allowHalfOpen` in a `once` listener.
+const bufferEventSource = `
+const { Buffer } = require("buffer");
+const { EventEmitter } = require("events");
+
+module.exports.default = () => {
+  const SafeBuffer = Buffer.from && Buffer.alloc && Buffer.allocUnsafe && Buffer.allocUnsafeSlow
+    ? Buffer : function (size) { return Buffer(size); };
+  const first = SafeBuffer.allocUnsafeSlow(4);
+  const second = SafeBuffer.allocUnsafeSlow(4);
+  first[0] = 91;
+  const emitter = new EventEmitter();
+  const calls = [];
+  const chained = emitter.once("ready", function (...args) {
+    calls.push([this === emitter, ...args, emitter.listenerCount("ready")]);
+    emitter.emit("ready", "recursive");
+  }) === emitter;
+  const emitted = emitter.emit("ready", "value", 7);
+  const repeated = emitter.emit("ready", "again");
+  let removedCalls = 0;
+  function removed() { removedCalls++; }
+  emitter.once("removed", removed).removeListener("removed", removed);
+  emitter.emit("removed");
+  globalThis.__bufferEvents = {
+    selected: Buffer.isBuffer(new SafeBuffer(4)),
+    bytes: Array.from(second),
+    independent: first.buffer !== second.buffer,
+    empty: Buffer.allocUnsafeSlow(0).length === 0,
+    calls, chained, emitted, repeated, removedCalls,
+  };
+};
+`;
+
+// CoffeeScript-compiled libraries subclass EventEmitter without ever running its constructor.
+const lazyEmitterSource = `
+const { EventEmitter } = require("events");
+
+module.exports.default = () => {
+  const empty = Object.create(EventEmitter.prototype);
+  const untouched = [empty.emit("x"), empty.listenerCount("x"), empty.eventNames().length,
+    empty.listeners("x").length, empty.getMaxListeners()];
+  empty.off("x", () => {}).removeAllListeners("x").removeAllListeners();
+  const seen = [];
+  empty.on("x", (value) => seen.push(value));
+  empty.emit("x", 1);
+  globalThis.__lazyEmitter = { untouched, seen, names: empty.eventNames() };
+};
+`;
+
+// apple-passwords lazily requires `@raycast/api` through `createRequire`, which used to throw.
+const createRequireSource = `
+import { createRequire } from "module";
+import { Detail } from "@raycast/api";
+
+const requireFromHere = createRequire("/fixtures/package.json");
+
+export default function Command() {
+  const api = requireFromHere("@raycast/api");
+  const path = requireFromHere("node:path");
+  const parts = [String(api.Detail === Detail), path.join("a", "b"), requireFromHere.resolve("node:path")];
+  return <Detail markdown={parts.join("\\n")} />;
+}
+`;
+
 // Bundled HTTP clients (axios) construct and probe a Response at module scope, before any component
 // mounts — a host-shaped constructor took the whole command down with them.
 const responseSource = `
@@ -423,6 +489,31 @@ export default async function Command() {
     request.on("error", reject);
     request.end("ping");
   });
+}
+`;
+
+// Docker's dockerode talks to its daemon with `http.request({ socketPath, path })`.
+const unixHTTPSource = `
+import http from "node:http";
+
+export default async function Command() {
+  globalThis.__unixHTTP = [];
+  for (const input of [
+    { socketPath: "/var/run/docker.sock", path: "/containers/json?all=1", method: "post" },
+    "http://unused.test/images/json",
+  ]) {
+    const result = await new Promise((resolve, reject) => {
+      const options = typeof input === "string" ? { socketPath: "/tmp/docker.sock" } : {};
+      const request = http.request(input, options, (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => resolve({ status: response.statusCode, hex: Buffer.concat(chunks).toString("hex") }));
+      });
+      request.on("error", reject);
+      request.end(Buffer.from([0, 255, 1]));
+    });
+    globalThis.__unixHTTP.push(result);
+  }
 }
 `;
 
@@ -1002,6 +1093,29 @@ export async function runFixtures() {
     expected.forEach((value, index) => check(`shim ${index}: ${value}`, markdown[index] === value, markdown[index]));
   });
 
+  await run("safe-buffer and EventEmitter.once", bufferEventSource, "no-view", async (harness) => {
+    const result = harness.call("globalThis.__bufferEvents");
+    check("safe-buffer selects the modern Buffer API", result?.selected === true, harness.state.failures.join(" | "));
+    check("allocUnsafeSlow is zero-filled", JSON.stringify(result?.bytes) === "[0,0,0,0]");
+    check("allocUnsafeSlow allocations are independent", result?.independent === true && result?.empty === true);
+    check("once passes the emitter as receiver", JSON.stringify(result?.calls) === '[[true,"value",7,0]]', JSON.stringify(result?.calls));
+    check("once stays chainable and fires once", result?.chained && result?.emitted && result?.repeated === false);
+    check("once is removable by its original listener", result?.removedCalls === 0);
+  });
+
+  await run("EventEmitter without its constructor", lazyEmitterSource, "no-view", async (harness) => {
+    const result = harness.call("globalThis.__lazyEmitter");
+    check("every method tolerates missing state", JSON.stringify(result?.untouched) === "[false,0,0,0,10]", harness.state.failures.join(" | ") || JSON.stringify(result?.untouched));
+    check("the first listener creates the state", JSON.stringify(result?.seen) === "[1]" && JSON.stringify(result?.names) === '["x"]');
+  });
+
+  await run("createRequire resolves through the module registry", createRequireSource, "view", async (harness) => {
+    const markdown = findNode(harness.state.trees.at(-1), "Detail")?.props.markdown.split("\n") ?? [];
+    check("lazily requires @raycast/api", markdown[0] === "true", harness.state.failures.join(" | ") || markdown.join(","));
+    check("resolves a Node builtin", markdown[1] === "a/b", markdown[1]);
+    check("resolve names the request", markdown[2] === "node:path", markdown[2]);
+  });
+
   await run("Response takes the Web spec's constructor", responseSource, "no-view", async (harness) => {
     const result = harness.call("globalThis.__response");
     const equals = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
@@ -1113,6 +1227,7 @@ export async function runFixtures() {
       const result = harness.call("globalThis.__http");
       const spec = httpSpecs[0] ?? {};
       check("sends one request over the fetch bridge", httpSpecs.length === 1, String(httpSpecs.length));
+      check("ordinary HTTP names no Unix socket", spec.socketPath === undefined);
       check("uppercases the method", spec.method === "POST", String(spec.method));
       check("joins a multi-valued header", spec.headers?.["x-probe"] === "one, two", JSON.stringify(spec.headers));
       check("leaves content negotiation to the transport", spec.headers?.["accept-encoding"] === undefined);
@@ -1134,6 +1249,34 @@ export async function runFixtures() {
             url: "https://example.test/data",
             bodyBase64: Buffer.from('{"ok":true}').toString("base64"),
           };
+        },
+      },
+    },
+  );
+
+  const unixSpecs = [];
+  await run(
+    "http.request keeps Docker's Unix socket",
+    unixHTTPSource,
+    "no-view",
+    async (harness) => {
+      const [options, url] = unixSpecs;
+      check("options carry the socket path", options?.socketPath === "/var/run/docker.sock", String(options?.socketPath));
+      check("a URL request carries the socket from its options", url?.socketPath === "/tmp/docker.sock", String(url?.socketPath));
+      check("keeps the API path and query", options?.url === "http://localhost/containers/json?all=1", String(options?.url));
+      check("keeps the method and binary body", options?.method === "POST" && options?.bodyBase64 === "AP8B");
+      const result = harness.call("globalThis.__unixHTTP");
+      check(
+        "hands back the error status and binary body",
+        result?.length === 2 && result.every((r) => r.status === 404 && r.hex === "00ff01"),
+        JSON.stringify(result),
+      );
+    },
+    {
+      stubs: {
+        "fetch.request": (args) => {
+          unixSpecs.push(args[0]);
+          return { status: 404, headers: {}, bodyBase64: "AP8B" };
         },
       },
     },
@@ -1396,6 +1539,8 @@ export async function runFixtures() {
     );
     check("the error reaches the console", harness.state.logs.some((line) => line.includes("async kaboom")));
   });
+
+  await runModuleFixtures(check);
 
   console.log(failures === 0 ? "\nAll runtime fixtures passed." : `\n${failures} check(s) failed.`);
   if (import.meta.url === `file://${process.argv[1]}`) process.exit(failures === 0 ? 0 : 1);

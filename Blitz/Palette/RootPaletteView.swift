@@ -986,11 +986,13 @@ struct RootPaletteView: View {
         HStack(spacing: 0) {
             appMenuButton
                 .modifier(ExtensionToastSlot(extensions: extensions, showing: vm.mode == .extensionCommand))
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             if showActionGroup {
                 actionGroup(
                     pillLabel: pillLabel, formPrimaryShortcut: formPrimaryShortcut,
-                    showActions: showActions)
+                    showActions: showActions
+                )
+                .fixedSize()
             }
         }
         .padding(.horizontal, metrics.spacing.md)
