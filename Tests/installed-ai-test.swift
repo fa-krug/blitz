@@ -125,6 +125,8 @@ struct InstalledAITests {
         await theRoundCapEndsTheTurnTheWayTheLoopDoes(fixture)
         await unlimitedPassesNoTurnCap(fixture)
         await concurrentCallsAreAskedOneAtATime(fixture)
+        hostedServerSpeaksJSONRPC()
+        await claudeHostsBlitzsOwnTools(fixture)
         await aCrashedTurnsFilesAreRemovedAtLaunch(fixture)
         await aManagedMCPPolicyLeavesBothFlagsOff(fixture)
         await aReadersVariablesReachTheToolButNeverItsIsolation(fixture)
@@ -638,6 +640,140 @@ struct InstalledAITests {
             "both calls are allowed on the one channel and the turn finishes")
     }
 
+    private static func hostedServerSpeaksJSONRPC() {
+        let tool = AITool(
+            name: "reminders_create", description: "Create a reminder.",
+            parameters: AIToolJSON.object(properties: ["title": AIToolJSON.string("Title")]),
+            origin: "Reminders", title: "Create Reminder")
+        let initialize = ClaudeHostedServer.reply(
+            to: .object([
+                "jsonrpc": .string("2.0"), "id": .number(0), "method": .string("initialize"),
+                "params": .object(["protocolVersion": .string("2025-11-25")])
+            ]),
+            tools: [tool])
+        guard case .answer(let opened) = initialize else {
+            expect(false, "initialize is answered at once")
+            return
+        }
+        let result = opened.objectValue?["result"]?.objectValue
+        expect(
+            result?["protocolVersion"] == .string("2025-11-25")
+                && result?["capabilities"]?.objectValue?["tools"] != nil,
+            "initialize echoes the CLI's protocol version and declares tools")
+        let notified = ClaudeHostedServer.reply(
+            to: .object(["jsonrpc": .string("2.0"), "method": .string("notifications/initialized")]),
+            tools: [tool])
+        expect(
+            notified == .answer(
+                .object(["jsonrpc": .string("2.0"), "id": .number(0), "result": .object([:])])),
+            "a notification still gets the empty answer the CLI waits for")
+        guard
+            case .answer(let listed) = ClaudeHostedServer.reply(
+                to: .object(["id": .number(1), "method": .string("tools/list")]), tools: [tool])
+        else {
+            expect(false, "tools/list is answered at once")
+            return
+        }
+        let first = listed.objectValue?["result"]?.objectValue?["tools"]?.arrayValue?.first
+        expect(
+            first?.objectValue?["name"] == .string("reminders_create")
+                && first?.objectValue?["inputSchema"] == tool.parameters,
+            "tools/list offers each tool with its schema carried through untouched")
+        let call = ClaudeHostedServer.reply(
+            to: .object([
+                "id": .number(2), "method": .string("tools/call"),
+                "params": .object([
+                    "name": .string("reminders_create"),
+                    "arguments": .object(["title": .string("foo")])
+                ])
+            ]),
+            tools: [tool])
+        guard case .call(let toolCall, let id) = call else {
+            expect(false, "a call for an offered tool is handed on to run")
+            return
+        }
+        expect(
+            toolCall.name == "reminders_create" && toolCall.arguments == #"{"title":"foo"}"#
+                && id == .number(2),
+            "with its arguments as the JSON text Blitz's own executors parse")
+        let unknown = ClaudeHostedServer.reply(
+            to: .object([
+                "id": .number(3), "method": .string("tools/call"),
+                "params": .object(["name": .string("calendar_create_event")])
+            ]),
+            tools: [tool])
+        guard case .answer(let refused) = unknown else {
+            expect(false, "a tool that was not offered is never run")
+            return
+        }
+        expect(
+            refused.objectValue?["result"]?.objectValue?["isError"] == .bool(true),
+            "and comes back as an error result the model can read, not a JSON-RPC error")
+        guard
+            case .answer(let missing) = ClaudeHostedServer.reply(
+                to: .object(["id": .number(4), "method": .string("resources/list")]), tools: [])
+        else { return }
+        expect(
+            missing.objectValue?["error"]?.objectValue?["code"] == .number(-32601),
+            "a method the server does not speak is refused as JSON-RPC says")
+    }
+
+    /// Calendar and Reminders reach Claude as an in-process server answered on the turn's own pipe.
+    private static func claudeHostsBlitzsOwnTools(_ fixture: Fixture) async {
+        let asked = Box()
+        let ran = HostedRuns()
+        let tool = AITool(
+            name: "reminders_create", description: "Create a reminder.",
+            parameters: AIToolJSON.object(properties: ["title": AIToolJSON.string("Title")]),
+            origin: "Reminders", title: "Create Reminder")
+        let hosted = AIHostedTools {
+            [tool]
+        } run: { call in
+            await MainActor.run { ran.calls.append(call) }
+            return AIToolResult(callID: call.id, content: "Saved foo.", isError: false)
+        }
+        let session = AIToolServerSession(rounds: 25, hosted: hosted) {
+            []
+        } consent: { call in
+            await MainActor.run { asked.calls.append(call) }
+            return false
+        }
+        let events = await fixture.events(
+            kind: .claude, model: "hosted", effort: nil, toolServers: session)
+        let argv = fixture.lastArguments("claude-args.log")
+        expect(
+            argv.contains("--mcp-config") && !argv.contains("--disallowedTools")
+                && argv.firstIndex(of: "--max-turns").map { argv[$0 + 1] } == "25",
+            "Blitz's own tools arm a turn even with no MCP server to run")
+        let config = fixture.read("claude-mcp-config.log")
+        expect(
+            config.contains(#""blitz_data":{"name":"blitz_data","type":"sdk"}"#),
+            "the configuration names Blitz's in-process server, with nothing to start")
+        let hostedLog = fixture.read("claude-hosted.log")
+        expect(
+            hostedLog.contains(#""mcp_response""#) && hostedLog.contains(#""request_id":"mcp_0""#)
+                && hostedLog.contains("reminders_create"),
+            "each message is answered on the control channel, the tool list included")
+        expect(
+            hostedLog.contains("Saved foo."),
+            "and the call's result goes back as the tool's content")
+        expect(
+            ran.calls.map(\.arguments) == [#"{"title":"foo"}"#],
+            "the call ran once, through Blitz's own executor, with the CLI's arguments")
+        expect(
+            asked.calls.isEmpty
+                && fixture.read("claude-control.log").contains(#""request_id":"req_hosted""#),
+            "and was allowed without MCP's trust dialog, since the tool gates itself")
+        expect(
+            events.contains(
+                .toolCall(id: "toolu_hosted", origin: "Reminders", title: "Create Reminder")),
+            "the transcript row names the store and the tool as the BYOK loop does")
+        expect(
+            events.contains(.toolResult(id: "toolu_hosted", isError: false))
+                && events.last == .finished,
+            "and the turn finishes on the CLI's own result")
+    }
+
     private static func theRoundCapEndsTheTurnTheWayTheLoopDoes(_ fixture: Fixture) async {
         let error = await fixture.streamError(
             kind: .claude, model: "round-cap", effort: nil,
@@ -760,6 +896,11 @@ struct InstalledAITests {
 @MainActor
 private final class Box {
     var calls: [AIToolServerCall] = []
+}
+
+@MainActor
+private final class HostedRuns {
+    var calls: [AIToolCall] = []
 }
 
 /// A reader who is asked once, takes a moment over it, and grants the server for the chat.

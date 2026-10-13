@@ -164,6 +164,14 @@ enum AIModelSelection: Codable, Equatable, Hashable, Sendable {
         }
     }
 
+    /// Blitz's own tools reach Claude as an in-process server; Codex can only be handed servers.
+    var reachesBlitzTools: Bool {
+        switch self {
+        case .codex: return false
+        case .appleIntelligence, .claude, .grok, .openCode, .cursor, .api: return true
+        }
+    }
+
     var source: AIModelSource {
         switch self {
         case .appleIntelligence: return .appleIntelligence

@@ -39,6 +39,10 @@ function claudeToolLoop() {
     claudeParallelCalls(read, emit);
     return;
   }
+  if (modelIndex >= 0 && args[modelIndex + 1] === "hosted") {
+    claudeHostedServer(read, emit);
+    return;
+  }
 
   emit({ type: "control_request", request_id: "req_unknown", request: { subtype: "unknown" } });
   record("claude-unknown.log", read.next().value ?? "{}");
@@ -110,6 +114,50 @@ function claudeParallelCalls(read, emit) {
     type: "user",
     message: {
       content: calls.map(([id]) => ({ type: "tool_result", tool_use_id: id, content: "ok" })),
+    },
+  });
+  emit({ type: "result", is_error: false, usage: { input_tokens: 8, output_tokens: 2 } });
+}
+
+/** Blitz's in-process server, driven the way the CLI drives an SDK server over the pipe. */
+function claudeHostedServer(read, emit) {
+  let next = 0;
+  const ask = (message) => {
+    emit({
+      type: "control_request",
+      request_id: "mcp_" + next++,
+      request: { subtype: "mcp_message", server_name: "blitz_data", message },
+    });
+    const answer = read.next().value ?? "{}";
+    record("claude-hosted.log", answer);
+    return JSON.parse(answer);
+  };
+  ask({ jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-11-25" } });
+  ask({ jsonrpc: "2.0", method: "notifications/initialized" });
+  ask({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+  const id = "toolu_hosted";
+  const name = "mcp__blitz_data__reminders_create";
+  emit({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", id, name, input: { title: "foo" } }] },
+  });
+  emit({
+    type: "control_request",
+    request_id: "req_hosted",
+    request: { subtype: "can_use_tool", tool_name: name, input: { title: "foo" } },
+  });
+  record("claude-control.log", read.next().value ?? "{}");
+  const called = ask({
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "reminders_create", arguments: { title: "foo" } },
+  });
+  emit({
+    type: "user",
+    message: {
+      content: [{
+        type: "tool_result", tool_use_id: id, is_error: called.response.response.mcp_response
+          .result.isError === true, content: "done",
+      }],
     },
   });
   emit({ type: "result", is_error: false, usage: { input_tokens: 8, output_tokens: 2 } });

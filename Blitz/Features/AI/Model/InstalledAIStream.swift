@@ -7,6 +7,8 @@ struct InstalledAIStreamFrame: Equatable, Sendable {
     var completed = false
     /// A tool call the CLI is holding open; the runner answers it and the turn carries on.
     var controlRequest: ClaudeControlProtocol.Request?
+    /// A message for the server Blitz hosts in-process, answered on the same pipe.
+    var hostedMessage: ClaudeHostedServer.Message?
     var unsupportedRequestID: String?
     /// The round cap ended the turn. Only the runner knows the number to say it with.
     var stoppedAtRoundCap = false
@@ -14,14 +16,15 @@ struct InstalledAIStreamFrame: Equatable, Sendable {
 
 enum InstalledAIStreamDecoder {
     static func decode(
-        _ data: Data, kind: InstalledAIKind, servers: [AIToolServer] = []
+        _ data: Data, kind: InstalledAIKind, servers: [AIToolServer] = [],
+        hosted: [AITool] = []
     ) -> InstalledAIStreamFrame {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let type = object["type"] as? String
         else { return InstalledAIStreamFrame() }
         switch kind {
         case .openCode: return openCode(object, type: type)
-        case .claude: return claude(object, type: type, servers: servers)
+        case .claude: return claude(object, type: type, servers: servers, hosted: hosted)
         case .cursor: return cursor(object, type: type)
         case .grok: return grok(object, type: type)
         case .codex: return InstalledAIStreamFrame()
@@ -56,16 +59,18 @@ enum InstalledAIStreamDecoder {
     }
 
     private static func claude(
-        _ object: [String: Any], type: String, servers: [AIToolServer]
+        _ object: [String: Any], type: String, servers: [AIToolServer], hosted: [AITool] = []
     ) -> InstalledAIStreamFrame {
         var frame = InstalledAIStreamFrame()
-        if !servers.isEmpty, type == "control_request" {
+        let armed = !servers.isEmpty || !hosted.isEmpty
+        if armed, type == "control_request" {
             frame.controlRequest = ClaudeControlProtocol.request(object)
+            if !hosted.isEmpty { frame.hostedMessage = ClaudeControlProtocol.hostedMessage(object) }
             frame.unsupportedRequestID = ClaudeControlProtocol.unsupportedRequestID(object)
             return frame
         }
-        if !servers.isEmpty, type == "assistant" || type == "user" {
-            frame.events = toolEvents(in: object, servers: servers)
+        if armed, type == "assistant" || type == "user" {
+            frame.events = toolEvents(in: object, servers: servers, hosted: hosted)
             return frame
         }
         // Summaries arrive as several thinking blocks; a break keeps them from running together.
@@ -111,7 +116,7 @@ enum InstalledAIStreamDecoder {
 
     /// `tool_use` and `tool_result` blocks, as the two events a transcript row is built from.
     private static func toolEvents(
-        in object: [String: Any], servers: [AIToolServer]
+        in object: [String: Any], servers: [AIToolServer], hosted: [AITool]
     ) -> [AIStreamEvent] {
         guard let message = object["message"] as? [String: Any],
             let content = message["content"] as? [[String: Any]]
@@ -122,6 +127,12 @@ enum InstalledAIStreamDecoder {
                 guard let id = block["id"] as? String, let name = block["name"] as? String,
                     let call = ClaudeMCPLaunch.route(name)
                 else { return nil }
+                if call.handle == ClaudeHostedServer.handle {
+                    let tool = hosted.first { $0.name == call.tool }
+                    return .toolCall(
+                        id: id, origin: tool?.origin ?? "Blitz",
+                        title: AIToolServerRow.label(tool?.title ?? call.tool))
+                }
                 return .toolCall(
                     id: id, origin: AIToolServerRow.title(of: call.handle, in: servers),
                     title: AIToolServerRow.label(call.tool))

@@ -40,11 +40,36 @@ enum ClaudeControlProtocol {
         return line
     }
 
+    /// A JSON-RPC message for the server Blitz hosts in-process; any other server is not ours.
+    static func hostedMessage(_ object: [String: Any]) -> ClaudeHostedServer.Message? {
+        guard object["type"] as? String == "control_request",
+            let id = object["request_id"] as? String,
+            let request = object["request"] as? [String: Any],
+            request["subtype"] as? String == "mcp_message",
+            request["server_name"] as? String == ClaudeHostedServer.handle,
+            let message = request["message"]
+        else { return nil }
+        return ClaudeHostedServer.Message(requestID: id, body: JSONValue(message))
+    }
+
+    static func hostedResponse(to requestID: String, message: JSONValue) -> Data? {
+        var line = try? JSONSerialization.data(
+            withJSONObject: [
+                "type": "control_response",
+                "response": [
+                    "subtype": "success", "request_id": requestID,
+                    "response": ["mcp_response": message.jsonObject]
+                ]
+            ])
+        line?.append(0x0A)
+        return line
+    }
+
     /// A control request that is no tool question of ours; unanswered, the CLI waits for good.
     static func unsupportedRequestID(_ object: [String: Any]) -> String? {
-        guard object["type"] as? String == "control_request", request(object) == nil else {
-            return nil
-        }
+        guard object["type"] as? String == "control_request", request(object) == nil,
+            hostedMessage(object) == nil
+        else { return nil }
         return object["request_id"] as? String
     }
 

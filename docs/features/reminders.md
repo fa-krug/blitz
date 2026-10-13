@@ -125,8 +125,9 @@ fixed there at all, so it re-runs `setRemindersEnabled`'s consent path instead.
 ## Chat tools
 
 With Reminders on and Settings → AI → Personal data → Reminders access set past Off, a chat on an
-API connection is offered `reminders_list`, and with Read & Write `reminders_create`, `reminders_update` and
-`reminders_complete` — see [AI](ai.md) for who gets offered what.
+API connection or the Claude command is offered `reminders_list`, and with Read & Write
+`reminders_create`, `reminders_update` and `reminders_complete` — see [AI](ai.md) for who gets
+offered what.
 `RemindersCoordinator.chatTools` decides the list and `runTool` answers a call.
 
 A listing is the store's own snapshot, so it covers exactly the lists switched on here, open

@@ -166,8 +166,8 @@ struct AISettingsView: View {
             SettingsSectionHeader(.aiPersonalData)
         } footer: {
             Text(
-                "API connections only. What a model reads goes to its provider, and you "
-                    + "confirm every change before it is saved.")
+                "API connections and the Claude command. What a model reads goes to its "
+                    + "provider, and you confirm every change before it is saved.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

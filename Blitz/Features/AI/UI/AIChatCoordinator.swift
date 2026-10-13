@@ -316,7 +316,10 @@ final class AIChatCoordinator {
         let excluded = chat.toolScope.excluded
         let chatID = chat.session.id
         let mcp = core.mcpCoordinator
-        return AIToolServerSession(rounds: core.aiSettings.toolRounds.limit) {
+        return AIToolServerSession(
+            rounds: core.aiSettings.toolRounds.limit,
+            hosted: slug == nil ? personalHostedTools : .none
+        ) {
             await mcp.toolServers(scopedTo: slug).filter { !excluded.contains($0.handle) }
         } consent: { call in
             await mcp.permit(call, in: chatID)
@@ -330,16 +333,27 @@ final class AIChatCoordinator {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
         let chatID = chat.session.id
+        let personal = personalHostedTools.run
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
-        ) {
-            [
-                mcp = core.mcpCoordinator, calendar = core.calendarCoordinator,
-                reminders = core.remindersCoordinator
-            ] call in
+        ) { [mcp = core.mcpCoordinator] call in
+            if Self.isPersonal(call.name) { return await personal(call) }
+            return await mcp.invoke(call, in: chatID)
+        }
+    }
+
+    nonisolated private static func isPersonal(_ name: String) -> Bool {
+        CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
+    }
+
+    /// The calendar and reminders for a client that hosts them, read again each turn it starts.
+    private var personalHostedTools: AIHostedTools {
+        AIHostedTools { [weak self] in
+            await self?.personalTools() ?? []
+        } run: { [calendar = core.calendarCoordinator, reminders = core.remindersCoordinator] call in
             if CalendarToolCatalog.handles(call.name) { return await calendar.runTool(call) }
             if ReminderToolCatalog.handles(call.name) { return await reminders.runTool(call) }
-            return await mcp.invoke(call, in: chatID)
+            return await AIHostedTools.none.run(call)
         }
     }
 
@@ -364,7 +378,7 @@ final class AIChatCoordinator {
 
     /// What the context card names: the stores a turn on this route may reach through Blitz.
     private func personalData(for chat: AIChatState) -> [String] {
-        guard capabilities(for: chat).tools, model(for: chat)?.runsItsOwnTools != true,
+        guard capabilities(for: chat).tools, model(for: chat)?.reachesBlitzTools == true,
             chat.toolScope.isEnabled
         else { return [] }
         var origins: [String] = []
