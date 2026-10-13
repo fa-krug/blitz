@@ -56,7 +56,8 @@ struct SettingsFileTest {
             "snippets.enabled", "extensions.enabled", "calendar.enabled",
             "calendar.autoJoinMeetings", "calendar.cameraPreview", "quickActions.enabled",
             "ai.mcpEnabled", "mcp.enabled", "clipboard.textSearchEnabled", "ai.calendarAccess",
-            "ai.remindersAccess", "fileSearch.screenshotTextSearch",
+            "ai.remindersAccess", "ai.shellCommands", "ai.shellCommandsEnabled",
+            "fileSearch.screenshotTextSearch",
             "fileSearch.screenshotTextSearchEnabled"
         ]
         check(

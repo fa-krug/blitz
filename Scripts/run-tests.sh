@@ -154,6 +154,9 @@ run reminders-test         Blitz/Features/Reminders/Model/*.swift \
                            $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
                            $A/AIToolArguments.swift $A/AIToolJSON.swift
 run contacts-test          Blitz/Features/Contacts/Model/*.swift
+run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
+                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
+                           Blitz/Features/AI/Service/ShellToolRunner.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
 Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
@@ -667,6 +670,7 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
                            Blitz/Features/AI/Model/ChatToolScope.swift \
+                           Blitz/Features/AI/Model/ShellCommandApproval.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \

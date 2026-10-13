@@ -43,6 +43,10 @@ function claudeToolLoop() {
     claudeHostedServer(read, emit);
     return;
   }
+  if (modelIndex >= 0 && args[modelIndex + 1] === "search") {
+    claudeWebSearch(emit);
+    return;
+  }
 
   emit({ type: "control_request", request_id: "req_unknown", request: { subtype: "unknown" } });
   record("claude-unknown.log", read.next().value ?? "{}");
@@ -91,6 +95,36 @@ function claudeToolLoop() {
     is_error: false,
     usage: { input_tokens: 8, output_tokens: 2 },
   });
+}
+
+/** A WebSearch round trip as Claude Code 2.1.285 streamed it, ids and query included. */
+function claudeWebSearch(emit) {
+  const id = "toolu_01BsFyY6CpJJn1tCEUHpftWX";
+  const query = "latest stable Swift version 2026";
+  emit({
+    type: "assistant",
+    message: {
+      role: "assistant",
+      content: [{
+        type: "tool_use", id, name: "WebSearch", input: { query, mode: "standard" },
+        caller: { type: "direct" },
+      }],
+    },
+  });
+  emit({
+    type: "user",
+    message: {
+      role: "user",
+      content: [{
+        tool_use_id: id, type: "tool_result",
+        content: `Web search results for query: "${query}"\n\nLinks: []`,
+      }],
+    },
+    tool_use_result: { query, results: [] },
+  });
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Claude reply" }] } });
+  emit({ type: "stream_event", event: { delta: { type: "text_delta", text: "Claude reply" } } });
+  emit({ type: "result", is_error: false, usage: { input_tokens: 8, output_tokens: 2 } });
 }
 
 /** Two calls in one assistant turn, both held open before either is answered. */
@@ -301,6 +335,8 @@ if (command === "opencode") {
     type: "result", is_error: false, session_id: "ses_stub",
     usage: { input_tokens: 8, output_tokens: 2 }
   }));
+} else if (model === "search") {
+  claudeWebSearch((message) => console.log(JSON.stringify(message)));
 } else {
   console.log(JSON.stringify({
     type: "stream_event", event: { delta: { type: "text_delta", text: "Claude reply" } }

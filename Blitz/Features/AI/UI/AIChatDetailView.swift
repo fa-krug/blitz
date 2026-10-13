@@ -180,6 +180,9 @@ private struct AIChatComposer: View {
             if coordinator.capabilities(for: chat).webSearch {
                 WebSearchToggle(settings: settings)
             }
+            if coordinator.offersShellCommands(in: chat) {
+                ShellApprovalToggle(chat: chat, coordinator: coordinator)
+            }
             Spacer(minLength: 0)
             ContextGauge(
                 report: coordinator.contextReport(for: chat, detailed: false), hovered: $showsContext)
@@ -410,6 +413,29 @@ private struct WebSearchToggle: View {
     }
 }
 
+/// This chat's own choice; Settings → AI decides whether a model may run commands at all.
+private struct ShellApprovalToggle: View {
+    let chat: AIChatState
+    let coordinator: AIChatCoordinator
+
+    var body: some View {
+        let automatic = chat.shellApproval == .automatic
+        Toggle(
+            isOn: Binding(
+                get: { automatic },
+                set: { coordinator.setShellApproval($0 ? .automatic : .ask, in: chat) })
+        ) {
+            Image(systemName: automatic ? "terminal.fill" : "terminal")
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.borderless)
+        .help(
+            automatic
+                ? "Shell commands run without asking" : "Shell commands ask before they run")
+        .accessibilityLabel("Run shell commands without asking")
+    }
+}
+
 /// A ring for the share of the context in use; hovering it raises the composer's context card.
 private struct ContextGauge: View {
     let report: ChatContextReport
@@ -503,6 +529,7 @@ private struct ContextCard: View {
                     "Personal data",
                     report.personalData.isEmpty
                         ? "None" : report.personalData.joined(separator: ", "))
+                row("Shell commands", shellTitle)
             }
             .font(.callout)
         }
@@ -533,6 +560,14 @@ private struct ContextCard: View {
 
     private func bytes(_ count: Int) -> String {
         count.formatted(.byteCount(style: .file))
+    }
+
+    private var shellTitle: String {
+        switch report.shellCommands {
+        case .ask?: "Confirm each"
+        case .automatic?: "Run without asking"
+        case nil: "Off"
+        }
     }
 
     private func tokens(_ count: Int, of window: Int?) -> String {

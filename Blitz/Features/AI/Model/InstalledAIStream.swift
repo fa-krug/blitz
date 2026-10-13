@@ -12,19 +12,23 @@ struct InstalledAIStreamFrame: Equatable, Sendable {
     var unsupportedRequestID: String?
     /// The round cap ended the turn. Only the runner knows the number to say it with.
     var stoppedAtRoundCap = false
+    /// Searches this frame started, by tool-use id, for the runner to match their results to.
+    var startedSearches: [String: String?] = [:]
 }
 
 enum InstalledAIStreamDecoder {
+    /// `searches` is nil on a turn offered no web search, else the ones it started so far.
     static func decode(
         _ data: Data, kind: InstalledAIKind, servers: [AIToolServer] = [],
-        hosted: [AITool] = []
+        hosted: [AITool] = [], searches: [String: String?]? = nil
     ) -> InstalledAIStreamFrame {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let type = object["type"] as? String
         else { return InstalledAIStreamFrame() }
         switch kind {
         case .openCode: return openCode(object, type: type)
-        case .claude: return claude(object, type: type, servers: servers, hosted: hosted)
+        case .claude:
+            return claude(object, type: type, servers: servers, hosted: hosted, searches: searches)
         case .cursor: return cursor(object, type: type)
         case .grok: return grok(object, type: type)
         case .codex: return InstalledAIStreamFrame()
@@ -59,7 +63,8 @@ enum InstalledAIStreamDecoder {
     }
 
     private static func claude(
-        _ object: [String: Any], type: String, servers: [AIToolServer], hosted: [AITool] = []
+        _ object: [String: Any], type: String, servers: [AIToolServer], hosted: [AITool] = [],
+        searches: [String: String?]? = nil
     ) -> InstalledAIStreamFrame {
         var frame = InstalledAIStreamFrame()
         let armed = !servers.isEmpty || !hosted.isEmpty
@@ -69,8 +74,19 @@ enum InstalledAIStreamDecoder {
             frame.unsupportedRequestID = ClaudeControlProtocol.unsupportedRequestID(object)
             return frame
         }
-        if armed, type == "assistant" || type == "user" {
-            frame.events = toolEvents(in: object, servers: servers, hosted: hosted)
+        // Text is read from the deltas alone, so these frames only ever add tool and search rows.
+        if armed || searches != nil, type == "assistant" || type == "user" {
+            var content =
+                (object["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+            if let searches {
+                frame.startedSearches = startedSearches(in: content)
+                let known = searches.merging(frame.startedSearches) { $1 }
+                frame.events = searchEvents(in: content, searches: known)
+                content.removeAll { known[blockID($0) ?? ""] != nil }
+            }
+            if armed {
+                frame.events += toolEvents(in: content, servers: servers, hosted: hosted)
+            }
             return frame
         }
         // Summaries arrive as several thinking blocks; a break keeps them from running together.
@@ -114,14 +130,41 @@ enum InstalledAIStreamDecoder {
         return frame
     }
 
+    private static func startedSearches(in content: [[String: Any]]) -> [String: String?] {
+        var started: [String: String?] = [:]
+        for block in content
+        where block["type"] as? String == "tool_use"
+            && block["name"] as? String == ClaudeMCPLaunch.searchTool
+        {
+            guard let id = block["id"] as? String else { continue }
+            started[id] = (block["input"] as? [String: Any])?["query"] as? String
+        }
+        return started
+    }
+
+    /// The built-in search as the search row the API routes draw, never a tool row or a question.
+    private static func searchEvents(
+        in content: [[String: Any]], searches: [String: String?]
+    ) -> [AIStreamEvent] {
+        content.compactMap { block in
+            guard let id = blockID(block), let query = searches[id] else { return nil }
+            switch block["type"] as? String {
+            case "tool_use": return .searching(query)
+            case "tool_result": return .searched(query)
+            default: return nil
+            }
+        }
+    }
+
+    private static func blockID(_ block: [String: Any]) -> String? {
+        (block["type"] as? String == "tool_result" ? block["tool_use_id"] : block["id"]) as? String
+    }
+
     /// `tool_use` and `tool_result` blocks, as the two events a transcript row is built from.
     private static func toolEvents(
-        in object: [String: Any], servers: [AIToolServer], hosted: [AITool]
+        in content: [[String: Any]], servers: [AIToolServer], hosted: [AITool]
     ) -> [AIStreamEvent] {
-        guard let message = object["message"] as? [String: Any],
-            let content = message["content"] as? [[String: Any]]
-        else { return [] }
-        return content.compactMap { block in
+        content.compactMap { block in
             switch block["type"] as? String {
             case "tool_use":
                 guard let id = block["id"] as? String, let name = block["name"] as? String,

@@ -98,6 +98,7 @@ enum AppSettingsKey: String, CaseIterable {
     case aiToolRounds = "aiToolRounds"
     case aiCalendarAccess = "aiCalendarAccess"
     case aiRemindersAccess = "aiRemindersAccess"
+    case aiShellCommands = "aiShellCommands"
     case aiShownModels = "aiShownModels"
     case aiDisabledRoutes = "aiDisabledRoutes"
     case aiInstalledOverrides = "aiInstalledOverrides"

@@ -3,6 +3,8 @@ import Foundation
 /// Blitz's servers as Claude's own MCP configuration: a file, since argv shows in `ps`.
 enum ClaudeMCPLaunch {
     static let toolPrefix = "mcp__"
+    /// The one built-in a turn is ever handed, and only while the chat's web search is on.
+    static let searchTool = "WebSearch"
     /// Per turn, so a second turn never overwrites or deletes a live turn's configuration.
     static func configurationFileName(_ id: UUID = UUID()) -> String {
         "blitz-mcp-\(id.uuidString).json"
@@ -35,13 +37,15 @@ enum ClaudeMCPLaunch {
     }
 
     /// The flags that arm the servers; `--disallowedTools *` would take the MCP tools with it.
-    static func arguments(configurationPath: String, handles: [String], rounds: Int?) -> [String] {
+    static func arguments(
+        configurationPath: String, handles: [String], rounds: Int?, allowing: [String] = []
+    ) -> [String] {
         var result = [
             "--strict-mcp-config",
             "--mcp-config", configurationPath,
             "--permission-prompt-tool", "stdio",
             "--permission-mode", "default",
-            "--settings", askSettings(handles: handles)
+            "--settings", askSettings(handles: handles, allowing: allowing)
         ]
         // Claude has no turn cap of its own, so no flag is what Unlimited means.
         if let rounds { result += ["--max-turns", "\(rounds)"] }
@@ -49,11 +53,13 @@ enum ClaudeMCPLaunch {
     }
 
     /// An ask rule outranks the reader's allow rules, so their settings never pre-approve a call.
-    static func askSettings(handles: [String]) -> String {
-        let rules = handles.map { toolPrefix + $0 }
+    static func askSettings(handles: [String], allowing: [String] = []) -> String {
+        var permissions: [String: Any] = ["ask": handles.map { toolPrefix + $0 }]
+        // A built-in would reach the consent channel, which refuses anything not an MCP call.
+        if !allowing.isEmpty { permissions["allow"] = allowing }
         guard
             let data = try? JSONSerialization.data(
-                withJSONObject: ["permissions": ["ask": rules]], options: [.sortedKeys]),
+                withJSONObject: ["permissions": permissions], options: [.sortedKeys]),
             let text = String(bytes: data, encoding: .utf8)
         else { return #"{"permissions":{"ask":[]}}"# }
         return text

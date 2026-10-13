@@ -106,6 +106,7 @@ struct AIProviderTests {
         conversationSettingsPersistAndDecide()
         toolCatalogsAndTurnsEncodePerProvider()
         toolArgumentsSurviveArrivingInFragments()
+        anthropicSearchesOnItsOwnServer()
         toolCapabilitiesFollowTheRoute()
         codexLaunchNamesServersAndKeepsSecretsOffArgv()
         codexLaunchHandsAServerItsOwnVariableNames()
@@ -117,6 +118,162 @@ struct AIProviderTests {
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
+    }
+
+    /// Anthropic runs the search itself, so its blocks become search rows and never tool calls.
+    static func anthropicSearchesOnItsOwnServer() {
+        let connection = AIConnection(provider: .anthropic, models: ["claude-sonnet-5-5"])
+        expect(
+            connection.capabilities(for: "claude-sonnet-5-5").webSearch,
+            "the Anthropic API offers web search")
+
+        let tool = AITool(
+            name: "fs__read", description: "Reads a file.",
+            parameters: .object(["type": .string("object")]), origin: "Files")
+        func tools(model: String, webSearch: Bool) -> [[String: Any]] {
+            let body = AIRequestBody.make(
+                AIRequest(
+                    messages: [AIMessage(role: .user, text: "news?")], webSearch: webSearch,
+                    tools: [tool]),
+                configuration: AIHTTPConfiguration(
+                    provider: .anthropic, baseURL: URL(string: "https://api.anthropic.com")!,
+                    model: model))
+            return body["tools"] as? [[String: Any]] ?? []
+        }
+        expect(
+            tools(model: "claude-sonnet-5-5", webSearch: false).map { $0["name"] as? String }
+                == ["fs__read"],
+            "without the switch only the client tools are sent")
+        let searching = tools(model: "claude-sonnet-5-5", webSearch: true)
+        expect(
+            searching.map { $0["name"] as? String } == ["fs__read", "web_search"]
+                && searching.first?["input_schema"] != nil,
+            "the server tool joins the client tools, which keep their shape")
+        expect(
+            searching.last?["type"] as? String == "web_search_20260209"
+                && searching.last?["max_uses"] as? Int == 5,
+            "a current Sonnet gets the dynamic-filtering tool, capped at five searches")
+        expect(
+            tools(model: "claude-haiku-4-5", webSearch: true).last?["type"] as? String
+                == "web_search_20250305",
+            "Haiku gets the basic tool")
+        let versions: [(String, String)] = [
+            ("claude-opus-4-6", "web_search_20260209"),
+            ("claude-opus-4-8-20260801", "web_search_20260209"),
+            ("claude-opus-5-5", "web_search_20260209"),
+            ("claude-sonnet-5", "web_search_20260209"),
+            ("claude-sonnet-4-6", "web_search_20260209"),
+            ("claude-sonnet-4-5-20250929", "web_search_20250305"),
+            ("claude-opus-4-20250514", "web_search_20250305"),
+            ("claude-opus-4-1-20250805", "web_search_20250305"),
+            ("claude-3-5-sonnet-20241022", "web_search_20250305"),
+            ("claude-3-opus-20240229", "web_search_20250305"),
+            ("something-else", "web_search_20250305")
+        ]
+        for (model, version) in versions {
+            expect(
+                AIRequestBody.anthropicWebSearchTool(for: model) == version,
+                "\(model) searches with \(version)")
+        }
+
+        var decoder = AIStreamDecoder(shape: .anthropic)
+        let stream = Data(
+            """
+            data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}
+
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1",\
+            "name":"web_search","input":{}}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta",\
+            "partial_json":"{\\"query\\": \\"swift"}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":" 6\\"}"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result",\
+            "tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"Swift","url":"https://swift.org",\
+            "encrypted_content":"abc","page_age":null}]}}
+
+            data: {"type":"content_block_stop","index":1}
+
+            data: {"type":"content_block_start","index":2,"content_block":{"type":"server_tool_use","id":"srvtoolu_2",\
+            "name":"code_execution","input":{}}}
+
+            data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta",\
+            "partial_json":"{\\"code\\": \\"1\\"}"}}
+
+            data: {"type":"content_block_stop","index":2}
+
+            data: {"type":"content_block_start","index":3,"content_block":{"type":"code_execution_tool_result",\
+            "tool_use_id":"srvtoolu_2","content":{"type":"code_execution_result","stdout":"1"}}}
+
+            data: {"type":"content_block_stop","index":3}
+
+            data: {"type":"content_block_start","index":4,"content_block":{"type":"text","text":""}}
+
+            data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"Swift 6 is out."}}
+
+            data: {"type":"content_block_delta","index":4,"delta":{"type":"citations_delta",\
+            "citation":{"type":"web_search_result_location","url":"https://swift.org","cited_text":"x"}}}
+
+            data: {"type":"content_block_stop","index":4}
+
+            data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}
+
+            data: {"type":"message_stop"}
+
+            """.utf8)
+        var events = (try? decoder.feed(stream)) ?? []
+        events += (try? decoder.finish()) ?? []
+        let searchRows = events.filter {
+            switch $0 {
+            case .searching, .searched: true
+            default: false
+            }
+        }
+        expect(
+            searchRows == [.searching("swift 6"), .searched("swift 6")],
+            "a split query is reassembled and the result block completes its row")
+        expect(
+            !events.contains {
+                if case .toolCallRequested = $0 { return true } else { return false }
+            },
+            "a server tool never reaches Blitz's own tool loop")
+        expect(answerText(events) == "Swift 6 is out.", "the answer text arrives untouched")
+        expect(events.last == .finished, "a searched turn still finishes")
+
+        var failing = AIStreamDecoder(shape: .anthropic)
+        let failed = Data(
+            """
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1",\
+            "name":"web_search","input":{}}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"qu"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result",\
+            "tool_use_id":"srvtoolu_1","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}}
+
+            data: {"type":"content_block_stop","index":1}
+
+            data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":2}}
+
+            data: {"type":"message_stop"}
+
+            """.utf8)
+        let failedEvents: [AIStreamEvent]
+        do {
+            failedEvents = try failing.feed(failed) + failing.finish()
+        } catch {
+            failedEvents = []
+            expect(false, "an error-shaped search result must not throw: \(error)")
+        }
+        expect(
+            failedEvents.contains(.searching(nil)) && failedEvents.contains(.searched(nil)),
+            "an unparsable query and an error result still open and close a row")
+        expect(failedEvents.last == .finished, "a pause_turn turn finishes like any other")
     }
 
     /// Both providers stream a call's arguments in pieces; a half-parsed call would be uncallable.

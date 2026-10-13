@@ -149,6 +149,9 @@ enum SettingsBackupCoverage {
         AppSettingsKey.aiRemindersAccess.rawValue:
             "Lets a chat model read, and with Read & Write change, this Mac's reminders; a flag "
             + "that grants a capability is never carried by a backup.",
+        AppSettingsKey.aiShellCommands.rawValue:
+            "Lets a chat model run commands on this Mac as the user; a flag that grants a "
+            + "capability is never carried by a backup.",
         AppSettingsKey.aiShownModels.rawValue:
             "Names the models of this Mac's own installed tools and connections, which another Mac "
             + "may not have.",

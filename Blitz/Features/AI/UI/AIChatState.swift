@@ -14,6 +14,8 @@ final class AIChatState {
     var draft = ""
     /// This chat's tools menu; a new chat starts with every connected server on.
     var toolScope = ChatToolScope()
+    /// Read as each command arrives, so flipping it mid-reply binds the next one.
+    var shellApproval = ShellCommandApproval.ask
 
     /// Every path that consumes or drops the staged images moves this on, so a late decode knows
     @ObservationIgnored private(set) var stagingGeneration = 0
@@ -170,6 +172,7 @@ final class AIChatState {
         session = ChatSession()
         notice = nil
         clearStaging()
+        shellApproval = .ask
     }
 
     /// Staged images belong to the conversation they were picked in; leaving it drops them.
@@ -181,6 +184,7 @@ final class AIChatState {
         session = loaded
         notice = nil
         clearStaging()
+        shellApproval = .ask
         return true
     }
 
@@ -190,6 +194,7 @@ final class AIChatState {
             session = ChatSession()
             notice = nil
             clearStaging()
+            shellApproval = .ask
         }
         history.remove(id: id)
     }

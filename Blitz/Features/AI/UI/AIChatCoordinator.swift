@@ -14,6 +14,8 @@ final class AIChatCoordinator {
     private let window: AppWindowController
     /// Chats with a title request in flight, so a quick second reply never asks twice.
     @ObservationIgnored private var naming: [UUID: Task<Void, Never>] = [:]
+    /// Shared by every chat: there is one dialog, and a second command must wait for it.
+    @ObservationIgnored private let shellConsent = AIConsentQueue()
 
     init(
         chats: AIChatSurfacesState, settings: AppSettings, appIndex: AppIndex,
@@ -342,7 +344,7 @@ final class AIChatCoordinator {
         let mcp = core.mcpCoordinator
         return AIToolServerSession(
             rounds: core.aiSettings.toolRounds.limit,
-            hosted: slug == nil ? personalHostedTools : .none
+            hosted: slug == nil ? blitzHostedTools(for: chat) : .none
         ) {
             await mcp.toolServers(scopedTo: slug).filter { !excluded.contains($0.handle) }
         } consent: { call in
@@ -357,26 +359,32 @@ final class AIChatCoordinator {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
         let chatID = chat.session.id
-        let personal = personalHostedTools.run
+        let blitz = blitzHostedTools(for: chat).run
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
         ) { [mcp = core.mcpCoordinator] call in
-            if Self.isPersonal(call.name) { return await personal(call) }
+            if Self.isBlitzTool(call.name) { return await blitz(call) }
             return await mcp.invoke(call, in: chatID)
         }
     }
 
-    nonisolated private static func isPersonal(_ name: String) -> Bool {
+    nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
+            || ShellToolCatalog.handles(name)
     }
 
-    /// The calendar and reminders for a client that hosts them, read again each turn it starts.
-    private var personalHostedTools: AIHostedTools {
-        AIHostedTools { [weak self] in
-            await self?.personalTools() ?? []
-        } run: { [calendar = core.calendarCoordinator, reminders = core.remindersCoordinator] call in
+    /// Blitz's own tools for a client that hosts them, read again each turn it starts.
+    private func blitzHostedTools(for chat: AIChatState) -> AIHostedTools {
+        let calendar = core.calendarCoordinator
+        let reminders = core.remindersCoordinator
+        return AIHostedTools { [weak self] in
+            await self?.blitzTools() ?? []
+        } run: { [weak self, weak chat] call in
             if CalendarToolCatalog.handles(call.name) { return await calendar.runTool(call) }
             if ReminderToolCatalog.handles(call.name) { return await reminders.runTool(call) }
+            if ShellToolCatalog.handles(call.name), let self, let chat {
+                return await runShellCommand(call, in: chat)
+            }
             return await AIHostedTools.none.run(call)
         }
     }
@@ -389,8 +397,12 @@ final class AIChatCoordinator {
             guard let route = MCPToolName.parse(tool.name) else { return true }
             return !excluded.contains(route.slug)
         }
-        // `@server` addresses one server, so the calendar and reminders sit that turn out.
-        return slug == nil ? personalTools() + servers : servers
+        // `@server` addresses one server, so Blitz's own tools sit that turn out.
+        return slug == nil ? blitzTools() + servers : servers
+    }
+
+    private func blitzTools() -> [AITool] {
+        personalTools() + (core.aiSettings.shellCommandsEnabled ? ShellToolCatalog.tools() : [])
     }
 
     /// The calendar and reminders, as far as Settings → AI lets a model reach them.
@@ -410,6 +422,49 @@ final class AIChatCoordinator {
             origins.append(tool.origin)
         }
         return origins
+    }
+
+    /// Whether the composer shows the chat's Confirm / Auto-run switch: only where the tool rides.
+    func offersShellCommands(in chat: AIChatState) -> Bool {
+        core.aiSettings.shellCommandsEnabled && capabilities(for: chat).tools
+            && model(for: chat)?.reachesBlitzTools == true && chat.toolScope.isEnabled
+    }
+
+    func setShellApproval(_ approval: ShellCommandApproval, in chat: AIChatState) {
+        chat.shellApproval = approval
+    }
+
+    /// Re-checked per call, since Settings can change mid-reply, and again after any dialog.
+    private func runShellCommand(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let request: ShellToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try ShellToolCatalog.request(arguments: call.arguments, homeDirectory: home)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        var approved = chat.shellApproval == .automatic
+        if !approved { approved = await confirmShellCommand(request, in: chat) }
+        guard core.aiSettings.shellCommandsEnabled else {
+            return .failure(call.id, "Running shell commands is turned off in Blitz's settings.")
+        }
+        guard approved else { return .failure(call.id, ShellToolCatalog.declined) }
+        return ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
+    }
+
+    /// Queued behind a command already asking; the mode is read again once this one's turn comes.
+    private func confirmShellCommand(
+        _ request: ShellToolCatalog.Request, in chat: AIChatState
+    ) async -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return await shellConsent.ask { @MainActor [weak self] in
+            guard let self, core.aiSettings.shellCommandsEnabled else { return false }
+            guard chat.shellApproval == .ask else { return true }
+            return await core.confirm(
+                title: "Run this command?",
+                message: ShellToolCatalog.summary(of: request, homeDirectory: home),
+                symbol: "terminal", confirmTitle: "Run", tone: .neutral, confirmRole: .standard)
+        }
     }
 
     /// The servers a chat's tools menu offers; empty when MCP is off or nothing is set up.
@@ -482,7 +537,8 @@ final class AIChatCoordinator {
             webSearch: core.aiSettings.webSearchEnabled && can.webSearch,
             toolServers: can.tools && scope.isEnabled
                 ? mcpServers.count { scope.allows($0.slug) } : 0,
-            personalData: detailed ? personalData(for: chat) : [])
+            personalData: detailed ? personalData(for: chat) : [],
+            shellCommands: detailed && offersShellCommands(in: chat) ? chat.shellApproval : nil)
     }
 
     // MARK: - Attachments
@@ -766,6 +822,8 @@ struct ChatContextReport: Equatable {
     let toolServers: Int
     /// The Mac's own stores in reach, such as the calendar; left empty for the gauge alone.
     let personalData: [String]
+    /// Nil when no command can run, as for the gauge alone.
+    let shellCommands: ShellCommandApproval?
 
     /// The model's own window when the route reported one; otherwise Blitz's history budget.
     var fill: Double {

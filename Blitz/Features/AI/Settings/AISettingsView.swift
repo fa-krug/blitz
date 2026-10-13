@@ -35,6 +35,7 @@ struct AISettingsView: View {
                 defaultModelSection
                 chatSection
                 personalDataSection
+                shellSection
                 conversationsSection
                 systemPromptSection
                 MCPSettingsSection()
@@ -168,6 +169,24 @@ struct AISettingsView: View {
             Text(
                 "API connections and the Claude command. What a model reads goes to its "
                     + "provider, and you confirm every change before it is saved.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var shellSection: some View {
+        @Bindable var settings = settings
+        return Section {
+            Toggle(isOn: $settings.shellCommandsEnabled) {
+                SettingsRowTitle(.aiShell, "Run shell commands")
+                Text("A model runs commands in your login shell, as you.")
+            }
+        } header: {
+            SettingsSectionHeader(.aiShell)
+        } footer: {
+            Text(
+                "API connections and the Claude command. Each command asks first unless its "
+                    + "chat is switched to run them without asking.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

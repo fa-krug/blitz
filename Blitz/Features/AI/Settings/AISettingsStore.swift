@@ -57,6 +57,13 @@ final class AISettingsStore {
                 remindersAccess.rawValue, forKey: AppSettingsKey.aiRemindersAccess.rawValue)
         }
     }
+    /// Off by default: a model runs nothing on this Mac until the reader has said so.
+    var shellCommandsEnabled: Bool {
+        didSet {
+            defaults.set(
+                shellCommandsEnabled, forKey: AppSettingsKey.aiShellCommands.rawValue)
+        }
+    }
     /// Per route, the models its picker lists; no entry lists all it offers, later ones too.
     private(set) var shownModels: [String: [String]] {
         didSet { defaults.set(shownModels, forKey: AppSettingsKey.aiShownModels.rawValue) }
@@ -132,6 +139,7 @@ final class AISettingsStore {
             AIDataAccess(
                 rawValue: defaults.integer(forKey: AppSettingsKey.aiRemindersAccess.rawValue))
             ?? .off
+        shellCommandsEnabled = defaults.bool(forKey: AppSettingsKey.aiShellCommands.rawValue)
         shownModels =
             defaults.dictionary(forKey: AppSettingsKey.aiShownModels.rawValue) as? [String: [String]]
             ?? [:]

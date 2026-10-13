@@ -126,6 +126,20 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   chat's Use Tools switch withholds these with the rest. Both keys are excluded from backups and
   have no `settings.json` key: each grants a model a capability. The tools themselves live with
   their features — see [Calendar](calendar.md#chat-tools) and [Reminders](reminders.md#chat-tools).
+- **A model can run shell commands, off until asked for, and each one asks first by default.**
+  Settings → AI → Shell holds `aiShellCommands`, Off out of the box; while it is on,
+  `shell_run_command` (`ShellToolCatalog`) is offered to exactly the routes the calendar is, and
+  `@server` and Use Tools withhold it alike. Every call re-checks the switch. A chat's
+  `AIChatState.shellApproval` is the composer's terminal toggle: Confirm, the default, puts the
+  command verbatim and its folder in Blitz's own confirm, one at a time through `AIConsentQueue`,
+  the mode read again when its turn comes; Auto-run skips the dialog. It is never stored, and a new,
+  reopened or cleared chat asks again; Quick AI has no toggle, so it always asks.
+  `ShellToolRunner` runs `$SHELL -l -c` (else the account's shell, else zsh) in the folder asked
+  for, home by default, with stdin empty and `BLITZ=1`; at 60 s it signals the command's process
+  group, TERM then KILL. Each stream keeps its first 16 KB and counts the rest, and the model reads
+  the exit status, both streams and what was cut; a declined or refused call is a failure result.
+  The key is excluded from backups and has no `settings.json` key: it grants a model a capability.
+  `shell-tool-test` pins the schema, call reading and answers, and runs the runner against zsh.
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
@@ -193,11 +207,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `--disallowedTools "*"` comes off because it removes the MCP tools too, `--max-turns` carries
   the round cap instead of the constant 1, or is left out on Unlimited, and
   `--permission-mode default` with an ask rule per server keeps the reader's own allow rules and
-  default mode from answering before Blitz does. The calendar and reminders arm a turn the same way
-  with no server at all: the configuration names `blitz_data` as an `sdk` server, which the CLI
+  default mode from answering before Blitz does. The calendar, reminders and shell arm a turn the
+  same way with no server at all: the configuration names `blitz_data` as an `sdk` server, which the CLI
   reaches as `mcp_message` control requests on the turn's own pipe, and `ClaudeHostedServer`
   answers its JSON-RPC from the tools resolved when the turn started. A call runs through the same
-  `runTool` the loop calls, so it re-checks the setting and confirms a calendar write itself; its
+  code the loop calls, so it re-checks the setting and confirms a calendar write or a command itself; its
   `can_use_tool` question is allowed without MCP's trust dialog for that reason. `MCPSlug` never
   yields `_`, so no server the reader adds can take that handle. `@server` and the chat's Use
   Tools switch withhold it as they do in the loop.
@@ -216,7 +230,12 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `permission: deny` for OpenCode and withheld MCP approval for Cursor. Cursor's is the only one resting
   on an approval prompt rather than an explicit deny, which is why its Providers row says so and the
   others do not. That is also why none of the three may be handed a server: there is no way to offer
-  one without offering the reader's own. None of these routes offer web search, and only Claude
+  one without offering the reader's own. Only Claude searches the web, and only on a turn whose
+  web-search toggle is on: `--tools WebSearch` hands it that one built-in, never WebFetch. Unarmed,
+  `--allowedTools WebSearch` and `--permission-mode dontAsk` replace the deny-all, which would
+  outrank the allow, so nothing else runs whatever the reader's default mode; `--max-turns` rises
+  to 6 for a search and an answer. Armed, the `--settings` rules add `allow: [WebSearch]` beside the
+  ask rules, and the boundary prompt names WebSearch beside the MCP tools. Only Claude also
   takes images: every Claude turn is one `--input-format stream-json` user message, the newest
   question's pictures as base64 `image` blocks beside the framed prompt. Claude also runs with
   `--thinking-display summarized` — a hidden flag, and the only switch that works: a `-p` run forces
@@ -492,7 +511,8 @@ and the Actions menu's own chords, and dies with the window.
   line without Return ever stealing an IME's confirm. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
   menu, the reasoning menu (always shown, disabled for a model with no efforts, so the row never
-  changes shape), a web-search toggle when the route offers search, a context gauge, and Send/Stop.
+  changes shape), a web-search toggle when the route offers search, the shell's Confirm / Auto-run
+  toggle while commands are offered, a context gauge, and Send/Stop.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
   last reply's `contextTokens` against the model's window when the route reported one, and
   `ChatSession.historyBytes` against Blitz's history budget otherwise — orange from 80%, red at
@@ -501,7 +521,7 @@ and the Actions menu's own chords, and dies with the window.
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
   thinking share and cost; then what the next message sends — model, history of budget, messages
-  sent of total, staged files, and whether the system prompt, web search, MCP servers and personal data ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
+  sent of total, staged files, and whether the system prompt, web search, MCP servers, personal data and shell commands ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
   the refusals a paste does. The unsent text lives on `AIChatState.draft`, so it survives closing
   the window.
 
@@ -741,14 +761,14 @@ transport code at all.
 | --- | --- | --- | --- | --- |
 | Apple Intelligence | never — it reaches nothing | never — the model is text-only | never | never |
 | Codex | thread-scoped `web_search` config | `image` input part | never — the app-server takes no document part | Blitz's servers, added as launch overrides; the reader's own are disabled by name |
-| Claude command | never | base64 `image` block in its stream-json user message | never | Blitz's servers, through `--strict-mcp-config` and a private config file — an empty one when there are none, and neither flag under a managed MCP policy |
+| Claude command | its built-in `WebSearch`, alone: `--tools WebSearch` plus an allow rule | base64 `image` block in its stream-json user message | never | Blitz's servers, through `--strict-mcp-config` and a private config file — an empty one when there are none, and neither flag under a managed MCP policy |
 | Grok command | never | never | never | the global config still loads — `--deny *` refuses the call |
 | OpenCode command | never | never | never | the global config still loads — `permission: deny` refuses the call |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
 | OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
 | OpenAI | not offered | `image_url` part, assumed supported | `file` part with `filename` and a `file_data` data URL | `tools` + `role: "tool"` turns |
 | Gemini / compatible | not offered | `image_url` part, assumed supported | never — a gateway that has not implemented the part bills the upload before rejecting it | `tools` + `role: "tool"` turns |
-| Anthropic | not offered | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
+| Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
 
 A search is part of the reply, not a status: `item/started` for a `webSearch` item appends a
 `ChatSearch` to the streaming message pinned at the text length so far, `item/completed` (or the
@@ -756,7 +776,11 @@ next text delta, or the turn ending) marks it finished and fills in the query if
 carry it. `ChatMessage.segments` splits the text around its searches so the transcript renders
 text, a search row (spinner → globe, "Searching web" → "Searched web · query"), then the rest, in
 the order it happened. Searches persist in `message_searches`. OpenRouter's web plugin is invisible
-to the stream, so it shows none. The web-search instructions ask for citations linked by the
+to the stream, so it shows none. Anthropic's arrives as a `server_tool_use` block, kept apart
+from the tool loop's calls, and its `web_search_tool_result` completes the row; the Claude command's
+is a `WebSearch` `tool_use` and its `tool_result`, never a tool row. A paused server loop
+(`pause_turn`) ends the reply where it stopped: Blitz keeps no server blocks to resume it with.
+Anthropic's own citation blocks are ignored, since sources come from the reply's links. The web-search instructions ask for citations linked by the
 publication's name — the model otherwise labels them "Read more".
 
 `AIModelCapabilities` says what the footer may offer for the selected model. OpenRouter is the only
@@ -913,7 +937,8 @@ join them: all three are decisions about conversations that never leave the Mac 
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
 limits what a tool-driven reply may spend, and an import must not raise that unasked.
 `aiCalendarAccess` and `aiRemindersAccess` let a model read, or change, this Mac's calendar and
-reminders, and a flag that grants a capability travels in neither a backup nor `settings.json`.
+reminders, and `aiShellCommands` lets it run commands as the user; a flag that grants a capability
+travels in neither a backup nor `settings.json`.
 `aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
 another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
 with, and an import must never decide which program a Mac launches. None of the three has a

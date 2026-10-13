@@ -28,9 +28,23 @@ private final class InstalledCLITurnRunner {
     /// The same boundary, for the one route that is handed tools: everything else stays off.
     private static let toolSafetyInstructions = """
         You are generating text inside Blitz. The only tools you may use are the MCP tools \
-        supplied with this request. Do not read files, inspect the environment, access external \
-        resources, or modify anything else.
+        supplied with this request; whatever one of them does is allowed. Do not read files, \
+        inspect the environment, access external resources, or modify anything in any other way.
         """
+    /// Web search is the one built-in a turn may be handed, so the boundary names it.
+    private static let searchSafetyInstructions = """
+        You are generating text inside Blitz. The only tool you may use is WebSearch, to search \
+        the web. Do not read files, inspect the environment, access any other external resource, \
+        or modify anything.
+        """
+    private static let toolSearchSafetyInstructions = """
+        You are generating text inside Blitz. The only tools you may use are WebSearch, to search \
+        the web, and the MCP tools supplied with this request; whatever one of them does is \
+        allowed. Do not read files, inspect the environment, access any other external resource, \
+        or modify anything in any other way.
+        """
+    /// A search is a tool round trip, and a model may search more than once before it answers.
+    private static let searchRounds = 6
 
     private static var maximumPartialLineBytes: Int {
         if let raw = ProcessInfo.processInfo.environment["TC_INSTALLED_MAX_LINE_BYTES"],
@@ -63,6 +77,8 @@ private final class InstalledCLITurnRunner {
     private var activeServers: [AIToolServer] = []
     /// Blitz's own tools this turn serves in-process; empty off Claude and while none are allowed.
     private var activeHosted: [AITool] = []
+    /// Nil unless this turn offers Claude's web search; then the searches it started, by id.
+    private var searches: [String: String?]?
     private var mcpConfigURL: URL?
     private var input: FileHandle?
     /// Each one answers a request the CLI is holding open: a consent or a hosted tool call.
@@ -156,6 +172,7 @@ private final class InstalledCLITurnRunner {
 
         activeServers = await resolvedToolServers()
         activeHosted = await resolvedHostedTools()
+        searches = kind == .claude && request.webSearch ? [:] : nil
         let prompt = prompt(for: request)
         var configURL: URL?
         if isArmed {
@@ -312,8 +329,21 @@ private final class InstalledCLITurnRunner {
 
     private var isArmed: Bool { !activeServers.isEmpty || !activeHosted.isEmpty }
 
+    private var offersSearch: Bool { searches != nil }
+
     /// Nothing to call is one request; an armed turn takes the reader's cap, which may be none.
-    private var roundCap: Int? { isArmed ? toolServers?.rounds : 1 }
+    private var roundCap: Int? {
+        isArmed ? toolServers?.rounds : offersSearch ? Self.searchRounds : 1
+    }
+
+    private var boundary: String {
+        switch (isArmed, offersSearch) {
+        case (false, false): Self.safetyInstructions
+        case (true, false): Self.toolSafetyInstructions
+        case (false, true): Self.searchSafetyInstructions
+        case (true, true): Self.toolSearchSafetyInstructions
+        }
+    }
 
     private func arguments(promptFile: URL? = nil, mcpConfig: URL? = nil) -> [String] {
         switch kind {
@@ -329,16 +359,23 @@ private final class InstalledCLITurnRunner {
                 "--include-partial-messages",
                 "--no-session-persistence",
                 "--disable-slash-commands",
-                "--tools", "",
+                "--tools", offersSearch ? ClaudeMCPLaunch.searchTool : "",
                 // Never `--bare`: it refuses the OAuth sign-in this whole route reuses.
                 "--no-chrome",
-                "--system-prompt",
-                mcpConfig == nil ? Self.safetyInstructions : Self.toolSafetyInstructions
+                "--system-prompt", boundary
             ]
             if let mcpConfig {
                 result += ClaudeMCPLaunch.arguments(
                     configurationPath: mcpConfig.path, handles: activeServers.map(\.handle),
-                    rounds: roundCap)
+                    rounds: roundCap, allowing: offersSearch ? [ClaudeMCPLaunch.searchTool] : [])
+            } else if offersSearch {
+                // A deny-all would outrank the allow and take the search with it.
+                result += [
+                    "--allowedTools", ClaudeMCPLaunch.searchTool,
+                    "--permission-mode", "dontAsk",
+                    "--max-turns", "\(Self.searchRounds)"
+                ]
+                result += InstalledAIManager.claudeWithoutMCPArguments
             } else {
                 // A route with nothing to call keeps every tool off and the turn to one request.
                 result += ["--disallowedTools", "*", "--max-turns", "1"]
@@ -397,9 +434,7 @@ private final class InstalledCLITurnRunner {
     }
 
     private func prompt(for request: AIRequest) -> String {
-        var sections = [
-            isArmed ? Self.toolSafetyInstructions : Self.safetyInstructions
-        ]
+        var sections = [boundary]
         if let instructions = request.instructions?.trimmingCharacters(in: .whitespacesAndNewlines),
             !instructions.isEmpty
         {
@@ -433,7 +468,8 @@ private final class InstalledCLITurnRunner {
             guard !line.isEmpty else { continue }
             apply(
                 InstalledAIStreamDecoder.decode(
-                    Data(line), kind: kind, servers: activeServers, hosted: activeHosted),
+                    Data(line), kind: kind, servers: activeServers, hosted: activeHosted,
+                    searches: searches),
                 token: token)
         }
         if outputBuffer.count > Self.maximumPartialLineBytes {
@@ -443,6 +479,7 @@ private final class InstalledCLITurnRunner {
 
     private func apply(_ frame: InstalledAIStreamFrame, token: TurnToken) {
         if let sessionID = frame.sessionID { turnSessionID = sessionID }
+        searches?.merge(frame.startedSearches) { $1 }
         if let request = frame.controlRequest {
             answer(request, token: token)
             return
@@ -647,6 +684,7 @@ private final class InstalledCLITurnRunner {
         activeExecutable = nil
         activeServers = []
         activeHosted = []
+        searches = nil
         write(Data(), closing: true)
     }
 }

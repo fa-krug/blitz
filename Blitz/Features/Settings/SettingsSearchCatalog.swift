@@ -314,6 +314,9 @@ enum SettingsSearchCatalog {
             .aiPersonalData, "Reminders access",
             keywords: ["to-do", "todo", "tasks", "tools", "privacy"]),
         .init(
+            .aiShell, "Run shell commands",
+            keywords: ["terminal", "command line", "zsh", "bash", "tools", "execute"]),
+        .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),
         .init(

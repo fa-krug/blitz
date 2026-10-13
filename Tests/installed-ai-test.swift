@@ -127,6 +127,8 @@ struct InstalledAITests {
         await concurrentCallsAreAskedOneAtATime(fixture)
         hostedServerSpeaksJSONRPC()
         await claudeHostsBlitzsOwnTools(fixture)
+        claudeSearchFramesBecomeSearchRows()
+        await claudeSearchesTheWebOnlyWhenAsked(fixture)
         await aCrashedTurnsFilesAreRemovedAtLaunch(fixture)
         await aManagedMCPPolicyLeavesBothFlagsOff(fixture)
         await aReadersVariablesReachTheToolButNeverItsIsolation(fixture)
@@ -404,7 +406,108 @@ struct InstalledAITests {
         expect(
             argv.firstIndex(of: "--max-turns").map { argv[$0 + 1] } == "1",
             "a turn with nothing to call is held to one request")
+        expect(
+            argv.firstIndex(of: "--tools").map { argv[$0 + 1] } == ""
+                && argv.firstIndex(of: "--disallowedTools").map { argv[$0 + 1] } == "*"
+                && !argv.contains("--allowedTools"),
+            "and with web search off it is handed no built-in and allowed nothing")
         fixture.expectPrompt("claude-prompt.log")
+    }
+
+    /// The frames below are a real WebSearch round trip's, trimmed to the keys Blitz reads.
+    private static func claudeSearchFramesBecomeSearchRows() {
+        let query = "latest stable Swift version 2026"
+        let use = Data(
+            (#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","#
+                + #""id":"toolu_01Bs","name":"WebSearch","input":{"query":"\#(query)","#
+                + #""mode":"standard"},"caller":{"type":"direct"}}]}}"#).utf8)
+        let result = Data(
+            (#"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01Bs","#
+                + #""type":"tool_result","content":"Web search results"}]},"#
+                + #""tool_use_result":{"query":"\#(query)","results":[]}}"#).utf8)
+        let started = InstalledAIStreamDecoder.decode(use, kind: .claude, searches: [:])
+        expect(
+            started.events == [.searching(query)]
+                && started.startedSearches == ["toolu_01Bs": query],
+            "a WebSearch tool_use opens a search row with its query")
+        let finished = InstalledAIStreamDecoder.decode(
+            result, kind: .claude, searches: started.startedSearches)
+        expect(
+            finished.events == [.searched(query)],
+            "and its tool_result, matched by id, completes it")
+        let armed = [
+            AIToolServer(
+                handle: "probe", title: "Probe",
+                transport: .command(path: "/bin/echo", arguments: [], environment: [:]))
+        ]
+        let armedUse = InstalledAIStreamDecoder.decode(
+            use, kind: .claude, servers: armed, searches: [:])
+        let armedResult = InstalledAIStreamDecoder.decode(
+            result, kind: .claude, servers: armed, searches: started.startedSearches)
+        expect(
+            armedUse.events == [.searching(query)] && armedResult.events == [.searched(query)],
+            "beside MCP servers a search is still a search row, never a tool row")
+        expect(
+            InstalledAIStreamDecoder.decode(use, kind: .claude).events.isEmpty
+                && InstalledAIStreamDecoder.decode(result, kind: .claude).events.isEmpty,
+            "a turn offered no search draws nothing for one")
+        let text = Data(
+            #"{"type":"assistant","message":{"content":[{"type":"text","text":"Claude reply"}]}}"#
+                .utf8)
+        expect(
+            InstalledAIStreamDecoder.decode(text, kind: .claude, searches: [:]).events.isEmpty,
+            "and an assistant frame's text never repeats what the deltas already streamed")
+    }
+
+    /// Search is Claude's one built-in, handed over only on a turn whose chat has it switched on.
+    private static func claudeSearchesTheWebOnlyWhenAsked(_ fixture: Fixture) async {
+        let query = "latest stable Swift version 2026"
+        let events = await fixture.events(
+            kind: .claude, model: "search", effort: nil, webSearch: true)
+        expect(
+            events.contains(.searching(query)) && events.contains(.searched(query)),
+            "a WebSearch round trip becomes a completed search row")
+        expect(
+            !events.contains { if case .toolCall = $0 { true } else { false } }
+                && events.filter { $0 == .text("Claude reply") }.count == 1
+                && events.last == .finished,
+            "never a tool row, and the reply streams once")
+        let argv = fixture.lastArguments("claude-args.log")
+        expect(
+            argv.firstIndex(of: "--tools").map { argv[$0 + 1] } == "WebSearch"
+                && argv.firstIndex(of: "--allowedTools").map { argv[$0 + 1] } == "WebSearch",
+            "the turn is handed WebSearch alone and allowed it without a prompt")
+        expect(
+            !argv.contains("--disallowedTools")
+                && argv.firstIndex(of: "--max-turns").map { argv[$0 + 1] } == "6",
+            "with no deny-all, which outranks the allow, and room for a search and an answer")
+        expect(
+            argv.firstIndex(of: "--permission-mode").map { argv[$0 + 1] } == "dontAsk",
+            "dontAsk refuses whatever the allow does not name, whatever the reader's default mode")
+        expect(
+            !argv.contains { $0.contains("WebFetch") } && argv.contains("--strict-mcp-config")
+                && argv.contains("--no-chrome") && argv.contains("--disable-slash-commands"),
+            "while fetching a page, the reader's MCP servers and the browser all stay off")
+        expect(
+            argv.firstIndex(of: "--system-prompt").map { argv[$0 + 1].contains("WebSearch") }
+                == true,
+            "and the boundary it is told names the one tool it may use")
+
+        let asked = Box()
+        let armed = await fixture.events(
+            kind: .claude, model: "search", effort: nil,
+            toolServers: fixture.session(allowing: true, asked: asked), webSearch: true)
+        expect(
+            armed.contains(.searching(query)) && armed.contains(.searched(query))
+                && asked.calls.isEmpty && armed.last == .finished,
+            "beside MCP servers the search is still a search row, and nobody is asked about it")
+        let tools = fixture.lastArguments("claude-args.log")
+        expect(
+            tools.firstIndex(of: "--tools").map { tools[$0 + 1] } == "WebSearch"
+                && tools.firstIndex(of: "--settings").map { tools[$0 + 1] }
+                    == #"{"permissions":{"allow":["WebSearch"],"ask":["mcp__probe"]}}"#
+                && tools.firstIndex(of: "--max-turns").map { tools[$0 + 1] } == "25",
+            "an armed turn allows the search beside its ask rules and keeps the reader's cap")
     }
 
     private static func cursorRunsAskModeWithoutForce(_ fixture: Fixture) async {
@@ -551,6 +654,9 @@ struct InstalledAITests {
         for flag in ["--strict-mcp-config", "--mcp-config", "--permission-prompt-tool", "stdio"] {
             expect(argv.contains(flag), "Claude runs with \(flag) when servers are armed")
         }
+        expect(
+            argv.firstIndex(of: "--tools").map { argv[$0 + 1] } == "",
+            "and still with no built-in while web search is off")
         expect(
             !argv.contains("--disallowedTools"),
             "and without the deny-all that would take the MCP tools with it")
@@ -972,7 +1078,7 @@ private final class Fixture {
     func events(
         kind: InstalledAIKind, model: String, effort: String?,
         launch: InstalledAILaunch = InstalledAILaunch(),
-        toolServers: AIToolServerSession? = nil
+        toolServers: AIToolServerSession? = nil, webSearch: Bool = false
     ) async -> [AIStreamEvent] {
         guard let executable = executables[kind] else { return [] }
         let provider = InstalledCLIProvider(
@@ -981,7 +1087,9 @@ private final class Fixture {
             toolServers: toolServers)
         do {
             var events: [AIStreamEvent] = []
-            for try await event in provider.stream(request) { events.append(event) }
+            for try await event in provider.stream(request(webSearch: webSearch)) {
+                events.append(event)
+            }
             return events
         } catch {
             print("\(kind.title) stream failed: \(error)")
@@ -1000,7 +1108,7 @@ private final class Fixture {
             model: model, effort: effort, workspace: workspace, launch: launch,
             toolServers: toolServers)
         do {
-            for try await _ in provider.stream(request) {}
+            for try await _ in provider.stream(request()) {}
             return nil
         } catch {
             return String(describing: error)
@@ -1023,14 +1131,15 @@ private final class Fixture {
         }
     }
 
-    private var request: AIRequest {
+    private func request(webSearch: Bool = false) -> AIRequest {
         AIRequest(
             instructions: "Follow the custom instruction.",
             messages: [
                 AIMessage(role: .user, text: "First question"),
                 AIMessage(role: .assistant, text: "First answer"),
                 AIMessage(role: .user, text: "Final question")
-            ])
+            ],
+            webSearch: webSearch)
     }
 
     func expectPrompt(_ name: String) {

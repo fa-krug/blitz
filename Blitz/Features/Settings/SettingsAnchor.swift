@@ -42,6 +42,7 @@ extension SettingsAnchor {
     static let aiDefault = Self(tab: .ai, title: "Default")
     static let aiChat = Self(tab: .ai, title: "Chat")
     static let aiPersonalData = Self(tab: .ai, title: "Personal data")
+    static let aiShell = Self(tab: .ai, title: "Shell")
     static let aiConversations = Self(tab: .ai, title: "Conversations")
     static let aiSystemPrompt = Self(tab: .ai, title: "System prompt")
     static let aiMCPServers = Self(tab: .ai, title: "MCP Servers")
