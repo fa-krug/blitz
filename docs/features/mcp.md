@@ -46,17 +46,21 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   result, or a result whose call fell outside `boundedContext`, is a request both providers reject,
   so the shape that could produce one is never written down. It also means a later turn sees the
   model's own answer rather than the raw tool output it was billed for once already.
-- **A dialog can grant a server, and only Settings can withhold one.** `MCPTrust` is `.ask` by
-  default; the first call of a conversation goes through Blitz's own three-way dialog. **Always
-  Allow** persists `.always`, **Allow This Chat** grants for that `ChatSession.id` alone, and **Don't
-  Allow** — which is what Escape does — refuses that one call and lets the next ask again. Escape is
-  never allowed to persist a decision, and `.never` is set on the server's row in Settings.
-  `MCPTrustPolicy` is the whole rule and it is pure.
+- **A dialog can grant a server, and only Settings can withhold one.** A server's `MCPTrust` is its
+  row in the [agent's rule table](agent.md), `.ask` by default, and every call on every route is
+  decided by `AgentGateCoordinator`. At Ask the first call of a conversation raises Blitz's own
+  three-way dialog: **Always Allow** persists `.always`, **Allow This Chat** grants for that
+  conversation alone, held on its `AgentSessionScope`, and **Don't Allow** — which is what Escape does —
+  refuses that one call and lets the next ask again. Escape is never allowed to persist a decision,
+  and `.never` is set in the server's editor or its row in Settings → AI → Agent, both writing the
+  same `MCPServer.trust`. `AgentPolicy`, which is pure, turns trust and a chat grant into an
+  `AgentDecision`; under Ask for Everything the grant is not offered, and the middle answer allows
+  the one call.
 - **A refused or failed call is content, never a thrown error.** It comes back as an `AIToolResult`
   the model can read and work around, so a declined tool ends in an honest sentence rather than a
   failed turn.
 - **Every turn is bounded three ways.** The round cap is `AISettingsStore.toolRounds` — Settings →
-  AI → Chat → Tool call rounds, an `AIToolRounds` of 10, 25, 50, 100 or Unlimited, 25 unless changed
+  AI → Agent → Tool call rounds, an `AIToolRounds` of 10, 25, 50, 100 or Unlimited, 25 unless changed
   — after which the turn fails saying so: a model that only calls has stopped answering, but a long
   chain of calls is also honest work, which is why it is a choice and not a constant. Unlimited
   hands the loop no round cap, so the model or Stop ends the turn, even while the palette is hidden,
@@ -116,7 +120,7 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   a tool its server annotates `readOnlyHint: true` without raising an elicitation, even under
   `approvalPolicy: "untrusted"` — and that annotation is the server's own claim. So each server is
   passed with `default_tools_approval_mode="prompt"`, which makes Codex ask for every tool; the
-  answer then comes from `MCPTrustPolicy`, exactly as it does on an API route. Reading a server's
+  answer then comes from the agent's gate, exactly as it does on an API route. Reading a server's
   resources does not ask: Codex adds `list_mcp_resources`, `list_mcp_resource_templates` and
   `read_mcp_resource` whenever any server is configured, and none of its settings removes them or
   routes them through approval (codex-rs `spec_plan.rs`, `read_mcp_resource.rs`, 0.156). So on
@@ -205,7 +209,8 @@ passing text, thinking and usage straight through while collecting `.toolCallReq
 was requested it yields `.finished` and stops. Otherwise it appends the assistant turn with its
 calls, and for each one yields `.toolCall`, awaits the invoker, yields `.toolResult` and appends a
 tool turn — then goes round again with the same tools armed. The invoker `AIChatCoordinator` passes
-in sends Blitz's own calendar and reminders tools to their features, and every other call here.
+in sends Blitz's own calendar, reminders and shell tools to their runners, and every other call to
+the agent's gate and then `MCPCoordinator.invoke`, which runs only what the gate let through.
 
 The two tool events are deliberately separate. `.toolCallRequested` is what a transport emits and
 carries only the wire name; the loop consumes it and never forwards it. `.toolCall` is what the loop
@@ -224,8 +229,9 @@ hand-off — a server shaped for someone else to start — exactly as `AITool` i
 Blitz runs itself, and `MCPServer.toolServer` is the one place the mapping happens.
 `AIToolServerSession` carries the three things the route needs: what to run, who to ask, and how
 many rounds it may spend. `MCPCoordinator.toolServers` builds the list from `enabledServers`
-honouring `@slug` and dropping `.never`; `MCPCoordinator.permit` answers with `MCPTrustPolicy` and
-the same three-way dialog. The session asks one question at a time: a CLI can hold two calls
+honouring `@slug` and keeping only the servers the agent's gate offers the chat, which drops
+`.never` and any the tools menu switched off; its `consent` is `AgentGateCoordinator.authorize`,
+with the same three-way dialog. The session asks one question at a time: a CLI can hold two calls
 open at once, where the API loop never does, and `DialogController` shows one dialog and refuses
 the next, which read as the reader declining a call nobody showed them. So a second question waits
 for the first dialog to close and is then decided afresh, seeing whatever grant it made; one still
@@ -321,7 +327,8 @@ with the handle, because that is the half a reader has to type, then the live st
 transport. `MCPServerEditor` reaches `MCPCoordinator` through its environment. The editor holds name,
 HTTP or command, Header or OAuth authentication, optional client ID/secret, one Sign In / Cancel / Sign Out button and live
 sign-in status, enabled, trust, and a Test Connection button that runs a real handshake so a typo is
-caught there rather than in the middle of a conversation.
+caught there rather than in the middle of a conversation. Trust is also each server's row in
+Settings → AI → Agent, written through `MCPCoordinator.setTrust`.
 
 ## Manual sweep
 
@@ -337,7 +344,8 @@ caught there rather than in the middle of a conversation.
   after it. Reopening that chat from ⌘K → Chat History or the AI Chat window's sidebar still shows
   what ran.
 - The first call raises the dialog. Allow This Chat does not ask again in that conversation and does
-  in the next; Always Allow survives a relaunch; Escape refuses only that call.
+  in the next; Always Allow survives a relaunch and shows as Allow in Settings → AI → Agent; Escape
+  refuses only that call.
 - `@filesystem list my desktop` shows the tools glyph after the text, sends without the prefix, and
   offers only that server's tools. `@nosuch hello` is sent verbatim.
 - On Apple Intelligence, Grok, OpenCode or Cursor, no tool is offered and the reply streams as before.

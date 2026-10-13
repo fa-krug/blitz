@@ -24,7 +24,6 @@ struct MCPTests {
         toolNamesRouteBackToTheirServer()
         toolListsDropWhatCannotBeCalled()
         outputFlattensToWhatAModelCanRead()
-        trustDecidesFromStandingAndChatGrants()
         addressingTakesOnlyAKnownHandle()
         settingsPersistAndKeepHandlesApart()
         serversBecomeWhatACLICanRunItself()
@@ -166,21 +165,6 @@ struct MCPTests {
         expect(
             MCPToolOutput.flatten(JSONValue([:])).content.isEmpty == false,
             "an empty answer still says something rather than nothing")
-    }
-
-    static func trustDecidesFromStandingAndChatGrants() {
-        expect(
-            MCPTrustPolicy.decide(trust: .never, isGrantedForChat: true) == .deny,
-            "a withheld server stays withheld, whatever a chat granted")
-        expect(
-            MCPTrustPolicy.decide(trust: .always, isGrantedForChat: false) == .allow,
-            "a trusted server never asks again")
-        expect(
-            MCPTrustPolicy.decide(trust: .ask, isGrantedForChat: false) == .ask,
-            "the first call of a chat is asked about")
-        expect(
-            MCPTrustPolicy.decide(trust: .ask, isGrantedForChat: true) == .allow,
-            "and the rest of that chat is not")
     }
 
     static func addressingTakesOnlyAKnownHandle() {

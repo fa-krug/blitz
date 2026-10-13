@@ -107,39 +107,32 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   linked `[n]`: `ChatCitations` finds each link's sentence end in the drawn text and inserts after
   it, two sources in one sentence sharing it, so prose and chips always agree. The preamble asks the model to link a page it relies on inline, so a cited
   answer carries its sources without a second request.
-- **Tools are chosen per chat.** The composer's tools menu switches MCP off for the chat or turns
-  single servers off (`ChatToolScope`, held on `AIChatState`, not stored); `@server` still narrows
-  one turn inside that. The scope binds both shapes alike: Blitz's loop is offered only the
-  allowed servers' tools, and a Codex or Claude turn is handed only the allowed servers. A route that
-  cannot call tools shows the menu disabled and says why.
-- **The Mac's own calendar and reminders are tools Blitz runs, and off until asked for.**
-  Settings → AI → Personal data holds `aiCalendarAccess` and `aiRemindersAccess`, each an
-  `AIDataAccess` of Off, Read Only or Read & Write, both Off out of the box. A store is offered only
-  while its own feature is on too — that switch is where macOS was asked — and only to a route that
-  can call Blitz back: an API connection, through Blitz's loop, or the Claude command, through the
-  in-process server `ClaudeHostedServer` answers (see below). Codex is handed servers alone, never
-  Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
-  that writes, so the model never sees one it may not use; every call re-checks the setting, since
-  it can change mid-reply. An event is shown first through Blitz's confirm; a reminder is
-  written straight away, Read & Write being the consent, and edited in place by id rather than
-  duplicated — and the result tells the model what was actually saved. `@server` narrows a turn to that server alone, and the
-  chat's Use Tools switch withholds these with the rest. Both keys are excluded from backups and
-  have no `settings.json` key: each grants a model a capability. The tools themselves live with
-  their features — see [Calendar](calendar.md#chat-tools) and [Reminders](reminders.md#chat-tools).
-- **A model can run shell commands, off until asked for, and each one asks first by default.**
-  Settings → AI → Shell holds `aiShellCommands`, Off out of the box; while it is on,
-  `shell_run_command` (`ShellToolCatalog`) is offered to exactly the routes the calendar is, and
-  `@server` and Use Tools withhold it alike. Every call re-checks the switch. A chat's
-  `AIChatState.shellApproval` is the composer's terminal toggle: Confirm, the default, puts the
-  command verbatim and its folder in Blitz's own confirm, one at a time through `AIConsentQueue`,
-  the mode read again when its turn comes; Auto-run skips the dialog. It is never stored, and a new,
-  reopened or cleared chat asks again; Quick AI has no toggle, so it always asks.
-  `ShellToolRunner` runs `$SHELL -l -c` (else the account's shell, else zsh) in the folder asked
-  for, home by default, with stdin empty and `BLITZ=1`; at 60 s it signals the command's process
-  group, TERM then KILL. Each stream keeps its first 16 KB and counts the rest, and the model reads
-  the exit status, both streams and what was cut; a declined or refused call is a failure result.
-  The key is excluded from backups and has no `settings.json` key: it grants a model a capability.
-  `shell-tool-test` pins the schema, call reading and answers, and runs the runner against zsh.
+- **Every tool call answers to the agent's one rule table.** Shell, calendar, reminders, web search
+  and each MCP server are rows of `AgentRules`, decided by `AgentPolicy` and enforced by
+  `AgentGateCoordinator`, which `AIChatCoordinator` owns: a denied tool is never offered, every call
+  is decided when it arrives, and an Ask is Blitz's own dialog. The composer's tools menu is the
+  chat's `AgentSessionScope` — Use Tools, Ask for Everything, a switch per tool — held on
+  `AIChatState.agentScope`, never stored, and only ever narrowing; `@server` still narrows one turn
+  inside that. A route that cannot call tools shows the menu disabled and says why. All of it is
+  [Agent](agent.md).
+- **The Mac's own calendar and reminders are tools Blitz runs.** Their read and write halves are
+  separate rows, offered only while the feature's own switch is on — that switch is where macOS was
+  asked — and only to a route that can call Blitz back: an API connection, through Blitz's loop, or
+  the Claude command, through the in-process server `ClaudeHostedServer` answers (see below). Codex
+  is handed servers alone, never Blitz's tools; Apple Intelligence calls none. A reminder is edited
+  in place by id rather than duplicated, and the result tells the model what was actually saved.
+  The tools themselves live with their features — see [Calendar](calendar.md#chat-tools) and
+  [Reminders](reminders.md#chat-tools).
+- **A model can run shell commands as the user, only as the agent's rules allow.**
+  `shell_run_command` (`ShellToolCatalog`) is offered to exactly the routes the calendar is, while
+  the Run Commands row is not Deny; each command is decided by its row and the ordered shell
+  patterns, and an Ask puts the command verbatim and its folder in Blitz's own dialog — see
+  [Agent](agent.md#shell-patterns). `ShellToolRunner` runs `$SHELL -l -c` (else the account's
+  shell, else zsh) in the folder asked for, home by default, with stdin empty and `BLITZ=1`; at
+  60 s it signals the command's process group, TERM then KILL. Each stream keeps its first 16 KB and
+  counts the rest, and the model reads the exit status, both streams and what was cut; a declined
+  or refused call is a failure result. `shell-tool-test` pins the schema, call reading and answers,
+  and runs the runner against zsh.
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
@@ -211,8 +204,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   same way with no server at all: the configuration names `blitz_data` as an `sdk` server, which the CLI
   reaches as `mcp_message` control requests on the turn's own pipe, and `ClaudeHostedServer`
   answers its JSON-RPC from the tools resolved when the turn started. A call runs through the same
-  code the loop calls, so it re-checks the setting and confirms a calendar write or a command itself; its
-  `can_use_tool` question is allowed without MCP's trust dialog for that reason. `MCPSlug` never
+  code the loop calls, so it passes the agent's gate and asks there itself; its `can_use_tool`
+  question is allowed without a second dialog for that reason. `MCPSlug` never
   yields `_`, so no server the reader adds can take that handle. `@server` and the chat's Use
   Tools switch withhold it as they do in the loop.
   Grok runs with `--deny *`,
@@ -511,8 +504,9 @@ and the Actions menu's own chords, and dies with the window.
   line without Return ever stealing an IME's confirm. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
   menu, the reasoning menu (always shown, disabled for a model with no efforts, so the row never
-  changes shape), a web-search toggle when the route offers search, the shell's Confirm / Auto-run
-  toggle while commands are offered, a context gauge, and Send/Stop.
+  changes shape), the tools menu, which is this chat's agent scope
+  ([Agent](agent.md#the-session-scope-and-the-composer)), a web-search toggle when the route
+  searches and the agent's Web Search row is Allow, a context gauge, and Send/Stop.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
   last reply's `contextTokens` against the model's window when the route reported one, and
   `ChatSession.historyBytes` against Blitz's history budget otherwise — orange from 80%, red at
@@ -521,7 +515,7 @@ and the Actions menu's own chords, and dies with the window.
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
   thinking share and cost; then what the next message sends — model, history of budget, messages
-  sent of total, staged files, and whether the system prompt, web search, MCP servers, personal data and shell commands ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
+  sent of total, staged files, and whether the system prompt and web search ride along; then a **Tools** row per tool the next turn is offered, with what a call to it would get — Allow or Ask. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
   the refusals a paste does. The unsent text lives on `AIChatState.draft`, so it survives closing
   the window.
 
@@ -640,11 +634,13 @@ window, and every chat action either surface sends — is the nineteenth feature
 - Harnesses: `ai-provider-test` (endpoints, request bodies, stream decoding including leading
   think tags across content and SSE splits, persistence repair,
   Codex framing, on-device routing, the two MCP launch encodings and the two consent channels, the
-  shown-model and switched-off-route rules, and a tool's override from settings to launch),
+  shown-model and switched-off-route rules, a tool's override from settings to launch, and the
+  agent table's storage and one-off migration),
+  `agent-policy-test` (the agent's rules, dialogs and refusals — see [Agent](agent.md#harnesses)),
   `ai-chat-test` (`ChatSession`, `MarkdownBlock` with its math delimiters, LaTeX subset and
   mid-stream hold-back, `ChatHistoryStore` with renames and pins,
-  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, and
-  `AIChatSurfacesState`'s one-live-place rule),
+  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, the agent scope each chat
+  starts open, and `AIChatSurfacesState`'s one-live-place rule),
   `codex-turn-test` (the Stop path, driven against a stub app-server stalled where Stop races the
   turn ID, plus the MCP launch boundary, one launch for concurrent starts, the elicitation, the
   rows, the call cap, a custom provider's access without an account, and when a chat's thread is
@@ -789,8 +785,9 @@ Settings records a model into `AIConnection.visionModels` when it is added from 
 model added by hand is assumed text-only. A vendor API is assumed to take images; a model that
 doesn't simply returns the provider's error.
 
-Web search is a Settings → AI toggle, `aiWebSearch`, off by default: a prompt reaches a search engine
-only once the user has opted in.
+Web search is the composer's globe, `aiWebSearch`, off by default: a prompt reaches a search engine
+only once the user has opted in. The globe is offered only while the agent's Web Search row is
+Allow ([Agent](agent.md#the-rule-table)), which has no Ask because the provider runs the search.
 It's still excluded from backups — which Mac may send prompts to a search engine is that Mac's call.
 Nothing *guesses* at a capability: images ride on what the model's own catalog said, and a vendor
 API that does not take one simply returns its error. What is gated is only what a route provably
@@ -936,9 +933,9 @@ answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and
 join them: all three are decisions about conversations that never leave the Mac that had them, and
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
 limits what a tool-driven reply may spend, and an import must not raise that unasked.
-`aiCalendarAccess` and `aiRemindersAccess` let a model read, or change, this Mac's calendar and
-reminders, and `aiShellCommands` lets it run commands as the user; a flag that grants a capability
-travels in neither a backup nor `settings.json`.
+`aiAgentRules` decides which tools a model may call, from the calendar to the shell; a table that
+grants capabilities travels in neither a backup nor `settings.json`, and the three keys it was
+migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)).
 `aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
 another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
 with, and an import must never decide which program a Mac launches. None of the three has a

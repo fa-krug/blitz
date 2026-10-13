@@ -339,6 +339,11 @@ final class AISettingsStore {
         agentRules.shellRules.append(rule)
     }
 
+    /// Unlike Add Shell Rule, the pattern lands where it decides the command that asked.
+    func allowShellPattern(_ pattern: String, for command: String) {
+        agentRules.allow(pattern, for: command)
+    }
+
     func updateShellRule(_ rule: ShellRule) {
         guard let index = agentRules.shellRules.firstIndex(where: { $0.id == rule.id }) else {
             return

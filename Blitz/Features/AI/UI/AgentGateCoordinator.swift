@@ -6,8 +6,6 @@ final class AgentGateCoordinator {
     private unowned let core: AppCore
     /// Shared by every chat: there is one dialog, and a second call must wait for it.
     private let consent = AIConsentQueue()
-    /// "Allow This Chat" answers, by conversation, since a dialog may outlive a chat switch.
-    private var grants: [UUID: Set<AgentTool>] = [:]
 
     init(core: AppCore) {
         self.core = core
@@ -26,7 +24,7 @@ final class AgentGateCoordinator {
     }
 
     func decision(for call: AgentCall, in chat: AIChatState) -> AgentDecision {
-        decision(for: call, scope: chat.agentScope, session: chat.session.id)
+        decision(for: call, scope: chat.agentScope)
     }
 
     func isOffered(_ tool: AgentTool, in chat: AIChatState) -> Bool {
@@ -35,16 +33,12 @@ final class AgentGateCoordinator {
 
     /// What the tools menu lists: the table's own reach, before this chat switches anything off.
     func listed(_ tools: [AgentTool]) -> [AgentTool] {
-        AgentPolicy.offered(
-            tools, rules: rules, mcpTrust: { self.mcpTrust($0, granted: []) },
-            scope: AgentSessionScope())
+        AgentPolicy.offered(tools, rules: rules, mcpTrust: mcpTrust, scope: AgentSessionScope())
     }
 
     func decisions(for tools: [AgentTool], in chat: AIChatState) -> [AgentPolicy.ToolDecision] {
-        let granted = grants[chat.session.id] ?? []
-        return AgentPolicy.decisions(
-            for: tools, rules: rules.granting(granted),
-            mcpTrust: { self.mcpTrust($0, granted: granted) }, scope: chat.agentScope)
+        AgentPolicy.decisions(
+            for: tools, rules: rules, mcpTrust: mcpTrust, scope: chat.agentScope)
     }
 
     /// Bound to one call, for a runner to put its dialog to once it has read the arguments.
@@ -68,40 +62,33 @@ final class AgentGateCoordinator {
         _ call: AgentCall, prompt: AgentPrompt, in chat: AIChatState
     ) async -> AgentRefusal? {
         let session = chat.session.id
-        switch decision(for: call, scope: chat.agentScope, session: session) {
+        switch decision(for: call, scope: chat.agentScope) {
         case .allow: return nil
         case .deny: return .denied
         case .ask: break
         }
         return await consent.ask(cancelled: .declined) { @MainActor [weak self, weak chat] in
             guard let self, let chat else { return .declined }
-            switch decision(for: call, scope: chat.agentScope, session: session) {
+            switch decision(for: call, scope: chat.agentScope) {
             case .allow: return nil
             case .deny: return .denied
             case .ask: break
             }
-            let choice = await ask(prompt)
+            let choice = await ask(prompt.scoped(to: chat.agentScope))
             guard choice.allows else { return .declined }
-            apply(choice, for: call, session: session)
-            let after = decision(for: call, scope: chat.agentScope, session: session)
+            apply(choice, for: call, in: chat, session: session)
+            let after = decision(for: call, scope: chat.agentScope)
             return after == .deny ? .denied : nil
         }
     }
 
-    private func decision(
-        for call: AgentCall, scope: AgentSessionScope, session: UUID
-    ) -> AgentDecision {
-        let granted = grants[session] ?? []
-        return AgentPolicy.decision(
-            for: call, rules: rules.granting(granted),
-            mcpTrust: { mcpTrust($0, granted: granted) }, scope: scope)
+    private func decision(for call: AgentCall, scope: AgentSessionScope) -> AgentDecision {
+        AgentPolicy.decision(for: call, rules: rules, mcpTrust: mcpTrust, scope: scope)
     }
 
     /// Off, gone or withheld is Deny, so a server the reader cannot see is never offered.
-    private func mcpTrust(_ slug: String, granted: Set<AgentTool>) -> AgentDecision {
-        guard let server = core.mcpCoordinator.server(slug: slug) else { return .deny }
-        return MCPTrustPolicy.decide(
-            trust: server.trust, isGrantedForChat: granted.contains(.mcp(slug)))
+    private func mcpTrust(_ slug: String) -> AgentDecision {
+        core.mcpCoordinator.server(slug: slug)?.trust.decision ?? .deny
     }
 
     /// Escape is the last choice, a refusal; only Settings can withhold a tool for good.
@@ -115,17 +102,21 @@ final class AgentGateCoordinator {
         return prompt.choices.indices.contains(index) ? prompt.choices[index] : .refuse("")
     }
 
-    private func apply(_ choice: AgentPrompt.Choice, for call: AgentCall, session: UUID) {
+    /// A grant lands only on the chat that asked; one switched away from has a fresh scope.
+    private func apply(
+        _ choice: AgentPrompt.Choice, for call: AgentCall, in chat: AIChatState, session: UUID
+    ) {
         switch choice {
         case .alwaysAllowCommands(let pattern):
-            core.aiSettings.addShellRule(ShellRule(pattern: pattern, decision: .allow))
+            core.aiSettings.allowShellPattern(pattern, for: call.command ?? "")
         case .alwaysAllowServer:
             guard case .mcp(let slug) = call.tool,
                 let server = core.mcpCoordinator.server(slug: slug)
             else { return }
             core.mcpCoordinator.setTrust(.always, for: server.id)
         case .allowThisChat:
-            grants[session, default: []].insert(call.tool)
+            guard chat.session.id == session else { return }
+            chat.agentScope.grant(call.tool)
         case .allowOnce, .refuse:
             break
         }

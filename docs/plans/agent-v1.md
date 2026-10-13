@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: phase 1 in progress. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phase 1 built; phases 2–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -21,7 +21,7 @@ scope; it keeps MCP servers only.
   `ClaudeHostedServer`. Both reach the same tool runtime and the same rules. Codex keeps MCP servers
   only. Apple Intelligence answers only.
 
-## Invariants to hold (go into `docs/features/agent.md` when phase 1 lands)
+## Invariants to hold (as built, in [`docs/features/agent.md`](../features/agent.md))
 
 - **`AgentPolicy` is the whole rule, and it is pure** (Model/, harness-pinned): `(call, table,
   session scope) → .allow | .ask | .deny`. Nothing else decides.
@@ -30,21 +30,23 @@ scope; it keeps MCP servers only.
 - **Every call re-reads the table**, since Settings can change mid-reply. The decision is read again
   after an Ask dialog closes, the way the shell tool does today.
 - **The shell matcher fails toward Ask.**
-  - A command is split on `;`, `&&`, `||`, `|`, `&` and newlines. It is auto-allowed only if every
-    segment matches an Allow pattern. Any segment matching a Deny pattern denies the whole command.
+  - A command is split on `;`, `&&`, `||`, `|`, `&` and newlines. A segment any Deny pattern matches
+    is Deny; otherwise it takes its first matching pattern, or the row's own decision when none
+    matches, and the narrowest segment decides:
+    on an Ask row every segment must match an Allow pattern, and any Deny segment denies the whole.
   - Command substitution (`$(`, backticks, `<(`, `>(`), unbalanced quotes, heredocs, or anything the
     splitter cannot read with confidence means Ask, never Allow.
   - Patterns are globs over a whole segment (`git *`, `ls`, `brew list*`).
-  - The order is: Deny beats Allow, Allow beats the tool's own default, and a session's "ask
-    everything" beats Allow.
+  - A Deny row is final; within a segment a matching Deny pattern wins, and otherwise the first
+    matching pattern does, so order is the user's; a session's "ask everything" caps Allow at Ask. Deny patterns are a backstop, not a sandbox.
 - **The table is a capability grant.** It is excluded from backups (`SettingsBackupCoverage.
   deliberatelyExcluded`) and has no `settings.json` key, like `aiCalendarAccess` today.
 - **The feature switches stay the ceiling.** Calendar and Reminders still need their own feature
   switch (the macOS consent), and an MCP server still needs to be enabled. The table can never reach
   past them.
 - **MCP trust is not copied.** The table's MCP rows read and write `MCPServer.trust` itself
-  (`.always` ↔ Allow, `.ask` ↔ Ask, `.never` ↔ Deny). "Allow This Chat" stays the session grant it
-  is today.
+  (`.always` ↔ Allow, `.ask` ↔ Ask, `.never` ↔ Deny). "Allow This Chat" is a session grant held on
+  the chat's session scope, offered for MCP servers and for the calendar and reminders reads.
 - **Web search has no Ask.** The search runs on the provider's side, so Blitz never sees an
   individual call. Its row is Allow or Deny, and Allow means the composer toggle is offered.
 
@@ -56,7 +58,7 @@ scope; it keeps MCP servers only.
 | --- | --- |
 | `AgentTool.swift` | `AgentTool`: `.shell`, `.calendarRead`, `.calendarWrite`, `.remindersRead`, `.remindersWrite`, `.webSearch`, `.mcp(slug)`. Title, glyph, and whether Ask is possible (not for `.webSearch`). The catalog's tool names map onto it. |
 | `AgentDecision.swift` | `.allow`, `.ask`, `.deny`, ordered for narrowing (`min`). |
-| `AgentRules.swift` | `Codable` table: a default per built-in tool, plus `[ShellRule]` (pattern + decision, ordered). Defaults: everything Deny except Calendar/Reminders read = Ask once their feature is on. Encodes to one JSON blob. |
+| `AgentRules.swift` | `Codable` table: a default per built-in tool, plus `[ShellRule]` (pattern + decision, ordered). Defaults: everything Deny except Calendar/Reminders read = Ask once their feature is on, and web search = Allow (its composer toggle stays the opt-in). Encodes to one JSON blob. |
 | `ShellCommandSegments.swift` | The conservative splitter: `segments(of:) -> [String]?`, where nil means "cannot read, Ask". |
 | `AgentPolicy.swift` | `decision(for: AgentCall, rules:, scope:) -> AgentDecision`. `AgentCall` is the tool plus its arguments (the command, for the shell). Also `offered(_ tools:, rules:, scope:)` for the offer list, and `suggestedPattern(for command:)`, the first word + ` *` that "Always Allow" proposes. |
 | `AgentSessionScope.swift` | Replaces `ChatToolScope` and `ShellCommandApproval`: `isEnabled`, `excluded: Set<AgentTool>` (MCP slugs included), `asksForEverything`. |
@@ -86,21 +88,23 @@ scope; it keeps MCP servers only.
 - Every offer list comes from `AgentPolicy.offered`: `blitzTools()`, and the MCP tools in
   `tools(for:scopedTo:)` and `toolServers(for:scopedTo:)`. The calendar and reminders coordinators'
   `chatTools(now:)` stop reading `AIDataAccess`; they take the allowed tool set instead.
-- One gate, `AIChatCoordinator.authorize(_ call:, in chat:) async -> Bool`, called by every Blitz
-  tool runner before it acts. It reads the policy. On `.ask` it queues the request on the shared
-  `AIConsentQueue` and shows Blitz's dialog:
-  - Shell: **Run**, **Always Allow `<pattern>`** (appends a `ShellRule` to the table), **Don't Run**.
-  - Calendar/Reminders writes: **Allow** / **Don't Allow**, with today's event summary as the message.
-  - MCP: today's three-way dialog, unchanged, now reached through the same gate.
+- One gate, built as `AgentGateCoordinator` (owned by `AIChatCoordinator`), called by every Blitz
+  tool runner before it acts and by every MCP consent. It reads the policy. On `.ask` it queues the
+  request on the shared `AIConsentQueue` and shows Blitz's dialog, worded by `AgentPrompt`:
+  - Shell: **Run**, **Always Allow `<pattern>`** (an Allow `ShellRule`, placed so it decides that command), **Don't Run**.
+  - Calendar/Reminders reads: **Allow**, **Allow This Chat**, **Don't Allow**.
+  - Calendar/Reminders writes: **Allow** / **Don't Allow**, with the event or reminder summary.
+  - MCP: the three-way dialog, reached through the same gate.
 - `calendarCoordinator.runTool` and `remindersCoordinator.runTool` lose their own confirm and
-  access checks; the gate replaces both. A reminder write on Allow keeps today's write-straight-away
-  behaviour.
+  access checks; the gate replaces both. Every reminder write, completion included, runs straight
+  away on Allow and asks on Ask.
 - Web search: `webSearch(for:)` also requires `rules.webSearch == .allow`. The global `aiWebSearch`
   toggle stays as the composer's on/off memory.
 
 ### UI
 
-- **Settings → AI → Agent** replaces "Personal data" and "Shell":
+- **Settings → AI → Agent** replaces "Personal data", "Shell" and "Chat" (its web-search switch
+  became the Web Search row; the on/off memory is the composer's globe):
   - One row per tool with an Allow/Ask/Deny picker (`.popover` is fine in Settings).
   - Rows whose feature is off are disabled, and the footnote says why ("Turn on Calendar first").
   - MCP servers are listed beneath, bound to their trust.
@@ -177,5 +181,6 @@ scope; it keeps MCP servers only.
 ## Decided
 
 1. Calendar and Reminders access are migrated, as in the table above.
-2. Built-in defaults: everything Deny; calendar/reminders read = Ask once their feature is on.
+2. Built-in defaults: everything Deny; calendar/reminders read = Ask once their feature is on; web
+   search = Allow, since its composer toggle is the opt-in.
 3. "Always Allow" never proposes a pattern for `rm`, `sudo`, `curl` and the rest of the built-in list.

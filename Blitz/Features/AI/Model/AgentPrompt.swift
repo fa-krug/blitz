@@ -7,7 +7,7 @@ typealias AgentAuthorization = @MainActor @Sendable (AgentPrompt) async -> Strin
 struct AgentPrompt: Equatable, Sendable {
     enum Choice: Equatable, Sendable {
         case allowOnce(String)
-        /// Appends an Allow rule for the pattern, so the next matching command runs straight away.
+        /// An Allow rule for the pattern, placed where it decides the command that asked.
         case alwaysAllowCommands(pattern: String)
         /// Raises the MCP server's own trust, as its dialog always has.
         case alwaysAllowServer
@@ -26,6 +26,11 @@ struct AgentPrompt: Equatable, Sendable {
         var allows: Bool {
             if case .refuse = self { return false }
             return true
+        }
+
+        fileprivate var isOnce: Bool {
+            if case .allowOnce = self { return true }
+            return false
         }
     }
 
@@ -65,6 +70,17 @@ struct AgentPrompt: Equatable, Sendable {
             message: "What it reads is sent to the model's provider.", symbol: tool.symbolName,
             choices: [.allowOnce("Allow"), .allowThisChat, .refuse("Don't Allow")],
             defaultIndex: 0)
+    }
+
+    /// Without grants, "Allow This Chat" goes, or becomes a one-off Allow where there is none.
+    func scoped(to scope: AgentSessionScope) -> AgentPrompt {
+        guard !scope.offersGrants, choices.contains(.allowThisChat) else { return self }
+        let hasOnce = choices.contains(where: \.isOnce)
+        let kept = choices.indices.filter { !(hasOnce && choices[$0] == .allowThisChat) }
+        let scoped = kept.map { choices[$0] == .allowThisChat ? .allowOnce("Allow") : choices[$0] }
+        let index = kept.firstIndex(of: defaultIndex) ?? scoped.firstIndex(where: \.isOnce) ?? 0
+        return AgentPrompt(
+            title: title, message: message, symbol: symbol, choices: scoped, defaultIndex: index)
     }
 
     /// The server's own three-way question; only Settings can withhold a server for good.

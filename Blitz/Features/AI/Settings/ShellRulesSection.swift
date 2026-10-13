@@ -31,9 +31,9 @@ struct ShellRulesSection: View {
             SettingsSectionHeader(.aiShellRules)
         } footer: {
             Text(
-                "Each part of a command takes the first pattern it matches, and Deny wins. "
-                    + "* matches anything. A command with $(…) or backticks always asks. A Deny "
-                    + "pattern is a backstop, not a sandbox.")
+                "A matching Deny always wins; otherwise each part of a command takes the first "
+                    + "pattern it matches. * matches anything. A command with $(…) or backticks "
+                    + "always asks. A Deny pattern is a backstop, not a sandbox.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

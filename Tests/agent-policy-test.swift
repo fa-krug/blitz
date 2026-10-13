@@ -441,8 +441,16 @@ struct AgentPolicyTests {
         check("a later rule still matches the rest", decide(.shell("git fetch"), ordered) == .allow)
         let reversed = withShell(.ask, [("git *", .allow), ("git push*", .deny)])
         check(
-            "a deny pattern behind an allow one never fires for that segment",
-            decide(.shell("git push"), reversed) == .allow)
+            "a later deny beats an earlier allow in the same segment",
+            decide(.shell("git push"), reversed) == .deny)
+        check("and leaves the rest to the allow", decide(.shell("git fetch"), reversed) == .allow)
+        let laterAsk = withShell(.ask, [("git *", .allow), ("git push*", .ask)])
+        check(
+            "a later ask does not beat an earlier allow: only deny skips the order",
+            decide(.shell("git push"), laterAsk) == .allow)
+        check(
+            "a deny under an allow row wins over an allow pattern above it",
+            decide(.shell("rm x"), withShell(.allow, [("*", .allow), ("rm *", .deny)])) == .deny)
         let askPattern = withShell(.allow, [("brew *", .ask)])
         check("an ask pattern narrows an allow row", decide(.shell("brew upgrade"), askPattern) == .ask)
         check("an unmatched segment takes an allow row", decide(.shell("ls; pwd"), askPattern) == .allow)
@@ -648,16 +656,133 @@ struct AgentPolicyTests {
         let asking = AgentRules(
             shell: .ask, calendarRead: .ask, calendarWrite: .ask, remindersRead: .deny,
             remindersWrite: .ask, webSearch: .allow)
-        let granted = asking.granting([.calendarRead, .remindersRead, .shell, .calendarWrite])
-        check("a granted read is allowed", granted.calendarRead == .allow)
-        check("a grant never lifts a Deny", granted.remindersRead == .deny)
+        var grantedScope = AgentSessionScope()
+        for tool: AgentTool in [
+            .calendarRead, .remindersRead, .shell, .calendarWrite, .mcp("ask"), .mcp("never")
+        ] {
+            grantedScope.grant(tool)
+        }
+        func granted(_ tool: AgentTool, scope: AgentSessionScope = grantedScope) -> AgentDecision {
+            decide(AgentCall(tool: tool), asking, scope: scope)
+        }
+        check("a granted read is allowed", granted(.calendarRead) == .allow)
+        check("a grant never lifts a Deny", granted(.remindersRead) == .deny)
         check(
-            "the shell and writes ignore a grant",
-            granted.shell == .ask && granted.calendarWrite == .ask)
+            "the shell and writes take no grant",
+            granted(.shell) == .ask && granted(.calendarWrite) == .ask
+                && grantedScope.granted == [.calendarRead, .remindersRead, .mcp("ask"), .mcp("never")])
+        check("a granted server is allowed", granted(.mcp("ask")) == .allow)
+        check("a grant never lifts a withheld server", granted(.mcp("never")) == .deny)
+        check(
+            "without the grant, the read and the server still ask",
+            granted(.calendarRead, scope: open) == .ask && granted(.mcp("ask"), scope: open) == .ask)
+        var grantedAsking = grantedScope
+        grantedAsking.asksForEverything = true
+        check(
+            "ask for everything caps a grant back to ask",
+            granted(.calendarRead, scope: grantedAsking) == .ask
+                && granted(.mcp("ask"), scope: grantedAsking) == .ask)
+        check(
+            "a fresh scope carries no grant",
+            AgentSessionScope().granted.isEmpty && grantedScope != AgentSessionScope())
         check(
             "only reads and servers can be allowed for a chat",
             AgentTool.builtIn.filter(\.canAllowForSession) == [.calendarRead, .remindersRead]
                 && AgentTool.mcp("x").canAllowForSession)
+
+        // MARK: No chat grant under Ask for Everything
+
+        check("an open scope offers grants", open.offersGrants && !askEverything.offersGrants)
+        check("an open scope leaves a read's dialog alone", read.scoped(to: open) == read)
+        check("and a server's", server.scoped(to: open) == server)
+        let scopedRead = read.scoped(to: askEverything)
+        check(
+            "a read under ask for everything drops Allow This Chat",
+            titles(scopedRead) == ["Allow", "Don't Allow"] && scopedRead.defaultIndex == 0
+                && scopedRead.choices[0] == .allowOnce("Allow"))
+        let scopedServer = server.scoped(to: askEverything)
+        check(
+            "a server under ask for everything allows once instead, still by default",
+            titles(scopedServer) == ["Always Allow", "Allow", "Don't Allow"]
+                && scopedServer.defaultIndex == 1 && scopedServer.choices[1] == .allowOnce("Allow"))
+        check(
+            "and keeps Always Allow, which writes the table rather than the chat",
+            scopedServer.choices.first == .alwaysAllowServer)
+        check(
+            "a dialog with no chat grant is untouched",
+            [ls, write].allSatisfy { $0.scoped(to: askEverything) == $0 })
+        check(
+            "no scoped dialog offers Allow This Chat",
+            [ls, write, read, server].allSatisfy { prompt in
+                let scoped = prompt.scoped(to: askEverything)
+                return !scoped.choices.contains(.allowThisChat)
+                    && scoped.choices.last?.allows == false
+                    && scoped.choices.indices.contains(scoped.defaultIndex)
+            })
+
+        // MARK: Always Allow a pattern
+
+        func patterns(_ rules: AgentRules) -> [String] {
+            rules.shellRules.map { "\($0.pattern) → \($0.decision.rawValue)" }
+        }
+        var pushAsks = withShell(.ask, [("git push *", .ask)])
+        check("before: git push asks", decide(.shell("git push origin"), pushAsks) == .ask)
+        pushAsks.allow("git *", for: "git push origin")
+        check(
+            "a new allow lands before the first non-deny rule the command matches",
+            patterns(pushAsks) == ["git * → allow", "git push * → ask"])
+        check("so it decides that command", decide(.shell("git push origin"), pushAsks) == .allow)
+        pushAsks.allow("git *", for: "git push origin")
+        check("allowing again adds no duplicate", patterns(pushAsks) == ["git * → allow", "git push * → ask"])
+
+        var unrelated = withShell(.ask, [("ls *", .ask)])
+        unrelated.allow("git *", for: "git status")
+        check(
+            "with nothing matching, the allow is appended",
+            patterns(unrelated) == ["ls * → ask", "git * → allow"])
+
+        var pushDenied = withShell(.ask, [("git push *", .deny), ("brew *", .ask)])
+        pushDenied.allow("git *", for: "git status")
+        check(
+            "a deny is never a place to insert before",
+            patterns(pushDenied) == ["git push * → deny", "brew * → ask", "git * → allow"])
+        var denyFirst = withShell(.ask, [("git status *", .ask), ("git push *", .deny)])
+        denyFirst.allow("git *", for: "git status")
+        check(
+            "an allow placed above a deny",
+            patterns(denyFirst) == ["git * → allow", "git status * → ask", "git push * → deny"])
+        check("never shadows it", decide(.shell("git push origin"), denyFirst) == .deny)
+        check("and decides its own command", decide(.shell("git status"), denyFirst) == .allow)
+
+        let samePatternID = UUID()
+        var samePattern = everythingAsks
+        samePattern.shellRules = [
+            ShellRule(pattern: "brew *", decision: .ask),
+            ShellRule(pattern: "git  status *", decision: .ask),
+            ShellRule(id: samePatternID, pattern: "git *", decision: .ask)
+        ]
+        samePattern.allow("git *", for: "git status -s")
+        check(
+            "an existing rule with the same pattern turns allow and moves ahead of the decider",
+            patterns(samePattern) == ["brew * → ask", "git * → allow", "git  status * → ask"]
+                && samePattern.shellRules[1].id == samePatternID)
+        check("and decides the command", decide(.shell("git status -s"), samePattern) == .allow)
+        var spaced = samePattern
+        spaced.allow("git   *", for: "git status")
+        check("patterns compare collapsed, so no duplicate appears", spaced == samePattern)
+        var earlyRule = withShell(.ask, [("git *", .ask), ("ls *", .ask)])
+        earlyRule.allow("git *", for: "git status")
+        check(
+            "an existing rule already ahead stays where it is",
+            patterns(earlyRule) == ["git * → allow", "ls * → ask"])
+        var multi = withShell(.ask, [("ls *", .ask), ("git log *", .ask)])
+        multi.allow("git *", for: "ls && git log")
+        check(
+            "any segment of the command places the allow",
+            patterns(multi) == ["git * → allow", "ls * → ask", "git log * → ask"])
+        var blank = withShell(.ask, [])
+        blank.allow("  ", for: "ls")
+        check("an empty pattern is never added", blank.shellRules.isEmpty)
 
         // MARK: Context card rows
 

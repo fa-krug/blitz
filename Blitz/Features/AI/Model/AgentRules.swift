@@ -10,7 +10,7 @@ struct AgentRules: Equatable, Sendable {
     var webSearch: AgentDecision {
         didSet { webSearch = Self.withoutAsk(webSearch) }
     }
-    /// First match per segment decides it, so order is the user's to arrange.
+    /// A matching Deny decides a segment; otherwise the first match does, so order matters.
     var shellRules: [ShellRule]
 
     init(
@@ -79,14 +79,24 @@ struct AgentRules: Equatable, Sendable {
         return rules
     }
 
-    /// "Allow This Chat" answers a row's Ask ahead of time; it never lifts a Deny.
-    func granting(_ granted: Set<AgentTool>) -> AgentRules {
-        var rules = self
-        for tool in AgentTool.builtIn
-        where tool.canAllowForSession && granted.contains(tool) && decision(for: tool) == .ask {
-            rules.set(.allow, for: tool)
+    /// "Always Allow": ahead of the first rule that would still decide `command`, never later.
+    mutating func allow(_ pattern: String, for command: String) {
+        let key = ShellRule.collapsed(pattern)
+        guard !key.isEmpty else { return }
+        var rules = shellRules
+        let existing = rules.firstIndex { ShellRule.collapsed($0.pattern) == key }
+        var rule = ShellRule(pattern: pattern, decision: .allow)
+        if let existing {
+            rule = rules.remove(at: existing)
+            rule.decision = .allow
         }
-        return rules
+        let segments = ShellCommandSegments.segments(of: command) ?? []
+        let deciding = rules.firstIndex {
+            $0.decision != .deny && segments.contains(where: $0.matches)
+        }
+        let index = [existing, deciding].compactMap(\.self).min() ?? rules.endIndex
+        rules.insert(rule, at: index)
+        shellRules = rules
     }
 
     private static func withoutAsk(_ decision: AgentDecision) -> AgentDecision {

@@ -24,7 +24,8 @@ enum AgentPolicy {
         scope: AgentSessionScope
     ) -> AgentDecision {
         guard scope.allows(call.tool) else { return .deny }
-        let base = baseDecision(for: call.tool, rules: rules, mcpTrust: mcpTrust)
+        let base = baseDecision(
+            for: call.tool, rules: rules, mcpTrust: mcpTrust, isGranted: scope.grants(call.tool))
         guard base != .deny else { return .deny }
         var decision = base
         if call.tool == .shell, let command = call.command {
@@ -79,8 +80,10 @@ enum AgentPolicy {
         return word + " *"
     }
 
+    /// A grant answers only an Ask, so it never lifts a Deny.
     private static func baseDecision(
-        for tool: AgentTool, rules: AgentRules, mcpTrust: (String) -> AgentDecision
+        for tool: AgentTool, rules: AgentRules, mcpTrust: (String) -> AgentDecision,
+        isGranted: Bool
     ) -> AgentDecision {
         let decision: AgentDecision
         if case .mcp(let slug) = tool {
@@ -88,18 +91,28 @@ enum AgentPolicy {
         } else {
             decision = rules.decision(for: tool) ?? .deny
         }
-        return tool.canAsk || decision != .ask ? decision : .deny
+        guard decision == .ask else { return decision }
+        guard tool.canAsk else { return .deny }
+        return isGranted ? .allow : .ask
     }
 
-    /// Each segment takes its first matching rule, or the base; the narrowest segment decides.
+    /// The narrowest segment decides the command.
     private static func shellDecision(
         for command: String, base: AgentDecision, rules: [ShellRule]
     ) -> AgentDecision {
         guard let segments = ShellCommandSegments.segments(of: command) else {
             return min(base, .ask)
         }
-        return segments.map { segment in
-            rules.first(where: { $0.matches(segment) })?.decision ?? base
-        }.min() ?? min(base, .ask)
+        return segments.map { segmentDecision(for: $0, base: base, rules: rules) }.min()
+            ?? min(base, .ask)
+    }
+
+    /// Any matching Deny wins, so no Allow placed above it can shadow it; else the first match.
+    private static func segmentDecision(
+        for segment: String, base: AgentDecision, rules: [ShellRule]
+    ) -> AgentDecision {
+        let matching = rules.filter { $0.matches(segment) }
+        if matching.contains(where: { $0.decision == .deny }) { return .deny }
+        return matching.first?.decision ?? base
     }
 }

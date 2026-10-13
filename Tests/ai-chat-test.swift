@@ -1655,11 +1655,17 @@ extension AIChatTests {
         let chat = AIChatState(history: ChatHistoryStore(directory: directory))
         chat.agentScope.excluded = [.shell]
         chat.agentScope.asksForEverything = true
+        chat.agentScope.grant(.calendarRead)
         chat.startNewChat()
-        expect(chat.agentScope == AgentSessionScope(), "a new chat starts with the scope open")
+        expect(
+            chat.agentScope == AgentSessionScope(),
+            "a new chat starts with the scope open and no grant")
         chat.agentScope.isEnabled = false
+        chat.agentScope.grant(.mcp("files"))
         chat.delete(id: chat.session.id)
-        expect(chat.agentScope == AgentSessionScope(), "deleting the open chat reopens the scope")
+        expect(
+            chat.agentScope == AgentSessionScope(),
+            "deleting the open chat reopens the scope and drops its grants")
     }
 
     static func choicesComeOutOfTheirFence() {

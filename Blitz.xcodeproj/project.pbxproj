@@ -756,7 +756,6 @@
 		DE227F9605371469FF0B6387 /* ExtensionPagination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870ED3F7B1A9BE7BA27B6B03 /* ExtensionPagination.swift */; };
 		DE34231259A09526F44455EC /* PaletteTabAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE5A231B54AE813CF17460B /* PaletteTabAction.swift */; };
 		DE837A5DCEFF1994982AE5CF /* AgentRefusal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95C6A647F0187E68309F2F0E /* AgentRefusal.swift */; };
-		DF61AE8DA266AD6C12DA22EC /* MCPTrustPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF8C6A86F37F04745B5BD941 /* MCPTrustPolicy.swift */; };
 		E06F565149B675FF9FBDFD4F /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F80F550DBCCB6734330DE82 /* JSONValue.swift */; };
 		E103977DD58D81B1B7EBA9A1 /* RootPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF538BCA826F5F893DA0EB96 /* RootPaletteView.swift */; };
 		E1168BBC4A129129429F5024 /* ScrollIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF791B3EA8369D0AC97B9AB0 /* ScrollIntent.swift */; };
@@ -1536,7 +1535,6 @@
 		BEAB9A2857FAAAB2CFA128C4 /* KeyCapChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCapChip.swift; sourceTree = "<group>"; };
 		BED3E31B9D367B9756CA8EF8 /* WindowLayoutDisplayTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayoutDisplayTabs.swift; sourceTree = "<group>"; };
 		BF488AC207A7AFBD7620391E /* ExtensionCaret.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCaret.swift; sourceTree = "<group>"; };
-		BF8C6A86F37F04745B5BD941 /* MCPTrustPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPTrustPolicy.swift; sourceTree = "<group>"; };
 		BFAE022BB9C54D6ECE2E5387 /* SettingsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsHistory.swift; sourceTree = "<group>"; };
 		C043986539458CAAEA877148 /* QuickActionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionModelPicker.swift; sourceTree = "<group>"; };
 		C044DBD1C4EDE54C9F61C5A0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -2238,7 +2236,6 @@
 				4D12CB3421986B23D2BDAB42 /* MCPProtocol.swift */,
 				2A6635BA745745CE0633F2EE /* MCPServer.swift */,
 				185F6B952A1EFC8F6E68CB3D /* MCPTool.swift */,
-				BF8C6A86F37F04745B5BD941 /* MCPTrustPolicy.swift */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -4485,7 +4482,6 @@
 				6113BDEDB3F16314BC06429E /* MCPStdioTransport.swift in Sources */,
 				C00ED5BAFD4A012BC02A9D30 /* MCPTool.swift in Sources */,
 				82339B4612940F6CE0C52E33 /* MCPTransport.swift in Sources */,
-				DF61AE8DA266AD6C12DA22EC /* MCPTrustPolicy.swift in Sources */,
 				BD33EE688E3E7A989DFCC8C8 /* MarkdownBlock.swift in Sources */,
 				C3E137D4FAD20287FD696E40 /* MarkdownCodeView.swift in Sources */,
 				1294A527FEDA6AB583AD3EA5 /* MarkdownInline.swift in Sources */,

@@ -1308,6 +1308,12 @@ struct AIProviderTests {
         expect(
             AISettingsStore(defaults: defaults).agentRules.shellRules == [push, edited],
             "edits, removals and order persist")
+        store.allowShellPattern("ls *", for: "ls -la")
+        store.allowShellPattern("git status*", for: "git status")
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.shellRules.map(\.pattern)
+                == ["git push*", "git status*", "ls *"],
+            "Always Allow persists its pattern once, without duplicating one already there")
     }
 
     static func settingsPersistAndRepairSelections() {
