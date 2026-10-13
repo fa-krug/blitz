@@ -211,7 +211,8 @@ struct AgentPolicyTests {
         check(
             "only the rows a catalog serves are hosted; web search is the provider's",
             AgentTool.builtIn.filter(\.isHosted) == [
-                .shell, .calendarRead, .calendarWrite, .remindersRead, .remindersWrite
+                .shell, .filesRead, .filesWrite, .calendarRead, .calendarWrite, .remindersRead,
+                .remindersWrite
             ] && !AgentTool.mcp("x").isHosted)
         check(
             "only the file rows weigh paths",
@@ -229,6 +230,12 @@ struct AgentPolicyTests {
         // MARK: Wire names
 
         check("the shell's name", AgentTool(wireName: ShellToolCatalog.runCommandName) == .shell)
+        for name in [FileToolCatalog.listName, FileToolCatalog.readName] {
+            check("\(name) reads files", AgentTool(wireName: name) == .filesRead)
+        }
+        for name in [FileToolCatalog.writeName, FileToolCatalog.moveName, FileToolCatalog.trashName] {
+            check("\(name) changes files", AgentTool(wireName: name) == .filesWrite)
+        }
         check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
@@ -251,16 +258,20 @@ struct AgentPolicyTests {
                 + ReminderToolCatalog.tools(
                     canRead: read, canWrite: write, now: now, calendar: .current)).map(\.name)
         }
-        let catalogNames = ShellToolCatalog.tools().map(\.name) + catalogs(read: true, write: true)
+        let catalogNames =
+            ShellToolCatalog.tools().map(\.name)
+            + FileToolCatalog.tools(read: true, write: true).map(\.name)
+            + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
             catalogNames.allSatisfy { AgentTool(builtInToolName: $0) != nil })
-        let readOnlyNames = catalogs(read: true, write: false)
+        let readOnlyNames =
+            catalogs(read: true, write: false)
+            + FileToolCatalog.tools(read: true, write: false).map(\.name)
         check(
             "what a read-only catalog offers maps to a read row",
             readOnlyNames.allSatisfy { name in
-                let tool = AgentTool(builtInToolName: name)
-                return tool == .calendarRead || tool == .remindersRead
+                AgentTool(builtInToolName: name)?.isReadOnly == true
             })
         check(
             "an MCP wire name maps to its server",
@@ -951,9 +962,28 @@ struct AgentPolicyTests {
             "an MCP server keeps its three-way dialog, This Chat by default",
             titles(server) == ["Always Allow", "Allow This Chat", "Don't Allow"]
                 && server.defaultIndex == 1 && server.title == "Let GitHub run its tools?")
+        let fileRead = AgentPrompt.files(
+            .filesRead, title: "Let the agent read “~/a/b”?", message: nil, pattern: "~/a/**")
+        check(
+            "a file read offers This Chat and Always Allow its folder",
+            titles(fileRead) == [
+                "Allow", "Allow This Chat", "Always Allow \u{201C}~/a/**\u{201D}", "Don't Allow"
+            ] && fileRead.choices[2] == .alwaysAllowPaths(pattern: "~/a/**")
+                && fileRead.symbol == AgentTool.filesRead.symbolName)
+        let fileWrite = AgentPrompt.files(
+            .filesWrite, title: "Let the agent write to “~/a/b”?", message: nil, pattern: "~/a/**")
+        check(
+            "a file write never offers This Chat",
+            titles(fileWrite) == ["Allow", "Always Allow \u{201C}~/a/**\u{201D}", "Don't Allow"])
+        check(
+            "with no pattern there is no Always Allow",
+            titles(.files(.filesRead, title: "", message: nil, pattern: nil))
+                == ["Allow", "Allow This Chat", "Don't Allow"]
+                && titles(.files(.filesWrite, title: "", message: nil, pattern: nil))
+                    == ["Allow", "Don't Allow"])
         check(
             "every dialog ends on its refusal",
-            [ls, write, read, server].allSatisfy { prompt in
+            [ls, write, read, server, fileRead, fileWrite].allSatisfy { prompt in
                 prompt.choices.last?.allows == false
                     && prompt.choices.dropLast().allSatisfy(\.allows)
                     && prompt.choices.indices.contains(prompt.defaultIndex)
@@ -1297,6 +1327,13 @@ struct AgentPolicyTests {
             "the path is canonical first",
             suggested("/Users/me/Projects/../Projects/app/./a") == "~/Projects/app/**")
         check("an unreadable path suggests nothing", suggested("app/a") == nil)
+        func suggestedFolder(_ path: String) -> String? {
+            AgentPolicy.suggestedPathPattern(
+                for: path, homeDirectory: home, seeds: seeds, isFolder: true)
+        }
+        check("a folder suggests itself", suggestedFolder("/Users/me/Projects") == "~/Projects/**")
+        check("but never home", suggestedFolder("/Users/me") == nil)
+        check("nor a seeded folder", suggestedFolder("/Users/me/.ssh") == nil)
 
         func pathPatterns(_ rules: AgentRules) -> [String] {
             rules.pathRules.map { "\($0.pattern) \($0.access.rawValue) → \($0.decision.rawValue)" }

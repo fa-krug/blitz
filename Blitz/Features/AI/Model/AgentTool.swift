@@ -58,6 +58,11 @@ enum AgentTool: Hashable, Sendable {
     /// Keyed by the catalogs' wire names, which this layer cannot import; the harness pins them.
     private static let builtInToolNames: [String: AgentTool] = [
         "shell_run_command": .shell,
+        "files_list": .filesRead,
+        "files_read": .filesRead,
+        "files_write": .filesWrite,
+        "files_move": .filesWrite,
+        "files_trash": .filesWrite,
         "calendar_list_events": .calendarRead,
         "calendar_create_event": .calendarWrite,
         "reminders_list": .remindersRead,

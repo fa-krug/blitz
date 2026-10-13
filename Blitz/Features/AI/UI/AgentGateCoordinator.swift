@@ -139,6 +139,8 @@ final class AgentGateCoordinator {
         switch choice {
         case .alwaysAllowCommands(let pattern):
             core.aiSettings.allowShellPattern(pattern, for: call.command ?? "")
+        case .alwaysAllowPaths(let pattern):
+            core.aiSettings.allowPathPattern(pattern, for: call)
         case .alwaysAllowServer:
             guard case .mcp(let slug) = call.tool,
                 let server = core.mcpCoordinator.server(slug: slug)

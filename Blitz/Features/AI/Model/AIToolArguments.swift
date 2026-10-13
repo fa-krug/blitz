@@ -32,6 +32,17 @@ struct AIToolArguments: Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Untrimmed, for a field whose whitespace is its content, such as a file's text.
+    func text(_ key: String) -> String? {
+        fields[key]?.stringValue
+    }
+
+    /// Whether the call sent the field at all; a JSON null counts as not sent.
+    func contains(_ key: String) -> Bool {
+        guard let value = fields[key] else { return false }
+        return value != .null
+    }
+
     func requiredString(_ key: String) throws(Invalid) -> String {
         guard let value = string(key) else { throw Invalid("\u{201C}\(key)\u{201D} is required.") }
         return value

@@ -17,8 +17,8 @@ enum AgentRefusal: Equatable, Sendable {
     private static func action(of tool: AgentTool) -> String {
         switch tool {
         case .shell: "run this command"
-        case .filesRead: "read this file"
-        case .filesWrite: "change this file"
+        case .filesRead: "read this file or folder"
+        case .filesWrite: "change this file or folder"
         case .webSearch: "search the web"
         case .webFetch: "fetch this page"
         case .openItems: "open this"

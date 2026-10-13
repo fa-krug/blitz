@@ -1,15 +1,16 @@
 # Agent
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
-calls the tools one rule table allows: the shell, the calendar, reminders, web search and each MCP
-server, with rows already in the table for the Phase 3 toolbox — files, web fetch, Mac actions,
-personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
+calls the tools one rule table allows: the shell, files, the calendar, reminders, web search and
+each MCP server, with rows already in the table for the rest of the Phase 3 toolbox — web fetch,
+Mac actions, personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
 tool, plus ordered command patterns for the shell and path patterns for files; a
 session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
 a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in Plan, `write_plan`.
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
+[File tools](#file-tools) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -110,8 +111,8 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context.
 | Group | Row (`AgentTool`) | Settings title | Covers | Read-only | Default | Ceiling |
 | --- | --- | --- | --- | --- | --- | --- |
 | Commands | `.shell` | Run Commands | `shell_run_command` | no | Deny | — |
-| Files | `.filesRead` | Read Files | list and read (3b) | yes | Ask | — |
-| | `.filesWrite` | Change Files | write, move to Trash (3b) | no | Deny | — |
+| Files | `.filesRead` | Read Files | `files_list`, `files_read` | yes | Ask | — |
+| | `.filesWrite` | Change Files | `files_write`, `files_move`, `files_trash` | no | Deny | — |
 | Web | `.webSearch` | Web Search | the route's own search | yes | Allow (no Ask) | — |
 | | `.webFetch` | Fetch Web Pages | a URL as text (3c) | yes | Ask | — |
 | Mac | `.openItems` | Open Apps, Files and Links | (3d) | no | Deny | — |
@@ -269,7 +270,81 @@ nothing for a path that is not absolute, for `/`, for the home folder or a folde
 for a read and a Write rule for a write: a rule with the same pattern and access becomes Allow and
 moves up if it must; otherwise a new one goes in just before the first non-Deny rule that would
 decide one of the call's paths, or at the end. `AISettingsStore.allowPathPattern(_:for:)` persists
-it. The dialog choice that calls it arrives with the files runner (3b).
+it, from the file dialogs' **Always Allow** choice. For a listing, the folder listed is the one
+proposed (`isFolder`), so listing `~/Projects` offers `~/Projects/**`.
+
+A write no Allow pattern matches takes the row's decision, as every path does: Change Files on
+Allow writes anywhere no Deny rule covers, without a dialog. That was decided with the runner (3b),
+rather than capping such a write at Ask: the row is the reader's own word, and it starts on Deny.
+
+## File tools
+
+`FileToolCatalog` (`Model/`) spells five tools and `FileToolRunner` (`Service/`) carries them out.
+There is deliberately no delete tool: the most a model can do to a file is move it to the Trash.
+
+| Tool | Row | Arguments | What comes back |
+| --- | --- | --- | --- |
+| `files_list` | Read Files | `path` (a folder, default `~`), `recursive`, `includeHidden` (both default false) | a header, then a tab-separated row per item: name, type (file, folder, link, package), size, modified |
+| `files_read` | Read Files | `path`, `offset` (first line, from 1), `limit` (lines) | a header naming the lines and how many there are, then the text |
+| `files_write` | Change Files | `path`, `content`, `mode` (`create` default, `overwrite`, `append`), `createFolders` (default false) | what was written, and how much |
+| `files_move` | Change Files | `from`, `to` | where it went |
+| `files_trash` | Change Files | `path` | that it is in the Trash, where the user can put it back |
+
+A path is absolute, starts with `~`, or is taken from the home folder, as the shell tool reads its
+folder (`ShellToolCatalog.resolved`); `.` and `..` resolve first. The caps:
+
+- **A listing** holds at most 500 items (`listLimit`). A flat one counts what it left out; a
+  recursive one, three levels deep (`listDepth`), stops at the cap and says so, notes the folders
+  at the bottom it did not enter, never follows a link or enters a package, and never enters a
+  folder a Deny rule for that row covers, naming it instead. Hidden items, by the Finder's flag or
+  a leading dot, are left out unless asked for.
+- **A read** is text only: UTF-8, or UTF-16 told by its byte-order mark or by where ASCII's zero
+  bytes fall. Anything else, or text with a NUL in it, is refused with a sentence naming its type
+  (`UTType`'s description, "PNG image"). At most the first 8 MB of a file is read (`scanLimit`), and
+  at most 64 KB of text comes back (`readLimit`), cut at a line, with a note saying where to read on
+  with `offset`; one line longer than that shows its start. A pipe or a device is never read, so a
+  read cannot hang.
+- **A write** carries at most 1 MB of text (`writeLimit`), refused with a pointer to `append`. It
+  is UTF-8; `create` never replaces anything (`.withoutOverwriting`), `append` makes a missing
+  file, and only `createFolders` makes a missing folder. A folder is never written.
+- **A move** never replaces: anything already at `to` refuses it, and `to`'s folder must exist.
+  The root, the home folder and a folder holding it are never moved or put in the Trash
+  (`FileToolCatalog.isProtected`), whatever the rules say.
+
+### Canonical paths
+
+The policy weighs the path the disk would use, never the model's spelling. Before the gate is
+asked, `FileToolRunner.resolved` gives each path:
+
+- **For a list, read or write**, the deepest part that exists (checked with `lstat`, so a link
+  counts) resolved through `URL.resolvingSymlinksInPath()`, and the rest appended as named; a
+  path through a link to nothing is refused. So `~/Documents/key`, a link to `~/.ssh/id_ed25519`,
+  is weighed as the key, which the Deny seed catches, and a new file in a linked folder as one in
+  the real folder.
+- **For a move's `from` and `to` and the Trash**, the folder resolved that way and the last name
+  kept, since those act on the item itself: a link is moved or trashed, not what it points to.
+
+`resolvingSymlinksInPath` drops `/private` from a path whose shorter spelling exists, so
+`/private/tmp/x` is weighed as `/tmp/x`; the runner's own walk spells child paths from the resolved
+folder for the same reason.
+
+### Order of a call
+
+`AIChatCoordinator.runFileTool`, with every disk access in `Task.detached`:
+
+1. **Read and resolve** (`FileToolRunner.prepare`). A malformed call is a sentence and never a
+   dialog.
+2. **Denied?** The gate's decision for `AgentCall.files` over the resolved paths. A Deny refuses
+   before the disk is asked anything else, so a denied path's existence is never told.
+3. **Preflight** (`FileToolRunner.preflight`): a file that is not there, a folder where a file
+   should be, a `create` over something, a missing folder without `createFolders`, a move onto
+   something. Refused without asking.
+4. **Ask**, through `AgentGateCoordinator.authorization(for:in:)`, with `FileToolCatalog.prompt`.
+5. **Act** (`FileToolRunner.run`): resolve again from the model's spelling and refuse, with "…
+   changed while the user was asked, so nothing was done.", if anything now resolves elsewhere —
+   a folder swapped for a link while the dialog was up — then the preflight again, then the call.
+   This narrows the window between check and act rather than closing it; `create`'s
+   `.withoutOverwriting` is the one step that holds even inside it.
 
 ## The gate and its dialogs
 
@@ -314,6 +389,11 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | Calendar write | Add "`<title>`" to your calendar? — the event summary | **Allow** ↵, Don't Allow |
 | Reminders write | Add "`<title>`" to Reminders? / Change "`<title>`"? / Complete "`<title>`"? | **Allow** ↵, Don't Allow |
 | MCP server | Let `<server>` run its tools? — the tool's name | Always Allow, **Allow This Chat** ↵, Don't Allow |
+| `files_list` | Let the agent list "`<folder>`"? — what it sees, how deep, and that it goes to the provider | **Allow** ↵, Allow This Chat, Always Allow "`<folder>/**`", Don't Allow |
+| `files_read` | Let the agent read "`<file>`"? — that it goes to the provider | **Allow** ↵, Allow This Chat, Always Allow "`<folder>/**`", Don't Allow |
+| `files_write` | Let the agent write to "`<file>`"? — create, replace or add to the end, with the size | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
+| `files_move` | Let the agent move "`<from>`"? — To "`<to>`" | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
+| `files_trash` | Let the agent move "`<path>`" to the Trash? — It can be put back from the Trash. | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -321,6 +401,11 @@ refusal of that one call; only Settings withholds a tool for good.
 - **Always Allow "`<pattern>`"** places the pattern through `AISettingsStore.allowShellPattern`, as
   [Shell patterns](#shell-patterns) describes; Settings' Add Shell Rule appends through
   `addShellRule` instead.
+- **Always Allow "`<folder>/**`"** on a file dialog places a Read rule for a read and a Write rule
+  for a write through `AISettingsStore.allowPathPattern`, as [Path rules](#path-rules) describes.
+  The paths shown are the resolved ones. It is offered only when every path of the call proposes
+  the same pattern (`FileToolCatalog.suggestedPattern`), so a move between two folders, a path in
+  home, at the root or under a seed offers none.
 - **Always Allow** on a server sets its trust to `.always` through `MCPCoordinator.setTrust`.
 - **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — every read-only row but
   web search, and MCP servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
@@ -536,7 +621,8 @@ Each route honours the mode where it decides what to offer:
   names, the rows' groups and order, which rows are hosted, the MCP trust mapping, defaults and the
   web-search rule, migration, `Codable` and its tolerance of a table stored before later rows, path
   matching (`*` and `**`, `~`, a trailing `/**`, `..`, case, relative paths), the seeds, path
-  precedence and a move's narrowest path, the suggested path pattern, Always Allow for a path, the
+  precedence and a move's narrowest path, the suggested path pattern (a listed folder's own too),
+  Always Allow for a path, the file dialogs' choices, the
   session
   scope, the policy's precedence and offers, the suggested pattern and `neverSuggested`, calls from
   the wire, every `AgentPrompt`, both refusals, chat grants on the scope, Always Allow's placement,
@@ -544,6 +630,13 @@ Each route honours the mode where it decides what to offer:
   tools weighed one at a time and servers handed to a CLI in
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
   the plan instruction, and the context card's rows per mode.
+- `file-tool-test` — the five schemas and wire names, call reading and its refusals, each dialog's
+  wording and choices (no Always Allow for home, the root or a seed, nor for a move between
+  folders), the answers' wording and caps, text decoding, canonical resolution against links in a
+  scratch folder — a link into a fake `.ssh` resolves to it and the seed then denies it — and the
+  runner there: list, read with offset and limit, the three write modes and `createFolders`, a move
+  that refuses an existing target, the Trash (a scratch folder stands in, so the user's Trash is
+  never touched) and a folder swapped for a link after asking.
 - `agent-wait-test` — `AgentWait.of`'s precedence and wording, `AgentApprovals` holding each request
   once and handing every waiter back once, `ChatPresence` per surface, `AgentWaitEpisodes` with a
   wait that changes kind, and each `AgentWaitNotice`: its wording, one identifier per chat, the
@@ -583,8 +676,13 @@ Each route honours the mode where it decides what to offer:
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal and Context; switching Contacts off greys Read Contacts with "Turn on Contacts first.",
-  and with Accessibility not granted Read Selected Text says so. None of the toolbox rows appears in
-  the composer's tools menu or the context card, whatever they are set to.
+  and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only Read Files
+  and Change Files appear in the composer's tools menu and the context card.
+- With Read Files on Ask, ask a chat to read a file in `~/Projects/app`: the dialog names it, and
+  **Always Allow "~/Projects/app/**"** adds a Read rule to Path rules, after which the next read
+  there runs straight away; a write there still asks, or is refused while Change Files is Deny.
+- Make `~/Documents/key` a link to `~/.ssh/id_ed25519` and ask for it to be read: it is refused
+  without a dialog. In Plan, `files_write` is not offered whatever Change Files says.
 - Settings → AI → Path rules starts with the Deny seeds; a rule edited, moved or removed there is
   still so after a relaunch.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model

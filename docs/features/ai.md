@@ -107,8 +107,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   linked `[n]`: `ChatCitations` finds each link's sentence end in the drawn text and inserts after
   it, two sources in one sentence sharing it, so prose and chips always agree. The preamble asks the model to link a page it relies on inline, so a cited
   answer carries its sources without a second request.
-- **Every tool call answers to the agent's one rule table.** Shell, calendar, reminders, web search
-  and each MCP server are rows of `AgentRules`, decided by `AgentPolicy` and enforced by
+- **Every tool call answers to the agent's one rule table.** Shell, files, calendar, reminders, web
+  search and each MCP server are rows of `AgentRules`, decided by `AgentPolicy` and enforced by
   `AgentGateCoordinator`, which `AIChatCoordinator` owns: a denied tool is never offered, every call
   is decided when it arrives, and an Ask is Blitz's own dialog. The composer's tools menu — Use
   Tools and a switch per tool — and its mode pill — Manual, Auto or Plan — edit the chat's
@@ -141,6 +141,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   counts the rest, and the model reads the exit status, both streams and what was cut; a declined
   or refused call is a failure result. `shell-tool-test` pins the schema, call reading and answers,
   and runs the runner against zsh.
+- **A model can list, read and change the user's files, only as the path rules allow.**
+  `files_list` and `files_read` (Read Files), and `files_write`, `files_move` and `files_trash`
+  (Change Files), from `FileToolCatalog`, go to the same routes as the shell. Every path is weighed
+  with its symlinks resolved, resolved again just before the runner acts, and nothing is ever
+  deleted for good — the Trash is the furthest it goes. See [Agent](agent.md#file-tools).
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's

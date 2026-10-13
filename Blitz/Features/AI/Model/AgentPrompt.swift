@@ -9,6 +9,8 @@ struct AgentPrompt: Equatable, Sendable {
         case allowOnce(String)
         /// An Allow rule for the pattern, placed where it decides the command that asked.
         case alwaysAllowCommands(pattern: String)
+        /// A path rule for the folder, placed where it decides the call that asked.
+        case alwaysAllowPaths(pattern: String)
         /// Raises the MCP server's own trust, as its dialog always has.
         case alwaysAllowServer
         case allowThisChat
@@ -17,7 +19,8 @@ struct AgentPrompt: Equatable, Sendable {
         var title: String {
             switch self {
             case .allowOnce(let title), .refuse(let title): title
-            case .alwaysAllowCommands(let pattern): "Always Allow \u{201C}\(pattern)\u{201D}"
+            case .alwaysAllowCommands(let pattern), .alwaysAllowPaths(let pattern):
+                "Always Allow \u{201C}\(pattern)\u{201D}"
             case .alwaysAllowServer: "Always Allow"
             case .allowThisChat: "Allow This Chat"
             }
@@ -64,6 +67,18 @@ struct AgentPrompt: Equatable, Sendable {
             title: "Let the agent read \(subject)?",
             message: "What it reads is sent to the model's provider.", symbol: tool.symbolName,
             choices: [.allowOnce("Allow"), .allowThisChat, .refuse("Don't Allow")],
+            defaultIndex: 0)
+    }
+
+    /// A file call: a read may be allowed for the chat, and either may allow its folder for good.
+    static func files(
+        _ tool: AgentTool, title: String, message: String?, pattern: String?
+    ) -> AgentPrompt {
+        let chat: [Choice] = tool.canAllowForSession ? [.allowThisChat] : []
+        let always = pattern.map { [Choice.alwaysAllowPaths(pattern: $0)] } ?? []
+        return AgentPrompt(
+            title: title, message: message, symbol: tool.symbolName,
+            choices: [.allowOnce("Allow")] + chat + always + [.refuse("Don't Allow")],
             defaultIndex: 0)
     }
 

@@ -112,7 +112,7 @@ enum ShellToolCatalog {
         return Output(text: text, omittedBytes: totalBytes - kept.count)
     }
 
-    private static func droppingPartialScalar(_ bytes: ArraySlice<UInt8>) -> ArraySlice<UInt8> {
+    static func droppingPartialScalar(_ bytes: ArraySlice<UInt8>) -> ArraySlice<UInt8> {
         guard let lead = bytes.suffix(4).lastIndex(where: { $0 & 0xC0 != 0x80 }) else {
             return bytes
         }

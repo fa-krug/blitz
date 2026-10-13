@@ -510,8 +510,8 @@ final class AIChatCoordinator {
 
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
-            || ShellToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
-            || PlanToolCatalog.handles(name)
+            || ShellToolCatalog.handles(name) || FileToolCatalog.handles(name)
+            || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -523,6 +523,7 @@ final class AIChatCoordinator {
             guard let self, let chat else { return await AIHostedTools.none.run(call) }
             if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
             if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
+            if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -597,6 +598,7 @@ final class AIChatCoordinator {
             + core.remindersCoordinator.chatTools(
                 read: offered(.remindersRead), write: offered(.remindersWrite), now: now)
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
+            + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
                 ? AskUserToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
@@ -618,6 +620,43 @@ final class AIChatCoordinator {
             summary: ShellToolCatalog.summary(of: request, homeDirectory: home))
         if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
         return ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
+    }
+
+    /// The gate weighs canonical paths, and the runner re-resolves them before it acts.
+    private func runFileTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let (name, arguments) = (call.name, call.arguments)
+        let prepared: FileToolRunner.Prepared
+        switch await Task.detached(operation: {
+            FileToolRunner.prepare(name: name, arguments: arguments)
+        }).value {
+        case .success(let ready): prepared = ready
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
+        let tool = prepared.request.tool
+        let agentCall = AgentCall.files(
+            tool, paths: prepared.resolved.paths, homeDirectory: prepared.homeDirectory)
+        // Before the disk is asked anything, so a denied path's existence is never told.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: tool))
+        }
+        if let failure = await Task.detached(operation: { FileToolRunner.preflight(prepared) })
+            .value
+        {
+            return .failure(call.id, failure.message)
+        }
+        let prompt = FileToolCatalog.prompt(
+            for: prepared.resolved, homeDirectory: prepared.homeDirectory)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        let denied = gate.rules.pathRules.filter { $0.decision == .deny && $0.applies(to: tool) }
+        switch await Task.detached(operation: {
+            FileToolRunner.run(prepared, deniedRules: denied)
+        }).value {
+        case .success(let answer):
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
     }
 
     // MARK: - The session scope

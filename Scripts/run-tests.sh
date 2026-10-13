@@ -157,6 +157,14 @@ run contacts-test          Blitz/Features/Contacts/Model/*.swift
 run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            Blitz/Features/AI/Service/ShellToolRunner.swift
+run file-tool-test         $A/FileToolCatalog.swift $A/ShellToolCatalog.swift $A/AITool.swift \
+                           $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
+                           $A/AIToolJSON.swift $A/AgentTool.swift $A/AgentDecision.swift \
+                           $A/AgentRules.swift $A/PathRule.swift $A/ShellRule.swift \
+                           $A/ShellCommandSegments.swift $A/AgentCall.swift $A/AgentSessionScope.swift \
+                           $A/AgentPolicy.swift $A/AIDataAccess.swift $A/AgentPrompt.swift \
+                           $A/AgentMode.swift $A/AgentChatTool.swift \
+                           Blitz/Features/AI/Service/FileToolRunner.swift
 # The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
 run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
@@ -164,9 +172,9 @@ run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRul
                            $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
                            $A/AgentChatTool.swift $A/AskUserToolCatalog.swift \
                            $A/PlanToolCatalog.swift $A/ChatPlan.swift $A/AgentModeInstructions.swift \
-                           $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
-                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
-                           $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
+                           $A/ShellToolCatalog.swift $A/FileToolCatalog.swift $A/AITool.swift \
+                           $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
+                           $A/AIToolJSON.swift $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
                            Blitz/Features/Reminders/Model/*.swift \
                            Blitz/Features/MCP/Model/MCPServer.swift \
                            Blitz/Features/MCP/Model/MCPTool.swift \

@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1, 1b, 2 and 3a built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phases 1, 1b, 2, 3a and 3b built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -282,19 +282,35 @@ the table now, so each later step adds only a catalog, a runner, its wire names 
 - **Settings.** The Agent section groups its rows; a **Path rules** section lists and edits the
   patterns; `AISettingsStore` adds, updates, removes, moves and Always-Allows them.
 
+### 3b: files (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#file-tools):
+
+- **Five tools.** `FileToolCatalog`: `files_list` and `files_read` under Read Files, `files_write`,
+  `files_move` and `files_trash` under Change Files; their wire names make both rows hosted. No
+  delete tool: the Trash is as far as a model can take a file.
+- **Caps.** A listing at most 500 items, recursion three levels deep; a read text only (UTF-8 or
+  UTF-16), from the first 8 MB, at most 64 KB back, with `offset` and `limit` in lines; a write at
+  most 1 MB, `create` never replacing; a move never replacing. Home, the root and a folder holding
+  home are never moved or trashed.
+- **Canonical paths.** `FileToolRunner` resolves every path with `resolvingSymlinksInPath()` —
+  for a path not there yet its deepest existing folder, for a move or the Trash the folder only, so
+  a link is moved rather than followed — before `AgentCall.files` is built, and again just before
+  acting, refusing a path that now resolves elsewhere.
+- **Dialogs.** Read: **Allow**, **Allow This Chat**, **Always Allow "`<folder>/**`"**, **Don't
+  Allow**; write, move and the Trash: the same without This Chat. Always Allow is a Read or Write
+  rule through `AISettingsStore.allowPathPattern`, offered only when every path of the call
+  proposes the same folder; for a listing, the folder itself (`suggestedPathPattern`'s `isFolder`).
+- **Decided:** a write no Allow pattern matches keeps the row's decision rather than being capped
+  at Ask. Change Files starts on Deny, and Allow on it is the reader's own word.
+
 ### Remaining steps
 
-1. **3b Files** — `.filesRead` (list, read clipped), `.filesWrite` (write, move to Trash): the
-   catalog and wire names, a runner that resolves symlinks before it builds `AgentCall.files`, the
-   dialogs with **Always Allow "`<folder>/**`"** (`AgentPolicy.suggestedPathPattern`,
-   `AISettingsStore.allowPathPattern`), and the gate applying that choice. Decide here whether a
-   write no Allow pattern matches is capped at Ask whatever the row says, as first sketched; 3a
-   gives it the row's decision.
-2. **3c Web fetch** — `.webFetch`: a URL as readable text, on a private `.ephemeral`,
+1. **3c Web fetch** — `.webFetch`: a URL as readable text, on a private `.ephemeral`,
    `urlCache = nil` session (`CurrencyRateStore` shape), with a size and time cap.
-3. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
+2. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
    `.systemActions` (Blitz's system actions), `.windowLayouts` (a window layout).
-4. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
+3. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
    `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
    and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
    turn by itself.

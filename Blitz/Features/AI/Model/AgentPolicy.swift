@@ -94,14 +94,15 @@ enum AgentPolicy {
         return word + " *"
     }
 
-    /// What file "Always Allow" proposes: the folder holding `path`, then `/**`.
+    /// What file "Always Allow" proposes: the folder holding `path`, or `path` itself, then `/**`.
     static func suggestedPathPattern(
-        for path: String, homeDirectory: String, seeds: [PathRule] = PathRule.seeds
+        for path: String, homeDirectory: String, seeds: [PathRule] = PathRule.seeds,
+        isFolder: Bool = false
     ) -> String? {
         guard let path = PathRule.canonical(path, homeDirectory: homeDirectory),
             let home = PathRule.canonical(homeDirectory, homeDirectory: homeDirectory)
         else { return nil }
-        let folder = (path as NSString).deletingLastPathComponent
+        let folder = isFolder ? path : (path as NSString).deletingLastPathComponent
         // Lowercased, as matching is: `/users/**` would cover `/Users/me` just the same.
         let (lowerFolder, lowerHome) = (folder.lowercased(), home.lowercased())
         guard lowerFolder != "/", lowerFolder != lowerHome, !lowerHome.hasPrefix(lowerFolder + "/")
