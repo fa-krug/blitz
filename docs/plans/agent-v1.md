@@ -145,6 +145,53 @@ scope; it keeps MCP servers only.
 4. **Docs and verification:** docs, the full suite, build, lint, and a real run in the Dev build
    (`ls` → Ask → Always Allow `ls *` → the next `ls` runs straight away). *(the parent)*
 
+## Phase 1b: modes, questions and plans (in progress)
+
+### Modes
+
+`AgentMode` is per session, on `AgentSessionScope`: never stored, and every new or reopened chat
+starts in Manual. The composer's mode picker replaces the "Ask for Everything" toggle, which goes.
+
+| Mode | What it does |
+| --- | --- |
+| **Manual** (default) | The rule table as written: Allow runs, Ask asks, Deny refuses. |
+| **Auto** | Every Ask is confirmed without a dialog. Deny still refuses and a denied tool is still not offered: the table stays the ceiling. |
+| **Plan** | Read-only. Offered: calendar and reminders read, web search, MCP tools whose server marks them `readOnlyHint`, the shell (every command asks, whatever the rules say), `ask_user`, `write_plan`. Never offered: calendar and reminders writes, other MCP tools. Each still needs its table row past Deny. |
+
+Plan mode adds an instruction for that turn: investigate read-only, ask with `ask_user` where the
+answer changes the plan, and finish by calling `write_plan`. A plan never changes anything by itself.
+
+### `ask_user`
+
+- A Blitz tool on every route that reaches Blitz's tools, in every mode. It has no rule row: asking
+  the reader is never a capability.
+- Arguments: `question`, `options` (2–6 short strings), `multiSelect` (default false). A free-text
+  answer is always possible.
+- The turn pauses. The transcript shows the question with its options as chips. A chip, or text
+  typed in the composer while a question is pending, is the answer; it does not start a new turn.
+- The answer is the tool result. The question and answer are stored with the message, the way
+  searches and tool calls are, so a reopened chat shows both.
+- Stop, or leaving the chat, answers "The user did not answer." and the turn ends as stopped does.
+
+### `write_plan`
+
+- Offered only in Plan mode. Arguments: `title`, `markdown`. A second call replaces the chat's plan.
+- The plan is a card in the transcript, rendered Markdown, stored with the conversation, and
+  editable from the card.
+- The card offers **Execute** (switches the chat to Manual) and **Execute in Auto**. Either one sends
+  a message that carries the plan's current text and asks the agent to carry it out.
+
+### Steps (subagents, in order)
+
+1. **Model:** `AgentMode` and its policy (replacing `asksForEverything`, with a read-only MCP input),
+   the `ask_user` and `write_plan` catalogs (schemas, argument reading, results), the plan-mode
+   instruction, harness coverage.
+2. **Questions:** the pending-question state, the transcript card and the composer routing, storage,
+   Stop and leave handling, on both routes.
+3. **Modes and plans:** the composer mode picker, the plan card with editing and Execute, plan
+   storage, MCP `readOnlyHint` plumbing, the per-turn instruction.
+4. **Docs and verification:** `agent.md`, `ai.md`, the full suite, build, lint.
+
 ## Phase 2: turns you can leave
 
 - A waiting state on `AIChatState` (`isAwaitingApproval`). The sidebar row shows a badge, and the
@@ -170,13 +217,11 @@ scope; it keeps MCP servers only.
 5. **Context on request:** the frontmost app, selected text, and the current clipboard. Each is a
    tool under the same rules, never pushed into a turn by itself.
 
-## Phase 4: memory and plans
+## Phase 4: memory
 
 - **Memory:** a small store the agent reads at each session start and appends to through a
   `remember` tool, which has its own rule (Ask by default). It is editable and clearable in Settings,
   excluded from backups, and stays on this Mac.
-- **Plan tool:** a checklist the agent keeps for multi-step turns, drawn pinned above the turn and
-  stored with the message like searches and tool calls are.
 
 ## Decided
 
