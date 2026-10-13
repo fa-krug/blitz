@@ -170,7 +170,7 @@ struct MCPTests {
 
     static func trustDecidesFromStandingAndChatGrants() {
         expect(
-            MCPTrustPolicy.decide(trust: .never, isGrantedForChat: true) == .refuse,
+            MCPTrustPolicy.decide(trust: .never, isGrantedForChat: true) == .deny,
             "a withheld server stays withheld, whatever a chat granted")
         expect(
             MCPTrustPolicy.decide(trust: .always, isGrantedForChat: false) == .allow,

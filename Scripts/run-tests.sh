@@ -161,6 +161,7 @@ run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValu
 run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
                            $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift \
                            $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
@@ -680,8 +681,8 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/ChatTitle.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
-                           Blitz/Features/AI/Model/ChatToolScope.swift \
-                           Blitz/Features/AI/Model/ShellCommandApproval.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentSessionScope.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
@@ -724,6 +725,9 @@ run mcp-test               Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/AgentTool.swift \
                            Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Settings/MCPSettingsStore.swift
 run -O text-diff-test      Blitz/Features/QuickActions/Model/TextDiffEngine.swift
@@ -753,6 +757,9 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/AgentTool.swift \
                            Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
@@ -769,6 +776,9 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/AgentTool.swift \
                            Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow codex-turn-test   Blitz/Platform/AppPaths.swift \

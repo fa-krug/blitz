@@ -7,7 +7,6 @@ enum ShellToolCatalog {
     /// Per stream: a chatty command must flood neither the model's context nor Blitz's memory.
     static let outputLimit = 16 * 1024
     static let timeout: Duration = .seconds(60)
-    static let declined = "The user declined to run this command."
 
     private typealias Invalid = AIToolArguments.Invalid
 

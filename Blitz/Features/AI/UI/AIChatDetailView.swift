@@ -177,11 +177,8 @@ private struct AIChatComposer: View {
             AIModelPicker(chat: chat, selected: coordinator.model(for: chat), coordinator: coordinator)
             AIReasoningPicker(chat: chat, coordinator: coordinator)
             AIToolsPicker(chat: chat, coordinator: coordinator)
-            if coordinator.capabilities(for: chat).webSearch {
+            if coordinator.offersWebSearch(in: chat) {
                 WebSearchToggle(settings: settings)
-            }
-            if coordinator.offersShellCommands(in: chat) {
-                ShellApprovalToggle(chat: chat, coordinator: coordinator)
             }
             Spacer(minLength: 0)
             ContextGauge(
@@ -314,43 +311,56 @@ private struct AIReasoningPicker: View {
     }
 }
 
-/// This chat's MCP servers: all of them, some, or none; the model must be one that calls tools.
+/// This chat's session scope: which tools it may call, and whether every call asks first.
 private struct AIToolsPicker: View {
     let chat: AIChatState
     let coordinator: AIChatCoordinator
 
     var body: some View {
-        let servers = coordinator.mcpServers
-        let scope = chat.toolScope
+        let builtIn = coordinator.listedBuiltInTools(for: chat)
+        let servers = coordinator.listedServers(for: chat)
+        let scope = chat.agentScope
         let takesTools = coordinator.capabilities(for: chat).tools
-        let active = servers.filter { scope.allows($0.slug) }.count
+        let total = builtIn.count + servers.count
+        let active =
+            builtIn.count(where: scope.allows) + servers.count { scope.allows(.mcp($0.slug)) }
         Menu {
-            if servers.isEmpty {
-                Text("No MCP servers are connected")
+            if total == 0 {
+                Text("The agent's rules allow no tools")
             } else {
                 Toggle(
                     "Use Tools",
                     isOn: Binding(
                         get: { scope.isEnabled },
                         set: { coordinator.setToolsEnabled($0, in: chat) }))
-                Section("Servers") {
-                    ForEach(servers) { server in
-                        Toggle(
-                            server.name.isEmpty ? server.slug : server.name,
-                            isOn: Binding(
-                                get: { scope.allows(server.slug) },
-                                set: { _ in coordinator.toggleToolServer(server.slug, in: chat) })
-                        )
-                        .disabled(!scope.isEnabled)
+                Toggle(
+                    "Ask for Everything",
+                    isOn: Binding(
+                        get: { scope.asksForEverything },
+                        set: { coordinator.setAsksForEverything($0, in: chat) })
+                )
+                .disabled(!scope.isEnabled)
+                if !builtIn.isEmpty {
+                    Section("Blitz") {
+                        ForEach(builtIn, id: \.self) { tool in
+                            toggle(tool.title, for: tool, in: scope)
+                        }
+                    }
+                }
+                if !servers.isEmpty {
+                    Section("MCP Servers") {
+                        ForEach(servers) { server in
+                            toggle(server.title, for: .mcp(server.slug), in: scope)
+                        }
                     }
                 }
             }
             Divider()
-            Button("MCP Settings…", action: coordinator.showMCPSettings)
+            Button("Agent Settings…", action: coordinator.showAgentSettings)
         } label: {
             Label(
-                servers.isEmpty || !scope.isEnabled ? "Tools" : "\(active) of \(servers.count)",
-                systemImage: "wrench.and.screwdriver"
+                total == 0 || !scope.isEnabled ? "Tools" : "\(active) of \(total)",
+                systemImage: scope.asksForEverything ? "hand.raised" : "wrench.and.screwdriver"
             )
             .labelStyle(.titleAndIcon)
         }
@@ -360,6 +370,18 @@ private struct AIToolsPicker: View {
             takesTools
                 ? "Choose the tools this chat may call"
                 : "This model can't call tools")
+    }
+
+    private func toggle(
+        _ title: String, for tool: AgentTool, in scope: AgentSessionScope
+    ) -> some View {
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { scope.allows(tool) },
+                set: { _ in coordinator.toggleTool(tool, in: chat) })
+        )
+        .disabled(!scope.isEnabled)
     }
 }
 
@@ -397,7 +419,7 @@ private struct FindCounter: View {
     }
 }
 
-/// The same switch as Settings → AI's: a prompt reaches a search engine only once it is on.
+/// Offered where the rules allow web search; a prompt reaches a search engine only once it is on.
 private struct WebSearchToggle: View {
     let settings: AISettingsStore
 
@@ -410,29 +432,6 @@ private struct WebSearchToggle: View {
         .buttonStyle(.borderless)
         .help(settings.webSearchEnabled ? "Web search is on" : "Web search is off")
         .accessibilityLabel("Web search")
-    }
-}
-
-/// This chat's own choice; Settings → AI decides whether a model may run commands at all.
-private struct ShellApprovalToggle: View {
-    let chat: AIChatState
-    let coordinator: AIChatCoordinator
-
-    var body: some View {
-        let automatic = chat.shellApproval == .automatic
-        Toggle(
-            isOn: Binding(
-                get: { automatic },
-                set: { coordinator.setShellApproval($0 ? .automatic : .ask, in: chat) })
-        ) {
-            Image(systemName: automatic ? "terminal.fill" : "terminal")
-        }
-        .toggleStyle(.button)
-        .buttonStyle(.borderless)
-        .help(
-            automatic
-                ? "Shell commands run without asking" : "Shell commands ask before they run")
-        .accessibilityLabel("Run shell commands without asking")
     }
 }
 
@@ -522,14 +521,13 @@ private struct ContextCard: View {
                 }
                 row("System prompt", report.systemPrompt ? "On" : "Off")
                 row("Web search", report.webSearch ? "On" : "Off")
-                row(
-                    "MCP servers",
-                    report.toolServers == 0 ? "None" : "\(report.toolServers) in reach")
-                row(
-                    "Personal data",
-                    report.personalData.isEmpty
-                        ? "None" : report.personalData.joined(separator: ", "))
-                row("Shell commands", shellTitle)
+                section("Tools")
+                if report.tools.isEmpty {
+                    row("Offered", "None")
+                }
+                ForEach(Array(report.tools.enumerated()), id: \.offset) { _, tool in
+                    row(tool.title, tool.decision.title)
+                }
             }
             .font(.callout)
         }
@@ -560,14 +558,6 @@ private struct ContextCard: View {
 
     private func bytes(_ count: Int) -> String {
         count.formatted(.byteCount(style: .file))
-    }
-
-    private var shellTitle: String {
-        switch report.shellCommands {
-        case .ask?: "Confirm each"
-        case .automatic?: "Run without asking"
-        case nil: "Off"
-        }
     }
 
     private func tokens(_ count: Int, of window: Int?) -> String {

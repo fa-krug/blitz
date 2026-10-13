@@ -14,8 +14,8 @@ final class AIChatCoordinator {
     private let window: AppWindowController
     /// Chats with a title request in flight, so a quick second reply never asks twice.
     @ObservationIgnored private var naming: [UUID: Task<Void, Never>] = [:]
-    /// Shared by every chat: there is one dialog, and a second command must wait for it.
-    @ObservationIgnored private let shellConsent = AIConsentQueue()
+    /// Every tool call on either surface is decided, and asked about, here.
+    @ObservationIgnored private lazy var gate = AgentGateCoordinator(core: core)
 
     init(
         chats: AIChatSurfacesState, settings: AppSettings, appIndex: AppIndex,
@@ -318,8 +318,13 @@ final class AIChatCoordinator {
         }
     }
 
+    /// The composer's switch, offered only where the route searches and the rules allow it.
+    func offersWebSearch(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).webSearch && gate.rules.webSearch == .allow
+    }
+
     private func webSearch(for chat: AIChatState) -> Bool {
-        core.aiSettings.webSearchEnabled && capabilities(for: chat).webSearch
+        core.aiSettings.webSearchEnabled && offersWebSearch(in: chat)
     }
 
     private var instructions: String? {
@@ -338,17 +343,17 @@ final class AIChatCoordinator {
 
     /// The same narrowing as `tools(for:scopedTo:)`, for a client that starts its own servers.
     private func toolServers(for chat: AIChatState, scopedTo slug: String?) -> AIToolServerSession? {
-        guard capabilities(for: chat).tools, chat.toolScope.isEnabled else { return nil }
-        let excluded = chat.toolScope.excluded
-        let chatID = chat.session.id
+        guard capabilities(for: chat).tools, chat.agentScope.isEnabled else { return nil }
         let mcp = core.mcpCoordinator
         return AIToolServerSession(
             rounds: core.aiSettings.toolRounds.limit,
             hosted: slug == nil ? blitzHostedTools(for: chat) : .none
-        ) {
-            await mcp.toolServers(scopedTo: slug).filter { !excluded.contains($0.handle) }
-        } consent: { call in
-            await mcp.permit(call, in: chatID)
+        ) { @MainActor [weak self, weak chat] in
+            guard let self, let chat else { return [] }
+            return await mcp.toolServers(scopedTo: slug) { self.gate.isOffered(.mcp($0), in: chat) }
+        } consent: { @MainActor [weak self, weak chat] call in
+            guard let self, let chat else { return false }
+            return await gate.authorize(call, in: chat) == nil
         }
     }
 
@@ -358,14 +363,26 @@ final class AIChatCoordinator {
     ) -> any AIProvider {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
-        let chatID = chat.session.id
         let blitz = blitzHostedTools(for: chat).run
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
-        ) { [mcp = core.mcpCoordinator] call in
+        ) { @MainActor [weak self, weak chat] call in
             if Self.isBlitzTool(call.name) { return await blitz(call) }
-            return await mcp.invoke(call, in: chatID)
+            guard let self, let chat else { return .failure(call.id, "The chat was closed.") }
+            return await runServerTool(call, in: chat)
         }
+    }
+
+    /// An MCP call on the loop route: the gate first, then the server Blitz holds open.
+    private func runServerTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        guard let route = MCPToolName.parse(call.name) else {
+            return .failure(call.id, "That tool is no longer connected.")
+        }
+        let request = AIToolServerCall(handle: route.slug, tool: route.tool)
+        if let refusal = await gate.authorize(request, in: chat) {
+            return .failure(call.id, refusal.message(for: .mcp(route.slug)))
+        }
+        return await core.mcpCoordinator.invoke(call)
     }
 
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
@@ -375,68 +392,58 @@ final class AIChatCoordinator {
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
     private func blitzHostedTools(for chat: AIChatState) -> AIHostedTools {
-        let calendar = core.calendarCoordinator
-        let reminders = core.remindersCoordinator
-        return AIHostedTools { [weak self] in
-            await self?.blitzTools() ?? []
-        } run: { [weak self, weak chat] call in
-            if CalendarToolCatalog.handles(call.name) { return await calendar.runTool(call) }
-            if ReminderToolCatalog.handles(call.name) { return await reminders.runTool(call) }
-            if ShellToolCatalog.handles(call.name), let self, let chat {
-                return await runShellCommand(call, in: chat)
+        AIHostedTools { @MainActor [weak self, weak chat] in
+            guard let self, let chat else { return [] }
+            return blitzTools(for: chat)
+        } run: { @MainActor [weak self, weak chat] call in
+            guard let self, let chat, let agentCall = AgentCall(toolCall: call) else {
+                return await AIHostedTools.none.run(call)
             }
-            return await AIHostedTools.none.run(call)
+            return await runBlitzTool(call, authorize: gate.authorization(for: agentCall, in: chat))
         }
+    }
+
+    /// Each runner reads its call, then puts its own dialog to the gate before it acts.
+    private func runBlitzTool(
+        _ call: AIToolCall, authorize: AgentAuthorization
+    ) async -> AIToolResult {
+        if CalendarToolCatalog.handles(call.name) {
+            return await core.calendarCoordinator.runTool(call, authorize: authorize)
+        }
+        if ReminderToolCatalog.handles(call.name) {
+            return await core.remindersCoordinator.runTool(call, authorize: authorize)
+        }
+        if ShellToolCatalog.handles(call.name) {
+            return await runShellCommand(call, authorize: authorize)
+        }
+        return await AIHostedTools.none.run(call)
     }
 
     /// `@server` narrows a turn further, but never past what the chat's tools menu switched off.
     private func tools(for chat: AIChatState, scopedTo slug: String?) -> [AITool] {
-        guard chat.toolScope.isEnabled else { return [] }
-        let excluded = chat.toolScope.excluded
+        guard chat.agentScope.isEnabled else { return [] }
         let servers = core.mcpCoordinator.tools(scopedTo: slug).filter { tool in
-            guard let route = MCPToolName.parse(tool.name) else { return true }
-            return !excluded.contains(route.slug)
+            guard let route = MCPToolName.parse(tool.name) else { return false }
+            return gate.isOffered(.mcp(route.slug), in: chat)
         }
         // `@server` addresses one server, so Blitz's own tools sit that turn out.
-        return slug == nil ? blitzTools() + servers : servers
+        return slug == nil ? blitzTools(for: chat) + servers : servers
     }
 
-    private func blitzTools() -> [AITool] {
-        let offersShell = core.aiSettings.agentRules.shell != .deny
-        return personalTools() + (offersShell ? ShellToolCatalog.tools() : [])
-    }
-
-    /// The calendar and reminders, as far as Settings → AI lets a model reach them.
-    private func personalTools() -> [AITool] {
+    /// Exactly the rows the policy offers this chat; a denied tool is never shown to the model.
+    private func blitzTools(for chat: AIChatState) -> [AITool] {
+        let offered = { (tool: AgentTool) in self.gate.isOffered(tool, in: chat) }
         let now = Date()
-        return core.calendarCoordinator.chatTools(now: now)
-            + core.remindersCoordinator.chatTools(now: now)
+        return core.calendarCoordinator.chatTools(
+            read: offered(.calendarRead), write: offered(.calendarWrite), now: now)
+            + core.remindersCoordinator.chatTools(
+                read: offered(.remindersRead), write: offered(.remindersWrite), now: now)
+            + (offered(.shell) ? ShellToolCatalog.tools() : [])
     }
 
-    /// What the context card names: the stores a turn on this route may reach through Blitz.
-    private func personalData(for chat: AIChatState) -> [String] {
-        guard capabilities(for: chat).tools, model(for: chat)?.reachesBlitzTools == true,
-            chat.toolScope.isEnabled
-        else { return [] }
-        var origins: [String] = []
-        for tool in personalTools() where !origins.contains(tool.origin) {
-            origins.append(tool.origin)
-        }
-        return origins
-    }
-
-    /// Whether the composer shows the chat's Confirm / Auto-run switch: only where the tool rides.
-    func offersShellCommands(in chat: AIChatState) -> Bool {
-        core.aiSettings.agentRules.shell != .deny && capabilities(for: chat).tools
-            && model(for: chat)?.reachesBlitzTools == true && chat.toolScope.isEnabled
-    }
-
-    func setShellApproval(_ approval: ShellCommandApproval, in chat: AIChatState) {
-        chat.shellApproval = approval
-    }
-
-    /// Re-checked per call, since Settings can change mid-reply, and again after any dialog.
-    private func runShellCommand(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+    private func runShellCommand(
+        _ call: AIToolCall, authorize: AgentAuthorization
+    ) async -> AIToolResult {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let request: ShellToolCatalog.Request
         do throws(AIToolArguments.Invalid) {
@@ -444,43 +451,44 @@ final class AIChatCoordinator {
         } catch {
             return .failure(call.id, error.message)
         }
-        var approved = chat.shellApproval == .automatic
-        if !approved { approved = await confirmShellCommand(request, in: chat) }
-        guard core.aiSettings.agentRules.shell != .deny else {
-            return .failure(call.id, "Running shell commands is turned off in Blitz's settings.")
-        }
-        guard approved else { return .failure(call.id, ShellToolCatalog.declined) }
+        let prompt = AgentPrompt.shell(
+            command: request.command,
+            summary: ShellToolCatalog.summary(of: request, homeDirectory: home))
+        if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
         return ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
     }
 
-    /// Queued behind a command already asking; the mode is read again once this one's turn comes.
-    private func confirmShellCommand(
-        _ request: ShellToolCatalog.Request, in chat: AIChatState
-    ) async -> Bool {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return await shellConsent.ask { @MainActor [weak self] in
-            guard let self, core.aiSettings.agentRules.shell != .deny else { return false }
-            guard chat.shellApproval == .ask else { return true }
-            return await core.confirm(
-                title: "Run this command?",
-                message: ShellToolCatalog.summary(of: request, homeDirectory: home),
-                symbol: "terminal", confirmTitle: "Run", tone: .neutral, confirmRole: .standard)
-        }
+    // MARK: - The session scope
+
+    /// Built-in rows the composer's menu lists: only where this route carries Blitz's own tools.
+    func listedBuiltInTools(for chat: AIChatState) -> [AgentTool] {
+        guard model(for: chat)?.reachesBlitzTools == true else { return [] }
+        return gate.listed(AgentTool.builtIn.filter { $0 != .webSearch })
     }
 
-    /// The servers a chat's tools menu offers; empty when MCP is off or nothing is set up.
-    var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
+    /// The servers the composer's menu lists; one the table denies is left out, like the model.
+    func listedServers(for chat: AIChatState) -> [MCPServer] {
+        let listed = Set(gate.listed(mcpServers.map { .mcp($0.slug) }))
+        return mcpServers.filter { listed.contains(.mcp($0.slug)) }
+    }
 
     func setToolsEnabled(_ enabled: Bool, in chat: AIChatState) {
-        chat.toolScope.isEnabled = enabled
+        chat.agentScope.isEnabled = enabled
     }
 
-    func toggleToolServer(_ slug: String, in chat: AIChatState) {
-        chat.toolScope.toggle(slug)
+    func toggleTool(_ tool: AgentTool, in chat: AIChatState) {
+        chat.agentScope.toggle(tool)
     }
 
-    func showMCPSettings() {
-        settingsCoordinator.showSettings(tab: .ai)
+    func setAsksForEverything(_ asks: Bool, in chat: AIChatState) {
+        chat.agentScope.asksForEverything = asks
+    }
+
+    /// Every enabled server, before the agent's rules have their say.
+    private var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
+
+    func showAgentSettings() {
+        settingsCoordinator.showSettings(tab: .ai, revealing: .section(.aiAgent))
     }
 
     /// The server a draft is addressed to, so the composer can show it as a chip while typing.
@@ -524,8 +532,6 @@ final class AIChatCoordinator {
     func contextReport(for chat: AIChatState, detailed: Bool = true) -> ChatContextReport {
         let session = chat.session
         let budget = contextBudget(for: chat)
-        let can = capabilities(for: chat)
-        let scope = chat.toolScope
         return ChatContextReport(
             modelTitle: detailed ? selectedModelTitle(for: chat) : "",
             historyBytes: session.historyBytes, budget: budget,
@@ -535,11 +541,22 @@ final class AIChatCoordinator {
             stagedBytes: chat.pendingAttachments.reduce(0) { $0 + $1.payload.byteCount },
             usage: chat.usage,
             systemPrompt: core.aiSettings.systemPromptEnabled,
-            webSearch: core.aiSettings.webSearchEnabled && can.webSearch,
-            toolServers: can.tools && scope.isEnabled
-                ? mcpServers.count { scope.allows($0.slug) } : 0,
-            personalData: detailed ? personalData(for: chat) : [],
-            shellCommands: detailed && offersShellCommands(in: chat) ? chat.shellApproval : nil)
+            webSearch: webSearch(for: chat),
+            tools: detailed ? toolRows(for: chat) : [])
+    }
+
+    /// What a call to each tool the next turn is offered would do, in the menu's order.
+    private func toolRows(for chat: AIChatState) -> [ChatContextReport.ToolRow] {
+        guard capabilities(for: chat).tools else { return [] }
+        let servers = mcpServers
+        let tools = listedBuiltInTools(for: chat) + servers.map { AgentTool.mcp($0.slug) }
+        return gate.decisions(for: tools, in: chat).map { row in
+            guard case .mcp(let slug) = row.tool else {
+                return ChatContextReport.ToolRow(title: row.tool.title, decision: row.decision)
+            }
+            let title = servers.first { $0.slug == slug }?.title ?? slug
+            return ChatContextReport.ToolRow(title: title, decision: row.decision)
+        }
     }
 
     // MARK: - Attachments
@@ -820,11 +837,13 @@ struct ChatContextReport: Equatable {
     let usage: AIUsage?
     let systemPrompt: Bool
     let webSearch: Bool
-    let toolServers: Int
-    /// The Mac's own stores in reach, such as the calendar; left empty for the gauge alone.
-    let personalData: [String]
-    /// Nil when no command can run, as for the gauge alone.
-    let shellCommands: ShellCommandApproval?
+    /// Each tool the next turn is offered; left empty for the gauge alone.
+    let tools: [ToolRow]
+
+    struct ToolRow: Equatable {
+        let title: String
+        let decision: AgentDecision
+    }
 
     /// The model's own window when the route reported one; otherwise Blitz's history budget.
     var fill: Double {

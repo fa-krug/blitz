@@ -236,21 +236,13 @@ final class RemindersCoordinator {
 
     // MARK: - Chat tools
 
-    /// What a chat model may call now: nothing unless this feature and its AI setting allow it.
-    func chatTools(now: Date) -> [AITool] {
-        let rules = core.aiSettings.agentRules
-        guard settings.remindersEnabled, rules.remindersRead != .deny else { return [] }
-        return ReminderToolCatalog.tools(
-            canWrite: rules.remindersWrite != .deny, now: now, calendar: .current)
+    /// The halves the agent's rules offer; the feature switch is already part of those rules.
+    func chatTools(read: Bool, write: Bool, now: Date) -> [AITool] {
+        ReminderToolCatalog.tools(canRead: read, canWrite: write, now: now, calendar: .current)
     }
 
-    /// Re-checked per call, since Settings can change mid-reply; Read & Write is the consent.
-    func runTool(_ call: AIToolCall) async -> AIToolResult {
-        let rules = core.aiSettings.agentRules
-        let canWrite = rules.remindersWrite != .deny
-        guard settings.remindersEnabled, rules.remindersRead != .deny else {
-            return .failure(call.id, "Chat access to Reminders is turned off in Blitz's settings.")
-        }
+    /// A call is read before the gate is asked, so a bad one is a sentence and never a dialog.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
         store.refreshAccess()
         guard store.access == .granted else {
             return .failure(call.id, "macOS has not given Blitz access to Reminders.")
@@ -264,21 +256,54 @@ final class RemindersCoordinator {
         }
         switch request {
         case .list(let query):
+            if let refusal = await authorize(.read(.remindersRead)) {
+                return .failure(call.id, refusal)
+            }
             let answer = ReminderToolCatalog.render(
                 await store.loadedReminders(), query: query, now: Date(), calendar: .current)
             return AIToolResult(callID: call.id, content: answer, isError: false)
-        case .create(let draft) where canWrite:
+        case .create(let draft):
+            let prompt = Self.writePrompt(
+                "Add \u{201C}\(draft.trimmedTitle)\u{201D} to Reminders?",
+                ReminderToolCatalog.summary(of: draft, now: Date(), calendar: .current))
+            if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
             return createForChat(draft, callID: call.id)
-        case .update(let id, let edit) where canWrite:
-            return updateForChat(id: id, edit: edit, callID: call.id)
-        case .complete(let id) where canWrite:
-            return await completeForChat(id: id, callID: call.id)
-        case .create, .update, .complete:
-            return .failure(call.id, "Chat may read reminders but not change them.")
+        case .update(let id, let edit):
+            guard let reminder = store.openReminder(id: id) else { return Self.gone(call.id) }
+            let draft = edit.applied(to: ReminderDraft(editing: reminder))
+            let prompt = Self.writePrompt(
+                "Change \u{201C}\(reminder.title)\u{201D}?",
+                Self.changeSummary(from: reminder, to: draft))
+            if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+            return updateForChat(reminder, with: draft, callID: call.id)
+        case .complete(let id):
+            guard let reminder = store.openReminder(id: id) else { return Self.gone(call.id) }
+            let prompt = Self.writePrompt(
+                "Complete \u{201C}\(reminder.title)\u{201D}?",
+                "It is checked off in \(reminder.listName) on every device.")
+            if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+            return completeForChat(reminder, callID: call.id)
         }
     }
 
-    /// Written straight away: the reader asked in the chat, and the transcript shows the call.
+    private static func writePrompt(_ title: String, _ message: String) -> AgentPrompt {
+        .write(title: title, message: message, symbol: AgentTool.remindersWrite.symbolName)
+    }
+
+    /// A rename leads, since the title above names the reminder as it was.
+    private static func changeSummary(
+        from reminder: ReminderItem, to draft: ReminderDraft
+    ) -> String {
+        let summary = ReminderToolCatalog.summary(of: draft, now: Date(), calendar: .current)
+        guard draft.trimmedTitle != reminder.title else { return summary }
+        return "Renamed \u{201C}\(draft.trimmedTitle)\u{201D}\n\(summary)"
+    }
+
+    private static func gone(_ callID: String) -> AIToolResult {
+        .failure(callID, "No open reminder has that id. List them again.")
+    }
+
+    /// Written straight away once allowed: the reader asked in chat, and the transcript shows it.
     private func createForChat(_ draft: ReminderDraft, callID: String) -> AIToolResult {
         guard let id = store.create(draft) else {
             return .failure(callID, "No Reminders list on this Mac accepts new reminders.")
@@ -288,12 +313,8 @@ final class RemindersCoordinator {
     }
 
     private func updateForChat(
-        id: ReminderItem.ID, edit: ReminderToolCatalog.Edit, callID: String
+        _ reminder: ReminderItem, with draft: ReminderDraft, callID: String
     ) -> AIToolResult {
-        guard let reminder = store.openReminder(id: id) else {
-            return .failure(callID, "No open reminder has that id. List them again.")
-        }
-        let draft = edit.applied(to: ReminderDraft(editing: reminder))
         guard store.update(reminder, with: draft) else {
             return .failure(callID, "It may have been changed or deleted somewhere else.")
         }
@@ -302,17 +323,7 @@ final class RemindersCoordinator {
             isError: false)
     }
 
-    private func completeForChat(id: ReminderItem.ID, callID: String) async -> AIToolResult {
-        guard let reminder = store.openReminder(id: id) else {
-            return .failure(callID, "No open reminder has that id. List them again.")
-        }
-        guard
-            await core.confirm(
-                title: "Complete \u{201C}\(reminder.title)\u{201D}?",
-                message: "It is checked off in \(reminder.listName) on every device.",
-                symbol: "checklist", confirmTitle: "Complete", tone: .neutral,
-                confirmRole: .standard)
-        else { return .failure(callID, "The user declined to complete this reminder.") }
+    private func completeForChat(_ reminder: ReminderItem, callID: String) -> AIToolResult {
         guard store.complete(reminder) else {
             return .failure(callID, "It may have been changed or deleted somewhere else.")
         }

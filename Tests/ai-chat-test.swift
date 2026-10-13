@@ -65,7 +65,7 @@ struct AIChatTests {
         findWalksMatchesAndWraps()
         chatStepsFollowTheSidebarAndWrap()
         citationsCloseTheSentenceThatCitedThem()
-        toolScopeSwitchesServersPerChat()
+        agentScopeIsPerChatAndStartsOpen()
         await usageIsKeptWithTheReplyThatReportedIt()
 
         print("\(passes) passed, \(failures) failed")
@@ -1638,14 +1638,28 @@ extension AIChatTests {
             "a reply with no sources gets no numbers")
     }
 
-    static func toolScopeSwitchesServersPerChat() {
-        var scope = ChatToolScope()
-        expect(scope.allows("files"), "a new chat may call every connected server")
-        scope.toggle("files")
-        expect(!scope.allows("files") && scope.allows("web"), "one server switches off alone")
-        scope.toggle("files")
+    static func agentScopeIsPerChatAndStartsOpen() {
+        var scope = AgentSessionScope()
+        expect(scope.allows(.mcp("files")), "a new chat may call every connected server")
+        scope.toggle(.mcp("files"))
+        expect(
+            !scope.allows(.mcp("files")) && scope.allows(.mcp("web")) && scope.allows(.shell),
+            "one server switches off alone")
+        scope.toggle(.mcp("files"))
         scope.isEnabled = false
-        expect(!scope.allows("web"), "switching tools off stops every server")
+        expect(!scope.allows(.mcp("web")) && !scope.allows(.shell), "tools off stops every tool")
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-ai-scope-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: ChatHistoryStore(directory: directory))
+        chat.agentScope.excluded = [.shell]
+        chat.agentScope.asksForEverything = true
+        chat.startNewChat()
+        expect(chat.agentScope == AgentSessionScope(), "a new chat starts with the scope open")
+        chat.agentScope.isEnabled = false
+        chat.delete(id: chat.session.id)
+        expect(chat.agentScope == AgentSessionScope(), "deleting the open chat reopens the scope")
     }
 
     static func choicesComeOutOfTheirFence() {

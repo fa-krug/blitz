@@ -698,11 +698,19 @@ struct CalendarTests {
     }
 
     static func chatToolOffer() {
-        let readOnly = CalendarToolCatalog.tools(canWrite: false, now: october(3, 14), calendar: calendar)
+        func offer(read: Bool, write: Bool) -> [AITool] {
+            CalendarToolCatalog.tools(
+                canRead: read, canWrite: write, now: october(3, 14), calendar: calendar)
+        }
+        let readOnly = offer(read: true, write: false)
         expect(
             readOnly.map(\.name) == [CalendarToolCatalog.listEventsName],
             "read-only access offers no tool that writes")
-        let both = CalendarToolCatalog.tools(canWrite: true, now: october(3, 14), calendar: calendar)
+        expect(
+            offer(read: false, write: true).map(\.name) == [CalendarToolCatalog.createEventName],
+            "a write the rules allow is offered without the read they deny")
+        expect(offer(read: false, write: false).isEmpty, "nothing allowed offers nothing")
+        let both = offer(read: true, write: true)
         expect(
             both.map(\.name) == [CalendarToolCatalog.listEventsName, CalendarToolCatalog.createEventName],
             "read and write adds Create Event")

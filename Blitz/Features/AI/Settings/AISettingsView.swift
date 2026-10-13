@@ -33,7 +33,6 @@ struct AISettingsView: View {
 
             Group {
                 defaultModelSection
-                chatSection
                 AgentSettingsSection()
                 ShellRulesSection()
                 conversationsSection
@@ -117,18 +116,6 @@ struct AISettingsView: View {
 
     private func syncSelection() {
         settings.reconcile(subscription: subscription, installedAI: installedAI)
-    }
-
-    private var chatSection: some View {
-        @Bindable var settings = settings
-        return Section {
-            Toggle(isOn: $settings.webSearchEnabled) {
-                SettingsRowTitle(.aiChat, "Web search")
-                Text("Codex and OpenRouter only. Prompts go to a search engine.")
-            }
-        } header: {
-            SettingsSectionHeader(.aiChat)
-        }
     }
 
     private var conversationsSection: some View {

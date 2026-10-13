@@ -305,7 +305,6 @@ enum SettingsSearchCatalog {
             ]),
         .init(.aiDefault, "Default model", keywords: ["llm", "gpt", "claude", "grok"]),
         .init(.aiDefault, "Reasoning effort", keywords: ["thinking", "effort", "deepseek"]),
-        .init(.aiChat, "Web search", keywords: ["browse", "internet"]),
         .init(
             group: .aiAgent, "Agent",
             keywords: ["tools", "permissions", "allow", "ask", "deny", "rules", "privacy"]),
@@ -318,6 +317,9 @@ enum SettingsSearchCatalog {
         .init(
             group: .aiAgent, "Reminders access",
             keywords: ["read reminders", "change reminders", "to-do", "todo", "tasks", "tools"]),
+        .init(
+            group: .aiAgent, "Web search",
+            keywords: ["browse", "internet", "search engine", "tools"]),
         .init(
             group: .aiAgent, "MCP server trust",
             keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),

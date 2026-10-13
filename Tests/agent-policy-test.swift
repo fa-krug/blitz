@@ -205,16 +205,18 @@ struct AgentPolicyTests {
         ] {
             check("\(name) writes", AgentTool(wireName: name) == .remindersWrite)
         }
-        let catalogNames =
-            ShellToolCatalog.tools().map(\.name)
-            + CalendarToolCatalog.tools(canWrite: true, now: Date(), calendar: .current).map(\.name)
-            + ReminderToolCatalog.tools(canWrite: true, now: Date(), calendar: .current).map(\.name)
+        func catalogs(read: Bool, write: Bool) -> [String] {
+            let now = Date()
+            return (CalendarToolCatalog.tools(
+                canRead: read, canWrite: write, now: now, calendar: .current)
+                + ReminderToolCatalog.tools(
+                    canRead: read, canWrite: write, now: now, calendar: .current)).map(\.name)
+        }
+        let catalogNames = ShellToolCatalog.tools().map(\.name) + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
             catalogNames.allSatisfy { AgentTool(builtInToolName: $0) != nil })
-        let readOnlyNames =
-            CalendarToolCatalog.tools(canWrite: false, now: Date(), calendar: .current).map(\.name)
-            + ReminderToolCatalog.tools(canWrite: false, now: Date(), calendar: .current).map(\.name)
+        let readOnlyNames = catalogs(read: true, write: false)
         check(
             "what a read-only catalog offers maps to a read row",
             readOnlyNames.allSatisfy { name in
@@ -554,6 +556,136 @@ struct AgentPolicyTests {
             "a suggestion matches the command it came from",
             ShellRule(pattern: AgentPolicy.suggestedPattern(for: "git status") ?? "", decision: .allow)
                 .matches("git status"))
+
+        // MARK: Calls from the wire
+
+        func call(_ name: String, _ arguments: String = "{}") -> AgentCall? {
+            AgentCall(toolCall: AIToolCall(id: "1", name: name, arguments: arguments))
+        }
+        check(
+            "a shell call carries its command, trimmed as the runner reads it",
+            call(ShellToolCatalog.runCommandName, #"{"command":"  ls -la "}"#) == .shell("ls -la"))
+        check(
+            "a shell call with no command still names the shell",
+            call(ShellToolCatalog.runCommandName, "not json") == AgentCall(tool: .shell))
+        check(
+            "a calendar write carries no command",
+            call(CalendarToolCatalog.createEventName, #"{"command":"ls"}"#)
+                == AgentCall(tool: .calendarWrite))
+        check(
+            "a reminder completion is a write",
+            call(ReminderToolCatalog.completeName) == AgentCall(tool: .remindersWrite))
+        check(
+            "an MCP call is its server's row",
+            call(MCPToolName.compose(slug: "github", tool: "list"))
+                == AgentCall(tool: .mcp("github")))
+        check("an unknown call maps to nothing", call("launch_rockets") == nil)
+
+        // MARK: Ask dialogs
+
+        func titles(_ prompt: AgentPrompt) -> [String] { prompt.choices.map(\.title) }
+        let ls = AgentPrompt.shell(command: "ls -la", summary: "ls -la\n\nIn ~")
+        check(
+            "a plain command offers Run, Always Allow its pattern, Don't Run",
+            titles(ls) == ["Run", "Always Allow \u{201C}ls *\u{201D}", "Don't Run"])
+        check(
+            "Always Allow carries the suggested pattern",
+            ls.choices[1] == .alwaysAllowCommands(pattern: "ls *"))
+        check("↵ runs the command once", ls.defaultIndex == 0 && ls.choices[0].allows)
+        check("Escape, the last choice, refuses", ls.choices.last?.allows == false)
+        check(
+            "the shell dialog shows the summary verbatim",
+            ls.title == "Run this command?" && ls.message == "ls -la\n\nIn ~")
+        for command in ["rm -rf build", "sudo ls", "ls && pwd", "ls | wc -l", "ls $(pwd)", "./x"] {
+            check(
+                "\(command) offers no Always Allow",
+                titles(AgentPrompt.shell(command: command, summary: command))
+                    == ["Run", "Don't Run"])
+        }
+        let write = AgentPrompt.write(title: "Add “Lunch”?", message: "Sat", symbol: "calendar")
+        check(
+            "a write is Allow or Don't Allow, with its summary",
+            titles(write) == ["Allow", "Don't Allow"] && write.message == "Sat")
+        let read = AgentPrompt.read(.calendarRead)
+        check(
+            "a read may be allowed for the chat",
+            titles(read) == ["Allow", "Allow This Chat", "Don't Allow"]
+                && read.title == "Let the agent read your calendar?")
+        check(
+            "reminders read as reminders",
+            AgentPrompt.read(.remindersRead).title == "Let the agent read your reminders?")
+        let server = AgentPrompt.mcp(serverTitle: "GitHub", tool: "list_issues")
+        check(
+            "an MCP server keeps its three-way dialog, This Chat by default",
+            titles(server) == ["Always Allow", "Allow This Chat", "Don't Allow"]
+                && server.defaultIndex == 1 && server.title == "Let GitHub run its tools?")
+        check(
+            "every dialog ends on its refusal",
+            [ls, write, read, server].allSatisfy { prompt in
+                prompt.choices.last?.allows == false
+                    && prompt.choices.dropLast().allSatisfy(\.allows)
+                    && prompt.choices.indices.contains(prompt.defaultIndex)
+            })
+
+        // MARK: Refusals
+
+        check(
+            "a denied command says the rules stopped it",
+            AgentRefusal.denied.message(for: .shell)
+                == "Blitz's agent rules do not let the model run this command.")
+        check(
+            "a declined event says the user did",
+            AgentRefusal.declined.message(for: .calendarWrite)
+                == "The user declined to let the model add this event.")
+        check(
+            "every row has both sentences, and they differ",
+            (AgentTool.builtIn + [.mcp("x")]).allSatisfy {
+                AgentRefusal.denied.message(for: $0) != AgentRefusal.declined.message(for: $0)
+            })
+
+        // MARK: This chat's grants
+
+        let asking = AgentRules(
+            shell: .ask, calendarRead: .ask, calendarWrite: .ask, remindersRead: .deny,
+            remindersWrite: .ask, webSearch: .allow)
+        let granted = asking.granting([.calendarRead, .remindersRead, .shell, .calendarWrite])
+        check("a granted read is allowed", granted.calendarRead == .allow)
+        check("a grant never lifts a Deny", granted.remindersRead == .deny)
+        check(
+            "the shell and writes ignore a grant",
+            granted.shell == .ask && granted.calendarWrite == .ask)
+        check(
+            "only reads and servers can be allowed for a chat",
+            AgentTool.builtIn.filter(\.canAllowForSession) == [.calendarRead, .remindersRead]
+                && AgentTool.mcp("x").canAllowForSession)
+
+        // MARK: Context card rows
+
+        let rows = AgentPolicy.decisions(
+            for: [.shell, .calendarRead, .remindersRead, .mcp("github"), .mcp("files")],
+            rules: asking, mcpTrust: { $0 == "github" ? .allow : .deny },
+            scope: AgentSessionScope())
+        check(
+            "rows list the offered tools in order, with their bare decision",
+            rows == [
+                .init(tool: .shell, decision: .ask), .init(tool: .calendarRead, decision: .ask),
+                .init(tool: .mcp("github"), decision: .allow)
+            ])
+        var narrowed = AgentSessionScope()
+        narrowed.excluded = [.shell]
+        narrowed.asksForEverything = true
+        check(
+            "the chat's scope removes and narrows rows",
+            AgentPolicy.decisions(
+                for: [.shell, .mcp("github")], rules: asking,
+                mcpTrust: { _ in .allow }, scope: narrowed)
+                == [.init(tool: .mcp("github"), decision: .ask)])
+        narrowed.isEnabled = false
+        check(
+            "tools off leaves no rows",
+            AgentPolicy.decisions(
+                for: AgentTool.builtIn, rules: asking, mcpTrust: { _ in .allow }, scope: narrowed)
+                .isEmpty)
 
         exit(failures == 0 ? 0 : 1)
     }

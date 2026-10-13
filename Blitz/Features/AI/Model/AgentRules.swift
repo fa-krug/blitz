@@ -79,6 +79,16 @@ struct AgentRules: Equatable, Sendable {
         return rules
     }
 
+    /// "Allow This Chat" answers a row's Ask ahead of time; it never lifts a Deny.
+    func granting(_ granted: Set<AgentTool>) -> AgentRules {
+        var rules = self
+        for tool in AgentTool.builtIn
+        where tool.canAllowForSession && granted.contains(tool) && decision(for: tool) == .ask {
+            rules.set(.allow, for: tool)
+        }
+        return rules
+    }
+
     private static func withoutAsk(_ decision: AgentDecision) -> AgentDecision {
         decision == .ask ? .deny : decision
     }

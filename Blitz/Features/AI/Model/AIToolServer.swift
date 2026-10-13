@@ -50,7 +50,9 @@ struct AIToolServerSession: Sendable {
         self.hosted = hosted
         self.servers = servers
         let queue = AIConsentQueue()
-        self.consent = { @MainActor call in await queue.ask { await consent(call) } }
+        self.consent = { @MainActor call in
+            await queue.ask(cancelled: false) { await consent(call) }
+        }
     }
 }
 
@@ -60,7 +62,10 @@ final class AIConsentQueue {
     private var isAsking = false
     private var waiting: [CheckedContinuation<Void, Never>] = []
 
-    func ask(_ question: @Sendable () async -> Bool) async -> Bool {
+    /// `cancelled` answers for a question whose task ended while it waited its turn.
+    func ask<Answer: Sendable>(
+        cancelled: Answer, _ question: @Sendable () async -> Answer
+    ) async -> Answer {
         if isAsking {
             await withCheckedContinuation { waiting.append($0) }
         } else {
@@ -69,7 +74,7 @@ final class AIConsentQueue {
         defer {
             if waiting.isEmpty { isAsking = false } else { waiting.removeFirst().resume() }
         }
-        guard !Task.isCancelled else { return false }
+        guard !Task.isCancelled else { return cancelled }
         return await question()
     }
 }

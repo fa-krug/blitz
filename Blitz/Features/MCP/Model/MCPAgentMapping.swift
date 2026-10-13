@@ -31,3 +31,13 @@ extension AgentTool {
         }
     }
 }
+
+extension AgentCall {
+    /// The row a model's call falls under, with the command a shell call would run.
+    init?(toolCall: AIToolCall) {
+        guard let tool = AgentTool(wireName: toolCall.name) else { return nil }
+        let command =
+            tool == .shell ? (try? AIToolArguments(toolCall.arguments))?.string("command") : nil
+        self.init(tool: tool, command: command)
+    }
+}

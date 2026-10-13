@@ -132,9 +132,6 @@ struct ShellToolTests {
             "a launch failure is one sentence",
             ShellToolCatalog.answer(.init(ending: .failedToStart("no shell")))
                 == "The command could not be started: no shell")
-        check(
-            "a decline is its own sentence",
-            ShellToolCatalog.declined == "The user declined to run this command.")
 
         let umlaut = Array("aä".utf8)
         let cut = ShellToolCatalog.output(head: Array(umlaut.prefix(2)), totalBytes: umlaut.count)

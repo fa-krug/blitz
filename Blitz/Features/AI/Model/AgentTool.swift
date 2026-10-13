@@ -57,6 +57,14 @@ enum AgentTool: Hashable, Sendable {
 
     /// The provider runs a web search itself, so Blitz never sees a call it could stop to ask.
     var canAsk: Bool { self != .webSearch }
+
+    /// Whether an Ask may be answered for the whole chat; a write or a command is asked each time.
+    var canAllowForSession: Bool {
+        switch self {
+        case .calendarRead, .remindersRead, .mcp: true
+        case .shell, .calendarWrite, .remindersWrite, .webSearch: false
+        }
+    }
 }
 
 extension AgentTool: Codable {

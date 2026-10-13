@@ -52,6 +52,24 @@ enum AgentPolicy {
         tools.filter { isOffered($0, rules: rules, mcpTrust: mcpTrust, scope: scope) }
     }
 
+    /// One tool a turn is offered and what a bare call to it does, as the context card lists it.
+    struct ToolDecision: Equatable, Sendable {
+        let tool: AgentTool
+        let decision: AgentDecision
+    }
+
+    /// In the order given, leaving out every tool the turn is not offered.
+    static func decisions(
+        for tools: [AgentTool], rules: AgentRules, mcpTrust: (String) -> AgentDecision,
+        scope: AgentSessionScope
+    ) -> [ToolDecision] {
+        tools.compactMap { tool in
+            let decision = decision(
+                for: AgentCall(tool: tool), rules: rules, mcpTrust: mcpTrust, scope: scope)
+            return decision == .deny ? nil : ToolDecision(tool: tool, decision: decision)
+        }
+    }
+
     /// The pattern "Always Allow" proposes: one plain command's first word, then ` *`.
     static func suggestedPattern(for command: String) -> String? {
         guard let segments = ShellCommandSegments.segments(of: command), segments.count == 1
