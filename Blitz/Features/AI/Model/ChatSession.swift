@@ -43,7 +43,7 @@ struct ChatSession: Equatable, Sendable {
             historyMessages.map { message in
                 AIMessage(
                     role: message.role == .user ? .user : .assistant,
-                    text: message.text, images: message.images, documents: message.documents)
+                    text: message.contextText, images: message.images, documents: message.documents)
             }, textBudget: textBudget)
     }
 
@@ -56,7 +56,7 @@ struct ChatSession: Equatable, Sendable {
 
     /// Counted in the budget's own unit; past `textBudget` the oldest turns stop going out.
     var historyBytes: Int {
-        historyMessages.reduce(0) { $0 + $1.text.utf8.count }
+        historyMessages.reduce(0) { $0 + $1.contextText.utf8.count }
     }
 
     /// How many turns `requestMessages` would send, counted without building or inlining them.
@@ -67,10 +67,10 @@ struct ChatSession: Equatable, Sendable {
         }
         var remaining = textBudget
         let tail = history[(newest + 1)...]
-        remaining -= tail.reduce(0) { $0 + $1.text.utf8.count }
+        remaining -= tail.reduce(0) { $0 + $1.contextText.utf8.count }
         var head: [ChatMessage.Role] = []
         for message in history[..<newest].reversed() {
-            remaining -= message.text.utf8.count
+            remaining -= message.contextText.utf8.count
             guard remaining >= 0 else { break }
             head.append(message.role)
         }

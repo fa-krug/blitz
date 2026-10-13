@@ -67,6 +67,11 @@ struct AIChatTests {
         citationsCloseTheSentenceThatCitedThem()
         agentScopeIsPerChatAndStartsOpen()
         await usageIsKeptWithTheReplyThatReportedIt()
+        questionsAnswerFromChipsAndText()
+        questionsSitWhereTheyWereAskedAndReachLaterTurns()
+        await aQuestionPausesTheTurnUntilAnswered()
+        await stopAndLeavingEndAQuestionExactlyOnce()
+        await aQuestionAsksOneAtATime()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -219,6 +224,7 @@ struct AIChatTests {
             case .text(let text): "text \(text)"
             case .search(let search): "search \(search.query ?? "")"
             case .tools(let uses): "tools \(uses.map(\.callID).joined(separator: ","))"
+            case .question(let asked): "question \(asked.question.question)"
             case .reasoning(let block): "reasoning \(block.text)"
             }
         }
@@ -1716,6 +1722,281 @@ extension AIChatTests {
         expect(reopened.usage == reported, "a reopened chat still knows its last turn's tokens")
     }
 
+    // MARK: - Questions
+
+    static let formats = AskUserToolCatalog.Question(
+        id: UUID(), question: "Which format?", options: ["PDF", "Word", "HTML"], multiSelect: false)
+
+    static func pending(_ question: AskUserToolCatalog.Question = formats) -> ChatQuestion {
+        ChatQuestion(question: question, textOffset: 0, sequence: 0)
+    }
+
+    static func questionsAnswerFromChipsAndText() {
+        var single = pending()
+        single.toggle(1)
+        expect(single.picked.isEmpty, "a single-choice question has nothing to toggle: a chip answers")
+        expect(
+            single.answer(choosing: 1) == ChatQuestion.Answer(selected: [1])
+                && single.answer(choosing: 3) == nil,
+            "a chip answers with itself, and only a chip the question offered")
+        expect(single.answer(typing: " \n ") == nil, "a blank composer is no answer")
+        expect(
+            single.answer(typing: " Markdown ") == ChatQuestion.Answer(text: "Markdown"),
+            "typed text is the answer, trimmed")
+
+        var multi = pending(
+            AskUserToolCatalog.Question(
+                id: UUID(), question: "Which days?", options: ["Mon", "Tue", "Wed"],
+                multiSelect: true))
+        multi.toggle(2)
+        multi.toggle(0)
+        multi.toggle(1)
+        multi.toggle(1)
+        multi.toggle(7)
+        expect(multi.picked == [0, 2], "chips toggle on and off, and only offered ones")
+        expect(
+            multi.answer(typing: "") == ChatQuestion.Answer(selected: [0, 2]),
+            "Send answers with the picked chips, in the question's order")
+        expect(
+            multi.answer(typing: "evenings") == ChatQuestion.Answer(selected: [0, 2], text: "evenings"),
+            "text sent from the composer carries the picked chips with it")
+
+        var answered = multi
+        answered.answer = multi.answer(typing: "evenings")
+        expect(
+            answered.chosenOptions == ["Mon", "Wed"] && answered.typedAnswer == "evenings"
+                && !answered.wentUnanswered,
+            "an answered card shows the options chosen and what was typed")
+        answered.toggle(1)
+        expect(
+            answered.answer(typing: "more") == nil && answered.answer(choosing: 0) == nil
+                && answered.picked == [0, 2],
+            "an answered question takes no second answer and toggles nothing")
+        var unanswered = pending()
+        unanswered.answer = AskUserToolCatalog.Answer.none
+        expect(unanswered.wentUnanswered, "Stop's answer reads as not answered")
+    }
+
+    static func questionsSitWhereTheyWereAskedAndReachLaterTurns() {
+        var asked = ChatQuestion(question: formats, textOffset: 2, sequence: 1)
+        let use = ChatToolUse(
+            callID: "t", origin: "Files", title: "read", state: .completed, textOffset: 2,
+            sequence: 0)
+        var message = ChatMessage(
+            role: .assistant, text: "abcd", toolUses: [use], questions: [asked])
+        expect(
+            shape(message.segments) == ["text ab", "tools t", "question Which format?", "text cd"],
+            "a question sits at its offset, after a call made just before it")
+        expect(message.nextSequence == 2, "and takes its place in the reply's order")
+        expect(message.pendingQuestion == asked, "a question with no answer is still waiting")
+        expect(message.contextText == "abcd", "one still waiting is nothing a later turn can read")
+
+        asked.answer = ChatQuestion.Answer(selected: [0], text: "A4")
+        message.questions = [asked]
+        expect(message.pendingQuestion == nil, "an answered question waits on nobody")
+        expect(
+            message.contextText == "ab\n\nask_user: Which format?\nThe user chose: PDF\n"
+                + "The user added: A4\n\ncd",
+            "a later turn reads the question and its answer where the reply asked it")
+
+        var session = ChatSession()
+        session.append(ChatMessage(role: .user, text: "Export it"))
+        session.append(message)
+        session.append(ChatMessage(role: .user, text: "Thanks"))
+        let sent = session.requestMessages()
+        expect(
+            sent[1].text == message.contextText,
+            "the request carries it as the reply's own text, inside the same budget")
+        expect(
+            session.historyBytes == "Export it".utf8.count + message.contextText.utf8.count
+                + "Thanks".utf8.count,
+            "and the budget counts it as sent")
+    }
+
+    /// The coordinator's runner for `ask_user`, minus the scope check `agent-policy-test` pins.
+    static func askingLoop(
+        _ base: ScriptedProvider, _ chat: AIChatState, results: AskedResults
+    ) -> AIToolLoopProvider {
+        AIToolLoopProvider(
+            base: base, tools: AskUserToolCatalog.tools(), maxRounds: 10
+        ) { @MainActor [weak chat] call in
+            guard let chat, let question = try? AskUserToolCatalog.question(arguments: call.arguments)
+            else { return .failure(call.id, "unreadable") }
+            let result =
+                await chat.ask(question).map {
+                    AskUserToolCatalog.result($0, to: question, callID: call.id)
+                } ?? .failure(call.id, AskUserToolCatalog.oneAtATime)
+            results.all.append(result)
+            return result
+        }
+    }
+
+    static let askFormat = AIStreamEvent.toolCallRequested(
+        AIToolCall(
+            id: "q1", name: "ask_user",
+            arguments: #"{"question":"Which format?","options":["PDF","Word"]}"#))
+
+    static func waitUntil(_ condition: () -> Bool) async {
+        for _ in 0..<200 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    static func aQuestionPausesTheTurnUntilAnswered() async {
+        let (store, directory) = temporaryStore("question")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: store)
+        let results = AskedResults()
+        let base = ScriptedProvider(rounds: [
+            [.text("Let me check."), askFormat],
+            [.text(" PDF it is."), .finished]
+        ])
+        expect(chat.send("Export it", using: askingLoop(base, chat, results: results)), "starts")
+        await waitUntil { chat.pendingQuestion != nil }
+        expect(
+            chat.isStreaming && chat.pendingQuestion?.question.question == "Which format?",
+            "the turn pauses on the question")
+        expect(
+            shape(chat.session.messages.last?.segments) == ["text Let me check.", "question Which format?"],
+            "its card sits where the reply paused, with no call row beside it")
+        expect(base.requests.count == 1, "the model is asked nothing more while the reader decides")
+
+        expect(
+            !chat.answerQuestion(chat.pendingQuestion?.answer(typing: "  ")),
+            "a blank composer answers nothing")
+        expect(chat.answerQuestion(chat.pendingQuestion?.answer(typing: "PDF, A4")), "text answers")
+        expect(
+            !chat.answerQuestion(ChatQuestion.Answer(selected: [1])),
+            "a second answer finds nothing left waiting")
+        await settle(chat)
+        expect(
+            chat.session.messages.count == 2,
+            "the answer starts no turn and is no message of its own")
+        expect(
+            base.requests.last?.messages.last?.toolResult?.content == "The user answered: PDF, A4"
+                && results.all.count == 1,
+            "the answer is the one tool result the model reads")
+        let message = chat.session.messages.last
+        expect(
+            message?.state == .complete && message?.text == "Let me check. PDF it is.",
+            "the reply goes on after it")
+        expect(
+            shape(message?.segments)
+                == ["text Let me check.", "question Which format?", "text  PDF it is."],
+            "and the answered card stays where it was asked")
+
+        let reopened = ChatHistoryStore(directory: directory).session(id: chat.session.id)
+        let stored = reopened?.messages.last?.questions.first
+        expect(
+            stored?.question.question == "Which format?" && stored?.question.options == ["PDF", "Word"]
+                && stored?.question.multiSelect == false && stored?.typedAnswer == "PDF, A4"
+                && stored?.textOffset == 13 && stored?.sequence == 0,
+            "a reopened chat shows the question and its answer")
+        expect(
+            shape(reopened?.messages.last?.segments) == shape(message?.segments),
+            "in the same place")
+
+        let next = ScriptedProvider(rounds: [[.text("ok"), .finished]])
+        chat.send("Thanks", using: next)
+        await settle(chat)
+        expect(
+            next.requests.first?.messages[1].text
+                == "Let me check.\n\nask_user: Which format?\nThe user answered: PDF, A4\n\nPDF it is.",
+            "the next turn still knows what the reader answered")
+    }
+
+    static func stopAndLeavingEndAQuestionExactlyOnce() async {
+        let (store, directory) = temporaryStore("question-stop")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let results = AskedResults()
+
+        let chat = AIChatState(history: store)
+        chat.send(
+            "Export it",
+            using: askingLoop(ScriptedProvider(rounds: [[askFormat]]), chat, results: results))
+        await waitUntil { chat.pendingQuestion != nil }
+        chat.cancel()
+        await waitUntil { !results.all.isEmpty }
+        expect(
+            results.all.map(\.content) == ["The user did not answer."],
+            "Stop answers the question as unanswered, once")
+        let stopped = chat.session.messages.last
+        expect(
+            !chat.isStreaming && stopped?.state == .failed && chat.pendingQuestion == nil,
+            "and the turn ends as Stop ends it")
+        expect(stopped?.questions.first?.wentUnanswered == true, "the card says nobody answered")
+        expect(!chat.answerQuestion(ChatQuestion.Answer(selected: [0])), "a late answer is dropped")
+        let reloaded = ChatHistoryStore(directory: directory).session(id: chat.session.id)
+        expect(
+            reloaded?.messages.last?.questions.first?.wentUnanswered == true,
+            "and still says so once reopened")
+
+        let chats = AIChatSurfacesState(history: store)
+        let multi = AIStreamEvent.toolCallRequested(
+            AIToolCall(
+                id: "q2", name: "ask_user",
+                arguments: #"{"question":"Which days?","options":["Mon","Tue","Wed"],"multiSelect":true}"#))
+        let left = chats.window
+        left.send(
+            "Plan it",
+            using: askingLoop(ScriptedProvider(rounds: [[multi]]), left, results: results))
+        await waitUntil { left.pendingQuestion != nil }
+        left.toggleQuestionOption(2)
+        left.toggleQuestionOption(0)
+        chats.newWindowChat()
+        expect(
+            chats.window !== left && left.pendingQuestion?.picked == [0, 2],
+            "leaving the chat leaves its question waiting, chips and all")
+        expect(chats.openInWindow(id: left.session.id), "the waiting chat can be reopened")
+        expect(chats.window === left, "as the same live state")
+        chats.delete(id: left.session.id)
+        await waitUntil { results.all.count == 2 }
+        expect(
+            results.all.last?.content == "The user did not answer."
+                && left.pendingQuestion == nil && store.conversation(id: left.session.id) == nil,
+            "deleting the chat answers its question as unanswered, and nothing brings it back")
+
+        let answered = AIChatState(history: store)
+        answered.send(
+            "Plan it",
+            using: askingLoop(ScriptedProvider(rounds: [[multi], [.finished]]), answered,
+                results: results))
+        await waitUntil { answered.pendingQuestion != nil }
+        answered.toggleQuestionOption(2)
+        answered.toggleQuestionOption(0)
+        expect(
+            answered.answerQuestion(answered.pendingQuestion?.answer(typing: "")),
+            "Send answers a multi-select question with its picked chips")
+        await waitUntil { results.all.count == 3 }
+        expect(
+            results.all.last?.content == "The user chose:\n- Mon\n- Wed",
+            "in the question's order")
+    }
+
+    static func aQuestionAsksOneAtATime() async {
+        let (store, directory) = temporaryStore("question-one")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let idle = AIChatState(history: store)
+        let unasked = await idle.ask(formats)
+        expect(
+            unasked == AskUserToolCatalog.Answer.none && idle.session.messages.isEmpty,
+            "a chat with no turn running has nobody waiting to answer, so nothing is drawn")
+
+        let results = AskedResults()
+        let chat = AIChatState(history: store)
+        chat.send(
+            "Export it",
+            using: askingLoop(ScriptedProvider(rounds: [[askFormat]]), chat, results: results))
+        await waitUntil { chat.pendingQuestion != nil }
+        let second = await chat.ask(formats)
+        expect(second == nil, "a second question while one waits is refused, not queued")
+        expect(
+            chat.session.messages.last?.questions.count == 1,
+            "and draws no second card")
+        chat.cancel()
+        await waitUntil { !results.all.isEmpty }
+    }
+
     /// Replies stream on a task; a few turns of the main actor let the scripted events land.
     static func settle(_ chat: AIChatState) async {
         for _ in 0..<50 where chat.isStreaming {
@@ -1768,6 +2049,12 @@ final class ScriptedProvider: AIProvider, @unchecked Sendable {
             continuation.finish()
         }
     }
+}
+
+/// What each `ask_user` call handed back to the loop.
+@MainActor
+final class AskedResults {
+    var all: [AIToolResult] = []
 }
 
 /// Stands in for the MCP coordinator: it records what it was asked and answers the same way.

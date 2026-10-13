@@ -25,6 +25,8 @@ struct ChatTranscriptView: View {
     var onRegenerate: (() -> Void)?
     /// Answers with one of the last reply's choices; nil leaves them unshown.
     var onChoose: ((String) -> Void)?
+    /// Answers the question the last reply is waiting on; a card without it is only a record.
+    var onQuestion: ((ChatQuestionInput) -> Void)?
     var find: ChatFindHighlight?
     /// Cleared when the reader scrolls up, so a streaming reply stops dragging them back down.
     @State private var followsTail = true
@@ -51,7 +53,8 @@ struct ChatTranscriptView: View {
                             onRegenerate: isLast && message.role == .assistant
                                 ? onRegenerate : nil,
                             // Only the latest reply's choices still answer anything.
-                            onChoose: isLast && message.state == .complete ? onChoose : nil
+                            onChoose: isLast && message.state == .complete ? onChoose : nil,
+                            onQuestion: isLast && message.pendingQuestion != nil ? onQuestion : nil
                         )
                         .equatable()
                         .environment(\.chatTextHighlight, highlight(for: message.id))
@@ -174,6 +177,7 @@ private struct ChatMessageView: View, @MainActor Equatable {
     let status: String?
     let onRegenerate: (() -> Void)?
     let onChoose: ((String) -> Void)?
+    let onQuestion: ((ChatQuestionInput) -> Void)?
     @Environment(\.chatTextHighlight) private var highlight
 
     @State private var hovered = false
@@ -231,7 +235,7 @@ private struct ChatMessageView: View, @MainActor Equatable {
 
     @ViewBuilder private var content: some View {
         if message.text.isEmpty, message.searches.isEmpty, message.toolUses.isEmpty,
-            message.reasoning.isEmpty, message.state == .streaming
+            message.questions.isEmpty, message.reasoning.isEmpty, message.state == .streaming
         {
             HStack(spacing: metrics.spacing.sm) {
                 ProgressView().controlSize(.small)
@@ -271,7 +275,7 @@ private struct ChatMessageView: View, @MainActor Equatable {
                 }
             }
             if !message.text.isEmpty || !message.searches.isEmpty || !message.toolUses.isEmpty
-                || !message.reasoning.isEmpty
+                || !message.questions.isEmpty || !message.reasoning.isEmpty
             {
                 rendered
             }
@@ -297,6 +301,9 @@ private struct ChatMessageView: View, @MainActor Equatable {
                             ChatSearchRow(search: search)
                         case .tools(let uses):
                             ChatToolRun(uses: uses)
+                        case .question(let question):
+                            ChatQuestionCard(
+                                question: question, onInput: question.isPending ? onQuestion : nil)
                         case .reasoning(let block):
                             ChatReasoningBlock(
                                 block: block,
@@ -323,6 +330,7 @@ extension ChatMessageView {
         lhs.message == rhs.message && lhs.status == rhs.status
             && (lhs.onRegenerate == nil) == (rhs.onRegenerate == nil)
             && (lhs.onChoose == nil) == (rhs.onChoose == nil)
+            && (lhs.onQuestion == nil) == (rhs.onQuestion == nil)
     }
 }
 

@@ -79,6 +79,7 @@ struct AIChatDetailView: View {
                 messages: chat.session.messages, status: chat.liveStatus, usage: chat.usage,
                 surface: .window,
                 onRegenerate: chat.isStreaming ? nil : { coordinator.regenerate(in: chat) },
+                onQuestion: { coordinator.respond($0, in: chat) },
                 find: find.isSearching
                     ? ChatFindHighlight(
                         query: find.needle, matches: Set(occurrences.map(\.messageID)),
@@ -120,9 +121,13 @@ private struct AIChatComposer: View {
     @Binding var showsContext: Bool
 
     private var canSend: Bool {
-        !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if let question = chat.pendingQuestion { return question.answer(typing: chat.draft) != nil }
+        return !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !chat.pendingAttachments.isEmpty
     }
+
+    /// While the turn waits on a question, Send answers it and Stop gets a button of its own.
+    private var isAnswering: Bool { chat.pendingQuestion != nil }
 
     var body: some View {
         @Bindable var chat = chat
@@ -135,7 +140,7 @@ private struct AIChatComposer: View {
             chips
             ZStack(alignment: .topLeading) {
                 if chat.draft.isEmpty {
-                    Text("Ask anything…")
+                    Text(isAnswering ? "Answer the question…" : "Ask anything…")
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                 }
@@ -183,6 +188,7 @@ private struct AIChatComposer: View {
             Spacer(minLength: 0)
             ContextGauge(
                 report: coordinator.contextReport(for: chat, detailed: false), hovered: $showsContext)
+            if isAnswering { stopButton }
             sendButton
         }
     }
@@ -199,21 +205,37 @@ private struct AIChatComposer: View {
     }
 
     private var sendButton: some View {
-        Button(action: submit) {
-            Image(systemName: chat.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
+        let stops = chat.isStreaming && !isAnswering
+        return Button(action: submit) {
+            Image(systemName: stops ? "stop.circle.fill" : "arrow.up.circle.fill")
                 .font(.title2)
                 .symbolRenderingMode(.hierarchical)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.borderless)
-        .disabled(!chat.isStreaming && !canSend)
-        .help(chat.isStreaming ? "Stop Response" : "Send  ↵")
-        .accessibilityLabel(chat.isStreaming ? "Stop Response" : "Send")
+        .disabled(!stops && !canSend)
+        .help(stops ? "Stop Response" : isAnswering ? "Answer  ↵" : "Send  ↵")
+        .accessibilityLabel(stops ? "Stop Response" : isAnswering ? "Answer" : "Send")
     }
 
-    /// Return and the button are one action: Send, or Stop while a reply streams.
+    private var stopButton: some View {
+        Button {
+            coordinator.stopResponse(in: chat)
+        } label: {
+            Image(systemName: "stop.circle.fill")
+                .font(.title2)
+                .symbolRenderingMode(.hierarchical)
+        }
+        .buttonStyle(.borderless)
+        .help("Stop Response")
+        .accessibilityLabel("Stop Response")
+    }
+
+    /// Return and the button are one action: Send, Answer while a question waits, else Stop.
     private func submit() {
-        if chat.isStreaming {
+        if isAnswering {
+            if coordinator.send(chat.draft, in: chat) { chat.draft = "" }
+        } else if chat.isStreaming {
             coordinator.stopResponse(in: chat)
         } else if coordinator.send(chat.draft, in: chat) {
             chat.draft = ""

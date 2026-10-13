@@ -677,6 +677,11 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatQuestion.swift \
+                           Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolJSON.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatSession.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
@@ -705,6 +710,11 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatQuestion.swift \
+                           Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolJSON.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \

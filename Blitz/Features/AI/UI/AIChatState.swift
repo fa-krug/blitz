@@ -30,6 +30,13 @@ final class AIChatState {
     @ObservationIgnored var onReplyFinished: (@MainActor (AIChatState) -> Void)?
     @ObservationIgnored private var flushTask: Task<Void, Never>?
     @ObservationIgnored private var lastFlush = ContinuousClock().now
+    /// The `ask_user` call the turn is paused on; whoever ends the wait resumes it, exactly once.
+    @ObservationIgnored private var questionWaiter: QuestionWaiter?
+
+    private struct QuestionWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<ChatQuestion.Answer, Never>
+    }
 
     private static let flushInterval: Duration = .milliseconds(40)
 
@@ -155,6 +162,7 @@ final class AIChatState {
     }
 
     func cancel() {
+        resolveQuestion(with: .none)
         replyGeneration += 1
         replyTask?.cancel()
         replyTask = nil
@@ -195,6 +203,70 @@ final class AIChatState {
             agentScope = AgentSessionScope()
         }
         history.remove(id: id)
+    }
+
+    // MARK: - Questions
+
+    /// The question this chat's turn is paused on; the card and the composer both answer it.
+    var pendingQuestion: ChatQuestion? {
+        guard isStreaming, let last = session.messages.last, last.role == .assistant else {
+            return nil
+        }
+        return last.pendingQuestion
+    }
+
+    /// Nil refuses a second question while one is waiting; a turn already over answers `.none`.
+    func ask(_ question: AskUserToolCatalog.Question) async -> ChatQuestion.Answer? {
+        let unanswered = ChatQuestion.Answer.none
+        guard isStreaming, !Task.isCancelled else { return unanswered }
+        guard questionWaiter == nil else { return nil }
+        flushPendingText()
+        guard var message = session.messages.last, message.role == .assistant else {
+            return unanswered
+        }
+        isThinking = false
+        message.questions.append(
+            ChatQuestion(
+                question: question, textOffset: message.text.count,
+                sequence: message.nextSequence))
+        session.replaceLast(with: message)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                questionWaiter = QuestionWaiter(id: question.id, continuation: continuation)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resolveQuestion(with: .none, id: question.id) }
+        }
+    }
+
+    func toggleQuestionOption(_ option: Int) {
+        guard pendingQuestion != nil, var message = session.messages.last,
+            let index = message.questions.lastIndex(where: \.isPending)
+        else { return }
+        message.questions[index].toggle(option)
+        session.replaceLast(with: message)
+    }
+
+    /// False when there is nothing to answer, or nothing yet to answer it with.
+    @discardableResult
+    func answerQuestion(_ answer: ChatQuestion.Answer?) -> Bool {
+        guard let answer, questionWaiter != nil else { return false }
+        resolveQuestion(with: answer)
+        return true
+    }
+
+    /// The one way a wait ends, whoever ends it; a later answer finds nothing left to resume.
+    private func resolveQuestion(with answer: ChatQuestion.Answer, id: UUID? = nil) {
+        guard let waiter = questionWaiter, id == nil || id == waiter.id else { return }
+        questionWaiter = nil
+        if var message = session.messages.last,
+            let index = message.questions.lastIndex(where: { $0.question.id == waiter.id })
+        {
+            message.questions[index].answer = answer
+            message.questions[index].picked = []
+            session.replaceLast(with: message)
+        }
+        waiter.continuation.resume(returning: answer)
     }
 
     /// The latest reply's report, so a reopened chat still knows what its last turn cost.
@@ -318,6 +390,8 @@ final class AIChatState {
     }
 
     private func finishLast(state: ChatMessage.State, fallback: String) {
+        // However the turn ended, nobody is left to read an answer given after it.
+        resolveQuestion(with: .none)
         flushPendingText()
         discardPendingText()
         guard var message = session.messages.last, message.role == .assistant else { return }

@@ -62,6 +62,17 @@ final class ChatHistoryStore {
           text_offset INTEGER NOT NULL,
           PRIMARY KEY(message_id, position)
         );
+        CREATE TABLE IF NOT EXISTS message_questions(
+          message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          position INTEGER NOT NULL,
+          question TEXT NOT NULL,
+          options TEXT NOT NULL,
+          multi_select INTEGER NOT NULL,
+          selected TEXT,
+          answer TEXT,
+          text_offset INTEGER NOT NULL,
+          PRIMARY KEY(message_id, position)
+        );
         CREATE TABLE IF NOT EXISTS conversation_details(
           conversation_id TEXT PRIMARY KEY NOT NULL
             REFERENCES conversations(id) ON DELETE CASCADE,
@@ -204,6 +215,7 @@ final class ChatHistoryStore {
         let documents = documents(forConversation: id, in: database)
         let searches = searches(forConversation: id, in: database)
         let toolUses = toolUses(forConversation: id, in: database)
+        let questions = questions(forConversation: id, in: database)
         let reasoning = reasoning(forConversation: id, in: database)
         let meta = messageMeta(forConversation: id, in: database)
         var messages: [ChatMessage] = []
@@ -229,6 +241,7 @@ final class ChatHistoryStore {
                     images: images[messageID] ?? [], documents: documents[messageID] ?? [],
                     searches: searches[messageID] ?? [],
                     toolUses: toolUses[messageID] ?? [],
+                    questions: questions[messageID] ?? [],
                     reasoning: reasoning[messageID] ?? [],
                     usage: meta[messageID]?.usage, toolScope: meta[messageID]?.toolScope))
         }
@@ -435,6 +448,7 @@ final class ChatHistoryStore {
             saveImages(of: $0, in: database) && saveDocuments(of: $0, in: database)
                 && saveSearches(of: $0, in: database)
                 && saveToolUses(of: $0, in: database)
+                && saveQuestions(of: $0, in: database)
                 && saveReasoning(of: $0, in: database)
                 && saveMeta(of: $0, in: database)
         }
@@ -545,6 +559,77 @@ final class ChatHistoryStore {
                     sequence: Int(sqlite3_column_int64(statement, 6))))
         }
         return uses
+    }
+
+    /// Options and picks are JSON, so an option holding a comma or a newline reads back whole.
+    private func saveQuestions(of message: ChatMessage, in database: OpaquePointer) -> Bool {
+        guard !message.questions.isEmpty else { return true }
+        let sql = """
+            INSERT INTO message_questions(
+              message_id, position, question, options, multi_select, selected, answer, text_offset)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?);
+            """
+        guard let statement = prepare(sql, in: database) else { return false }
+        defer { sqlite3_finalize(statement) }
+        for asked in message.questions {
+            guard let options = Self.json(asked.question.options) else { return false }
+            bind(message.id.uuidString, to: statement, at: 1)
+            sqlite3_bind_int64(statement, 2, Int64(asked.sequence))
+            bind(asked.question.question, to: statement, at: 3)
+            bind(options, to: statement, at: 4)
+            sqlite3_bind_int64(statement, 5, asked.question.multiSelect ? 1 : 0)
+            if let answer = asked.answer {
+                bind(Self.json(answer.selected) ?? "[]", to: statement, at: 6)
+                if let text = answer.text { bind(text, to: statement, at: 7) }
+            }
+            sqlite3_bind_int64(statement, 8, Int64(asked.textOffset))
+            guard sqlite3_step(statement) == SQLITE_DONE else { return false }
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+        }
+        return true
+    }
+
+    /// A question stored unanswered was asked by a process that is gone, so nobody answered it.
+    private func questions(
+        forConversation id: UUID, in database: OpaquePointer
+    ) -> [UUID: [ChatQuestion]] {
+        let sql = """
+            SELECT q.message_id, q.question, q.options, q.multi_select, q.selected, q.answer,
+              q.text_offset, q.position
+            FROM message_questions q
+            JOIN messages m ON m.id = q.message_id
+            WHERE m.conversation_id = ? ORDER BY q.message_id, q.position;
+            """
+        guard let statement = prepare(sql, in: database) else { return [:] }
+        defer { sqlite3_finalize(statement) }
+        bind(id.uuidString, to: statement, at: 1)
+        var questions: [UUID: [ChatQuestion]] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let messageID = UUID(uuidString: text(statement, 0)),
+                let options = Self.decoded([String].self, text(statement, 2))
+            else { continue }
+            let selected = optionalText(statement, 4).flatMap { Self.decoded([Int].self, $0) }
+            let question = AskUserToolCatalog.Question(
+                id: UUID(), question: text(statement, 1), options: options,
+                multiSelect: sqlite3_column_int64(statement, 3) != 0)
+            questions[messageID, default: []].append(
+                ChatQuestion(
+                    question: question,
+                    answer: ChatQuestion.Answer(
+                        selected: selected ?? [], text: optionalText(statement, 5)),
+                    textOffset: Int(sqlite3_column_int64(statement, 6)),
+                    sequence: Int(sqlite3_column_int64(statement, 7))))
+        }
+        return questions
+    }
+
+    private static func json(_ value: some Encodable) -> String? {
+        (try? JSONEncoder().encode(value)).flatMap { String(bytes: $0, encoding: .utf8) }
+    }
+
+    private static func decoded<Value: Decodable>(_ type: Value.Type, _ text: String) -> Value? {
+        try? JSONDecoder().decode(type, from: Data(text.utf8))
     }
 
     /// After the conversation's row, which the meta row references; a chat with no pick has none.

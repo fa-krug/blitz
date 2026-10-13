@@ -269,6 +269,7 @@
 		4EA60E46451FE40034E813D7 /* DialogTextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCC20C364742113F21FCB0D /* DialogTextInput.swift */; };
 		4FB22F9CD0AAE0A663AC3C72 /* MathFormula.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A32E6D5BF0A4E9E6E4E7553 /* MathFormula.swift */; };
 		50236CDE9685C4211EDF3D1F /* AIProviderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98BD1146273498CDB2C04EF8 /* AIProviderFactory.swift */; };
+		50300D50396F377EDDC66018 /* ChatQuestionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187EC6A41C7955E8679C8667 /* ChatQuestionCard.swift */; };
 		50FDE0897778830868242DF7 /* BackupCategorySelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE5A2E26639C01C56FFC6F4 /* BackupCategorySelection.swift */; };
 		51BB21C960475BD620E6DAE7 /* ExtensionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149480C7A45AB37D9E156E48 /* ExtensionDetailView.swift */; };
 		51C480297409FB4330ECB30D /* NoteEditAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05980F3A102AA482B58E1C04 /* NoteEditAction.swift */; };
@@ -338,6 +339,7 @@
 		63CB416BC8DE9BA9F3FDBABB /* ScreenshotScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC959ECF3CCC3FF29E0556D8 /* ScreenshotScreen.swift */; };
 		640EDCDA28721DC6D57E91A3 /* ScreenshotTextStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8770BFE71E6482235F67A21 /* ScreenshotTextStore.swift */; };
 		644128622C46EF7AB070D1A0 /* WindowLayoutDisplayTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED3E31B9D367B9756CA8EF8 /* WindowLayoutDisplayTabs.swift */; };
+		64818DA44A15CD32D7B2769A /* ChatQuestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEEBED63A28B2F05CE211F9B /* ChatQuestion.swift */; };
 		6513DB110437904202FC332C /* RoomCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD2EB73A4B5C51FB68D7CB9 /* RoomCoordinator.swift */; };
 		65D0D66FE90594495F74A0B1 /* BannerHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B1CB29CDC81EEBDB3DCB5F /* BannerHUDController.swift */; };
 		65FD2E9A7744DB085350DF63 /* Permissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC30A0B7BD3B8DAAEB6F4CF /* Permissions.swift */; };
@@ -972,6 +974,7 @@
 		181EA1273D2CDA1F194B8961 /* FallbackActionsMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackActionsMenu.swift; sourceTree = "<group>"; };
 		185F6B952A1EFC8F6E68CB3D /* MCPTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPTool.swift; sourceTree = "<group>"; };
 		186B76126662A8931232A494 /* CustomCommandEditorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCommandEditorPanel.swift; sourceTree = "<group>"; };
+		187EC6A41C7955E8679C8667 /* ChatQuestionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatQuestionCard.swift; sourceTree = "<group>"; };
 		188AE698B797ECD18EA327FB /* SystemAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAction.swift; sourceTree = "<group>"; };
 		18DB6D5B0F9BFD3410EB716D /* CustomQuickAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomQuickAction.swift; sourceTree = "<group>"; };
 		19729A4AA3CC22A991AD75CE /* WindowLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayoutStore.swift; sourceTree = "<group>"; };
@@ -1490,6 +1493,7 @@
 		ADACD0C5DC62BDDA4BD94078 /* CalendarToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarToolCatalog.swift; sourceTree = "<group>"; };
 		ADD10232EE2BA5A8ADCFE21F /* QRCodeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeMonitor.swift; sourceTree = "<group>"; };
 		ADEC433ED005B26FA7668C54 /* Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Appearance.swift; sourceTree = "<group>"; };
+		AEEBED63A28B2F05CE211F9B /* ChatQuestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatQuestion.swift; sourceTree = "<group>"; };
 		AF0AE84F5689B1D4F2E5C276 /* QuickActionPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionPrompt.swift; sourceTree = "<group>"; };
 		AF3EFA3EAD4F3254F7AE8155 /* SmartReminderPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartReminderPrompt.swift; sourceTree = "<group>"; };
 		AF40B8780E3B9D18947E8FAF /* BackupBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupBundle.swift; sourceTree = "<group>"; };
@@ -2672,6 +2676,7 @@
 				A3E5805E2FD715C8A28B780E /* ChatHistoryView.swift */,
 				A56464C7A13D4145F6C370F9 /* ChatMarkdownRenderer.swift */,
 				78A63E1641AE7AF57CAF813A /* ChatMarkdownText.swift */,
+				187EC6A41C7955E8679C8667 /* ChatQuestionCard.swift */,
 				3F65304BC761A5B8E5272D9F /* ChatSuggestionChips.swift */,
 				BB1D6BC94E84E716F6EE2367 /* ChatTextHighlight.swift */,
 				A48ACF888E83F94FB9712781 /* ChatTranscriptView.swift */,
@@ -3472,6 +3477,7 @@
 				75FC820EFACAC408930BAECE /* ChatGPTSubscription.swift */,
 				F14288EBA096D1847028252A /* ChatMessage.swift */,
 				412C8CF0ECF2B65E499A5B08 /* ChatPlan.swift */,
+				AEEBED63A28B2F05CE211F9B /* ChatQuestion.swift */,
 				39FF583FBDBF6BC83B6925D6 /* ChatReferences.swift */,
 				951C174843186B8D0F38433A /* ChatSession.swift */,
 				A4BC39B4C12CDF9DD5F8FCCE /* ChatTitle.swift */,
@@ -4204,6 +4210,8 @@
 				0B9FE4E8B2A0F6A8D5777665 /* ChatMarkdownText.swift in Sources */,
 				8F6A5AA86E610603D859686D /* ChatMessage.swift in Sources */,
 				AED2A77FC3A02D042F2D05E3 /* ChatPlan.swift in Sources */,
+				64818DA44A15CD32D7B2769A /* ChatQuestion.swift in Sources */,
+				50300D50396F377EDDC66018 /* ChatQuestionCard.swift in Sources */,
 				910C0A2D517B4A32C90BFA07 /* ChatReferences.swift in Sources */,
 				B184259FAC289F6DF065DD01 /* ChatSession.swift in Sources */,
 				A012B23F9EC508BDB622015C /* ChatSuggestionChips.swift in Sources */,

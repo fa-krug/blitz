@@ -126,6 +126,7 @@ struct InstalledAITests {
         await unlimitedPassesNoTurnCap(fixture)
         await concurrentCallsAreAskedOneAtATime(fixture)
         hostedServerSpeaksJSONRPC()
+        aQuestionDrawsItsOwnCardNotACallRow()
         await claudeHostsBlitzsOwnTools(fixture)
         claudeSearchFramesBecomeSearchRows()
         await claudeSearchesTheWebOnlyWhenAsked(fixture)
@@ -824,6 +825,25 @@ struct InstalledAITests {
             "a method the server does not speak is refused as JSON-RPC says")
     }
 
+    /// The transcript draws a question as its card, so the CLI's report of the call adds no row.
+    private static func aQuestionDrawsItsOwnCardNotACallRow() {
+        let reminder = AITool(
+            name: "reminders_create", description: "", parameters: .object([:]),
+            origin: "Reminders", title: "Create Reminder")
+        let hosted = AskUserToolCatalog.tools() + [reminder]
+        let line = Data(
+            """
+            {"type":"assistant","message":{"content":[\
+            {"type":"tool_use","id":"toolu_ask","name":"mcp__blitz_data__ask_user","input":{}},\
+            {"type":"tool_use","id":"t2","name":"mcp__blitz_data__reminders_create","input":{}}\
+            ]}}
+            """.utf8)
+        let events = InstalledAIStreamDecoder.decode(line, kind: .claude, hosted: hosted).events
+        expect(
+            events == [.toolCall(id: "t2", origin: "Reminders", title: "Create Reminder")],
+            "an ask_user call reports no row of its own, while a tool beside it still does")
+    }
+
     /// Calendar and Reminders reach Claude as an in-process server answered on the turn's own pipe.
     private static func claudeHostsBlitzsOwnTools(_ fixture: Fixture) async {
         let asked = Box()
@@ -853,8 +873,12 @@ struct InstalledAITests {
             "Blitz's own tools arm a turn even with no MCP server to run")
         let config = fixture.read("claude-mcp-config.log")
         expect(
-            config.contains(#""blitz_data":{"name":"blitz_data","type":"sdk"}"#),
+            config.contains(
+                #""blitz_data":{"name":"blitz_data","timeout":86400000,"type":"sdk"}"#),
             "the configuration names Blitz's in-process server, with nothing to start")
+        expect(
+            ClaudeHostedServer.callTimeoutMilliseconds == 86_400_000,
+            "a call may wait a day on the reader, past a short MCP_TOOL_TIMEOUT of their own")
         let hostedLog = fixture.read("claude-hosted.log")
         expect(
             hostedLog.contains(#""mcp_response""#) && hostedLog.contains(#""request_id":"mcp_0""#)

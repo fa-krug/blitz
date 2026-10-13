@@ -7,11 +7,14 @@ enum AskUserToolCatalog {
     static let optionCount = 2...6
     /// A chip, not a paragraph: anything longer belongs in the question.
     static let optionLimit = 80
+    static let notOffered = "Asking the user is not available in this chat."
+    static let oneAtATime =
+        "The user has not answered your previous question yet. Ask one question at a time."
 
     private typealias Invalid = AIToolArguments.Invalid
 
     /// A call, already checked; `options` are trimmed, non-empty and distinct.
-    struct Question: Equatable, Identifiable, Sendable {
+    struct Question: Hashable, Identifiable, Sendable {
         let id: UUID
         let question: String
         let options: [String]
@@ -19,7 +22,7 @@ enum AskUserToolCatalog {
     }
 
     /// The chips picked, by index into the options, and anything the reader typed instead.
-    struct Answer: Equatable, Sendable {
+    struct Answer: Hashable, Sendable {
         var selected: [Int] = []
         var text: String?
 
@@ -48,7 +51,7 @@ enum AskUserToolCatalog {
                         "Whether the user may pick more than one option. Default: false.")
                 ],
                 required: ["question", "options"]),
-            origin: origin, title: "Ask a Question")
+            origin: origin, title: "Ask a Question", showsCallRow: false)
         return [ask]
     }
 
@@ -93,6 +96,11 @@ enum AskUserToolCatalog {
 
     static func result(_ answer: Answer, to question: Question, callID: String) -> AIToolResult {
         AIToolResult(callID: callID, content: self.answer(answer, to: question), isError: false)
+    }
+
+    /// How later turns read the exchange, set into the reply's text where the question was asked.
+    static func record(_ answer: Answer, to question: Question) -> String {
+        "\(askUserName): \(question.question)\n" + self.answer(answer, to: question)
     }
 
     /// Chips in the question's order, whatever order they were picked in.

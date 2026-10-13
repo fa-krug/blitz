@@ -24,6 +24,8 @@ struct ChatMessage: Identifiable, Equatable, Sendable {
     var searches: [ChatSearch]
     /// Tools the reply called, pinned the same way; the calls themselves never enter the context.
     var toolUses: [ChatToolUse]
+    /// Questions the reply asked the reader, each pinned where it paused the reply to ask.
+    var questions: [ChatQuestion]
     /// What the model shared of its thinking, a block per stretch of it, each where it happened.
     var reasoning: [ChatReasoning]
     /// What the route reported for this reply; the context card reads the latest one.
@@ -35,8 +37,8 @@ struct ChatMessage: Identifiable, Equatable, Sendable {
         id: UUID = UUID(), role: Role, text: String, state: State = .complete,
         sentAt: Date = Date(), images: [AIImage] = [], documents: [AIDocument] = [],
         searches: [ChatSearch] = [],
-        toolUses: [ChatToolUse] = [], reasoning: [ChatReasoning] = [], usage: AIUsage? = nil,
-        toolScope: String? = nil
+        toolUses: [ChatToolUse] = [], questions: [ChatQuestion] = [],
+        reasoning: [ChatReasoning] = [], usage: AIUsage? = nil, toolScope: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -47,6 +49,7 @@ struct ChatMessage: Identifiable, Equatable, Sendable {
         self.documents = documents
         self.searches = searches
         self.toolUses = toolUses
+        self.questions = questions
         self.reasoning = reasoning
         self.usage = usage
         self.toolScope = toolScope
@@ -57,8 +60,32 @@ struct ChatMessage: Identifiable, Equatable, Sendable {
         state == .streaming && offset == count - 1
     }
 
-    /// The next search or call's place among the reply's: with no text between, offsets tie.
-    var nextSequence: Int { searches.count + toolUses.count }
+    /// The next search, call or question's place in the reply: with no text between, offsets tie.
+    var nextSequence: Int { searches.count + toolUses.count + questions.count }
+
+    var pendingQuestion: ChatQuestion? { questions.last(where: \.isPending) }
+
+    /// What later turns read: the text, with each question and its answer where it was asked.
+    var contextText: String {
+        let answered = questions.filter { !$0.isPending }
+            .sorted { ($0.textOffset, $0.sequence) < ($1.textOffset, $1.sequence) }
+        guard !answered.isEmpty else { return text }
+        var parts: [String] = []
+        var rest = Substring(text)
+        var consumed = 0
+        for question in answered {
+            let take = max(0, min(question.textOffset - consumed, rest.count))
+            parts.append(String(rest.prefix(take)))
+            let answer = question.answer ?? AskUserToolCatalog.Answer.none
+            parts.append(AskUserToolCatalog.record(answer, to: question.question))
+            rest = rest.dropFirst(take)
+            consumed += take
+        }
+        parts.append(String(rest))
+        return parts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
 
     /// Every block joined, for find and for a transcript copied out whole.
     var reasoningText: String {
@@ -77,6 +104,9 @@ struct ChatMessage: Identifiable, Equatable, Sendable {
             }
             + toolUses.map {
                 (offset: $0.textOffset, sequence: $0.sequence, segment: ChatSegment.tools([$0]))
+            }
+            + questions.map {
+                (offset: $0.textOffset, sequence: $0.sequence, segment: ChatSegment.question($0))
             })
             .sorted { ($0.offset, $0.sequence) < ($1.offset, $1.sequence) }
         var segments: [ChatSegment] = []
@@ -155,5 +185,6 @@ enum ChatSegment: Equatable, Hashable {
     case text(String)
     case search(ChatSearch)
     case tools([ChatToolUse])
+    case question(ChatQuestion)
     case reasoning(ChatReasoning)
 }

@@ -928,6 +928,7 @@ struct RootPaletteView: View {
         if vm.mode == .extensionCommand, let placeholder = extensionScreen.searchPlaceholder {
             return placeholder
         }
+        if vm.mode == .ai, quickAI.pendingQuestion != nil { return "Answer the question…" }
         return vm.mode.placeholder
     }
 

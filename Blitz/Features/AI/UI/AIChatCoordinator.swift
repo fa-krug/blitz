@@ -285,9 +285,13 @@ final class AIChatCoordinator {
 
     // MARK: - Either surface
 
+    /// While the turn waits on a question, what was typed answers it rather than starting a turn.
     @discardableResult
     func send(_ input: String, in chat: AIChatState) -> Bool {
         guard settings.aiEnabled else { return false }
+        if let question = chat.pendingQuestion {
+            return chat.answerQuestion(question.answer(typing: input))
+        }
         do {
             let address = MCPComposerAddress.parse(input, slugs: core.mcpCoordinator.slugs)
             let sent = chat.send(
@@ -364,9 +368,14 @@ final class AIChatCoordinator {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
         let blitz = blitzHostedTools(for: chat).run
+        // An `@server` turn sits Blitz's own tools out, and a question has no gate to refuse it.
+        let asks = tools.contains { AskUserToolCatalog.handles($0.name) }
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
         ) { @MainActor [weak self, weak chat] call in
+            if AskUserToolCatalog.handles(call.name), !asks {
+                return .failure(call.id, AskUserToolCatalog.notOffered)
+            }
             if Self.isBlitzTool(call.name) { return await blitz(call) }
             guard let self, let chat else { return .failure(call.id, "The chat was closed.") }
             return await runServerTool(call, in: chat)
@@ -387,7 +396,7 @@ final class AIChatCoordinator {
 
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
-            || ShellToolCatalog.handles(name)
+            || ShellToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -396,11 +405,30 @@ final class AIChatCoordinator {
             guard let self, let chat else { return [] }
             return blitzTools(for: chat)
         } run: { @MainActor [weak self, weak chat] call in
-            guard let self, let chat, let agentCall = AgentCall(toolCall: call) else {
+            guard let self, let chat else { return await AIHostedTools.none.run(call) }
+            if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
+            guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
             return await runBlitzTool(call, authorize: gate.authorization(for: agentCall, in: chat))
         }
+    }
+
+    /// Never past the gate: asking the reader is no capability, so it has no rule row to consult.
+    private func askUser(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        guard AgentPolicy.isOffered(.askUser, scope: chat.agentScope) else {
+            return .failure(call.id, AskUserToolCatalog.notOffered)
+        }
+        let question: AskUserToolCatalog.Question
+        do throws(AIToolArguments.Invalid) {
+            question = try AskUserToolCatalog.question(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard let answer = await chat.ask(question) else {
+            return .failure(call.id, AskUserToolCatalog.oneAtATime)
+        }
+        return AskUserToolCatalog.result(answer, to: question, callID: call.id)
     }
 
     /// Each runner reads its call, then puts its own dialog to the gate before it acts.
@@ -439,6 +467,8 @@ final class AIChatCoordinator {
             + core.remindersCoordinator.chatTools(
                 read: offered(.remindersRead), write: offered(.remindersWrite), now: now)
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
+            + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
+                ? AskUserToolCatalog.tools() : [])
     }
 
     private func runShellCommand(
@@ -495,6 +525,16 @@ final class AIChatCoordinator {
 
     func stopResponse(in chat: AIChatState) {
         chat.cancel()
+    }
+
+    /// A click on a waiting question's card: a single choice answers, a multi-select one toggles.
+    func respond(_ input: ChatQuestionInput, in chat: AIChatState) {
+        guard let question = chat.pendingQuestion else { return }
+        switch input {
+        case .choose(let option): chat.answerQuestion(question.answer(choosing: option))
+        case .toggle(let option): chat.toggleQuestionOption(option)
+        case .send: chat.answerQuestion(question.answer(typing: ""))
+        }
     }
 
     func copyLastResponse(in chat: AIChatState) {
