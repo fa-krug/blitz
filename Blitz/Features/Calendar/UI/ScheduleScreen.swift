@@ -20,7 +20,7 @@ struct ScheduleScreen: PaletteScreen {
 
     /// A meeting with no link has nowhere to join, so the pill offers what it can instead.
     var primaryActionTitle: String {
-        meeting(at: vm.selection)?.link == nil ? "Open in Calendar" : "Join Meeting"
+        core.calendarCoordinator.activationTitle(for: meeting(at: vm.selection))
     }
 
     private func meeting(at selection: Int) -> MeetingEvent? {

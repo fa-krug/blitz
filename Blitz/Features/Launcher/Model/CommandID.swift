@@ -82,7 +82,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .mySchedule: return "My Schedule"
         case .createEvent: return "Create Event"
         case .copyMeetingLink: return "Copy Meeting Link"
-        case .openInCalendar: return "Open in Calendar"
+        case .openInCalendar: return "Open Next Meeting"
         case .myReminders: return "My Reminders"
         case .createReminder: return "Create Reminder"
         case .smartReminder: return "Smart Reminder"

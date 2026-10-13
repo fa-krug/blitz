@@ -188,6 +188,7 @@ private struct MeetingBrowserPicker: View {
 private struct CalendarPickerSection: View {
     @Environment(CalendarStore.self) private var store
     @State private var query = ""
+    @State private var outlookInstalled = false
 
     private var calendars: [MeetingCalendar] {
         guard !query.isEmpty else { return store.calendars }
@@ -207,12 +208,17 @@ private struct CalendarPickerSection: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 ForEach(calendars) { calendar in
-                    CalendarRow(calendar: calendar)
+                    CalendarRow(calendar: calendar, outlookInstalled: outlookInstalled)
                 }
             }
         } header: {
             SettingsSectionHeader(.calendarCalendars)
+        } footer: {
+            Text("Outlook opens the meeting's day.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .onAppear { outlookInstalled = MeetingLauncher.isOutlookInstalled }
     }
 
     private var emptyMessage: String {
@@ -223,10 +229,23 @@ private struct CalendarPickerSection: View {
 
 private struct CalendarRow: View {
     let calendar: MeetingCalendar
+    let outlookInstalled: Bool
     @Environment(CalendarStore.self) private var store
 
     var body: some View {
         SettingsRow(title: calendar.title, subtitle: calendar.accountName) {
+            Picker("", selection: openTargetBinding) {
+                ForEach(CalendarOpenTarget.allCases) { target in
+                    Text(target.title)
+                        .tag(target)
+                        .disabled(target == .outlook && !outlookInstalled)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+            .accessibilityLabel("Open \(calendar.title) meetings in")
+            .settingsEnabled(store.isEnabled(calendar))
             Toggle("", isOn: binding)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
@@ -238,6 +257,13 @@ private struct CalendarRow: View {
         Binding(
             get: { store.isEnabled(calendar) },
             set: { store.setEnabled($0, for: calendar) }
+        )
+    }
+
+    private var openTargetBinding: Binding<CalendarOpenTarget> {
+        Binding(
+            get: { store.openTarget(forCalendarID: calendar.id) },
+            set: { store.setOpenTarget($0, for: calendar) }
         )
     }
 }

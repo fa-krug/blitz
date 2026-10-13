@@ -593,7 +593,9 @@ enum SettingsSearchCatalog {
             keywords: ["shortcut", "launcher", "join", "schedule", "create event"]),
         .init(
             group: .calendarCalendars, "Calendars",
-            keywords: ["accounts", "sources", "choose", "icloud", "google"])
+            keywords: [
+                "accounts", "sources", "choose", "icloud", "google", "outlook", "exchange", "open"
+            ])
     ]
 
     private static let reminders: [SettingsSearchEntry] = [

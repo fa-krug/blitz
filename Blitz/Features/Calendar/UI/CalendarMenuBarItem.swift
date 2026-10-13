@@ -56,8 +56,10 @@ struct CalendarMenuBarMenu: View {
                             coordinator.join(meeting)
                         }
                     }
-                    Button("Open in Calendar", systemImage: "calendar") {
-                        coordinator.openInCalendar(meeting)
+                    Button(
+                        coordinator.openTarget(for: meeting).actionTitle, systemImage: "calendar"
+                    ) {
+                        coordinator.open(meeting)
                     }
                     Button("Dismiss Event", systemImage: "xmark.circle") {
                         coordinator.dismissMenuBarEvent(meeting)
@@ -80,7 +82,7 @@ struct CalendarMenuBarMenu: View {
     }
 }
 
-/// The span's remaining meetings by day; a click joins, or opens a linkless one in Calendar.
+/// The span's remaining meetings by day; a click joins, or opens a linkless one.
 private struct MenuBarAgenda: View {
     var body: some View {
         let now = AppCore.shared.meetingClock.now

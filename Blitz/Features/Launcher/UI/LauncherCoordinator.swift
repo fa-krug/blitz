@@ -245,7 +245,7 @@ final class LauncherCoordinator {
         case .mySchedule:
             calendarCoordinator.showSchedule()
         case .openInCalendar:
-            calendarCoordinator.openNextMeetingInCalendar()
+            calendarCoordinator.openNextMeeting()
         case .createEvent:
             calendarCoordinator.createEvent()
         case .myReminders:
