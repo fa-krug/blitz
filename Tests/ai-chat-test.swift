@@ -72,6 +72,9 @@ struct AIChatTests {
         await aQuestionPausesTheTurnUntilAnswered()
         await stopAndLeavingEndAQuestionExactlyOnce()
         await aQuestionAsksOneAtATime()
+        plansSitWhereTheyWereWrittenAndReachLaterTurns()
+        await plansAreStoredReplacedAndEdited()
+        await aPlanNeedsATurnAndAnEditWaitsForIt()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -225,6 +228,7 @@ struct AIChatTests {
             case .search(let search): "search \(search.query ?? "")"
             case .tools(let uses): "tools \(uses.map(\.callID).joined(separator: ","))"
             case .question(let asked): "question \(asked.question.question)"
+            case .plan(let written): "plan \(written.plan.title)"
             case .reasoning(let block): "reasoning \(block.text)"
             }
         }
@@ -1995,6 +1999,161 @@ extension AIChatTests {
             "and draws no second card")
         chat.cancel()
         await waitUntil { !results.all.isEmpty }
+    }
+
+    // MARK: - Plans
+
+    static let tidy = ChatPlan(
+        title: "Tidy Downloads", markdown: "1. Look\n2. Sort", updatedAt: Date(timeIntervalSince1970: 0))
+
+    static func plansSitWhereTheyWereWrittenAndReachLaterTurns() {
+        var asked = ChatQuestion(question: formats, textOffset: 2, sequence: 0)
+        asked.answer = ChatQuestion.Answer(selected: [0])
+        let written = ChatWrittenPlan(plan: tidy, textOffset: 4, sequence: 1)
+        let message = ChatMessage(
+            role: .assistant, text: "abcdef", questions: [asked], plans: [written])
+        expect(
+            shape(message.segments)
+                == ["text ab", "question Which format?", "text cd", "plan Tidy Downloads", "text ef"],
+            "a plan sits at its offset, among the reply's other interruptions")
+        expect(message.nextSequence == 2, "and takes its place in the reply's order")
+        expect(
+            message.contextText
+                == "ab\n\nask_user: Which format?\nThe user chose: PDF\n\ncd\n\n"
+                + "write_plan: Tidy Downloads\n1. Look\n2. Sort\n\nef",
+            "a later turn reads the plan where the reply wrote it, beside the question")
+
+        var session = ChatSession()
+        session.append(ChatMessage(role: .user, text: "Plan it"))
+        session.append(message)
+        session.append(ChatMessage(role: .user, text: "Go"))
+        expect(
+            session.requestMessages()[1].text == message.contextText,
+            "the request carries the plan as the reply's own text")
+        expect(
+            session.livePlan?.messageID == message.id && session.livePlan?.written == written,
+            "the chat's live plan is the one the reply wrote")
+    }
+
+    /// The coordinator's runner for `write_plan`, minus the mode check `agent-policy-test` pins.
+    static func planningLoop(_ base: ScriptedProvider, _ chat: AIChatState) -> AIToolLoopProvider {
+        AIToolLoopProvider(
+            base: base, tools: PlanToolCatalog.tools(), maxRounds: 10
+        ) { @MainActor [weak chat] call in
+            guard let chat, let plan = try? PlanToolCatalog.plan(arguments: call.arguments, now: Date())
+            else { return .failure(call.id, "unreadable") }
+            return chat.writePlan(plan)
+                ? PlanToolCatalog.result(callID: call.id)
+                : .failure(call.id, PlanToolCatalog.turnEnded)
+        }
+    }
+
+    static func writePlan(_ id: String, _ title: String, _ markdown: String) -> AIStreamEvent {
+        .toolCallRequested(
+            AIToolCall(
+                id: id, name: "write_plan",
+                arguments: #"{"title":"\#(title)","markdown":"\#(markdown)"}"#))
+    }
+
+    static func plansAreStoredReplacedAndEdited() async {
+        let (store, directory) = temporaryStore("plan")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: store)
+        let first = ScriptedProvider(rounds: [
+            [.text("Looked."), writePlan("p1", "Tidy", "1. Sort")],
+            [.text(" Done."), .finished]
+        ])
+        chat.send("Plan it", using: planningLoop(first, chat))
+        await settle(chat)
+        let reply = chat.session.messages.last
+        expect(
+            shape(reply?.segments) == ["text Looked.", "plan Tidy", "text  Done."]
+                && reply?.toolUses.isEmpty == true,
+            "the plan is a card where it was written, with no call row beside it")
+        expect(
+            first.requests.last?.messages.last?.toolResult?.content == PlanToolCatalog.resultText,
+            "the model is told the plan is shown and to stop")
+        expect(chat.session.livePlan?.written.plan.markdown == "1. Sort", "it is the chat's plan")
+
+        let second = ScriptedProvider(rounds: [
+            [writePlan("p2", "Tidy v2", "1. Sort\\n2. Trash")], [.finished]
+        ])
+        chat.send("Also trash", using: planningLoop(second, chat))
+        await settle(chat)
+        expect(
+            chat.session.livePlan?.written.plan.title == "Tidy v2"
+                && chat.session.livePlan?.messageID == chat.session.messages.last?.id,
+            "a second plan replaces the first as the chat's plan")
+        expect(
+            chat.session.messages[1].plans.first?.plan.title == "Tidy",
+            "and the first stays in the transcript where it was written")
+
+        expect(!chat.editPlan(markdown: "  \n "), "a blank edit is refused")
+        let edited = Date(timeIntervalSince1970: 500)
+        expect(chat.editPlan(markdown: " 1. Sort\n2. Keep ", now: edited), "an edit is taken")
+        expect(
+            chat.session.livePlan?.written.plan
+                == ChatPlan(title: "Tidy v2", markdown: "1. Sort\n2. Keep", updatedAt: edited),
+            "the edit lands on the live plan, trimmed and stamped")
+        expect(
+            chat.session.messages[1].plans.first?.plan.markdown == "1. Sort",
+            "and never on the plan it replaced")
+
+        let reopened = ChatHistoryStore(directory: directory).session(id: chat.session.id)
+        expect(
+            reopened?.messages[1].plans.first?.plan.title == "Tidy"
+                && reopened?.livePlan?.written.plan.markdown == "1. Sort\n2. Keep"
+                && reopened?.livePlan?.written.plan.updatedAt == edited,
+            "a reopened chat shows both plans, the edit saved on the live one")
+        expect(
+            shape(reopened?.messages[1].segments) == shape(chat.session.messages[1].segments),
+            "each in the same place")
+
+        let execute = AgentModeInstructions.execute(chat.session.livePlan!.written.plan)
+        expect(
+            execute == "Carry out this plan: Tidy v2\n\n1. Sort\n2. Keep",
+            "Execute sends the plan as the reader left it")
+        let next = ScriptedProvider(rounds: [[.text("ok"), .finished]])
+        chat.send(execute, using: next)
+        await settle(chat)
+        expect(
+            next.requests.first?.messages[3].text == "write_plan: Tidy v2\n1. Sort\n2. Keep",
+            "and the turn that carries it out still reads the plan the reply wrote")
+        expect(
+            chat.session.messages[3].text.isEmpty,
+            "a reply that only wrote a plan says nothing more, rather than \"No response\"")
+
+        expect(
+            chat.session.markdownTranscript(title: "T").contains(
+                "**AI**\n\n**Plan: Tidy v2**\n\n1. Sort\n2. Keep\n\n**You**"),
+            "Copy Chat carries each plan as it now reads, even from a reply with no text")
+
+        let reloaded = AIChatState(history: store)
+        reloaded.agentScope.mode = .plan
+        expect(reloaded.open(id: chat.session.id), "the chat reopens")
+        expect(reloaded.agentScope.mode == .manual, "a reopened chat starts in Manual")
+    }
+
+    static func aPlanNeedsATurnAndAnEditWaitsForIt() async {
+        let (store, directory) = temporaryStore("plan-turn")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let idle = AIChatState(history: store)
+        expect(!idle.writePlan(tidy) && idle.session.messages.isEmpty, "no turn, no plan")
+        expect(!idle.editPlan(markdown: "x"), "a chat with no plan has nothing to edit")
+
+        let chat = AIChatState(history: store)
+        let stalled = StalledProvider()
+        chat.send("Plan it", using: stalled)
+        expect(chat.writePlan(tidy), "a running turn writes its plan")
+        expect(!chat.editPlan(markdown: "1. Other"), "an edit waits until the turn is over")
+        try? await Task.sleep(for: .milliseconds(50))
+        stalled.finishAll()
+        await settle(chat)
+        expect(chat.editPlan(markdown: "1. Other"), "then it is taken")
+        expect(
+            ChatHistoryStore(directory: directory).session(id: chat.session.id)?.livePlan?
+                .written.plan.markdown == "1. Other",
+            "and saved")
     }
 
     /// Replies stream on a task; a few turns of the main actor let the scripted events land.

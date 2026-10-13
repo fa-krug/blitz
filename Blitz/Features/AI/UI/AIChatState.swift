@@ -269,6 +269,33 @@ final class AIChatState {
         waiter.continuation.resume(returning: answer)
     }
 
+    // MARK: - Plans
+
+    /// Pinned where the reply wrote it; false once the turn is over and nobody reads the result.
+    @discardableResult
+    func writePlan(_ plan: ChatPlan) -> Bool {
+        guard isStreaming else { return false }
+        flushPendingText()
+        guard var message = session.messages.last, message.role == .assistant else { return false }
+        isThinking = false
+        message.plans.append(
+            ChatWrittenPlan(
+                plan: plan, textOffset: message.text.count, sequence: message.nextSequence))
+        session.replaceLast(with: message)
+        return true
+    }
+
+    /// Never mid-turn: the turn may still be writing the plan this edit would land on.
+    @discardableResult
+    func editPlan(markdown: String, now: Date = Date()) -> Bool {
+        let markdown = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isStreaming, !markdown.isEmpty,
+            let edited = session.editLivePlan(markdown: markdown, at: now)
+        else { return false }
+        history.savePlan(edited.written, messageID: edited.messageID)
+        return true
+    }
+
     /// The latest reply's report, so a reopened chat still knows what its last turn cost.
     var usage: AIUsage? {
         session.messages.last { $0.role == .assistant && $0.usage != nil }?.usage
@@ -397,7 +424,7 @@ final class AIChatState {
         guard var message = session.messages.last, message.role == .assistant else { return }
         if state == .failed, !message.text.isEmpty {
             message.text += "\n\n\(fallback)"
-        } else if message.text.isEmpty {
+        } else if message.text.isEmpty, state != .complete || message.plans.isEmpty {
             message.text = fallback
         }
         message.state = state

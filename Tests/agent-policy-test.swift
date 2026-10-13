@@ -575,6 +575,68 @@ struct AgentPolicyTests {
                 }
             })
 
+        // MARK: MCP tools, one at a time
+
+        func listing(_ slug: String, _ tools: [(String, Bool?)]) -> [MCPTool] {
+            let entries: [Any] = tools.map { name, readOnly -> [String: Any] in
+                guard let readOnly else { return ["name": name] }
+                return ["name": name, "annotations": ["readOnlyHint": readOnly]]
+            }
+            return MCPTool.list(
+                JSONValue(["tools": entries]), serverID: UUID(), serverSlug: slug, serverTitle: slug)
+        }
+        let askTools = listing("ask", [("search", true), ("create", false), ("delete", nil)])
+        let alwaysWrites = listing("always", [("create", false), ("update", nil)])
+        let listed = askTools + alwaysWrites
+        func toolOffered(_ tool: MCPTool, scope: AgentSessionScope) -> Bool {
+            AgentPolicy.isOffered(
+                AgentCall(tool), rules: everythingAsks, mcpTrust: mcpTrust, scope: scope)
+        }
+        check(
+            "plan offers a server's tools one by one, by their own hint",
+            askTools.filter { toolOffered($0, scope: plan) }.map(\.name) == ["search"])
+        check(
+            "manual and auto offer every tool of a trusted server",
+            [open, auto].allSatisfy { scope in listed.allSatisfy { toolOffered($0, scope: scope) } })
+        func serverOffered(_ slug: String, scope: AgentSessionScope) -> Bool {
+            AgentPolicy.isOffered(
+                .server(slug, listed: listed), rules: everythingAsks, mcpTrust: mcpTrust,
+                scope: scope)
+        }
+        check(
+            "a CLI is handed a server in plan only when one of its tools only looks",
+            serverOffered("ask", scope: plan) && !serverOffered("always", scope: plan))
+        check(
+            "a server Blitz never listed is not handed over in plan",
+            !AgentPolicy.isOffered(
+                .server("ask", listed: []), rules: everythingAsks, mcpTrust: mcpTrust, scope: plan))
+        check(
+            "outside plan every trusted server is handed over, listed or not",
+            [open, auto].allSatisfy { scope in
+                serverOffered("ask", scope: scope) && serverOffered("always", scope: scope)
+                    && AgentPolicy.isOffered(
+                        .server("ask", listed: []), rules: everythingAsks, mcpTrust: mcpTrust,
+                        scope: scope)
+            })
+        func consent(_ tool: String, on slug: String, scope: AgentSessionScope) -> AgentDecision {
+            decide(.mcp(AIToolServerCall(handle: slug, tool: tool), listed: listed), scope: scope)
+        }
+        check(
+            "a CLI's call to a tool that changes things is denied in plan",
+            consent("create", on: "ask", scope: plan) == .deny
+                && consent("delete", on: "ask", scope: plan) == .deny)
+        check(
+            "its call to a read-only tool asks as the server's trust says",
+            consent("search", on: "ask", scope: plan) == .ask)
+        check(
+            "a tool the server never listed is not read-only",
+            consent("unlisted", on: "ask", scope: plan) == .deny
+                && consent("search", on: "always", scope: plan) == .deny)
+        check(
+            "manual asks and auto runs the same call",
+            consent("create", on: "ask", scope: open) == .ask
+                && consent("create", on: "ask", scope: auto) == .allow)
+
         // MARK: Tools with no rule row
 
         let modes: [AgentMode] = [.manual, .auto, .plan]
@@ -1092,6 +1154,13 @@ struct AgentPolicyTests {
             planRefusal(#"{"title":"T","markdown":"\#(fullPlan)é"}"#)
                 == "Keep the plan under 32 KB; this one is 33 KB. Shorten it and call write_plan again.")
         check(
+            "a plan draws its own card, not a call row",
+            planTool.first?.showsCallRow == false)
+        check(
+            "later turns read the plan under the tool's name",
+            PlanToolCatalog.record(ChatPlan(title: "Tidy", markdown: "1. Sort", updatedAt: now))
+                == "write_plan: Tidy\n1. Sort")
+        check(
             "the result tells the model to stop",
             PlanToolCatalog.result(callID: "p1")
                 == AIToolResult(
@@ -1113,6 +1182,17 @@ struct AgentPolicyTests {
             "and says to investigate without changing anything, and not to carry it out",
             planInstruction.contains("without changing anything")
                 && planInstruction.contains("Never start carrying the plan out"))
+        check(
+            "manual and auto leave a turn's instructions as they are",
+            AgentModeInstructions.appending(to: "Base", for: .manual) == "Base"
+                && AgentModeInstructions.appending(to: nil, for: .auto) == nil)
+        check(
+            "plan adds its instruction after the turn's own",
+            AgentModeInstructions.appending(to: "Base", for: .plan) == "Base\n\n" + planInstruction)
+        check(
+            "plan holds with no system prompt at all",
+            AgentModeInstructions.appending(to: nil, for: .plan) == planInstruction
+                && AgentModeInstructions.appending(to: "", for: .plan) == planInstruction)
         check(
             "executing a plan carries its current text",
             AgentModeInstructions.execute(

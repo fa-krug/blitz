@@ -18,6 +18,13 @@ enum AgentModeInstructions {
         }
     }
 
+    /// After whatever the turn already carries, so Plan holds with the system prompt switched off.
+    static func appending(to instructions: String?, for mode: AgentMode) -> String? {
+        guard let added = instruction(for: mode) else { return instructions }
+        guard let instructions, !instructions.isEmpty else { return added }
+        return instructions + "\n\n" + added
+    }
+
     /// The plan's current text, which the reader may have edited since the model wrote it.
     static func execute(_ plan: ChatPlan) -> String {
         "Carry out this plan: \(plan.title)\n\n\(plan.markdown)"

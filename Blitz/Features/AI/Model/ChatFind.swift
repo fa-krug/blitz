@@ -48,6 +48,8 @@ enum ChatFindIndex {
                     midStream: message.isArriving(segmentAt: offset, of: segments.count))
                 return leaves(of: blocks, at: [offset])
             case .reasoning(let block): return [([offset], block.text)]
+            case .plan(let written):
+                return leaves(of: MarkdownBlock.parse(written.plan.markdown), at: [offset])
             case .search, .tools, .question: return []
             }
         }

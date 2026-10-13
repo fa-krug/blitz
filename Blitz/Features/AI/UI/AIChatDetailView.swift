@@ -80,6 +80,7 @@ struct AIChatDetailView: View {
                 surface: .window,
                 onRegenerate: chat.isStreaming ? nil : { coordinator.regenerate(in: chat) },
                 onQuestion: { coordinator.respond($0, in: chat) },
+                onPlan: { coordinator.respond($0, in: chat) },
                 find: find.isSearching
                     ? ChatFindHighlight(
                         query: find.needle, matches: Set(occurrences.map(\.messageID)),
@@ -182,6 +183,9 @@ private struct AIChatComposer: View {
             AIModelPicker(chat: chat, selected: coordinator.model(for: chat), coordinator: coordinator)
             AIReasoningPicker(chat: chat, coordinator: coordinator)
             AIToolsPicker(chat: chat, coordinator: coordinator)
+            if coordinator.offersModes(in: chat) {
+                AIModePicker(chat: chat, coordinator: coordinator)
+            }
             if coordinator.offersWebSearch(in: chat) {
                 WebSearchToggle(settings: settings)
             }
@@ -400,6 +404,39 @@ private struct AIToolsPicker: View {
     }
 }
 
+/// This chat's mode; Auto is tinted, since its calls run without anyone being asked.
+private struct AIModePicker: View {
+    let chat: AIChatState
+    let coordinator: AIChatCoordinator
+
+    var body: some View {
+        let selected = chat.agentScope.mode
+        Menu {
+            ForEach(AgentMode.allCases) { mode in
+                Toggle(
+                    isOn: Binding(
+                        get: { selected == mode },
+                        set: { if $0 { coordinator.setMode(mode, in: chat) } })
+                ) {
+                    Label {
+                        Text(mode.title)
+                        Text(mode.summary)
+                    } icon: {
+                        Image(systemName: mode.symbolName)
+                    }
+                }
+            }
+        } label: {
+            Label(selected.title, systemImage: selected.symbolName)
+                .labelStyle(.titleAndIcon)
+        }
+        .modePill(isTinted: selected == .auto)
+        .help(selected.summary)
+        .accessibilityLabel("Mode")
+        .accessibilityValue(selected.title)
+    }
+}
+
 /// Where find is in the open chat, with the same steps ⌘G and ⇧⌘G take.
 private struct FindCounter: View {
     let position: Int
@@ -537,6 +574,9 @@ private struct ContextCard: View {
                 row("System prompt", report.systemPrompt ? "On" : "Off")
                 row("Web search", report.webSearch ? "On" : "Off")
                 section("Tools")
+                if let mode = report.mode {
+                    row("Mode", mode.title)
+                }
                 if report.tools.isEmpty {
                     row("Offered", "None")
                 }
@@ -607,6 +647,20 @@ extension View {
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
             .fixedSize()
+    }
+
+    /// Auto's pill is filled, so a reader notices that calls run without a dialog.
+    @ViewBuilder
+    fileprivate func modePill(isTinted: Bool) -> some View {
+        if isTinted {
+            menuStyle(.button)
+                .buttonStyle(.glassProminent)
+                .tint(Theme.Colors.warning)
+                .buttonBorderShape(.capsule)
+                .fixedSize()
+        } else {
+            composerPill()
+        }
     }
 }
 

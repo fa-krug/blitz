@@ -73,6 +73,15 @@ final class ChatHistoryStore {
           text_offset INTEGER NOT NULL,
           PRIMARY KEY(message_id, position)
         );
+        CREATE TABLE IF NOT EXISTS message_plans(
+          message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          position INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          markdown TEXT NOT NULL,
+          updated_at REAL NOT NULL,
+          text_offset INTEGER NOT NULL,
+          PRIMARY KEY(message_id, position)
+        );
         CREATE TABLE IF NOT EXISTS conversation_details(
           conversation_id TEXT PRIMARY KEY NOT NULL
             REFERENCES conversations(id) ON DELETE CASCADE,
@@ -216,6 +225,7 @@ final class ChatHistoryStore {
         let searches = searches(forConversation: id, in: database)
         let toolUses = toolUses(forConversation: id, in: database)
         let questions = questions(forConversation: id, in: database)
+        let plans = plans(forConversation: id, in: database)
         let reasoning = reasoning(forConversation: id, in: database)
         let meta = messageMeta(forConversation: id, in: database)
         var messages: [ChatMessage] = []
@@ -242,6 +252,7 @@ final class ChatHistoryStore {
                     searches: searches[messageID] ?? [],
                     toolUses: toolUses[messageID] ?? [],
                     questions: questions[messageID] ?? [],
+                    plans: plans[messageID] ?? [],
                     reasoning: reasoning[messageID] ?? [],
                     usage: meta[messageID]?.usage, toolScope: meta[messageID]?.toolScope))
         }
@@ -449,6 +460,7 @@ final class ChatHistoryStore {
                 && saveSearches(of: $0, in: database)
                 && saveToolUses(of: $0, in: database)
                 && saveQuestions(of: $0, in: database)
+                && savePlans(of: $0, in: database)
                 && saveReasoning(of: $0, in: database)
                 && saveMeta(of: $0, in: database)
         }
@@ -622,6 +634,73 @@ final class ChatHistoryStore {
                     sequence: Int(sqlite3_column_int64(statement, 7))))
         }
         return questions
+    }
+
+    private func savePlans(of message: ChatMessage, in database: OpaquePointer) -> Bool {
+        guard !message.plans.isEmpty else { return true }
+        let sql = """
+            INSERT INTO message_plans(
+              message_id, position, title, markdown, updated_at, text_offset)
+            VALUES(?, ?, ?, ?, ?, ?);
+            """
+        guard let statement = prepare(sql, in: database) else { return false }
+        defer { sqlite3_finalize(statement) }
+        for written in message.plans {
+            bind(message.id.uuidString, to: statement, at: 1)
+            sqlite3_bind_int64(statement, 2, Int64(written.sequence))
+            bind(written.plan.title, to: statement, at: 3)
+            bind(written.plan.markdown, to: statement, at: 4)
+            sqlite3_bind_double(statement, 5, written.plan.updatedAt.timeIntervalSince1970)
+            sqlite3_bind_int64(statement, 6, Int64(written.textOffset))
+            guard sqlite3_step(statement) == SQLITE_DONE else { return false }
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+        }
+        return true
+    }
+
+    private func plans(
+        forConversation id: UUID, in database: OpaquePointer
+    ) -> [UUID: [ChatWrittenPlan]] {
+        let sql = """
+            SELECT p.message_id, p.title, p.markdown, p.updated_at, p.text_offset, p.position
+            FROM message_plans p
+            JOIN messages m ON m.id = p.message_id
+            WHERE m.conversation_id = ? ORDER BY p.message_id, p.position;
+            """
+        guard let statement = prepare(sql, in: database) else { return [:] }
+        defer { sqlite3_finalize(statement) }
+        bind(id.uuidString, to: statement, at: 1)
+        var plans: [UUID: [ChatWrittenPlan]] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
+            let plan = ChatPlan(
+                title: text(statement, 1), markdown: text(statement, 2),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)))
+            plans[messageID, default: []].append(
+                ChatWrittenPlan(
+                    plan: plan, textOffset: Int(sqlite3_column_int64(statement, 4)),
+                    sequence: Int(sqlite3_column_int64(statement, 5))))
+        }
+        return plans
+    }
+
+    /// An edit lands on a reply already saved, which a tail rewrite would never reach.
+    @discardableResult
+    func savePlan(_ written: ChatWrittenPlan, messageID: UUID) -> Bool {
+        guard ensureDatabase(), let database else { return false }
+        let sql = """
+            UPDATE message_plans SET title = ?, markdown = ?, updated_at = ?
+            WHERE message_id = ? AND position = ?;
+            """
+        guard let statement = prepare(sql, in: database) else { return false }
+        defer { sqlite3_finalize(statement) }
+        bind(written.plan.title, to: statement, at: 1)
+        bind(written.plan.markdown, to: statement, at: 2)
+        sqlite3_bind_double(statement, 3, written.plan.updatedAt.timeIntervalSince1970)
+        bind(messageID.uuidString, to: statement, at: 4)
+        sqlite3_bind_int64(statement, 5, Int64(written.sequence))
+        return sqlite3_step(statement) == SQLITE_DONE && sqlite3_changes(database) == 1
     }
 
     private static func json(_ value: some Encodable) -> String? {

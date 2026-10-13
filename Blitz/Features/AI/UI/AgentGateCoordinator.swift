@@ -28,7 +28,11 @@ final class AgentGateCoordinator {
     }
 
     func isOffered(_ tool: AgentTool, in chat: AIChatState) -> Bool {
-        decision(for: AgentCall(tool: tool), in: chat) != .deny
+        isOffered(AgentCall(tool: tool), in: chat)
+    }
+
+    func isOffered(_ call: AgentCall, in chat: AIChatState) -> Bool {
+        decision(for: call, in: chat) != .deny
     }
 
     /// What the tools menu lists: the table's own reach, before this chat switches anything off.
@@ -36,10 +40,8 @@ final class AgentGateCoordinator {
         AgentPolicy.offered(tools, rules: rules, mcpTrust: mcpTrust, scope: AgentSessionScope())
     }
 
-    func decisions(for tools: [AgentTool], in chat: AIChatState) -> [AgentPolicy.ToolDecision] {
-        AgentPolicy.decisions(
-            for: tools.map { AgentCall(tool: $0) }, rules: rules, mcpTrust: mcpTrust,
-            scope: chat.agentScope)
+    func decisions(for calls: [AgentCall], in chat: AIChatState) -> [AgentPolicy.ToolDecision] {
+        AgentPolicy.decisions(for: calls, rules: rules, mcpTrust: mcpTrust, scope: chat.agentScope)
     }
 
     /// Bound to one call, for a runner to put its dialog to once it has read the arguments.
@@ -50,11 +52,12 @@ final class AgentGateCoordinator {
         }
     }
 
-    /// An MCP call from either route; the dialog is the server's own three-way question.
+    /// An MCP call from either route, weighed by its own read-only hint, which only Plan reads.
     func authorize(_ call: AIToolServerCall, in chat: AIChatState) async -> AgentRefusal? {
-        guard let server = core.mcpCoordinator.server(slug: call.handle) else { return .denied }
+        let mcp = core.mcpCoordinator
+        guard let server = mcp.server(slug: call.handle) else { return .denied }
         return await authorize(
-            AgentCall(tool: .mcp(call.handle)),
+            .mcp(call, listed: mcp.listedTools(slug: call.handle)),
             prompt: .mcp(serverTitle: server.title, tool: call.tool), in: chat)
     }
 

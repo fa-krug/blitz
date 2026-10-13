@@ -9,6 +9,8 @@ final class MCPCoordinator {
     private let store: MCPSettingsStore
     private let manager: MCPServerManager
     private unowned let core: AppCore
+    /// Tool lists read for a CLI route, by server; an edit or a removal makes them stale.
+    @ObservationIgnored private var listed: [UUID: [MCPTool]] = [:]
 
     init(
         settings: AppSettings, store: MCPSettingsStore, manager: MCPServerManager, core: AppCore
@@ -25,6 +27,7 @@ final class MCPCoordinator {
     func applyEnabled() {
         defer { dropWithdrawnServers() }
         guard isActive else {
+            listed = [:]
             core.mcpOAuth.stop()
             manager.stop()
             return
@@ -68,20 +71,42 @@ final class MCPCoordinator {
     }
 
     /// Every enabled server's tools, or one server's when `@slug` named it; the agent gate narrows.
-    func tools(scopedTo slug: String?) -> [AITool] {
+    func tools(scopedTo slug: String?) -> [MCPTool] {
         guard isActive else { return [] }
-        return manager.tools.filter { slug == nil || $0.serverSlug == slug }.map(\.aiTool)
+        return manager.tools.filter { slug == nil || $0.serverSlug == slug }
+    }
+
+    /// What a server last listed, from Blitz's own connection or the copy `listTools` read.
+    func listedTools(slug: String) -> [MCPTool] {
+        guard let server = server(slug: slug) else { return [] }
+        if let connection = manager.connection(slug: slug), connection.status.isReady {
+            return connection.tools
+        }
+        return listed[server.id] ?? []
+    }
+
+    /// A CLI starts its own copy, so a server Blitz isn't running is listed once, then remembered.
+    func listTools(of server: MCPServer) async -> [MCPTool] {
+        let known = listedTools(slug: server.slug)
+        guard known.isEmpty, isActive else { return known }
+        let connection = MCPServerConnection(
+            server: server, secrets: MCPSecretStore().secrets(for: server.id), oauth: core.mcpOAuth)
+        defer { connection.stop() }
+        await connection.start()
+        guard self.server(slug: server.slug) == server else { return [] }
+        listed[server.id] = connection.tools
+        return connection.tools
     }
 
     /// The same list for a CLI route; it starts its own copies, so Blitz's need not be ready.
     func toolServers(
-        scopedTo slug: String?, offering isOffered: (String) -> Bool
+        scopedTo slug: String?, offering isOffered: (MCPServer) async -> Bool
     ) async -> [AIToolServer] {
         guard isActive else { return [] }
         let secrets = MCPSecretStore()
         var result: [AIToolServer] = []
-        for server in store.enabledServers
-        where (slug == nil || server.slug == slug) && isOffered(server.slug) {
+        for server in store.enabledServers where slug == nil || server.slug == slug {
+            guard await isOffered(server) else { continue }
             let stored = secrets.secrets(for: server.id)
             var bearer: String?
             if server.oauth == true { bearer = try? await core.mcpOAuth.lentToken(for: server) }
@@ -132,6 +157,7 @@ final class MCPCoordinator {
         try MCPSecretStore().save(secrets, for: server.id)
         core.mcpOAuth.cancelSignIn(server.id)
         manager.disconnect(server.id)
+        listed[server.id] = nil
         store.save(server)
         applyEnabled()
     }
@@ -145,6 +171,7 @@ final class MCPCoordinator {
         core.mcpOAuth.cancelSignIn(id)
         try MCPSecretStore().remove(for: id)
         store.remove(id: id)
+        listed[id] = nil
         applyEnabled()
     }
 

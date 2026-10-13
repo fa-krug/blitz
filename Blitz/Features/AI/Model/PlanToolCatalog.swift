@@ -9,6 +9,8 @@ enum PlanToolCatalog {
     static let markdownLimit = 32 * 1024
     static let resultText =
         "The plan is shown to the user. Stop here; do not start carrying it out."
+    static let notOffered = "Writing a plan is only available in Plan mode."
+    static let turnEnded = "The turn had already ended, so the plan was not shown."
 
     private typealias Invalid = AIToolArguments.Invalid
 
@@ -28,7 +30,7 @@ enum PlanToolCatalog {
                     "markdown": AIToolJSON.string("The plan itself, in Markdown.")
                 ],
                 required: ["title", "markdown"]),
-            origin: origin, title: "Write Plan")
+            origin: origin, title: "Write Plan", showsCallRow: false)
         return [write]
     }
 
@@ -50,5 +52,10 @@ enum PlanToolCatalog {
 
     static func result(callID: String) -> AIToolResult {
         AIToolResult(callID: callID, content: resultText, isError: false)
+    }
+
+    /// How later turns read the plan, set into the reply's text where it was written.
+    static func record(_ plan: ChatPlan) -> String {
+        "\(writePlanName): \(plan.title)\n\(plan.markdown)"
     }
 }

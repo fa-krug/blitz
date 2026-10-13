@@ -297,7 +297,7 @@ final class AIChatCoordinator {
             let sent = chat.send(
                 address.rest, using: try provider(for: chat, scopedTo: address.slug),
                 model: model(for: chat), webSearch: webSearch(for: chat),
-                instructions: instructions, contextBudget: contextBudget(for: chat),
+                instructions: instructions(for: chat), contextBudget: contextBudget(for: chat),
                 toolScope: address.slug)
             // Named while the answer streams, so the sidebar has a title before the reply ends.
             if sent { nameIfNeeded(chat) }
@@ -316,7 +316,7 @@ final class AIChatCoordinator {
             chat.regenerate(
                 using: try provider(for: chat, scopedTo: scope),
                 model: model(for: chat), webSearch: webSearch(for: chat),
-                instructions: instructions, contextBudget: contextBudget(for: chat))
+                instructions: instructions(for: chat), contextBudget: contextBudget(for: chat))
         } catch {
             chat.report(error.localizedDescription)
         }
@@ -331,10 +331,12 @@ final class AIChatCoordinator {
         core.aiSettings.webSearchEnabled && offersWebSearch(in: chat)
     }
 
-    private var instructions: String? {
-        AIInstructions.compose(
-            userPrompt: core.aiSettings.systemPrompt,
-            isEnabled: core.aiSettings.systemPromptEnabled)
+    private func instructions(for chat: AIChatState) -> String? {
+        AgentModeInstructions.appending(
+            to: AIInstructions.compose(
+                userPrompt: core.aiSettings.systemPrompt,
+                isEnabled: core.aiSettings.systemPromptEnabled),
+            for: chat.agentScope.mode)
     }
 
     /// A turn's route and its tools: a CLI with its own client is handed servers, others the loop.
@@ -354,7 +356,15 @@ final class AIChatCoordinator {
             hosted: slug == nil ? blitzHostedTools(for: chat) : .none
         ) { @MainActor [weak self, weak chat] in
             guard let self, let chat else { return [] }
-            return await mcp.toolServers(scopedTo: slug) { self.gate.isOffered(.mcp($0), in: chat) }
+            return await mcp.toolServers(scopedTo: slug) { server in
+                // A read-only call is Plan's ceiling, so a server refused even that is never listed.
+                guard self.gate.isOffered(.mcp(server.slug, readOnly: true), in: chat) else {
+                    return false
+                }
+                guard chat.agentScope.mode == .plan else { return true }
+                let listed = await mcp.listTools(of: server)
+                return self.gate.isOffered(.server(server.slug, listed: listed), in: chat)
+            }
         } consent: { @MainActor [weak self, weak chat] call in
             guard let self, let chat else { return false }
             return await gate.authorize(call, in: chat) == nil
@@ -368,13 +378,17 @@ final class AIChatCoordinator {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
         let blitz = blitzHostedTools(for: chat).run
-        // An `@server` turn sits Blitz's own tools out, and a question has no gate to refuse it.
+        // An `@server` turn sits Blitz's own tools out, and the chat's own have no gate to refuse.
         let asks = tools.contains { AskUserToolCatalog.handles($0.name) }
+        let plans = tools.contains { PlanToolCatalog.handles($0.name) }
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
         ) { @MainActor [weak self, weak chat] call in
             if AskUserToolCatalog.handles(call.name), !asks {
                 return .failure(call.id, AskUserToolCatalog.notOffered)
+            }
+            if PlanToolCatalog.handles(call.name), !plans {
+                return .failure(call.id, PlanToolCatalog.notOffered)
             }
             if Self.isBlitzTool(call.name) { return await blitz(call) }
             guard let self, let chat else { return .failure(call.id, "The chat was closed.") }
@@ -397,6 +411,7 @@ final class AIChatCoordinator {
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
             || ShellToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
+            || PlanToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -407,6 +422,7 @@ final class AIChatCoordinator {
         } run: { @MainActor [weak self, weak chat] call in
             guard let self, let chat else { return await AIHostedTools.none.run(call) }
             if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
+            if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -431,6 +447,21 @@ final class AIChatCoordinator {
         return AskUserToolCatalog.result(answer, to: question, callID: call.id)
     }
 
+    /// Never past the gate either: a plan changes nothing until the reader carries it out.
+    private func writePlan(_ call: AIToolCall, in chat: AIChatState) -> AIToolResult {
+        guard AgentPolicy.isOffered(.writePlan, scope: chat.agentScope) else {
+            return .failure(call.id, PlanToolCatalog.notOffered)
+        }
+        let plan: ChatPlan
+        do throws(AIToolArguments.Invalid) {
+            plan = try PlanToolCatalog.plan(arguments: call.arguments, now: Date())
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard chat.writePlan(plan) else { return .failure(call.id, PlanToolCatalog.turnEnded) }
+        return PlanToolCatalog.result(callID: call.id)
+    }
+
     /// Each runner reads its call, then puts its own dialog to the gate before it acts.
     private func runBlitzTool(
         _ call: AIToolCall, authorize: AgentAuthorization
@@ -450,10 +481,9 @@ final class AIChatCoordinator {
     /// `@server` narrows a turn further, but never past what the chat's tools menu switched off.
     private func tools(for chat: AIChatState, scopedTo slug: String?) -> [AITool] {
         guard chat.agentScope.isEnabled else { return [] }
-        let servers = core.mcpCoordinator.tools(scopedTo: slug).filter { tool in
-            guard let route = MCPToolName.parse(tool.name) else { return false }
-            return gate.isOffered(.mcp(route.slug), in: chat)
-        }
+        let servers = core.mcpCoordinator.tools(scopedTo: slug)
+            .filter { gate.isOffered(AgentCall($0), in: chat) }
+            .map(\.aiTool)
         // `@server` addresses one server, so Blitz's own tools sit that turn out.
         return slug == nil ? blitzTools(for: chat) + servers : servers
     }
@@ -469,6 +499,8 @@ final class AIChatCoordinator {
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
                 ? AskUserToolCatalog.tools() : [])
+            + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
+                ? PlanToolCatalog.tools() : [])
     }
 
     private func runShellCommand(
@@ -500,6 +532,15 @@ final class AIChatCoordinator {
     func listedServers(for chat: AIChatState) -> [MCPServer] {
         let listed = Set(gate.listed(mcpServers.map { .mcp($0.slug) }))
         return mcpServers.filter { listed.contains(.mcp($0.slug)) }
+    }
+
+    /// Modes weigh Blitz's own tools and the plan they write, so a route without them has none.
+    func offersModes(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).tools && model(for: chat)?.reachesBlitzTools == true
+    }
+
+    func setMode(_ mode: AgentMode, in chat: AIChatState) {
+        chat.agentScope.mode = offersModes(in: chat) ? mode : .manual
     }
 
     func setToolsEnabled(_ enabled: Bool, in chat: AIChatState) {
@@ -534,6 +575,19 @@ final class AIChatCoordinator {
         case .choose(let option): chat.answerQuestion(question.answer(choosing: option))
         case .toggle(let option): chat.toggleQuestionOption(option)
         case .send: chat.answerQuestion(question.answer(typing: ""))
+        }
+    }
+
+    /// The live plan's card: an edit is saved where the plan was written, and Execute leaves Plan.
+    func respond(_ input: ChatPlanInput, in chat: AIChatState) {
+        guard !chat.isStreaming else { return }
+        switch input {
+        case .save(let markdown):
+            chat.editPlan(markdown: markdown)
+        case .execute(let mode):
+            guard let live = chat.session.livePlan else { return }
+            setMode(mode, in: chat)
+            send(AgentModeInstructions.execute(live.written.plan), in: chat)
         }
     }
 
@@ -578,6 +632,7 @@ final class AIChatCoordinator {
             usage: chat.usage,
             systemPrompt: core.aiSettings.systemPromptEnabled,
             webSearch: webSearch(for: chat),
+            mode: offersModes(in: chat) ? chat.agentScope.mode : nil,
             tools: detailed ? toolRows(for: chat) : [])
     }
 
@@ -585,8 +640,11 @@ final class AIChatCoordinator {
     private func toolRows(for chat: AIChatState) -> [ChatContextReport.ToolRow] {
         guard capabilities(for: chat).tools else { return [] }
         let servers = mcpServers
-        let tools = listedBuiltInTools(for: chat) + servers.map { AgentTool.mcp($0.slug) }
-        return gate.decisions(for: tools, in: chat).map { row in
+        let mcp = core.mcpCoordinator
+        let calls =
+            listedBuiltInTools(for: chat).map { AgentCall(tool: $0) }
+            + servers.map { AgentCall.server($0.slug, listed: mcp.listedTools(slug: $0.slug)) }
+        return gate.decisions(for: calls, in: chat).map { row in
             guard case .mcp(let slug) = row.tool else {
                 return ChatContextReport.ToolRow(title: row.tool.title, decision: row.decision)
             }
@@ -820,6 +878,8 @@ final class AIChatCoordinator {
             subscription: core.codexSubscription, installedAI: core.installedAI)
         chat.setModel(selection)
         core.aiSettings.select(selection)
+        // The picker leaves with the route, and a mode nobody can see must not keep applying.
+        if !offersModes(in: chat) { chat.agentScope.mode = .manual }
     }
 
     func reasoningEfforts(for chat: AIChatState) -> [ChatGPTSubscription.Effort] {
@@ -873,6 +933,8 @@ struct ChatContextReport: Equatable {
     let usage: AIUsage?
     let systemPrompt: Bool
     let webSearch: Bool
+    /// Nil where the route reaches none of Blitz's tools, so it has no mode to be in.
+    let mode: AgentMode?
     /// Each tool the next turn is offered; left empty for the gauge alone.
     let tools: [ToolRow]
 

@@ -120,6 +120,25 @@ struct ChatSession: Equatable, Sendable {
         updatedAt = max(updatedAt, now)
     }
 
+    /// The chat's one plan: a later `write_plan` replaces it, so it is the last any reply wrote.
+    var livePlan: (messageID: UUID, written: ChatWrittenPlan)? {
+        guard let message = messages.last(where: { !$0.plans.isEmpty }),
+            let written = message.plans.last
+        else { return nil }
+        return (message.id, written)
+    }
+
+    /// Edits the live plan where it was written; a replaced one stays the record it was.
+    mutating func editLivePlan(
+        markdown: String, at now: Date
+    ) -> (messageID: UUID, written: ChatWrittenPlan)? {
+        guard let index = messages.lastIndex(where: { !$0.plans.isEmpty }) else { return nil }
+        let last = messages[index].plans.count - 1
+        messages[index].plans[last].plan.markdown = markdown
+        messages[index].plans[last].plan.updatedAt = now
+        return (messages[index].id, messages[index].plans[last])
+    }
+
     /// Regenerate's first half: only a trailing reply goes, so the question it answered stays.
     @discardableResult
     mutating func dropTrailingReply() -> Bool {
@@ -132,13 +151,16 @@ struct ChatSession: Equatable, Sendable {
     func markdownTranscript(title: String) -> String {
         var parts = ["# \(title)"]
         for message in messages
-        where !message.text.isEmpty || !message.documents.isEmpty || !message.images.isEmpty {
+        where !message.text.isEmpty || !message.documents.isEmpty || !message.images.isEmpty
+            || !message.plans.isEmpty
+        {
             var turn = message.role == .user ? "**You**" : "**AI**"
             let names = message.documents.map(\.name) + message.images.map { _ in "Image" }
             if !names.isEmpty { turn += " _(attached: \(names.joined(separator: ", ")))_" }
             // The choices fence drew buttons; in a pasted transcript it is only markup.
             let text = message.role == .assistant ? ChatChoices.split(message.text).text : message.text
-            parts.append(turn + "\n\n" + text)
+            let plans = message.plans.map { "**Plan: \($0.plan.title)**\n\n\($0.plan.markdown)" }
+            parts.append(([turn, text] + plans).filter { !$0.isEmpty }.joined(separator: "\n\n"))
         }
         return parts.joined(separator: "\n\n")
     }

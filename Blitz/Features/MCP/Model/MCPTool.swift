@@ -8,6 +8,8 @@ struct MCPTool: Equatable, Sendable {
     let name: String
     let description: String
     let inputSchema: JSONValue
+    /// The server's own `readOnlyHint`; a tool that does not say so is taken to change things.
+    let isReadOnly: Bool
 
     /// The name the model sees. A wire name has to survive both providers' character rules.
     var wireName: String { MCPToolName.compose(slug: serverSlug, tool: name) }
@@ -29,7 +31,8 @@ struct MCPTool: Equatable, Sendable {
             return MCPTool(
                 serverID: serverID, serverSlug: serverSlug, serverTitle: serverTitle, name: name,
                 description: tool["description"]?.stringValue ?? "",
-                inputSchema: tool["inputSchema"] ?? .object(["type": .string("object")]))
+                inputSchema: tool["inputSchema"] ?? .object(["type": .string("object")]),
+                isReadOnly: tool["annotations"]?.objectValue?["readOnlyHint"]?.boolValue == true)
         }
     }
 }

@@ -229,6 +229,7 @@
 		432CC11A31427A1B75124723 /* PaletteWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E561282F300E6AFE19CB7E9 /* PaletteWindowController.swift */; };
 		43A9A9FC71B297F90831A7D8 /* SettingsFileMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F356566A5D4CEF575049420 /* SettingsFileMonitor.swift */; };
 		43D5A6440722250579F028DA /* QuickActionSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82DAA0EB902A01D481BFF800 /* QuickActionSettingsStore.swift */; };
+		43EA11F53FB1F1032DDDF36F /* ChatWrittenPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E6CD3D3C56C94EEE5006656 /* ChatWrittenPlan.swift */; };
 		44036AB4460CEB36D2E06B68 /* MenuPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A184A6638A83BDA724FBE000 /* MenuPanel.swift */; };
 		4495CB29C8D239B4187C682C /* CalcCurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD1C18E465F6DEC024E701F /* CalcCurrency.swift */; };
 		44D66783312C8603DD161434 /* ExtensionAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905CEC430144020A72C0447F /* ExtensionAppearance.swift */; };
@@ -522,6 +523,7 @@
 		98274A9CA7BA68BF0736FA36 /* RoomPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482DF1E1F91A53796F6852D5 /* RoomPlan.swift */; };
 		987E6076A613603DABF19F3F /* ExtensionFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD9A073343D15635B52E996F /* ExtensionFormView.swift */; };
 		98BFAEBE1C0803C9AFD4CE37 /* CustomCommandEditorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186B76126662A8931232A494 /* CustomCommandEditorPanel.swift */; };
+		991EEC8F5F925307796384CC /* ChatPlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */; };
 		994DC0596EA3BB10BF8A117F /* MessageHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A975C1994C3F3CA944807853 /* MessageHUDController.swift */; };
 		9990C636BED5F696FFAA76E7 /* ContactLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7C80336EBCFC33C2754E6F /* ContactLink.swift */; };
 		9992B816FE768A5523EE489D /* AIProvidersPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC25A31FEF56F6B48BD51EB /* AIProvidersPanel.swift */; };
@@ -1324,6 +1326,7 @@
 		7DA3D7EC512F8D7CE90300F4 /* ChatHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryStore.swift; sourceTree = "<group>"; };
 		7E38F3740E7B49F509E173BF /* RoomWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomWindow.swift; sourceTree = "<group>"; };
 		7E4C1DF8C037A32B814A1A88 /* AIToolLoopProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIToolLoopProvider.swift; sourceTree = "<group>"; };
+		7E6CD3D3C56C94EEE5006656 /* ChatWrittenPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatWrittenPlan.swift; sourceTree = "<group>"; };
 		7F07D2229C456FC9AE822108 /* WindowInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInventory.swift; sourceTree = "<group>"; };
 		7F22ED027B6DDA64EF9FA091 /* FormDraftMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormDraftMemory.swift; sourceTree = "<group>"; };
 		7F2888FBB079E1EDAECCD7EC /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
@@ -1493,6 +1496,7 @@
 		ADACD0C5DC62BDDA4BD94078 /* CalendarToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarToolCatalog.swift; sourceTree = "<group>"; };
 		ADD10232EE2BA5A8ADCFE21F /* QRCodeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeMonitor.swift; sourceTree = "<group>"; };
 		ADEC433ED005B26FA7668C54 /* Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Appearance.swift; sourceTree = "<group>"; };
+		AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPlanCard.swift; sourceTree = "<group>"; };
 		AEEBED63A28B2F05CE211F9B /* ChatQuestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatQuestion.swift; sourceTree = "<group>"; };
 		AF0AE84F5689B1D4F2E5C276 /* QuickActionPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionPrompt.swift; sourceTree = "<group>"; };
 		AF3EFA3EAD4F3254F7AE8155 /* SmartReminderPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartReminderPrompt.swift; sourceTree = "<group>"; };
@@ -2676,6 +2680,7 @@
 				A3E5805E2FD715C8A28B780E /* ChatHistoryView.swift */,
 				A56464C7A13D4145F6C370F9 /* ChatMarkdownRenderer.swift */,
 				78A63E1641AE7AF57CAF813A /* ChatMarkdownText.swift */,
+				AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */,
 				187EC6A41C7955E8679C8667 /* ChatQuestionCard.swift */,
 				3F65304BC761A5B8E5272D9F /* ChatSuggestionChips.swift */,
 				BB1D6BC94E84E716F6EE2367 /* ChatTextHighlight.swift */,
@@ -3481,6 +3486,7 @@
 				39FF583FBDBF6BC83B6925D6 /* ChatReferences.swift */,
 				951C174843186B8D0F38433A /* ChatSession.swift */,
 				A4BC39B4C12CDF9DD5F8FCCE /* ChatTitle.swift */,
+				7E6CD3D3C56C94EEE5006656 /* ChatWrittenPlan.swift */,
 				82A48E956A475FDC1D812F28 /* ClaudeControlProtocol.swift */,
 				0EB4E931B3C82921AD979C38 /* ClaudeHostedServer.swift */,
 				9F7917C86D79080BEE8C7108 /* ClaudeMCPLaunch.swift */,
@@ -4210,6 +4216,7 @@
 				0B9FE4E8B2A0F6A8D5777665 /* ChatMarkdownText.swift in Sources */,
 				8F6A5AA86E610603D859686D /* ChatMessage.swift in Sources */,
 				AED2A77FC3A02D042F2D05E3 /* ChatPlan.swift in Sources */,
+				991EEC8F5F925307796384CC /* ChatPlanCard.swift in Sources */,
 				64818DA44A15CD32D7B2769A /* ChatQuestion.swift in Sources */,
 				50300D50396F377EDDC66018 /* ChatQuestionCard.swift in Sources */,
 				910C0A2D517B4A32C90BFA07 /* ChatReferences.swift in Sources */,
@@ -4218,6 +4225,7 @@
 				35CEA2029BDA18DD19BB6542 /* ChatTextHighlight.swift in Sources */,
 				8E775BA38492B324CA415A0F /* ChatTitle.swift in Sources */,
 				F9BCB2434C70CBE954378614 /* ChatTranscriptView.swift in Sources */,
+				43EA11F53FB1F1032DDDF36F /* ChatWrittenPlan.swift in Sources */,
 				5F640DF7F94C66A357E74F10 /* ClaudeControlProtocol.swift in Sources */,
 				B24DD7921C1F547CEF1953A9 /* ClaudeHostedServer.swift in Sources */,
 				5A40D46AC42D09AAAFB7D0AA /* ClaudeMCPLaunch.swift in Sources */,

@@ -679,6 +679,9 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
                            Blitz/Features/AI/Model/ChatQuestion.swift \
                            Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/ChatPlan.swift \
+                           Blitz/Features/AI/Model/ChatWrittenPlan.swift \
+                           Blitz/Features/AI/Model/PlanToolCatalog.swift \
                            Blitz/Features/AI/Model/AIToolArguments.swift \
                            Blitz/Features/AI/Model/AIToolJSON.swift \
                            Blitz/Features/AI/Model/AIToolDate.swift \
@@ -691,6 +694,7 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/AgentTool.swift \
                            Blitz/Features/AI/Model/AgentSessionScope.swift \
                            Blitz/Features/AI/Model/AgentMode.swift \
+                           Blitz/Features/AI/Model/AgentModeInstructions.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
@@ -712,6 +716,9 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
                            Blitz/Features/AI/Model/ChatQuestion.swift \
                            Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/ChatPlan.swift \
+                           Blitz/Features/AI/Model/ChatWrittenPlan.swift \
+                           Blitz/Features/AI/Model/PlanToolCatalog.swift \
                            Blitz/Features/AI/Model/AIToolArguments.swift \
                            Blitz/Features/AI/Model/AIToolJSON.swift \
                            Blitz/Features/AI/Model/AIToolDate.swift \
