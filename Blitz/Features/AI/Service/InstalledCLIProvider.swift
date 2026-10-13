@@ -61,9 +61,12 @@ private final class InstalledCLITurnRunner {
     private var activeExecutable: URL?
     /// What this turn armed, empty on every route and every turn that offers no server.
     private var activeServers: [AIToolServer] = []
+    /// Blitz's own tools this turn serves in-process; empty off Claude and while none are allowed.
+    private var activeHosted: [AITool] = []
     private var mcpConfigURL: URL?
     private var input: FileHandle?
-    private var consents: [Task<Void, Never>] = []
+    /// Each one answers a request the CLI is holding open: a consent or a hosted tool call.
+    private var answers: [Task<Void, Never>] = []
     /// Chained rather than concurrent: two writes racing the same pipe would interleave a line.
     private var writes: Task<Void, Never> = Task {}
 
@@ -152,16 +155,20 @@ private final class InstalledCLITurnRunner {
         }
 
         activeServers = await resolvedToolServers()
+        activeHosted = await resolvedHostedTools()
         let prompt = prompt(for: request)
         var configURL: URL?
-        if !activeServers.isEmpty {
+        if isArmed {
             let url = workspace.appending(path: ClaudeMCPLaunch.configurationFileName())
             do {
                 try await Self.writePrivateFile(
-                    ClaudeMCPLaunch.configuration(servers: activeServers), to: url)
+                    ClaudeMCPLaunch.configuration(
+                        servers: activeServers, hosting: !activeHosted.isEmpty),
+                    to: url)
             } catch {
                 try? FileManager.default.removeItem(at: url)
                 activeServers = []
+                activeHosted = []
                 continuation.finish(
                     throwing: AIProviderError.unavailable(
                         "Blitz could not write its private MCP configuration."))
@@ -255,7 +262,7 @@ private final class InstalledCLITurnRunner {
             return
         }
         // A tool loop answers on the same pipe, so an armed turn keeps stdin open for it.
-        write(line, closing: activeServers.isEmpty)
+        write(line, closing: !isArmed)
     }
 
     /// A pipe write past the buffer blocks until the child drains it, so never on the main actor.
@@ -295,8 +302,18 @@ private final class InstalledCLITurnRunner {
         return await toolServers.servers()
     }
 
+    /// The same gate as the servers: a managed policy rejects the flags that would carry these.
+    private func resolvedHostedTools() async -> [AITool] {
+        guard kind == .claude, let toolServers, !InstalledAIManager.hasManagedMCPPolicy else {
+            return []
+        }
+        return await toolServers.hosted.tools()
+    }
+
+    private var isArmed: Bool { !activeServers.isEmpty || !activeHosted.isEmpty }
+
     /// Nothing to call is one request; an armed turn takes the reader's cap, which may be none.
-    private var roundCap: Int? { activeServers.isEmpty ? 1 : toolServers?.rounds }
+    private var roundCap: Int? { isArmed ? toolServers?.rounds : 1 }
 
     private func arguments(promptFile: URL? = nil, mcpConfig: URL? = nil) -> [String] {
         switch kind {
@@ -381,7 +398,7 @@ private final class InstalledCLITurnRunner {
 
     private func prompt(for request: AIRequest) -> String {
         var sections = [
-            activeServers.isEmpty ? Self.safetyInstructions : Self.toolSafetyInstructions
+            isArmed ? Self.toolSafetyInstructions : Self.safetyInstructions
         ]
         if let instructions = request.instructions?.trimmingCharacters(in: .whitespacesAndNewlines),
             !instructions.isEmpty
@@ -416,7 +433,8 @@ private final class InstalledCLITurnRunner {
             guard !line.isEmpty else { continue }
             apply(
                 InstalledAIStreamDecoder.decode(
-                    Data(line), kind: kind, servers: activeServers), token: token)
+                    Data(line), kind: kind, servers: activeServers, hosted: activeHosted),
+                token: token)
         }
         if outputBuffer.count > Self.maximumPartialLineBytes {
             fail(kind.title + " returned an oversized response.")
@@ -427,6 +445,10 @@ private final class InstalledCLITurnRunner {
         if let sessionID = frame.sessionID { turnSessionID = sessionID }
         if let request = frame.controlRequest {
             answer(request, token: token)
+            return
+        }
+        if let message = frame.hostedMessage {
+            serve(message, token: token)
             return
         }
         if let id = frame.unsupportedRequestID {
@@ -454,9 +476,12 @@ private final class InstalledCLITurnRunner {
 
     /// The reader's decision, through the same trust policy and dialog the BYOK loop asks with.
     private func answer(_ request: ClaudeControlProtocol.Request, token: TurnToken) {
-        consents.append(
+        answers.append(
             Task { [weak self] in
-                let allowed = await self?.toolServers?.consent(request.call) ?? false
+                // Blitz's own tools gate themselves per call, exactly as they do in Blitz's loop.
+                let allowed =
+                    request.call.handle == ClaudeHostedServer.handle
+                    ? true : await self?.toolServers?.consent(request.call) ?? false
                 guard let self, self.token === token else { return }
                 guard
                     let line = ClaudeControlProtocol.response(
@@ -467,10 +492,31 @@ private final class InstalledCLITurnRunner {
             })
     }
 
+    /// The server Blitz hosts: listing is answered at once, a call once its tool has run.
+    private func serve(_ message: ClaudeHostedServer.Message, token: TurnToken) {
+        let tools = activeHosted
+        answers.append(
+            Task { [weak self] in
+                let reply: JSONValue
+                switch ClaudeHostedServer.reply(to: message.body, tools: tools) {
+                case .answer(let answer):
+                    reply = answer
+                case .call(let call, let id):
+                    let run = self?.toolServers?.hosted.run ?? AIHostedTools.none.run
+                    reply = ClaudeHostedServer.result(await run(call), id: id)
+                }
+                guard let self, self.token === token,
+                    let line = ClaudeControlProtocol.hostedResponse(
+                        to: message.requestID, message: reply)
+                else { return }
+                self.write(line, closing: false)
+            })
+    }
+
     /// A question still waiting its turn belongs to a turn that is over, so it is never asked.
-    private func cancelConsents() {
-        for consent in consents { consent.cancel() }
-        consents = []
+    private func cancelAnswers() {
+        for answer in answers { answer.cancel() }
+        answers = []
     }
 
     private func consumeError(_ data: Data, token: TurnToken) {
@@ -506,7 +552,7 @@ private final class InstalledCLITurnRunner {
     }
 
     private func cancelActiveTurn() {
-        cancelConsents()
+        cancelAnswers()
         continuation?.finish(throwing: CancellationError())
         continuation = nil
         process?.terminate()
@@ -587,7 +633,7 @@ private final class InstalledCLITurnRunner {
     }
 
     private func cleanup() {
-        cancelConsents()
+        cancelAnswers()
         process?.terminationHandler = nil
         (process?.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
         (process?.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
@@ -600,6 +646,7 @@ private final class InstalledCLITurnRunner {
         removePrivateFiles()
         activeExecutable = nil
         activeServers = []
+        activeHosted = []
         write(Data(), closing: true)
     }
 }

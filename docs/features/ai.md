@@ -115,9 +115,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 - **The Mac's own calendar and reminders are tools Blitz runs, and off until asked for.**
   Settings → AI → Personal data holds `aiCalendarAccess` and `aiRemindersAccess`, each an
   `AIDataAccess` of Off, Read Only or Read & Write, both Off out of the box. A store is offered only
-  while its own feature is on too — that switch is where macOS was asked — and only to a route
-  whose loop Blitz runs: an API connection. Codex and the Claude command run their own client and
-  are handed servers, not Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
+  while its own feature is on too — that switch is where macOS was asked — and only to a route that
+  can call Blitz back: an API connection, through Blitz's loop, or the Claude command, through the
+  in-process server `ClaudeHostedServer` answers (see below). Codex is handed servers alone, never
+  Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
   that writes, so the model never sees one it may not use; every call re-checks the setting, since
   it can change mid-reply. An event is shown first through Blitz's confirm; a reminder is
   written straight away, Read & Write being the consent, and edited in place by id rather than
@@ -183,8 +184,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `AIRequestBody`'s, in `Model/`, precisely so a wrong shape fails a harness rather than a
   conversation. `installed-ai-test` runs the Claude, Grok, OpenCode and Cursor adapters against real
   subprocess stubs and pins their safety boundaries.
-- **Grok, OpenCode and Cursor are text transports, not agents, and so is Claude with no server to
-  run.** Claude runs one turn with no tools, browser integration, slash commands or persisted
+- **Grok, OpenCode and Cursor are text transports, not agents, and so is Claude with nothing to
+  call.** Claude runs one turn with no tools, browser integration, slash commands or persisted
   session — but never `--bare`, which reads neither
   OAuth nor the keychain and so refuses the very sign-in this route reuses. Given servers by
   [MCP](mcp.md) it becomes an agent for that turn and only over those: `--tools ""` still withholds
@@ -192,7 +193,14 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `--disallowedTools "*"` comes off because it removes the MCP tools too, `--max-turns` carries
   the round cap instead of the constant 1, or is left out on Unlimited, and
   `--permission-mode default` with an ask rule per server keeps the reader's own allow rules and
-  default mode from answering before Blitz does.
+  default mode from answering before Blitz does. The calendar and reminders arm a turn the same way
+  with no server at all: the configuration names `blitz_data` as an `sdk` server, which the CLI
+  reaches as `mcp_message` control requests on the turn's own pipe, and `ClaudeHostedServer`
+  answers its JSON-RPC from the tools resolved when the turn started. A call runs through the same
+  `runTool` the loop calls, so it re-checks the setting and confirms a calendar write itself; its
+  `can_use_tool` question is allowed without MCP's trust dialog for that reason. `MCPSlug` never
+  yields `_`, so no server the reader adds can take that handle. `@server` and the chat's Use
+  Tools switch withhold it as they do in the loop.
   Grok runs with `--deny *`,
   `dontAsk` permissions and a workspace sandbox, and never `--always-approve`, so a user's always-approve
   config cannot arm tools for this route. OpenCode runs `--pure` with deny-all permissions, disabled

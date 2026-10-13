@@ -613,6 +613,7 @@
 		B1969BE760ADBD25998393E9 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE4DAF587EF671DB3522EE9 /* FolderPicker.swift */; };
 		B217AE31B396983DF9343917 /* ChatHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DA3D7EC512F8D7CE90300F4 /* ChatHistoryStore.swift */; };
 		B21D7B320721B466EB4DBD92 /* WindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C976F7D29B3A428006E221EB /* WindowLayout.swift */; };
+		B24DD7921C1F547CEF1953A9 /* ClaudeHostedServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB4E931B3C82921AD979C38 /* ClaudeHostedServer.swift */; };
 		B2BA8C4EE78AD1183C1A2A52 /* RedactedPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 834407DAAA5E1FA510791A87 /* RedactedPlaceholder.swift */; };
 		B2CEBA452912F743E80C4B27 /* HotKeySpelling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D4CA1414941E4184AC95F2 /* HotKeySpelling.swift */; };
 		B2E688104F18C1DC87CD17EA /* MCPCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00EBC674286C3B7E0ECF4FE3 /* MCPCoordinator.swift */; };
@@ -908,6 +909,7 @@
 		0DFFD0715129B0993525C9A8 /* ChatFindState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatFindState.swift; sourceTree = "<group>"; };
 		0E1F5B6E1204847176A5588D /* CustomCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCommand.swift; sourceTree = "<group>"; };
 		0E494BE307E7236B76CDDB5A /* SettingsPaneScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPaneScanner.swift; sourceTree = "<group>"; };
+		0EB4E931B3C82921AD979C38 /* ClaudeHostedServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHostedServer.swift; sourceTree = "<group>"; };
 		0EBE6CA63F1BB1265231EEA3 /* NoteMarkdownStyler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdownStyler.swift; sourceTree = "<group>"; };
 		0EF0A07BD080463B5C69CF4B /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
 		0F10491A92405D59CF53AC85 /* SettingsNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationState.swift; sourceTree = "<group>"; };
@@ -3418,6 +3420,7 @@
 				A4BC39B4C12CDF9DD5F8FCCE /* ChatTitle.swift */,
 				2322AAC501A42E5F9DF64B20 /* ChatToolScope.swift */,
 				82A48E956A475FDC1D812F28 /* ClaudeControlProtocol.swift */,
+				0EB4E931B3C82921AD979C38 /* ClaudeHostedServer.swift */,
 				9F7917C86D79080BEE8C7108 /* ClaudeMCPLaunch.swift */,
 				7BC4B7BBEEE4CF7D2D0C8F27 /* CodexAppServerProtocol.swift */,
 				2E1D4DA5A3E9FB0CF4C5DA7F /* CodexMCPLaunch.swift */,
@@ -4134,6 +4137,7 @@
 				226550468ECC94BC7E1F7047 /* ChatToolScope.swift in Sources */,
 				F9BCB2434C70CBE954378614 /* ChatTranscriptView.swift in Sources */,
 				5F640DF7F94C66A357E74F10 /* ClaudeControlProtocol.swift in Sources */,
+				B24DD7921C1F547CEF1953A9 /* ClaudeHostedServer.swift in Sources */,
 				5A40D46AC42D09AAAFB7D0AA /* ClaudeMCPLaunch.swift in Sources */,
 				8AFCEBDBC326D23AEE6AFA5E /* ClipDrag.swift in Sources */,
 				B40746B15DBF611DFAB2B62D /* ClipDragPayload.swift in Sources */,

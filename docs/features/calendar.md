@@ -313,7 +313,8 @@ still lands on top of it. The session, the panel and the stage are the `Camera` 
 ## Chat tools
 
 With Calendar on and Settings → AI → Personal data → Calendar access set past Off, a chat on an API
-connection is offered `calendar_list_events`, and with Read & Write `calendar_create_event` too —
+connection or the Claude command is offered `calendar_list_events`, and with Read & Write
+`calendar_create_event` too —
 see [AI](ai.md) for who gets offered what. `CalendarCoordinator.chatTools` decides the list and
 `runTool` answers a call; the reading and the answer are `CalendarToolCatalog`'s, harness-pinned.
 

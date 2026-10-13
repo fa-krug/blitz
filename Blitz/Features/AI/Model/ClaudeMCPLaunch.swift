@@ -9,8 +9,11 @@ enum ClaudeMCPLaunch {
     }
     private static let separator = "__"
 
-    static func configuration(servers: [AIToolServer]) -> String {
+    static func configuration(servers: [AIToolServer], hosting: Bool = false) -> String {
         var entries: [String: Any] = [:]
+        if hosting {
+            entries[ClaudeHostedServer.handle] = ["type": "sdk", "name": ClaudeHostedServer.handle]
+        }
         for server in servers {
             switch server.transport {
             case .command(let path, let arguments, let environment):
@@ -56,7 +59,7 @@ enum ClaudeMCPLaunch {
         return text
     }
 
-    /// `mcp__<handle>__<tool>` back to Blitz's pair; a handle never holds `_`, a tool may.
+    /// `mcp__<handle>__<tool>` back to Blitz's pair; a handle never holds `__`, a tool may.
     static func route(_ wireName: String) -> AIToolServerCall? {
         guard wireName.hasPrefix(toolPrefix) else { return nil }
         let rest = wireName.dropFirst(toolPrefix.count)

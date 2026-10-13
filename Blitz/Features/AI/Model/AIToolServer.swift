@@ -21,6 +21,15 @@ struct AIToolServerCall: Equatable, Sendable {
     let tool: String
 }
 
+/// Blitz's own tools, served from inside Blitz to a client that can host a server in-process.
+struct AIHostedTools: Sendable {
+    let tools: @Sendable () async -> [AITool]
+    let run: @Sendable (AIToolCall) async -> AIToolResult
+
+    static let none = AIHostedTools(
+        tools: { [] }, run: { .failure($0.id, "Blitz offers no tool named \($0.name).") })
+}
+
 /// How a route whose own client runs the tool loop reaches Blitz's servers and its reader.
 struct AIToolServerSession: Sendable {
     let servers: @Sendable () async -> [AIToolServer]
@@ -28,13 +37,17 @@ struct AIToolServerSession: Sendable {
     let consent: @MainActor @Sendable (AIToolServerCall) async -> Bool
     /// The BYOK loop's bound, `nil` for none, applied to the CLI's own loop so a reply stops alike.
     let rounds: Int?
+    /// Only Claude can host these; Codex is handed servers alone.
+    let hosted: AIHostedTools
 
     init(
         rounds: Int?,
+        hosted: AIHostedTools = .none,
         servers: @escaping @Sendable () async -> [AIToolServer],
         consent: @escaping @Sendable (AIToolServerCall) async -> Bool
     ) {
         self.rounds = rounds
+        self.hosted = hosted
         self.servers = servers
         let queue = ConsentQueue()
         self.consent = { @MainActor call in await queue.ask { await consent(call) } }
