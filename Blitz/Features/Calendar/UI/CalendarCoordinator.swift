@@ -316,15 +316,16 @@ final class CalendarCoordinator {
 
     /// What a chat model may call now: nothing unless this feature and its AI setting allow it.
     func chatTools(now: Date) -> [AITool] {
-        let access = core.aiSettings.calendarAccess
-        guard settings.calendarEnabled, access.canRead else { return [] }
-        return CalendarToolCatalog.tools(canWrite: access.canWrite, now: now, calendar: .current)
+        let rules = core.aiSettings.agentRules
+        guard settings.calendarEnabled, rules.calendarRead != .deny else { return [] }
+        return CalendarToolCatalog.tools(
+            canWrite: rules.calendarWrite != .deny, now: now, calendar: .current)
     }
 
     /// Re-checked per call, since Settings can change mid-reply; a write is shown before it lands.
     func runTool(_ call: AIToolCall) async -> AIToolResult {
-        let access = core.aiSettings.calendarAccess
-        guard settings.calendarEnabled, access.canRead else {
+        let rules = core.aiSettings.agentRules
+        guard settings.calendarEnabled, rules.calendarRead != .deny else {
             return .failure(
                 call.id, "Chat access to the calendar is turned off in Blitz's settings.")
         }
@@ -344,7 +345,7 @@ final class CalendarCoordinator {
                 events, in: interval, query: query, calendar: .current)
             return AIToolResult(callID: call.id, content: answer, isError: false)
         case .create(let event):
-            guard access.canWrite else {
+            guard rules.calendarWrite != .deny else {
                 return .failure(call.id, "Chat may read the calendar but not change it.")
             }
             return await create(event, callID: call.id)

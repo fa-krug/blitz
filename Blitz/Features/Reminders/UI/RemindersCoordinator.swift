@@ -238,15 +238,17 @@ final class RemindersCoordinator {
 
     /// What a chat model may call now: nothing unless this feature and its AI setting allow it.
     func chatTools(now: Date) -> [AITool] {
-        let access = core.aiSettings.remindersAccess
-        guard settings.remindersEnabled, access.canRead else { return [] }
-        return ReminderToolCatalog.tools(canWrite: access.canWrite, now: now, calendar: .current)
+        let rules = core.aiSettings.agentRules
+        guard settings.remindersEnabled, rules.remindersRead != .deny else { return [] }
+        return ReminderToolCatalog.tools(
+            canWrite: rules.remindersWrite != .deny, now: now, calendar: .current)
     }
 
     /// Re-checked per call, since Settings can change mid-reply; Read & Write is the consent.
     func runTool(_ call: AIToolCall) async -> AIToolResult {
-        let access = core.aiSettings.remindersAccess
-        guard settings.remindersEnabled, access.canRead else {
+        let rules = core.aiSettings.agentRules
+        let canWrite = rules.remindersWrite != .deny
+        guard settings.remindersEnabled, rules.remindersRead != .deny else {
             return .failure(call.id, "Chat access to Reminders is turned off in Blitz's settings.")
         }
         store.refreshAccess()
@@ -265,11 +267,11 @@ final class RemindersCoordinator {
             let answer = ReminderToolCatalog.render(
                 await store.loadedReminders(), query: query, now: Date(), calendar: .current)
             return AIToolResult(callID: call.id, content: answer, isError: false)
-        case .create(let draft) where access.canWrite:
+        case .create(let draft) where canWrite:
             return createForChat(draft, callID: call.id)
-        case .update(let id, let edit) where access.canWrite:
+        case .update(let id, let edit) where canWrite:
             return updateForChat(id: id, edit: edit, callID: call.id)
-        case .complete(let id) where access.canWrite:
+        case .complete(let id) where canWrite:
             return await completeForChat(id: id, callID: call.id)
         case .create, .update, .complete:
             return .failure(call.id, "Chat may read reminders but not change them.")

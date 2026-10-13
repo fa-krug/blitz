@@ -29,7 +29,7 @@ struct AgentRules: Equatable, Sendable {
 
     static let defaults = AgentRules(
         shell: .deny, calendarRead: .ask, calendarWrite: .deny, remindersRead: .ask,
-        remindersWrite: .deny, webSearch: .deny)
+        remindersWrite: .deny, webSearch: .allow)
 
     /// The table the old access pickers and shell switch amounted to; read once, then dropped.
     static func migrated(

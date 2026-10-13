@@ -151,6 +151,11 @@ final class MCPCoordinator {
         applyEnabled()
     }
 
+    func setTrust(_ trust: MCPTrust, for id: UUID) {
+        store.setTrust(trust, for: id)
+        dropWithdrawnServers()
+    }
+
     func remove(_ id: UUID) throws {
         core.mcpOAuth.cancelSignIn(id)
         try MCPSecretStore().remove(for: id)

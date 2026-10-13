@@ -247,7 +247,7 @@ struct AgentPolicyTests {
         check("calendar write defaults to deny", defaults.calendarWrite == .deny)
         check("reminders read defaults to ask", defaults.remindersRead == .ask)
         check("reminders write defaults to deny", defaults.remindersWrite == .deny)
-        check("web search defaults to deny", defaults.webSearch == .deny)
+        check("web search defaults to allow: the composer toggle is the opt-in", defaults.webSearch == .allow)
         check("no shell rules by default", defaults.shellRules.isEmpty)
 
         var rules = AgentRules.defaults
@@ -504,7 +504,9 @@ struct AgentPolicyTests {
             decide(AgentCall(tool: .mcp("always"), command: "rm x"), gitRules) == .allow)
 
         check("web search allowed → allow", decide(AgentCall(tool: .webSearch)) == .allow)
-        check("web search denied → deny", decide(AgentCall(tool: .webSearch), .defaults) == .deny)
+        var noSearch = AgentRules.defaults
+        noSearch.set(.deny, for: .webSearch)
+        check("web search denied → deny", decide(AgentCall(tool: .webSearch), noSearch) == .deny)
         check(
             "web search is never ask, whatever the scope",
             [open, askEverything].allSatisfy { scope in
@@ -514,9 +516,9 @@ struct AgentPolicyTests {
             })
 
         check(
-            "the defaults offer only the read rows",
-            AgentPolicy.offered(tools, rules: .defaults, mcpTrust: mcpTrust, scope: open)
-                == [.calendarRead, .remindersRead])
+            "the defaults offer only the read rows and web search",
+            Set(AgentPolicy.offered(tools, rules: .defaults, mcpTrust: mcpTrust, scope: open))
+                == [.calendarRead, .remindersRead, .webSearch])
         check(
             "offered keeps the given order",
             AgentPolicy.offered(

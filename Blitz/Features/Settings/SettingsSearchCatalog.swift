@@ -306,16 +306,29 @@ enum SettingsSearchCatalog {
         .init(.aiDefault, "Default model", keywords: ["llm", "gpt", "claude", "grok"]),
         .init(.aiDefault, "Reasoning effort", keywords: ["thinking", "effort", "deepseek"]),
         .init(.aiChat, "Web search", keywords: ["browse", "internet"]),
-        .init(.aiChat, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "agent", "unlimited"]),
         .init(
-            .aiPersonalData, "Calendar access",
-            keywords: ["events", "schedule", "meetings", "tools", "privacy"]),
+            group: .aiAgent, "Agent",
+            keywords: ["tools", "permissions", "allow", "ask", "deny", "rules", "privacy"]),
         .init(
-            .aiPersonalData, "Reminders access",
-            keywords: ["to-do", "todo", "tasks", "tools", "privacy"]),
+            group: .aiAgent, "Run Commands",
+            keywords: ["shell", "terminal", "command line", "zsh", "bash", "tools", "execute"]),
         .init(
-            .aiShell, "Run shell commands",
-            keywords: ["terminal", "command line", "zsh", "bash", "tools", "execute"]),
+            group: .aiAgent, "Calendar access",
+            keywords: ["read calendar", "add calendar events", "events", "meetings", "tools"]),
+        .init(
+            group: .aiAgent, "Reminders access",
+            keywords: ["read reminders", "change reminders", "to-do", "todo", "tasks", "tools"]),
+        .init(
+            group: .aiAgent, "MCP server trust",
+            keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
+        .init(
+            .aiAgent, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "unlimited"]),
+        .init(
+            group: .aiShellRules, "Shell rules",
+            keywords: ["shell", "terminal", "commands", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .aiShellRules, "Add Shell Rule",
+            keywords: ["shell", "terminal", "command", "pattern", "always allow"]),
         .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),

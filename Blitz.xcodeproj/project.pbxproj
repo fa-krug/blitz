@@ -651,6 +651,7 @@
 		BEF7B606C59A83427B40335D /* SpotlightShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6577771E5709C6FEBAABDC5 /* SpotlightShortcut.swift */; };
 		BF3535E9083D8425FB90E5D4 /* RevealableSecureField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39CBADDEA1EB11033573DFB1 /* RevealableSecureField.swift */; };
 		BF42153B9F56115ABC9E823B /* MarkdownMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29210CA95DDE83D8C079679D /* MarkdownMath.swift */; };
+		BF94EDF5854CCBB9A02D507E /* AgentSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F699814DD35CCB6DE79AD4 /* AgentSettingsSection.swift */; };
 		BF9610604733375036C2FDCA /* SnippetsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C338BEB02B6F544F89FA004D /* SnippetsStore.swift */; };
 		BFCD1782E4F07213D4E3136C /* CalendarCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8383768C63DC6706BD1E7985 /* CalendarCoordinator.swift */; };
 		BFE73F180D81B8D1946EB5FD /* UpdateWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E6A26FDFB807B81E8671B0 /* UpdateWindowView.swift */; };
@@ -718,6 +719,7 @@
 		D2BEAF358787BFE9990C85AE /* RoomLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A4D49B28082A17CDF392E6 /* RoomLayoutEngine.swift */; };
 		D2DB8FFD8AD9D549937EAE3E /* UninstallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F04D60B4DBC74A94C0A8E6 /* UninstallView.swift */; };
 		D2EAFC7AD5A192B3D365BEAB /* IconStyleMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39CC7ADAB5E2F75C2EBCC391 /* IconStyleMonitor.swift */; };
+		D3649D03A17D0E2A4CE53AEE /* ShellRulesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904E67A6E90A58EC38A15425 /* ShellRulesSection.swift */; };
 		D44BC8612B0174606175B1EA /* CalcValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39A43560C0BDCD4DEBA038A3 /* CalcValue.swift */; };
 		D4A10E7A39A99C4359ECFCD3 /* InstalledAIEnvironmentKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B0D6761DE65401ADE55053 /* InstalledAIEnvironmentKeychain.swift */; };
 		D4BA32D1086E2E30ECD4D2EF /* Memo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63927E82B131CF19451D7FAC /* Memo.swift */; };
@@ -1066,6 +1068,7 @@
 		361B96B074A1A1A2E70B0053 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		36419546783C35A5AC970F36 /* QuicklinkDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkDestination.swift; sourceTree = "<group>"; };
 		366BEA7F6DE0C2FC85552A07 /* WindowLayoutRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayoutRunner.swift; sourceTree = "<group>"; };
+		36F699814DD35CCB6DE79AD4 /* AgentSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSettingsSection.swift; sourceTree = "<group>"; };
 		3730FAE25CFF479DE22707FA /* ExtensionFieldChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionFieldChrome.swift; sourceTree = "<group>"; };
 		3748D4FEE9783B4CF68608B8 /* PalettePlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePlacement.swift; sourceTree = "<group>"; };
 		38692E1D56B83405B800EB6E /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
@@ -1374,6 +1377,7 @@
 		8F3CDEFB9996843AA05A762F /* NoteWindowPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteWindowPlacement.swift; sourceTree = "<group>"; };
 		8F6195E6050FA6880ABD6A0F /* RaycastScriptImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaycastScriptImport.swift; sourceTree = "<group>"; };
 		8FADFEB23E1B7BF8D9B1DDDD /* SettingsEditorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsEditorPresenter.swift; sourceTree = "<group>"; };
+		904E67A6E90A58EC38A15425 /* ShellRulesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRulesSection.swift; sourceTree = "<group>"; };
 		90529E7EAA46AD7310675FF1 /* SettingsFileJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFileJSON.swift; sourceTree = "<group>"; };
 		905CEC430144020A72C0447F /* ExtensionAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionAppearance.swift; sourceTree = "<group>"; };
 		907871572FD07C7C5DAC136E /* UninstallSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallSession.swift; sourceTree = "<group>"; };
@@ -3164,6 +3168,7 @@
 		A49AFD794F276C15FFA0ED71 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				36F699814DD35CCB6DE79AD4 /* AgentSettingsSection.swift */,
 				76CFABD64416278502098934 /* AIConnectionEditorPanel.swift */,
 				FA7B99F6F218BD1450E75ACC /* AIModelChecklist.swift */,
 				FA02B78710AC5F553FC6FE26 /* AIModelSelectionRows.swift */,
@@ -3171,6 +3176,7 @@
 				7FC25A31FEF56F6B48BD51EB /* AIProvidersPanel.swift */,
 				B755BCB684DDCE83A6A2A985 /* AISettingsStore.swift */,
 				0C49C1C9AC3148802F52B90A /* AISettingsView.swift */,
+				904E67A6E90A58EC38A15425 /* ShellRulesSection.swift */,
 				4EF25E9D2721A9FBCBB6904C /* SystemPromptEditor.swift */,
 			);
 			path = Settings;
@@ -4064,6 +4070,7 @@
 				1C889C42775C95EE5F1AB7BF /* AgentPolicy.swift in Sources */,
 				8D2D8F20F812EFC07994ACCC /* AgentRules.swift in Sources */,
 				D0775B70E088DE427AEAD2CF /* AgentSessionScope.swift in Sources */,
+				BF94EDF5854CCBB9A02D507E /* AgentSettingsSection.swift in Sources */,
 				E5F6174A6EFD91470B666A6C /* AgentTool.swift in Sources */,
 				F3DAE89160C13E514083E4AF /* AliasStore.swift in Sources */,
 				8EF74BF762AE18FBDF339EB0 /* AppActionsMenu.swift in Sources */,
@@ -4731,6 +4738,7 @@
 				7B60E6D645321035B80C571E /* ShellCommandRunner.swift in Sources */,
 				C2B6A4CBA81AD91E61A67E14 /* ShellCommandSegments.swift in Sources */,
 				0F1EDFBD3F8945B50C080637 /* ShellRule.swift in Sources */,
+				D3649D03A17D0E2A4CE53AEE /* ShellRulesSection.swift in Sources */,
 				FA92FA490C06D6DF990784E1 /* ShellToolCatalog.swift in Sources */,
 				03DEEA5EA4FBC09A6DE4C4C5 /* ShellToolRunner.swift in Sources */,
 				9EEE2B01CE8F93CC69359884 /* ShortcutCaptureSession.swift in Sources */,

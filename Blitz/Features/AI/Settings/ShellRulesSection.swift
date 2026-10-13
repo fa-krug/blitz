@@ -1,0 +1,95 @@
+import SwiftUI
+
+/// Settings → AI → Shell rules: ordered patterns, each deciding the command parts it matches.
+struct ShellRulesSection: View {
+    @Environment(AISettingsStore.self) private var settings
+    @FocusState private var focusedRule: ShellRule.ID?
+
+    var body: some View {
+        let rules = settings.agentRules.shellRules
+        Section {
+            ForEach(rules) { rule in
+                ShellRuleRow(
+                    rule: rule,
+                    canMoveUp: rule.id != rules.first?.id,
+                    canMoveDown: rule.id != rules.last?.id,
+                    onChange: settings.updateShellRule,
+                    onMove: { settings.moveShellRule(id: rule.id, by: $0) },
+                    onRemove: { settings.removeShellRule(id: rule.id) },
+                    focus: $focusedRule
+                )
+            }
+            Button(action: addRule) {
+                Label {
+                    SettingsRowTitle(.aiShellRules, "Add Shell Rule")
+                } icon: {
+                    Image(systemName: "plus")
+                        .foregroundStyle(.primary)
+                }
+            }
+        } header: {
+            SettingsSectionHeader(.aiShellRules)
+        } footer: {
+            Text(
+                "Each part of a command takes the first pattern it matches, and Deny wins. "
+                    + "* matches anything. A command with $(…) or backticks always asks. A Deny "
+                    + "pattern is a backstop, not a sandbox.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func addRule() {
+        let rule = ShellRule(pattern: "", decision: .allow)
+        settings.addShellRule(rule)
+        focusedRule = rule.id
+    }
+}
+
+private struct ShellRuleRow: View {
+    let rule: ShellRule
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onChange: (ShellRule) -> Void
+    let onMove: (Int) -> Void
+    let onRemove: () -> Void
+    let focus: FocusState<ShellRule.ID?>.Binding
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            TextField("Pattern", text: field(\.pattern), prompt: Text("git status *"))
+                .labelsHidden()
+                .font(Theme.Typography.inlineCode)
+                .focused(focus, equals: rule.id)
+            Picker("Decision", selection: field(\.decision)) {
+                ForEach([AgentDecision.allow, .ask, .deny]) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            iconButton("chevron.up", label: "Move Up") { onMove(-1) }
+                .settingsEnabled(canMoveUp)
+            iconButton("chevron.down", label: "Move Down") { onMove(1) }
+                .settingsEnabled(canMoveDown)
+            iconButton("minus.circle", label: "Remove") { onRemove() }
+        }
+    }
+
+    private func field<Value>(_ path: WritableKeyPath<ShellRule, Value>) -> Binding<Value> {
+        Binding(
+            get: { rule[keyPath: path] },
+            set: { value in
+                var edited = rule
+                edited[keyPath: path] = value
+                onChange(edited)
+            })
+    }
+
+    private func iconButton(
+        _ symbol: String, label: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) { Image(systemName: symbol) }
+            .buttonStyle(.borderless)
+            .help(label)
+            .accessibilityLabel(label)
+    }
+}

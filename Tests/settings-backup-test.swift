@@ -76,7 +76,7 @@ struct SettingsBackupTest {
         for key: AppSettingsKey in [
             .snippetsEnabled, .extensionsEnabled, .calendarEnabled, .autoJoinMeetings,
             .cameraPreview, .quickActionsEnabled, .remindersEnabled, .contactsEnabled,
-            .aiCalendarAccess, .aiRemindersAccess, .aiShellCommands,
+            .aiAgentRules, .aiCalendarAccess, .aiRemindersAccess, .aiShellCommands,
             .quicklinkPrefersExistingTabs
         ] {
             check(

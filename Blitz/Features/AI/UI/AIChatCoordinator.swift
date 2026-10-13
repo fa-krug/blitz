@@ -402,7 +402,8 @@ final class AIChatCoordinator {
     }
 
     private func blitzTools() -> [AITool] {
-        personalTools() + (core.aiSettings.shellCommandsEnabled ? ShellToolCatalog.tools() : [])
+        let offersShell = core.aiSettings.agentRules.shell != .deny
+        return personalTools() + (offersShell ? ShellToolCatalog.tools() : [])
     }
 
     /// The calendar and reminders, as far as Settings → AI lets a model reach them.
@@ -426,7 +427,7 @@ final class AIChatCoordinator {
 
     /// Whether the composer shows the chat's Confirm / Auto-run switch: only where the tool rides.
     func offersShellCommands(in chat: AIChatState) -> Bool {
-        core.aiSettings.shellCommandsEnabled && capabilities(for: chat).tools
+        core.aiSettings.agentRules.shell != .deny && capabilities(for: chat).tools
             && model(for: chat)?.reachesBlitzTools == true && chat.toolScope.isEnabled
     }
 
@@ -445,7 +446,7 @@ final class AIChatCoordinator {
         }
         var approved = chat.shellApproval == .automatic
         if !approved { approved = await confirmShellCommand(request, in: chat) }
-        guard core.aiSettings.shellCommandsEnabled else {
+        guard core.aiSettings.agentRules.shell != .deny else {
             return .failure(call.id, "Running shell commands is turned off in Blitz's settings.")
         }
         guard approved else { return .failure(call.id, ShellToolCatalog.declined) }
@@ -458,7 +459,7 @@ final class AIChatCoordinator {
     ) async -> Bool {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return await shellConsent.ask { @MainActor [weak self] in
-            guard let self, core.aiSettings.shellCommandsEnabled else { return false }
+            guard let self, core.aiSettings.agentRules.shell != .deny else { return false }
             guard chat.shellApproval == .ask else { return true }
             return await core.confirm(
                 title: "Run this command?",
