@@ -39,7 +39,9 @@ whose **Open** shows it in Reminders.
   The model is sent the typed sentence and today's date, never a reminder already on the Mac.
 - **A model's reply is read, never trusted.** `SmartReminderPrompt.draft(from:)` takes the first `{`
   to the last `}` and decodes it field by field. No title is no reminder; a due date that is not a
-  real day is dropped rather than guessed. A clean reply is written straight away — the reader typed
+  real day is dropped rather than guessed, and so is one whose `when` — the words the model quotes as
+  naming it — is not found in the typed sentence, because a small model will otherwise echo the
+  prompt's own `Now` as the due date. A clean reply is written straight away — the reader typed
   the sentence and asked for it — and the banner shows what landed, its **Open** the way to fix a
   misread. Whatever fails, the sentence is not lost: `Write It Myself` opens the New Reminder prompt
   with it as the title.

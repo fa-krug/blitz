@@ -87,7 +87,9 @@ struct RemindersTests {
     }
 
     static func dueTitles() {
-        func title(_ day: Int, month: Int = 10, year: Int = 2026, time: ReminderDue.Time? = nil)
+        func title(
+            _ day: Int, month: Int = 10, year: Int = 2026, time: ReminderDue.Time? = nil
+        )
             -> String
         {
             ReminderDue(year: year, month: month, day: day, time: time)
@@ -178,45 +180,67 @@ struct RemindersTests {
 
     static func replies() {
         let plain = SmartReminderPrompt.draft(
-            from: #"{"title": "Give Greg a cake", "due": "2026-10-04", "notes": null}"#,
-            calendar: calendar)
+            from: #"{"title": "Give Greg a cake", "when": "tomorrow", "due": "2026-10-04"}"#,
+            note: "Greg wants tomorrow a cake", calendar: calendar)
         expect(plain?.title == "Give Greg a cake", "the title is read")
         expect(plain?.due == ReminderDue(year: 2026, month: 10, day: 4), "and the day it is due")
         expect(plain?.trimmedNotes == nil, "a null note stays empty")
 
         let fenced = SmartReminderPrompt.draft(
-            from: "Sure!\n```json\n{\"title\": \"Call mum\", \"due\": null}\n```", calendar: calendar)
+            from: "Sure!\n```json\n{\"title\": \"Call mum\", \"due\": null}\n```", note: "call mum",
+            calendar: calendar)
         expect(fenced?.title == "Call mum", "prose and a code fence around the object are ignored")
         expect(fenced?.due == nil, "a null due date means no due date")
 
         let timed = SmartReminderPrompt.draft(
-            from: #"{"title": "Gym", "due": "2026-10-05T18:00", "notes": "bring towel"}"#,
-            calendar: calendar)
+            from:
+                #"{"title": "Gym", "when": "Monday evening", "due": "2026-10-05T18:00", "notes": "bring towel"}"#,
+            note: "gym monday evening, bring towel", calendar: calendar)
         expect(
             timed?.due == ReminderDue(year: 2026, month: 10, day: 5, time: .init(hour: 18, minute: 0)),
             "a time rides along when the reply gives one")
         expect(timed?.notes == "bring towel", "and so do notes")
 
         let numericDue = SmartReminderPrompt.draft(
-            from: #"{"title": "Pay rent", "due": 20261005}"#, calendar: calendar)
+            from: #"{"title": "Pay rent", "when": "Monday", "due": 20261005}"#,
+            note: "pay rent monday", calendar: calendar)
         expect(
             numericDue?.title == "Pay rent" && numericDue?.due == nil,
             "a due date of the wrong type is dropped, not the whole reminder")
         expect(
-            SmartReminderPrompt.draft(from: #"{"title": "  ", "due": "2026-10-04"}"#, calendar: calendar)
-                == nil,
+            SmartReminderPrompt.draft(
+                from: #"{"title": "  ", "due": "2026-10-04"}"#, note: "", calendar: calendar) == nil,
             "a reply with no title is no reminder")
         expect(
-            SmartReminderPrompt.draft(from: "I can't help with that.", calendar: calendar) == nil,
+            SmartReminderPrompt.draft(from: "I can't help with that.", note: "x", calendar: calendar)
+                == nil,
             "a refusal is no reminder")
+
+        let echoed = SmartReminderPrompt.draft(
+            from: #"{"title": "Accept the CFA invitation", "when": null, "due": "2026-10-03T14:00"}"#,
+            note: "Invitation to CFA", calendar: calendar)
+        expect(
+            echoed?.title == "Accept the CFA invitation" && echoed?.due == nil,
+            "a due date the note never names is dropped, not the reminder")
+        let invented = SmartReminderPrompt.draft(
+            from: #"{"title": "Accept the CFA invitation", "when": "today", "due": "2026-10-03"}"#,
+            note: "Invitation to CFA", calendar: calendar)
+        expect(invented?.due == nil, "and so is one whose quoted words are not in the note")
+        let german = SmartReminderPrompt.draft(
+            from: #"{"title": "Zahnarzt anrufen", "when": "Übermorgen", "due": "2026-10-05"}"#,
+            note: "übermorgen zahnarzt anrufen", calendar: calendar)
+        expect(
+            german?.due == ReminderDue(year: 2026, month: 10, day: 5),
+            "the quote matches whatever its case, in any language")
     }
 
     static func replyDates() {
         let due = { SmartReminderPrompt.due(from: $0, calendar: calendar) }
         expect(due("2026-10-04") == ReminderDue(year: 2026, month: 10, day: 4), "a bare day reads")
         expect(
-            due("2026-10-04 07:05") == ReminderDue(
-                year: 2026, month: 10, day: 4, time: .init(hour: 7, minute: 5)),
+            due("2026-10-04 07:05")
+                == ReminderDue(
+                    year: 2026, month: 10, day: 4, time: .init(hour: 7, minute: 5)),
             "a space may separate the day from the time")
         expect(
             due("2026-10-04T07:05:00Z")?.time == ReminderDue.Time(hour: 7, minute: 5),
@@ -238,7 +262,7 @@ struct RemindersTests {
             text.contains(#""due": "2026-10-04""#),
             "the worked example's tomorrow is the real tomorrow")
         expect(
-            text.contains(#""due": null"#) && text.contains("Never guess one"),
+            text.contains(#""when": null, "due": null"#) && text.contains("Never guess one"),
             "and a second example names no day, so no date is an answer rather than a gap")
     }
 
