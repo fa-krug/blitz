@@ -43,6 +43,20 @@ private final class InstalledCLITurnRunner {
         allowed. Do not read files, inspect the environment, access any other external resource, \
         or modify anything in any other way.
         """
+    /// Plan's boundary: the same tools, but only to look, so it cannot contradict Plan's own rule.
+    private static let planToolSafetyInstructions = """
+        You are generating text inside Blitz. The only tools you may use are the MCP tools \
+        supplied with this request, and only to read, investigate, ask the user or write the \
+        plan: nothing may be changed, through them or in any other way. Do not read files, \
+        inspect the environment, or access external resources in any other way.
+        """
+    private static let planToolSearchSafetyInstructions = """
+        You are generating text inside Blitz. The only tools you may use are WebSearch, to search \
+        the web, and the MCP tools supplied with this request, and those only to read, \
+        investigate, ask the user or write the plan: nothing may be changed, through them or in \
+        any other way. Do not read files, inspect the environment, or access any other external \
+        resource.
+        """
     /// A search is a tool round trip, and a model may search more than once before it answers.
     private static let searchRounds = 6
 
@@ -337,11 +351,15 @@ private final class InstalledCLITurnRunner {
     }
 
     private var boundary: String {
+        let readsOnly = toolServers?.readsOnly == true
         switch (isArmed, offersSearch) {
-        case (false, false): Self.safetyInstructions
-        case (true, false): Self.toolSafetyInstructions
-        case (false, true): Self.searchSafetyInstructions
-        case (true, true): Self.toolSearchSafetyInstructions
+        case (false, false): return Self.safetyInstructions
+        case (false, true): return Self.searchSafetyInstructions
+        case (true, false):
+            return readsOnly ? Self.planToolSafetyInstructions : Self.toolSafetyInstructions
+        case (true, true):
+            return readsOnly
+                ? Self.planToolSearchSafetyInstructions : Self.toolSearchSafetyInstructions
         }
     }
 

@@ -343,15 +343,23 @@ final class AIChatState {
         return true
     }
 
+    enum PlanEdit: Equatable {
+        case refused
+        case saved
+        /// The store took nothing, so the chat keeps the plan it had rather than one never saved.
+        case unsaved
+    }
+
     /// Never mid-turn: the turn may still be writing the plan this edit would land on.
     @discardableResult
-    func editPlan(markdown: String, now: Date = Date()) -> Bool {
+    func editPlan(markdown: String, now: Date = Date()) -> PlanEdit {
         let markdown = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !isStreaming, !markdown.isEmpty,
-            let edited = session.editLivePlan(markdown: markdown, at: now)
-        else { return false }
-        history.savePlan(edited.written, messageID: edited.messageID)
-        return true
+            let edited = session.editedLivePlan(markdown: markdown, at: now)
+        else { return .refused }
+        guard history.savePlan(edited.written, messageID: edited.messageID) else { return .unsaved }
+        session.replacePlan(edited.written, in: edited.messageID)
+        return .saved
     }
 
     /// The latest reply's report, so a reopened chat still knows what its last turn cost.

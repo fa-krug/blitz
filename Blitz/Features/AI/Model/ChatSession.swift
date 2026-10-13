@@ -128,15 +128,24 @@ struct ChatSession: Equatable, Sendable {
         return (message.id, written)
     }
 
-    /// Edits the live plan where it was written; a replaced one stays the record it was.
-    mutating func editLivePlan(
+    /// The live plan as an edit would leave it; nothing changes until `replacePlan` lands it.
+    func editedLivePlan(
         markdown: String, at now: Date
     ) -> (messageID: UUID, written: ChatWrittenPlan)? {
-        guard let index = messages.lastIndex(where: { !$0.plans.isEmpty }) else { return nil }
-        let last = messages[index].plans.count - 1
-        messages[index].plans[last].plan.markdown = markdown
-        messages[index].plans[last].plan.updatedAt = now
-        return (messages[index].id, messages[index].plans[last])
+        guard var live = livePlan else { return nil }
+        live.written.plan.markdown = markdown
+        live.written.plan.updatedAt = now
+        return live
+    }
+
+    /// Lands an edit where its plan was written; a replaced one stays the record it was.
+    mutating func replacePlan(_ written: ChatWrittenPlan, in messageID: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+            let position = messages[index].plans.firstIndex(where: {
+                $0.sequence == written.sequence
+            })
+        else { return }
+        messages[index].plans[position] = written
     }
 
     /// Regenerate's first half: only a trailing reply goes, so the question it answered stays.

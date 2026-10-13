@@ -5,8 +5,9 @@ calls the tools one rule table allows: the shell, the calendar, reminders, web s
 server. The table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell; a
 session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
 a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in Plan, `write_plan`.
-`AgentPolicy` decides, `AgentGateCoordinator` enforces and asks, and the tools themselves stay with
-their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
+`AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
+screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
+with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -39,6 +40,21 @@ their features — [AI](ai.md#invariants) for the shell runner, the question and
   the call, again when a queued call's turn comes, and again once its dialog closes, so a Settings
   change mid-reply binds the next call. A call the model makes to a tool that went to Deny after
   the turn started is refused with a sentence.
+- **An Ask dialog comes up only while its chat is on screen.** `AgentGateCoordinator.authorize`
+  asks `AIChatCoordinator.isOnScreen` first; a request from a chat off screen is held on its
+  `AIChatState` with no dialog until the chat comes on screen. See
+  [Waiting off screen](#waiting-off-screen).
+- **The shared queue serialises shown dialogs only.** A held request takes no place in
+  `AIConsentQueue`, so a chat left waiting never stalls another chat's dialog, and one whose chat
+  leaves the screen while it queues is held again when its turn comes rather than shown.
+- **Whatever still waits is declined, exactly once.** Stop, deleting the chat or clearing the
+  history it is in, AI going off, quitting and the turn ending any other way all go through
+  `AIChatState.cancel` or the turn's finish, which end every open request (`AgentApprovals.endAll`)
+  and resume each held one with a decline. A later release or end finds nothing to resume.
+- **A wait is derived, never stored.** `AIChatState.awaiting: AgentWait?` is
+  `AgentWait.of(isStreaming:pendingApprovals:hasQuestion:)`: `.approval` while any Ask request is
+  open, held or with its dialog up, else `.answer` while an `ask_user` question waits, and nil
+  whenever no turn runs, so a badge can never outlive its turn.
 - **The shell matcher fails toward Ask.** A command the splitter cannot read with confidence never
   reaches a pattern; it asks, or is denied by a Deny row. See [Shell patterns](#shell-patterns).
 - **A Deny pattern is a backstop, not a sandbox.** Patterns match a segment's text, not the program
@@ -173,13 +189,22 @@ Plan a CLI's call to a tool without the hint, or to one the list lacks, is Deny.
 themselves.
 
 On Allow the call runs. On Deny it fails with `AgentRefusal.denied`'s sentence, "Blitz's agent rules
-do not let the model …". On Ask the gate queues the question on its `AIConsentQueue`, one dialog
-for every chat, since `DialogController` refuses a second. When the question's turn comes the
-decision is read again — an earlier dialog may have answered it — then Blitz's own dialog goes up
-through `core.choose`, the choice is applied, and the decision is read once more, so a row set to
-Deny while the dialog was up still refuses. A question whose turn was cancelled while it waited is
-declined without being shown. A decline is `AgentRefusal.declined`, "The user declined to let the
-model …"; the CLI routes send their own fixed decline instead.
+do not let the model …". On Ask the gate opens a request on the chat (`AIChatState.beginApproval`),
+which is what makes the chat's `awaiting` read `.approval`, and then:
+
+1. **Held.** While the chat is off screen the request waits on the chat (`holdApproval`), with no
+   dialog and no place in the queue, until the chat comes on screen
+   ([what releases it](#held-requests)) or the request ends.
+2. **Queued.** On screen, it joins the gate's `AIConsentQueue`, one dialog for every chat, since
+   `DialogController` refuses a second.
+3. **Its turn.** A request that ended while it queued is declined without being shown; one whose
+   chat has left the screen goes back to step 1. Otherwise the decision is read again — an earlier
+   dialog may have answered it — then Blitz's own dialog goes up through `core.choose`, the choice
+   is applied, and the decision is read once more, so a row set to Deny while the dialog was up
+   still refuses.
+
+However it ends, the request closes (`endApproval`). A decline is `AgentRefusal.declined`, "The
+user declined to let the model …"; the CLI routes send their own fixed decline instead.
 
 | Call | Title | Choices (↵ marked) |
 | --- | --- | --- |
@@ -210,7 +235,7 @@ one, or deleting the open one starts it fresh. It holds `isEnabled`, the `exclud
 `mode` and the `granted` tools, so a chat grant ends exactly when the scope does. A server added
 later arrives switched on.
 
-The AI Chat composer's tools menu (`AIToolsPicker`) edits what the chat may call:
+The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits what the chat may call:
 
 - **Use Tools** — off offers nothing, Blitz's tools, `ask_user` and every server alike.
 - **Blitz** — one switch per built-in row the table does not deny, on a route that reaches Blitz's
@@ -242,13 +267,99 @@ says whether the next turn searches. A server's row is `AgentCall.server(_:liste
 `MCPCoordinator.listedTools(slug:)`, so in Plan it shows while any listed tool is read-only, and a
 CLI route's server Blitz has never listed is missing until a Plan turn lists it.
 
+## Waiting off screen
+
+A turn keeps running while its chat is left — the window closed or behind another app, the palette
+dismissed, another chat opened — and so do its Ask requests and questions. Nothing is shown where
+nobody looks: the request is held, and the chat shows that it waits.
+
+### On screen
+
+`AIChatCoordinator.isOnScreen(_:)` is the one definition, and the gate and the notifications both
+ask it. It feeds `ChatPresence` (`Model/`) the facts, and `AIChatSurfacesState.surface(of:)` says
+which surface holds the chat:
+
+- **The window's chat** is on screen while the window is open, not minimized, visible and not wholly
+  covered or on another Space (`AppWindowController.isOnScreen`, from `occlusionState`), and Blitz
+  is the active app, so a dialog lands where the reader looks.
+- **Quick AI's chat** is on screen while the palette is up on Quick AI's conversation
+  (`PaletteMode.ai`); its Chat History is a list, not the conversation.
+- **A chat parked answering** while another took the window is on screen nowhere.
+
+### Held requests
+
+`AIChatState` keeps the turn's requests in an `AgentApprovals`: each one is begun, may be held once
+with its waiter, and ends once. `AIChatCoordinator` releases every live chat's held requests that
+are now on screen, oldest first (`AIChatState.releaseApprovals`), whenever something could have
+brought one on screen:
+
+- Blitz becomes active (`NSApplication.didBecomeActiveNotification`);
+- any window's occlusion changes (`NSWindow.didChangeOcclusionStateNotification`), which covers the
+  window being opened, uncovered, unminimized or brought to this Space;
+- the window's chat or Quick AI's changes, or the palette shows, hides or changes mode — read through
+  Observation, never a reply's text.
+
+The observers start with the feature, in `applyEnabled`, and stay; with AI off nothing waits. A
+released request joins the dialog queue as any other, and a task cancelled while it is held is
+declined at once.
+
+### The badge and the dot
+
+`AIChatCoordinator.trackWaits` re-reads every live chat's `awaiting` under Observation and keeps the
+reading on `AIChatSurfacesState.waits`, written only when a chat's wait starts, ends or changes kind,
+so a streaming reply's flushes reach nothing else.
+
+- **Sidebar.** A row whose chat waits shows `AgentWait.symbol` — `hand.raised.fill` for an
+  approval, `questionmark.bubble.fill` for a question — in `Theme.Colors.warning`, in place of the
+  spinner, labelled "Waiting for approval" or "Waiting for an answer".
+- **Menu bar.** `MenuBarLabel` swaps in a dot cut into the icon's corner while
+  `AIChatSurfacesState.isAnyWaiting`, labelled "the agent is waiting". It counts every live chat,
+  on screen or not.
+
+### Notifications
+
+`AgentNotificationPresenter` posts and withdraws them; `AppCore` owns it as `agentNotifications`
+and makes it `UNUserNotificationCenter`'s delegate in `start()`, before any notification can be
+clicked. It is the app's only notification delegate.
+
+- **One per wait that starts off screen.** `AgentWaitEpisodes.changes(from:to:)` turns two readings
+  of `waits` into the waits that started and ended; a wait that changes kind ends and starts again,
+  since its notification names the old kind. A start posts only while
+  `AISettingsStore.notifiesWhenWaiting` is on and the chat is off screen at that moment. A wait that
+  started on screen posts nothing, even once the chat is left; its badge and the dot still show.
+- **What it says** is `AgentWaitNotice`'s: "Blitz is waiting for approval" over the chat's title, or
+  "Blitz has a question" over the title and the question on one line, cut at a word near 140
+  characters (`AgentWaitNotice.clipped`). The app's display name stands in for Blitz, so a Dev build
+  says Blitz Dev. It plays the default sound and carries no actions: an Ask is answered in Blitz,
+  never from the notification.
+- **One identifier per chat**, `agent-wait-` and the chat's UUID (`AgentWaitNotice.identifier(for:)`),
+  so a later wait replaces an earlier one rather than stacking; `userInfo` carries the chat's ID
+  under `AgentWaitNotice.chatKey`.
+- **Withdrawn when the wait ends**, pending or delivered (`withdraw(chatID:)`), however it ended. A
+  post that lands after its wait ended withdraws itself, and quitting withdraws every one still
+  showing (`withdrawAll`, from `AppCore.prepareForTermination`).
+- **Permission is asked on first need**, for alerts and sound, never at launch. Denied or never
+  answered posts nothing; the badge and the dot are the whole signal then.
+- **`willPresent`** shows the banner even with Blitz in front, since the waiting chat may not be the
+  one on screen, unless the wait has been withdrawn or its chat is on screen by then.
+- **A click** calls `AIChatCoordinator.openWaitingChat(id:)`: nothing with AI off; otherwise it hides
+  the palette, opens the chat in the window — a Quick AI chat moves over whole, reply and all — and
+  shows the window. The chat is then on screen, so its held request goes on to its dialog, or its
+  question card is there to answer.
+
+**Settings → AI → Agent → Notify when the agent is waiting** is `notifiesWhenWaiting`, on by
+default, stored under `AppSettingsKey.aiNotifyWhenWaiting`. Off withholds the notification only.
+Unlike the rule table it grants nothing, so `settings.json` carries it as `ai.notifyWhenWaiting`;
+it stays out of backups with the rest of the AI setup (`SettingsBackupCoverage.deliberatelyExcluded`).
+
 ## Settings and storage
 
 Settings → AI holds two sections, between Default model and Conversations:
 
 - **Agent** (`AgentSettingsSection`) — a picker per built-in row, disabled with "Turn on Calendar
   first." or "Turn on Reminders first." while that feature is off; a picker per MCP server, written
-  to its trust and disabled while MCP or the server is off; and **Tool call rounds**.
+  to its trust and disabled while MCP or the server is off; **Tool call rounds**; and **Notify when
+  the agent is waiting** ([Notifications](#notifications)).
 - **Shell rules** (`ShellRulesSection`) — the ordered patterns, each with a pattern field, a
   decision, Move Up, Move Down and Remove, then **Add Shell Rule**, which adds an empty Allow
   pattern and focuses it. An empty pattern matches nothing.
@@ -302,7 +413,11 @@ Each route honours the mode where it decides what to offer:
   while its connection is ready, else one short-lived connection of its own, kept by server until
   the server is saved or removed or MCP goes off. A server whose list was empty is listed again on
   every Plan turn. Consent then weighs each call by that list, as [the gate](#the-gate-and-its-dialogs)
-  says.
+  says. The CLI's own boundary follows the mode too: an armed Plan turn
+  (`AIToolServerSession.readsOnly`) is told the supplied tools may only read, investigate, ask the
+  user or write the plan and that nothing may be changed, where any other armed turn is told
+  whatever a supplied tool does is allowed. Consent enforces Plan either way; the wording only keeps
+  the boundary from contradicting Plan's instruction.
 - **Codex.** No mode pill, so always Manual; it reaches neither `ask_user` nor `write_plan`.
 
 ## Harnesses
@@ -314,16 +429,26 @@ Each route honours the mode where it decides what to offer:
   each mode's decisions and offers, MCP tools weighed one at a time and servers handed to a CLI in
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
   the plan instruction, and the context card's rows per mode.
+- `agent-wait-test` — `AgentWait.of`'s precedence and wording, `AgentApprovals` holding each request
+  once and handing every waiter back once, `ChatPresence` per surface, `AgentWaitEpisodes` with a
+  wait that changes kind, and each `AgentWaitNotice`: its wording, one identifier per chat, the
+  click's chat ID read back and the question's clipping.
 - `ai-provider-test` — `AISettingsStore`: every old combination migrates once and leaves no old key,
   a fresh install starts on the defaults, a broken table falls back without migrating, shell
-  rules keep their order, and Always Allow persists a pattern once.
-- `ai-chat-test` — the scope per chat, open, in Manual and without grants on a new or deleted chat.
+  rules keep their order, Always Allow persists a pattern once, and the waiting notification is on
+  by default and persists off.
+- `ai-chat-test` — the scope per chat, open, in Manual and without grants on a new or deleted chat;
+  requests held off screen, let go on screen and declined exactly once by Stop, a cancelled task,
+  a delete or the turn's end; `awaiting` derived from the turn; and which surface holds a chat.
+- `installed-ai-test` — the Claude command's boundary: an armed turn outside Plan is told whatever a
+  supplied tool does is allowed, and a Plan turn that nothing may be changed, search or not.
 - `mcp-test` — `MCPTool.isReadOnly` from a plain `true` hint alone, and the `AgentCall` built from a
   listing, a CLI's call and a whole server.
 - `calendar-test` and `reminders-test` — read and write halves offered independently, and the
   reminder dialogs' summary.
 - `settings-backup-test` and `settings-file-test` — `aiAgentRules` and the old keys excluded, and no
-  `settings.json` key for any of them.
+  `settings.json` key for any of them; `aiNotifyWhenWaiting` excluded from backups and carried as
+  `ai.notifyWhenWaiting`.
 
 ## Manual sweep
 
@@ -343,3 +468,16 @@ Each route honours the mode where it decides what to offer:
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model
   is not offered it.
+- Leave a chat that asks: with the shell row on Ask, send a request that runs a command, then switch
+  to another app before the model calls it. No dialog comes up; the sidebar row shows the raised
+  hand, the menu bar icon a dot, and a notification says Blitz is waiting for approval, under the
+  chat's title. Clicking it brings the window forward on that chat and the Run dialog comes up;
+  answering clears the badge, the dot and the notification.
+- Do the same from Quick AI and dismiss the palette: the click moves the chat into the window, reply
+  and all, and its dialog comes up there.
+- In the window, send the same request and press ⌘N before the model calls the command: no dialog
+  comes up, the old chat's row shows the raised hand, and the banner shows though Blitz is in
+  front. Delete that chat from the sidebar: no dialog ever comes up for it, and the badge, the dot
+  and the notification go.
+- Switch Notify when the agent is waiting off: a chat left waiting posts nothing, and its badge and
+  the dot still show.

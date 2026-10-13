@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1 and 1b built; phases 2–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phases 1, 1b and 2 built; phases 3–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -18,7 +18,7 @@ scope; it keeps MCP servers only.
   modes replace the Ask toggle: Auto answers every Ask, Plan narrows to reads, and neither lifts a
   Deny.)
 - **Asks are answered in Blitz, never from a notification.** A turn that waits shows a badge in the
-  sidebar and posts an alert-only notification (phase 2).
+  sidebar and posts a notification with no actions (phase 2).
 - **Routes:** API connections run through `AIToolLoopProvider`, and the Claude command runs through
   `ClaudeHostedServer`. Both reach the same tool runtime and the same rules. Codex keeps MCP servers
   only. Apple Intelligence answers only.
@@ -210,18 +210,45 @@ answer changes the plan, and finish by calling `write_plan`. A plan never change
 - A server that lists no tools is listed again on every Plan turn, since an empty list reads as
   never listed.
 
-## Phase 2: turns you can leave
+## Phase 2: turns you can leave (built)
 
-- A waiting state on `AIChatState` (`isAwaitingApproval`). The sidebar row shows a badge, and the
-  menu bar icon a dot while any session waits.
-- An Ask dialog is presented only when its session is on screen. Otherwise the request waits in the
-  queue, and a **notification** (`UNUserNotificationCenter`; first use asks macOS) says "Blitz is
-  waiting for approval: <session title>". The notification has no actions. Clicking it opens the AI
-  window on that session, and the dialog comes up.
-- Stop and the round cap are unchanged. A turn that is stopped while waiting answers its pending
-  request as declined.
-- User-facing renaming from "chat" to "agent" where it reads better (window title, command names).
-  Command IDs stay as they are.
+As built, in [`docs/features/agent.md`](../features/agent.md#waiting-off-screen):
+
+- **A derived wait, not a stored flag.** `AIChatState.awaiting: AgentWait?` is `.approval` while
+  an Ask request is open, `.answer` while an `ask_user` question waits, and nil whenever no turn
+  runs, so it covers questions as well as approvals.
+- **The sidebar and the menu bar.** A waiting chat's row shows a raised hand or a question bubble in
+  place of the spinner, and the menu bar icon a dot while any chat waits.
+- **Held until on screen.** An Ask dialog comes up only while its chat is on screen
+  (`AIChatCoordinator.isOnScreen`, over `ChatPresence`): the window in front on that chat with Blitz
+  active, or the palette up on Quick AI's. Otherwise the request is held on the chat, outside the
+  shared dialog queue, and released when the chat comes on screen.
+- **A notification** (`AgentNotificationPresenter`, `UNUserNotificationCenter`; macOS asks on first
+  use) for a wait that starts off screen: "Blitz is waiting for approval" or "Blitz has a question",
+  over the chat's title. It has no actions. Clicking it opens the AI Agent window on that chat, and
+  the dialog comes up. It is withdrawn when the wait ends. Settings → AI → Agent → **Notify when the
+  agent is waiting** turns it off; `aiNotifyWhenWaiting` stays out of backups and has the
+  `settings.json` key `ai.notifyWhenWaiting`.
+- **Stop and the round cap are unchanged.** Stop, deleting or clearing the chat, AI going off and the
+  turn ending any other way decline whatever still waits, exactly once.
+- **"Agent" where it reads better.** The window and its launcher command are **AI Agent** (found by
+  `chat` and `agent`), and Quick AI's menus offer **Continue in AI Agent**. Command IDs and type
+  names stay as they are.
+
+Known limits:
+
+- A wait that started on screen and was then left posts no notification; the badge and the dot
+  still show.
+- Neither an API connection nor the Claude command gives up on a held request within a day: the
+  loop holds no request open while a tool waits, and the Claude CLI (2.1.285) awaits a
+  `can_use_tool` answer with no deadline, until it is answered, the turn is interrupted or stdin
+  closes; its 5-minute dialog deadline (CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS) is for its other
+  dialogs, not permission requests. A request held inside one of Blitz's own tools rides that
+  call's MCP timeout, which Blitz sets to 24 h (`ClaudeHostedServer.callTimeoutMilliseconds`); past
+  it the CLI fails that call, while the request stays open in Blitz until answered or the turn
+  ends. Blitz's Codex client puts no timeout on an elicitation it answers and keeps the app-server
+  up while a turn runs; the app-server itself was not available to check, so whether it ever
+  abandons an elicitation is unverified. Nothing needs doing in Blitz for now.
 
 ## Phase 3: toolbox (one tool group per step, each with its catalog, runner, rule row and harness)
 

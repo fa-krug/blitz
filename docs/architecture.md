@@ -103,7 +103,10 @@ managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextInde
 `ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
 (`AppSettings`, `PaletteState`, `FileSearchSession`, `MenuSearchSession`, `UninstallSession`,
-`MeetingClock`), `NotesStore`, every feature's coordinator, and the window controllers.
+`MeetingClock`), `NotesStore`, every feature's coordinator, the window controllers, and
+`AgentNotificationPresenter` — the app's one `UNUserNotificationCenter` delegate, made so in
+`start()` before any notification can be clicked, which routes a click on the agent's waiting
+notification back to `AIChatCoordinator`.
 
 `AppDelegate.applicationDidFinishLaunching` calls `AppCore.shared.start()` and nothing else. That is the
 one wiring point, and `start()` reads as the app's whole boot sequence in one screen.
@@ -128,9 +131,10 @@ handed an input path and answers with bounded text down a pipe.
 
 ## Entry points and windows
 
-`BlitzApp` (`@main`) declares only two `MenuBarExtra` scenes — Blitz's own item and the
-calendar's, each inserted by one preference and independent of the other; everything else visible is
-driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owned entirely by
+`BlitzApp` (`@main`) declares only two `MenuBarExtra` scenes — Blitz's own item and the calendar's,
+each inserted by one preference and independent of the other, Blitz's carrying one piece of feature
+state, the agent's waiting dot ([ui.md](ui.md#the-app-icon)); everything else visible is driven
+imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owned entirely by
 `Features/Extensions/`, through `ExtensionManager`, with no scene or lifecycle wiring in the core.
 
 - **Command palette** — a borderless floating `NSPanel` (`Palette/PalettePanel.swift`) hosting SwiftUI
@@ -158,12 +162,12 @@ driven imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem
   literal source, switches among local Markdown files and stays visible on focus loss. The displayed
   string is the canonical file source; there is no source/display mapping.
   See [features/notes.md](features/notes.md).
-- **AI Chat** — a titled `AppWindowController` window owned by `AIChatCoordinator`: an
+- **AI Agent** — a titled `AppWindowController` window owned by `AIChatCoordinator`: an
   `NSSplitViewController` with a collapsible sidebar of saved chats beside the open conversation, as
   Settings is built. The conversation lives on `AppCore.aiChats`, not the window, so closing it cancels
   nothing. Quick AI is the same feature's palette screen. See [features/ai.md](features/ai.md).
 - **The main menu** — shaped by `BlitzApp`'s `.commands`, which rebinds ⌘Q to Close Window: the AI
-  Chat window when it is key, otherwise Settings. It is only ever on screen while a titled window is
+  Agent window when it is key, otherwise Settings. It is only ever on screen while a titled window is
   open, so it is those windows' menu bar. It must stay declarative.
 - **Dialogs** — borderless `DialogPanel`s driven by `DialogController`, the app's only presenter for
   confirmations, failure reports and value prompts. Presentation is `async`, so nothing blocks the main

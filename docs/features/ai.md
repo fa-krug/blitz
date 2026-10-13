@@ -1,20 +1,20 @@
 # AI providers and chat
 
 Blitz has one app-wide provider layer for features that need text generation. Chat chooses its
-model from Quick AI's header or the AI Chat composer, and `AIChatCoordinator.provider(for:)`
+model from Quick AI's header or the AI Agent window's composer, and `AIChatCoordinator.provider(for:)`
 builds that chat's route through `AIProviderFactory` to stream an `AIRequest`.
 Chat is the first consumer and [Quick Actions](quick-actions.md) the second; the provider layer
 depends on neither, and Quick Actions carries its own route rather than borrowing this one.
 
 Chat has two surfaces over one history, as Raycast's does. **Quick AI** is the palette screen: Tab
-from the launcher asks what you typed, and the answer appears in place. **AI Chat** is a window —
+from the launcher asks what you typed, and the answer appears in place. **AI Agent** is a window —
 saved conversations in a sidebar on the left, the open one on the right, and a composer at the
 bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 
 ## Invariants
 
 - **AI is off out of the box, and off means fully off.** `AppSettings.aiEnabled` is the flag:
-  no `Quick AI` or `AI Chat` command in the launcher, no history database opened or created, no Codex
+  no `Quick AI` or `AI Agent` command in the launcher, no history database opened or created, no Codex
   helper for chat, no stop for it on Tab's ring, the palette leaves `.ai` and the window closes.
   Installed providers may still remain available for Quick Actions, which has its own switch and route. Turning AI off cancels
   every streaming reply and drops both transcripts, but touches neither the saved conversations in
@@ -418,7 +418,7 @@ a debug description written for a log, so each case maps to a plain sentence ins
 The built-in `Quick AI` launcher command enters `AIScreen`, and carries a bindable global shortcut
 (`HotKeyAction.command(.quickAI)`) that does the same thing from any app; Tab from the launcher is the
 third way in. Settings → AI holds the recorder and a checkbox for the command's place in launcher
-search, beside `AI Chat`'s; either shortcut keeps working while its command is hidden, and does
+search, beside `AI Agent`'s; either shortcut keeps working while its command is hidden, and does
 nothing at all while the feature is off. The palette search field becomes the single-line composer.
 The footer pill and Return are one action, `activate`: Send, Answer while a question waits, or Stop
 while a response streams — an empty composer sends nothing, so the pill never needs a disabled
@@ -431,20 +431,23 @@ the next message. Other API routes keep their provider default because their mod
 portable effort contract. Neither change interrupts a response already streaming; stopping one is
 the pill's job, so the header never has to fit a third control beside the switcher.
 
-The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Chat
-(`⌘J`; Open AI Chat while the chat is empty), New Chat (`⌘N`), Chat History (`⌘Y`) and AI Settings
+The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Agent
+(`⌘J`; Open AI Agent while the chat is empty), New Chat (`⌘N`), Chat History (`⌘Y`) and AI Settings
 (`⌥⌘,`), plus Stop Response (`⌘.`), Regenerate Response (`⌘R`), Copy Last Response (`⇧⌘C`) and
 Remove Attachments when those apply. The chords are Raycast's where it has one, and `AIScreen.perform`
 maps each `PaletteShortcut` to its action. AI Settings takes ⌥⌘, because ⌘, stays the app's own
 Settings on every screen. Continuing closes the palette and carries the half-typed line into the
 window's composer with the conversation. Chat History is the palette's own browser over the same
 saved chats the window's sidebar lists: ↵ opens one in Quick AI, or in the window when the window
-already holds it, and Continue in AI Chat (`⌘J`) takes it to the window either way.
+already holds it, and Continue in AI Agent (`⌘J`) takes it to the window either way.
 
-### AI Chat
+### AI Agent
 
-The `AI Chat` command (`command:ai-chat-window`, `HotKeyAction.command(.aiChat)`) opens a titled
-`AppWindowController` window owned by `AIChatCoordinator`, autosaved as `AIChatWindow`. Its shortcut
+The `AI Agent` command (`command:ai-chat-window`, `HotKeyAction.command(.aiChat)`; the ID and the
+type names keep "chat") opens a titled `AppWindowController` window owned by `AIChatCoordinator`,
+created with the title "AI Agent", which the chrome replaces with the open chat's, and autosaved
+as `AIChatWindow`. The launcher finds it by `chat` and `agent`
+alike ([boosted terms](launcher.md#kind-priority-and-boosts)). Its shortcut
 toggles: `toggleWindow` closes the window when it is key, as Escape would, and one open behind
 another app comes forward instead. The palette row always opens it, since `LauncherCoordinator`
 reads whether the palette was up before hiding it can hand key status back to the chat. It is built
@@ -508,8 +511,10 @@ and the Actions menu's own chords, and dies with the window.
   the next or previous one, wrapping, over every saved chat whatever the filter shows, in the same
   `pinnedFirst` order the sections are built from. ⌘B shows or hides the sidebar. A new chat has
   none until its first message saves it, so starting one or leaving an empty one never adds or
-  drops a row under the pointer. A row shows a spinner while its reply streams, else a pin when
-  pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
+  drops a row under the pointer. A row shows the agent's waiting badge while its turn waits on the
+  reader — a raised hand for an approval, a question bubble for a question
+  ([Agent](agent.md#the-badge-and-the-dot)) — else a spinner while its reply streams, else a pin
+  when pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
   shape — never blinks off crossing between rows.
   The context menu pins, renames in place, copies or exports the chat as Markdown
   (`ChatSession.markdownTranscript`: each turn's text and its plans under "**Plan: title**", never
@@ -617,9 +622,14 @@ happened, like a search or a call — `ChatMessage.questions` as `ChatSegment.qu
   "Replaced", and stays the record it was.
 - **Edit is the live plan's, and never mid-turn.** It opens a monospaced editor
   `Theme.Size.chatPlanEditor` tall. Save writes the plan where it was written —
-  `ChatSession.editLivePlan`, then `ChatHistoryStore.savePlan`, an `UPDATE` of its row, since the
-  save after a turn rewrites only the stored tail. While a reply streams every control on the card
+  `ChatSession.editedLivePlan` works the edit out, `ChatHistoryStore.savePlan` stores it, an
+  `UPDATE` of its row, since the save after a turn rewrites only the stored tail, and only then does
+  `ChatSession.replacePlan` land it in the chat. While a reply streams every control on the card
   is disabled and `AIChatState.editPlan` refuses, because the turn may still replace the plan.
+- **An edit that is not saved is not shown.** When the `UPDATE` fails or matches no row,
+  `AIChatState.editPlan` answers `.unsaved` and leaves the plan as it was, so the card, Execute and
+  a reopened chat all read the same text, and `AIChatCoordinator` reports "The plan edit could not
+  be saved." through the message HUD. The editor has closed by then, so the edit is lost.
 - **Execute carries out the plan as it reads now.** Execute sets Manual and Execute in Auto sets
   Auto, through `setMode`, then sends `AgentModeInstructions.execute` — "Carry out this plan:", the
   title and the current, possibly edited, Markdown — as the reader's next message. Only the window
@@ -722,10 +732,10 @@ window, and every chat action either surface sends — is the nineteenth feature
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
 - Collapse the sidebar with the toolbar button or ⌘B; ⌘N and ⌘Q (Close Window) still work, and ⌘Q
   with Settings in front closes Settings instead.
-- Press the AI Chat shortcut twice: the window opens, then closes; with it open behind another app,
-  the shortcut brings it forward. Summon the palette over the open window and run AI Chat: it stays
+- Press the AI Agent shortcut twice: the window opens, then closes; with it open behind another app,
+  the shortcut brings it forward. Summon the palette over the open window and run AI Agent: it stays
   open.
-- Escape with the composer focused closes AI Chat; reopening shows the draft, and a reply that was
+- Escape with the composer focused closes AI Agent; reopening shows the draft, and a reply that was
   streaming has kept going. With a sidebar filter typed, the first Escape clears it, the second
   closes; a rename field and Find in Chat each cancel before a further Escape closes.
 - Harnesses: `ai-provider-test` (endpoints, request bodies, stream decoding including leading
@@ -739,8 +749,11 @@ window, and every chat action either surface sends — is the nineteenth feature
   `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, the agent scope each chat
   starts open and in Manual, `AIChatSurfacesState`'s one-live-place rule, questions — answers from
   chips and text, their place and their context, the paused turn, Stop, leaving and deleting each
-  resolving once, one at a time — and plans — their place and context, storage, replacement,
-  editing, and an edit that waits out the turn),
+  resolving once, one at a time — plans — their place and context, storage, replacement,
+  editing, an edit that waits out the turn and one the store cannot save — and Ask requests held
+  off screen, with the wait each chat reports),
+  `agent-wait-test` (the waiting state, held requests, on screen and the notification — see
+  [Agent](agent.md#harnesses)),
   `codex-turn-test` (the Stop path, driven against a stub app-server stalled where Stop races the
   turn ID, plus the MCP launch boundary, one launch for concurrent starts, the elicitation, the
   rows, the call cap, a custom provider's access without an account, and when a chat's thread is
@@ -748,6 +761,7 @@ window, and every chat action either surface sends — is the nineteenth feature
   `installed-ai-test` (Claude/Grok/OpenCode/Cursor flags, prompt
   framing, streaming and cleanup, and Claude's private MCP configuration with the hosted server's
   timeout, control channel, round cap and managed-policy branch, an `ask_user` call drawing no row,
+  the boundary a Plan turn is told,
   a reader's variables against Blitz's own, and a set command
   path that runs or fails) and `apple-intelligence-test` (status copy, snapshot deltas,
   transcript assembly, error mapping, plus one real generation when this Mac can run one), all in
@@ -908,15 +922,15 @@ through to the field editor as a normal paste. **Only `isFileURL` URLs are read*
 filter a copied `https://…/a.png` reaches `Data(contentsOf:)`, turning a keystroke into a network
 request. Every file is **sized before it is read**, so a huge CSV can never be slurped into memory.
 
-**A text file is inlined by `ChatSession.boundedContext`, never into `ChatMessage.text`.** That
-seam is load-bearing: `ChatSession.title` summarises the first user message, so folding a CSV into
-the stored text would make the dump the conversation's title in the AI Chat sidebar, its preview, and what
-the user bubble renders back. Inlining after the transcript and before the transport also means
-only the newest turn carries it, so a chat's payload cannot grow turn on turn. The block names the
-file and fences it with a run longer than any inside it, so a Markdown file holding its own fence
-cannot escape; a staged name is stripped of newlines and capped, so a file called
-`a\nAttached file: passwd` cannot forge a second header. Undecodable bytes are refused rather than
-guessed at, and a file past `AIAttachmentBudget.maxInlinedTextBytes` is refused rather than
+**A text file is inlined by `ChatSession.boundedContext`, never into `ChatMessage.text`.** That seam
+is load-bearing: `ChatSession.title` summarises the first user message, so folding a CSV into the
+stored text would make the dump the conversation's title in the AI Agent window's sidebar, its
+preview, and what the user bubble renders back. Inlining after the transcript and before the
+transport also means only the newest turn carries it, so a chat's payload cannot grow turn on turn.
+The block names the file and fences it with a run longer than any inside it, so a Markdown file
+holding its own fence cannot escape; a staged name is stripped of newlines and capped, so a file
+called `a\nAttached file: passwd` cannot forge a second header. Undecodable bytes are refused rather
+than guessed at, and a file past `AIAttachmentBudget.maxInlinedTextBytes` is refused rather than
 truncated — a silently truncated CSV is a lie the model then answers confidently.
 
 `AIAttachmentPolicy` is the one place deciding what may be attached and as what. It is pure and
@@ -972,11 +986,11 @@ width and clipped the search field well short of the button.
 
 ## Settings and backup boundary
 
-Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI
-section owns the feature switch and the **Providers → Manage…** action, and **Default model** below
-it picks the app-wide route and its reasoning effort. A
-pick in Quick AI's header or the AI Chat composer sets that chat's model and moves this default with
-it, while Quick Actions keeps its own model selection.
+Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI section
+owns the feature switch and the **Providers → Manage…** action, and **Default model** below it picks
+the app-wide route and its reasoning effort. A pick in Quick AI's header or the AI Agent window's
+composer sets that chat's model and moves this default with it, while Quick Actions keeps its own
+model selection.
 
 Provider management opens as an editor panel laid out like Mail's Accounts: every route in a list on
 the left — **On This Mac**, **Installed**, **API Connections** — each with its mark and a one-line
@@ -1022,9 +1036,10 @@ preamble is the part that is billed on every turn for every user and has no othe
 disables the editor rather than hiding it, so what is being withheld stays readable. One thing it
 deliberately cannot reach: every installed CLI route prepends its own instruction never to run
 commands or touch files, and never to invoke a tool beyond the MCP tools an armed Codex or Claude
-turn supplies. That is a sandbox boundary on a local CLI, not Blitz describing itself, and a user
-switch must not be able to lift it. Nor does it reach Plan's instruction, which is the chat's mode
-speaking, not a prompt: a Plan turn carries it with the switch off ([Plans](#plans)).
+turn supplies — on a Claude Plan turn, only to look ([Agent](agent.md#routes)). That is a sandbox
+boundary on a local CLI, not Blitz describing itself, and a user switch must not be able to lift it.
+Nor does it reach Plan's instruction, which is the chat's mode speaking, not a prompt: a Plan turn
+carries it with the switch off ([Plans](#plans)).
 
 `mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).
 `aiConnections`, `aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt` and
@@ -1035,6 +1050,9 @@ answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and
 join them: all three are decisions about conversations that never leave the Mac that had them, and
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
 limits what a tool-driven reply may spend, and an import must not raise that unasked.
+`aiNotifyWhenWaiting`, Settings → AI → Agent → **Notify when the agent is waiting**
+([Agent](agent.md#notifications)), stays behind with the rest of the AI setup, though as an
+ordinary preference it has a `settings.json` key, `ai.notifyWhenWaiting`.
 `aiAgentRules` decides which tools a model may call, from the calendar to the shell; a table that
 grants capabilities travels in neither a backup nor `settings.json`, and the three keys it was
 migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)).

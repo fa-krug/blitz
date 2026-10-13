@@ -452,7 +452,8 @@ final class AIChatCoordinator {
         let mcp = core.mcpCoordinator
         return AIToolServerSession(
             rounds: core.aiSettings.toolRounds.limit,
-            hosted: slug == nil ? blitzHostedTools(for: chat) : .none
+            hosted: slug == nil ? blitzHostedTools(for: chat) : .none,
+            readsOnly: chat.agentScope.mode == .plan
         ) { @MainActor [weak self, weak chat] in
             guard let self, let chat else { return [] }
             return await mcp.toolServers(scopedTo: slug) { server in
@@ -682,7 +683,9 @@ final class AIChatCoordinator {
         guard !chat.isStreaming else { return }
         switch input {
         case .save(let markdown):
-            chat.editPlan(markdown: markdown)
+            if chat.editPlan(markdown: markdown) == .unsaved {
+                core.showMessage("The plan edit could not be saved.", tone: .danger)
+            }
         case .execute(let mode):
             guard let live = chat.session.livePlan else { return }
             setMode(mode, in: chat)

@@ -105,7 +105,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test` |
 | notes and snippets | `notes-*`, `snippets-test` |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
-| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
+| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
 | updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
@@ -808,10 +808,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 ### Quick AI and Quick Actions
 
-- With AI off, Quick AI and AI Chat are absent and Tab rings past Quick AI; with it on, Tab from a
+- With AI off, Quick AI and AI Agent are absent and Tab rings past Quick AI; with it on, Tab from a
   typed query asks it and the answer streams in place
-- ⌘J hands the conversation to the AI Chat window with its reply intact, and Quick AI then starts
+- ⌘J hands the conversation to the AI Agent window with its reply intact, and Quick AI then starts
   fresh
+- A chat left waiting on an Ask shows no dialog; its sidebar row shows the raised hand, the menu bar
+  icon a dot, and clicking the notification brings the window up on it with the dialog; the full
+  list is in [agent.md](features/agent.md#manual-sweep)
 - Quick Actions are off out of the box; enabling asks with Blitz's dialog, then Accessibility
 - Fix Grammar on a selection in another app replaces it, with the `Fixing Grammar…` pill while the
   model works; the full list is in [quick-actions.md](features/quick-actions.md#manual-sweep)

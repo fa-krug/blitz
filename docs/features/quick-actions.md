@@ -10,7 +10,7 @@ A **custom Quick Action** is a name, a glyph and a prompt, run through the same 
 shortcut and a launcher row like any other.
 
 Quick Actions is the provider layer's second consumer. It shares the provider connections and
-selectable Markdown renderer with AI Chat.
+selectable Markdown renderer with AI Agent.
 
 ## Invariants
 
@@ -18,7 +18,7 @@ selectable Markdown renderer with AI Chat.
   is the flag and `QuickActionCoordinator` is the only place that reads it: no selection is read, no
   provider is built, no panel opens. The four commands leave the launcher's Quick Actions slice
   through `AppIndex.setCommandsVisible`, and the custom ones leave it through
-  `AppIndex.setCustomQuickActions`, the way Notes and AI Chat drop theirs. Carbon bindings stay
+  `AppIndex.setCustomQuickActions`, the way Notes and AI Agent drop theirs. Carbon bindings stay
   registered, so re-enabling restores every shortcut without touching the hotkey layer. The flag
   grants keystroke delivery into other apps, so like `snippetsEnabled` it is excluded from settings
   backups — an import must never arm it.

@@ -2036,6 +2036,16 @@ extension AIChatTests {
         expect(
             session.livePlan?.messageID == message.id && session.livePlan?.written == written,
             "the chat's live plan is the one the reply wrote")
+
+        let edit = session.editedLivePlan(markdown: "1. Sort", at: Date(timeIntervalSince1970: 9))
+        expect(
+            edit?.written.plan.markdown == "1. Sort" && session.livePlan?.written == written,
+            "an edit is worked out without touching the plan, which waits for it to be saved")
+        if let edit { session.replacePlan(edit.written, in: edit.messageID) }
+        expect(
+            session.livePlan?.written.plan.markdown == "1. Sort"
+                && session.livePlan?.written.sequence == written.sequence,
+            "and once landed, it is the live plan, in the place it was written")
     }
 
     /// The coordinator's runner for `write_plan`, minus the mode check `agent-policy-test` pins.
@@ -2091,9 +2101,11 @@ extension AIChatTests {
             chat.session.messages[1].plans.first?.plan.title == "Tidy",
             "and the first stays in the transcript where it was written")
 
-        expect(!chat.editPlan(markdown: "  \n "), "a blank edit is refused")
+        expect(chat.editPlan(markdown: "  \n ") == .refused, "a blank edit is refused")
         let edited = Date(timeIntervalSince1970: 500)
-        expect(chat.editPlan(markdown: " 1. Sort\n2. Keep ", now: edited), "an edit is taken")
+        expect(
+            chat.editPlan(markdown: " 1. Sort\n2. Keep ", now: edited) == .saved,
+            "an edit is taken")
         expect(
             chat.session.livePlan?.written.plan
                 == ChatPlan(title: "Tidy v2", markdown: "1. Sort\n2. Keep", updatedAt: edited),
@@ -2142,21 +2154,30 @@ extension AIChatTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let idle = AIChatState(history: store)
         expect(!idle.writePlan(tidy) && idle.session.messages.isEmpty, "no turn, no plan")
-        expect(!idle.editPlan(markdown: "x"), "a chat with no plan has nothing to edit")
+        expect(idle.editPlan(markdown: "x") == .refused, "a chat with no plan has nothing to edit")
 
         let chat = AIChatState(history: store)
         let stalled = StalledProvider()
         chat.send("Plan it", using: stalled)
         expect(chat.writePlan(tidy), "a running turn writes its plan")
-        expect(!chat.editPlan(markdown: "1. Other"), "an edit waits until the turn is over")
+        expect(
+            chat.editPlan(markdown: "1. Other") == .refused, "an edit waits until the turn is over")
         try? await Task.sleep(for: .milliseconds(50))
         stalled.finishAll()
         await settle(chat)
-        expect(chat.editPlan(markdown: "1. Other"), "then it is taken")
+        expect(chat.editPlan(markdown: "1. Other") == .saved, "then it is taken")
         expect(
             ChatHistoryStore(directory: directory).session(id: chat.session.id)?.livePlan?
                 .written.plan.markdown == "1. Other",
             "and saved")
+
+        store.remove(id: chat.session.id)
+        expect(
+            chat.editPlan(markdown: "1. Lost") == .unsaved,
+            "an edit the store cannot save is reported as unsaved")
+        expect(
+            chat.session.livePlan?.written.plan.markdown == "1. Other",
+            "and the chat keeps the plan it had, so what shows is what is stored")
     }
 
     /// The gate's half of an Ask, without the dialog: held off screen, let go on screen.
@@ -2258,9 +2279,9 @@ extension AIChatTests {
             "a chat neither holds is shown nowhere")
     }
 
-    /// Replies stream on a task; a few turns of the main actor let the scripted events land.
+    /// Until the turn ends, with seconds to spare: a two-round reply under full-suite load is slow.
     static func settle(_ chat: AIChatState) async {
-        for _ in 0..<50 where chat.isStreaming {
+        for _ in 0..<500 where chat.isStreaming {
             try? await Task.sleep(for: .milliseconds(10))
         }
     }

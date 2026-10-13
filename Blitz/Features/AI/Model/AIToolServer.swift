@@ -39,15 +39,19 @@ struct AIToolServerSession: Sendable {
     let rounds: Int?
     /// Only Claude can host these; Codex is handed servers alone.
     let hosted: AIHostedTools
+    /// A Plan turn: the tools may only look, so the CLI's boundary must not call every use allowed.
+    let readsOnly: Bool
 
     init(
         rounds: Int?,
         hosted: AIHostedTools = .none,
+        readsOnly: Bool = false,
         servers: @escaping @Sendable () async -> [AIToolServer],
         consent: @escaping @Sendable (AIToolServerCall) async -> Bool
     ) {
         self.rounds = rounds
         self.hosted = hosted
+        self.readsOnly = readsOnly
         self.servers = servers
         let queue = AIConsentQueue()
         self.consent = { @MainActor call in

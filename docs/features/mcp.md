@@ -356,7 +356,7 @@ Settings → AI → Agent, written through `MCPCoordinator.setTrust`.
 - A stdio server (`npx -y @modelcontextprotocol/server-filesystem ~/Desktop`) reaches ready; its
   process is gone ten minutes after the palette closes, and immediately on Quit.
 - A question answered with a tool shows the row inline, spinner then glyph, and the reply continues
-  after it. Reopening that chat from ⌘K → Chat History or the AI Chat window's sidebar still shows
+  after it. Reopening that chat from ⌘K → Chat History or the AI Agent window's sidebar still shows
   what ran.
 - The first call raises the dialog. Allow This Chat does not ask again in that conversation and does
   in the next; Always Allow survives a relaunch and shows as Allow in Settings → AI → Agent; Escape

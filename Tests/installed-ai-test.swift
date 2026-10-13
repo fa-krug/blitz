@@ -130,6 +130,7 @@ struct InstalledAITests {
         await claudeHostsBlitzsOwnTools(fixture)
         claudeSearchFramesBecomeSearchRows()
         await claudeSearchesTheWebOnlyWhenAsked(fixture)
+        await aPlanTurnsBoundaryOnlyLetsTheToolsLook(fixture)
         await aCrashedTurnsFilesAreRemovedAtLaunch(fixture)
         await aManagedMCPPolicyLeavesBothFlagsOff(fixture)
         await aReadersVariablesReachTheToolButNeverItsIsolation(fixture)
@@ -509,6 +510,35 @@ struct InstalledAITests {
                     == #"{"permissions":{"allow":["WebSearch"],"ask":["mcp__probe"]}}"#
                 && tools.firstIndex(of: "--max-turns").map { tools[$0 + 1] } == "25",
             "an armed turn allows the search beside its ask rules and keeps the reader's cap")
+    }
+
+    /// Plan's instruction says change nothing, so the CLI's own boundary must not say otherwise.
+    private static func aPlanTurnsBoundaryOnlyLetsTheToolsLook(_ fixture: Fixture) async {
+        func boundary(readsOnly: Bool, webSearch: Bool) async -> String {
+            _ = await fixture.events(
+                kind: .claude, model: webSearch ? "search" : "sonnet", effort: nil,
+                toolServers: fixture.session(allowing: true, asked: Box(), readsOnly: readsOnly),
+                webSearch: webSearch)
+            let argv = fixture.lastArguments("claude-args.log")
+            return argv.firstIndex(of: "--system-prompt").map { argv[$0 + 1] } ?? ""
+        }
+        let allowedAll = "whatever one of them does is allowed"
+        let changesNothing = "nothing may be changed"
+        let manual = await boundary(readsOnly: false, webSearch: false)
+        let manualSearch = await boundary(readsOnly: false, webSearch: true)
+        expect(
+            manual.contains(allowedAll) && manualSearch.contains(allowedAll)
+                && !manual.contains(changesNothing),
+            "outside Plan an armed turn is told whatever a supplied tool does is allowed")
+        let plan = await boundary(readsOnly: true, webSearch: false)
+        let planSearch = await boundary(readsOnly: true, webSearch: true)
+        expect(
+            plan.contains(changesNothing) && planSearch.contains(changesNothing)
+                && !plan.contains(allowedAll) && !planSearch.contains(allowedAll),
+            "in Plan it is told the tools may only look and nothing may be changed")
+        expect(
+            plan.contains("MCP tools supplied") && planSearch.contains("WebSearch"),
+            "and still names the tools it may use, the search too where one is offered")
     }
 
     private static func cursorRunsAskModeWithoutForce(_ fixture: Fixture) async {
@@ -1140,8 +1170,10 @@ private final class Fixture {
     }
 
     /// One local server, and a reader who answers every call the same way.
-    func session(allowing: Bool, asked: Box, rounds: Int? = 25) -> AIToolServerSession {
-        AIToolServerSession(rounds: rounds) {
+    func session(
+        allowing: Bool, asked: Box, rounds: Int? = 25, readsOnly: Bool = false
+    ) -> AIToolServerSession {
+        AIToolServerSession(rounds: rounds, readsOnly: readsOnly) {
             [
                 AIToolServer(
                     handle: "probe", title: "Probe",

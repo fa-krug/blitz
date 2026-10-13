@@ -138,7 +138,8 @@ shows anything that aligns.
 The first rule that separates two entries decides:
 
 1. An exact alias.
-2. A boosted term — `ai` and `chat` for AI Chat — unless the other entry is used more.
+2. A boosted term — `ai` for Quick AI, `chat` and `agent` for AI Agent — unless the other entry is
+   used more.
 3. Past three characters, an exact title or alternate title.
 4. An exact past search term.
 5. An exact subtitle, so typing an extension's title lists its commands.
@@ -165,8 +166,8 @@ the Zed app: rule 3 only protects an exact title past three characters.
   (3), quicklinks and marked contacts (2), and System Settings panes and meetings (1), so a
   first-party app is never shadowed by the Blitz command named after it: Calculator over
   Calculator History.
-- **One boosted command.** Only AI Chat carries boosted terms (`CommandID.boostedTerms`); boosting Show
-  Notes would shadow Apple's Notes.
+- **Two boosted commands.** Only Quick AI and AI Agent carry boosted terms (`CommandID.boostedTerms`);
+  boosting Show Notes would shadow Apple's Notes.
 - **Two entries with the same alias** fall through to the next rule.
 
 `settings` is the case these were measured against. Apple declares `Settings` in System Settings'
@@ -517,7 +518,7 @@ so the sectioned view stays 1:1 with the flat selection.
 ### Suggestions
 
 `LauncherSuggestions.select` chooses at most five from every visible entry that is not a favorite, a
-meeting, an AI command or Blitz itself. AI is the lowest priority, so Quick AI and AI Chat are
+meeting, an AI command or Blitz itself. AI is the lowest priority, so Quick AI and AI Agent are
 never suggested, however often they are opened:
 
 1. up to two apps or extensions installed in the last five minutes and never opened —
