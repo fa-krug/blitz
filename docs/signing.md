@@ -15,11 +15,12 @@ What the updater trusts is [below](#what-the-updater-trusts).
 ## 1. Create the `Blitz Self-Signed` identity (once)
 
 Run these in a terminal. They generate a self-signed code-signing certificate and import it into your
-login keychain:
+login keychain. They call `/usr/bin/openssl` (LibreSSL) by path on purpose: a Homebrew OpenSSL 3
+earlier on `PATH` writes a `.p12` whose MAC `security import` rejects as "wrong password?".
 
 ```sh
 # Generate a self-signed code-signing cert (10-year, codeSigning use).
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -keyout /tmp/tc-key.pem -out /tmp/tc-cert.pem \
   -subj "/CN=Blitz Self-Signed" \
   -addext "basicConstraints=critical,CA:false" \
@@ -27,7 +28,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -addext "extendedKeyUsage=critical,codeSigning"
 
 # Bundle it as a .p12 (the non-empty password keeps `security import` happy).
-openssl pkcs12 -export -inkey /tmp/tc-key.pem -in /tmp/tc-cert.pem \
+/usr/bin/openssl pkcs12 -export -inkey /tmp/tc-key.pem -in /tmp/tc-cert.pem \
   -name "Blitz Self-Signed" -out /tmp/tc.p12 -passout pass:blitz
 
 # Import into the login keychain so codesign can use it without prompting.
