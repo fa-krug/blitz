@@ -35,6 +35,7 @@ struct AISettingsView: View {
                 defaultModelSection
                 AgentSettingsSection()
                 ShellRulesSection()
+                PathRulesSection()
                 conversationsSection
                 systemPromptSection
                 MCPSettingsSection()

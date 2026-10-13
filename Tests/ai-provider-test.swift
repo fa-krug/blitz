@@ -107,6 +107,7 @@ struct AIProviderTests {
         agentRulesMigrateOnceThenPersist()
         aBrokenAgentTableFallsBackToTheDefaults()
         shellRulesKeepTheirOrder()
+        pathRulesKeepTheirOrder()
         toolCatalogsAndTurnsEncodePerProvider()
         toolArgumentsSurviveArrivingInFragments()
         anthropicSearchesOnItsOwnServer()
@@ -1279,11 +1280,17 @@ struct AIProviderTests {
             "and touches no old key, since no migration ran")
 
         defaults.set(
-            Data(#"{"shell":"allow","shellRules":[]}"#.utf8),
+            Data(#"{"shell":"allow","calendarRead":"deny","shellRules":[]}"#.utf8),
             forKey: AppSettingsKey.aiAgentRules.rawValue)
+        let older = AISettingsStore(defaults: defaults).agentRules
         expect(
-            AISettingsStore(defaults: defaults).agentRules == .defaults,
-            "a table missing a row is broken too, rather than filled in with guesses")
+            older.decision(for: .shell) == .allow && older.decision(for: .calendarRead) == .deny,
+            "a table stored before later rows keeps every row it has")
+        expect(
+            older.decision(for: .filesRead) == AgentRules.defaultDecision(for: .filesRead)
+                && older.decision(for: .remindersRead) == .ask
+                && older.pathRules == PathRule.seeds,
+            "and fills each row it lacks with that row's default, and the path seeds")
     }
 
     static func shellRulesKeepTheirOrder() {
@@ -1317,6 +1324,46 @@ struct AIProviderTests {
             AISettingsStore(defaults: defaults).agentRules.shellRules.map(\.pattern)
                 == ["git push*", "git status*", "ls *"],
             "Always Allow persists its pattern once, without duplicating one already there")
+    }
+
+    static func pathRulesKeepTheirOrder() {
+        let suite = "AIProviderTests.pathRules"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let store = AISettingsStore(defaults: defaults)
+        let seeds = store.agentRules.pathRules
+        expect(!seeds.isEmpty, "a fresh table starts on the path seeds")
+        let projects = PathRule(pattern: "~/Projects/**", decision: .allow)
+        let downloads = PathRule(pattern: "~/Downloads/*", access: .read, decision: .ask)
+        store.addPathRule(projects)
+        store.addPathRule(downloads)
+        store.movePathRule(id: downloads.id, by: -1)
+        expect(
+            store.agentRules.pathRules.suffix(2).map(\.id) == [downloads.id, projects.id],
+            "a path rule moves up past the one above it")
+        store.movePathRule(id: projects.id, by: 1)
+        expect(
+            store.agentRules.pathRules.last?.id == projects.id,
+            "and one moved past the end stays put")
+        var edited = projects
+        edited.access = .write
+        store.updatePathRule(edited)
+        store.removePathRule(id: seeds[0].id)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.pathRules
+                == Array(seeds.dropFirst()) + [downloads, edited],
+            "edits, removals, order and access persist, a removed seed included")
+        let read = AgentCall.files(
+            .filesRead, paths: ["/Users/me/Projects/app/a"], homeDirectory: "/Users/me")
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        let persisted = AISettingsStore(defaults: defaults).agentRules.pathRules
+        expect(
+            persisted.filter { $0.pattern == "~/Projects/app/**" }.map(\.access) == [.read],
+            "Always Allow persists a read-only pattern once")
+        expect(
+            persisted.last?.pattern == "~/Projects/app/**",
+            "placed last, since the write-only rule there never decided the read")
     }
 
     static func settingsPersistAndRepairSelections() {

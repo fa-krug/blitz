@@ -158,7 +158,7 @@ run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValu
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            Blitz/Features/AI/Service/ShellToolRunner.swift
 # The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
-run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
+run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
                            $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
                            $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \

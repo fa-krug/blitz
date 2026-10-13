@@ -175,8 +175,47 @@ struct AgentPolicyTests {
         check(
             "built-in rows, in Settings order",
             AgentTool.builtIn == [
-                .shell, .calendarRead, .calendarWrite, .remindersRead, .remindersWrite, .webSearch
+                .shell, .filesRead, .filesWrite, .webSearch, .webFetch, .openItems, .shortcuts,
+                .systemActions, .windowLayouts, .calendarRead, .calendarWrite, .remindersRead,
+                .remindersWrite, .contactsRead, .noteRead, .noteWrite, .clipboardRead,
+                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard
             ])
+        check(
+            "the groups, in Settings order",
+            AgentTool.Group.allCases.map(\.title) == [
+                "Commands", "Files", "Web", "Mac", "Calendar & Reminders", "Personal", "Context"
+            ])
+        check(
+            "the built-in rows run group by group, so Settings order is the groups' order",
+            AgentTool.Group.allCases.flatMap(\.tools) == AgentTool.builtIn)
+        check(
+            "every built-in row has a group, and an MCP row none",
+            AgentTool.builtIn.allSatisfy { $0.group != nil } && AgentTool.mcp("x").group == nil)
+        check(
+            "the groups hold the rows the plan names",
+            AgentTool.Group.commands.tools == [.shell]
+                && AgentTool.Group.files.tools == [.filesRead, .filesWrite]
+                && AgentTool.Group.web.tools == [.webSearch, .webFetch]
+                && AgentTool.Group.mac.tools == [
+                    .openItems, .shortcuts, .systemActions, .windowLayouts
+                ]
+                && AgentTool.Group.calendarAndReminders.tools == [
+                    .calendarRead, .calendarWrite, .remindersRead, .remindersWrite
+                ]
+                && AgentTool.Group.personal.tools == [
+                    .contactsRead, .noteRead, .noteWrite, .clipboardRead, .snippetsRead
+                ]
+                && AgentTool.Group.context.tools == [
+                    .frontmostApp, .selectedText, .currentClipboard
+                ])
+        check(
+            "only the rows a catalog serves are hosted; web search is the provider's",
+            AgentTool.builtIn.filter(\.isHosted) == [
+                .shell, .calendarRead, .calendarWrite, .remindersRead, .remindersWrite
+            ] && !AgentTool.mcp("x").isHosted)
+        check(
+            "only the file rows weigh paths",
+            AgentTool.builtIn.filter(\.usesPathRules) == [.filesRead, .filesWrite])
         check("only web search has no ask", AgentTool.builtIn.filter { !$0.canAsk } == [.webSearch])
         check("an MCP server can ask", AgentTool.mcp("github").canAsk)
         check("an MCP row is titled by its slug", AgentTool.mcp("github").title == "github")
@@ -244,26 +283,40 @@ struct AgentPolicyTests {
         // MARK: Rules — defaults and web search
 
         let defaults = AgentRules.defaults
-        check("the shell defaults to deny", defaults.shell == .deny)
-        check("calendar read defaults to ask", defaults.calendarRead == .ask)
-        check("calendar write defaults to deny", defaults.calendarWrite == .deny)
-        check("reminders read defaults to ask", defaults.remindersRead == .ask)
-        check("reminders write defaults to deny", defaults.remindersWrite == .deny)
-        check("web search defaults to allow: the composer toggle is the opt-in", defaults.webSearch == .allow)
+        check("the shell defaults to deny", defaults.decision(for: .shell) == .deny)
+        check("calendar read defaults to ask", defaults.decision(for: .calendarRead) == .ask)
+        check("calendar write defaults to deny", defaults.decision(for: .calendarWrite) == .deny)
+        check("reminders read defaults to ask", defaults.decision(for: .remindersRead) == .ask)
+        check("reminders write defaults to deny", defaults.decision(for: .remindersWrite) == .deny)
+        check(
+            "web search defaults to allow: the composer toggle is the opt-in",
+            defaults.decision(for: .webSearch) == .allow)
         check("no shell rules by default", defaults.shellRules.isEmpty)
+        for tool in AgentTool.builtIn where tool != .webSearch {
+            check(
+                "\(tool.title) defaults to \(tool.isReadOnly ? "ask" : "deny")",
+                defaults.decision(for: tool) == (tool.isReadOnly ? .ask : .deny))
+        }
+        check(
+            "every new read asks and every new row that acts is denied",
+            [AgentTool.filesRead, .webFetch, .contactsRead, .noteRead, .clipboardRead,
+                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard]
+                .allSatisfy { defaults.decision(for: $0) == .ask }
+                && [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
+                    .noteWrite]
+                .allSatisfy { defaults.decision(for: $0) == .deny })
+        check("the path rules start on their seeds", defaults.pathRules == PathRule.seeds)
 
         var rules = AgentRules.defaults
-        rules.webSearch = .ask
-        check("web search set to ask reads as deny", rules.webSearch == .deny)
-        rules.webSearch = .allow
         rules.set(.ask, for: .webSearch)
-        check("and through set(_:for:) too", rules.webSearch == .deny)
-        let built = AgentRules(
-            shell: .ask, calendarRead: .ask, calendarWrite: .ask, remindersRead: .ask,
-            remindersWrite: .ask, webSearch: .ask)
-        check("and through the initialiser", built.webSearch == .deny)
+        check("web search set to ask reads as deny", rules.decision(for: .webSearch) == .deny)
+        let built = AgentRules([.webSearch: .ask])
+        check("and through the initialiser", built.decision(for: .webSearch) == .deny)
         rules.set(.allow, for: .webSearch)
-        check("allow is kept", rules.webSearch == .allow)
+        check("allow is kept", rules.decision(for: .webSearch) == .allow)
+        check(
+            "a row the initialiser is not given takes its default",
+            built.decision(for: .shell) == .deny && built.decision(for: .filesRead) == .ask)
 
         for tool in AgentTool.builtIn {
             var table = AgentRules.defaults
@@ -280,10 +333,15 @@ struct AgentPolicyTests {
         ).restricted(to: { $0 != .calendarRead && $0 != .calendarWrite })
         check(
             "a feature that is off denies its rows",
-            calendarOff.calendarRead == .deny && calendarOff.calendarWrite == .deny)
+            calendarOff.decision(for: .calendarRead) == .deny
+                && calendarOff.decision(for: .calendarWrite) == .deny)
         check(
             "and leaves the rest",
-            calendarOff.remindersRead == .allow && calendarOff.shell == .ask)
+            calendarOff.decision(for: .remindersRead) == .allow
+                && calendarOff.decision(for: .shell) == .ask)
+        check(
+            "a feature ceiling never touches the patterns",
+            calendarOff.pathRules == PathRule.seeds && calendarOff.shellRules.isEmpty)
 
         // MARK: Rules — migration
 
@@ -303,15 +361,29 @@ struct AgentPolicyTests {
                     let label = "\(calendar.title)/\(reminders.title)/shell \(shell)"
                     check(
                         "\(label): calendar rows",
-                        migrated.calendarRead == calendarRows[calendar]?.read
-                            && migrated.calendarWrite == calendarRows[calendar]?.write)
+                        migrated.decision(for: .calendarRead) == calendarRows[calendar]?.read
+                            && migrated.decision(for: .calendarWrite)
+                                == calendarRows[calendar]?.write)
                     check(
                         "\(label): reminder rows",
-                        migrated.remindersRead == reminderRows[reminders]?.read
-                            && migrated.remindersWrite == reminderRows[reminders]?.write)
-                    check("\(label): shell", migrated.shell == (shell ? .ask : .deny))
-                    check("\(label): web search is offered", migrated.webSearch == .allow)
+                        migrated.decision(for: .remindersRead) == reminderRows[reminders]?.read
+                            && migrated.decision(for: .remindersWrite)
+                                == reminderRows[reminders]?.write)
+                    check(
+                        "\(label): shell",
+                        migrated.decision(for: .shell) == (shell ? .ask : .deny))
+                    check(
+                        "\(label): web search is offered",
+                        migrated.decision(for: .webSearch) == .allow)
                     check("\(label): no shell rules", migrated.shellRules.isEmpty)
+                    check(
+                        "\(label): the rows added since take their defaults, paths their seeds",
+                        AgentTool.builtIn.filter { $0.group != .calendarAndReminders }
+                            .filter { $0 != .shell && $0 != .webSearch }
+                            .allSatisfy {
+                                migrated.decision(for: $0) == AgentRules.defaultDecision(for: $0)
+                            }
+                            && migrated.pathRules == PathRule.seeds)
                 }
             }
         }
@@ -341,9 +413,67 @@ struct AgentPolicyTests {
         let storedAsk = (try? JSONSerialization.data(withJSONObject: storedRows)) ?? Data()
         check(
             "a stored web search ask decodes as deny",
-            (try? decoder.decode(AgentRules.self, from: storedAsk))?.webSearch == .deny)
-        let decodedShell = (try? decoder.decode(AgentRules.self, from: storedAsk))?.shell
-        check("the other rows decode as stored", decodedShell == .ask)
+            (try? decoder.decode(AgentRules.self, from: storedAsk))?.decision(for: .webSearch)
+                == .deny)
+        let olderTable = try? decoder.decode(AgentRules.self, from: storedAsk)
+        check("the other rows decode as stored", olderTable?.decision(for: .shell) == .ask)
+        check(
+            "a table stored before the new rows keeps every old row",
+            olderTable?.decision(for: .calendarRead) == .allow
+                && olderTable?.decision(for: .calendarWrite) == .deny
+                && olderTable?.decision(for: .remindersRead) == .ask
+                && olderTable?.decision(for: .remindersWrite) == .deny)
+        check(
+            "and gives each row it lacks its default, never the whole defaults table",
+            [AgentTool.filesRead, .filesWrite, .webFetch, .openItems, .contactsRead, .noteWrite]
+                .allSatisfy {
+                    olderTable?.decision(for: $0) == AgentRules.defaultDecision(for: $0)
+                })
+        check("and the seeds where it has no path rules", olderTable?.pathRules == PathRule.seeds)
+        let encodedOld: AgentRules = {
+            var table = AgentRules.defaults
+            table.set(.allow, for: .shell)
+            table.shellRules = [ShellRule(pattern: "ls *", decision: .allow)]
+            return table
+        }()
+        let withoutNewRows: Data? = (try? encoder.encode(encodedOld)).flatMap { data in
+            guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            for key in ["filesRead", "filesWrite", "webFetch", "selectedText", "pathRules"] {
+                object[key] = nil
+            }
+            return try? JSONSerialization.data(withJSONObject: object)
+        }
+        let readBack = withoutNewRows.flatMap { try? decoder.decode(AgentRules.self, from: $0) }
+        check("a table encoded without the new rows still decodes", readBack != nil)
+        check(
+            "with its old rows and shell rules intact",
+            readBack?.decision(for: .shell) == .allow
+                && readBack?.shellRules == encodedOld.shellRules)
+        check(
+            "and the missing rows at their defaults",
+            readBack?.decision(for: .filesRead) == .ask
+                && readBack?.decision(for: .filesWrite) == .deny
+                && readBack?.decision(for: .selectedText) == .ask)
+        let unknownRow = Data(#"{"shell":"allow","teleport":"allow"}"#.utf8)
+        check(
+            "a row this build no longer knows is ignored",
+            (try? decoder.decode(AgentRules.self, from: unknownRow))?.decision(for: .shell)
+                == .allow)
+        check(
+            "a value no decision spells still fails the whole table",
+            (try? decoder.decode(AgentRules.self, from: Data(#"{"shell":"maybe"}"#.utf8))) == nil)
+        var pathTable = AgentRules.defaults
+        pathTable.pathRules.append(PathRule(pattern: "~/Projects/**", access: .read, decision: .allow))
+        check(
+            "path rules round-trip, access included",
+            (try? encoder.encode(pathTable)).flatMap {
+                try? decoder.decode(AgentRules.self, from: $0)
+            } == pathTable)
+        check(
+            "a table whose path rules were all removed stays empty",
+            (try? decoder.decode(AgentRules.self, from: Data(#"{"pathRules":[]}"#.utf8)))?
+                .pathRules == [])
         check(
             "decisions encode by name",
             (try? encoder.encode([AgentDecision.allow, .ask, .deny]))
@@ -378,9 +508,14 @@ struct AgentPolicyTests {
 
         // MARK: Policy
 
-        let everythingAsks = AgentRules(
-            shell: .ask, calendarRead: .ask, calendarWrite: .ask, remindersRead: .ask,
-            remindersWrite: .ask, webSearch: .allow)
+        func table(
+            _ decision: AgentDecision, _ overrides: [AgentTool: AgentDecision] = [:]
+        ) -> AgentRules {
+            AgentRules(
+                Dictionary(uniqueKeysWithValues: AgentTool.builtIn.map { ($0, decision) })
+                    .merging(overrides) { $1 })
+        }
+        let everythingAsks = table(.ask, [.webSearch: .allow])
         let open = AgentSessionScope()
         let trust: [String: AgentDecision] = ["always": .allow, "ask": .ask, "never": .deny]
         let mcpTrust: (String) -> AgentDecision = { trust[$0] ?? .deny }
@@ -399,14 +534,14 @@ struct AgentPolicyTests {
         }
         func withShell(_ base: AgentDecision, _ patterns: [(String, AgentDecision)]) -> AgentRules {
             var table = everythingAsks
-            table.shell = base
+            table.set(base, for: .shell)
             table.shellRules = patterns.map { ShellRule(pattern: $0.0, decision: $0.1) }
             return table
         }
 
         check("a built-in tool takes its row", decide(AgentCall(tool: .calendarRead)) == .ask)
         var calendarAllowed = everythingAsks
-        calendarAllowed.calendarRead = .allow
+        calendarAllowed.set(.allow, for: .calendarRead)
         check("allow is allow", decide(AgentCall(tool: .calendarRead), calendarAllowed) == .allow)
         check(
             "deny is deny",
@@ -505,13 +640,25 @@ struct AgentPolicyTests {
 
         var plan = AgentSessionScope()
         plan.mode = .plan
-        let allAllowed = AgentRules(
-            shell: .allow, calendarRead: .allow, calendarWrite: .allow, remindersRead: .allow,
-            remindersWrite: .allow, webSearch: .allow)
+        let allAllowed = table(.allow)
         check(
             "plan offers exactly the reads, web search and the shell",
             AgentPolicy.offered(tools, rules: allAllowed, mcpTrust: mcpTrust, scope: plan)
-                == [.shell, .calendarRead, .remindersRead, .webSearch])
+                == [
+                    .shell, .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
+                    .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
+                    .selectedText, .currentClipboard
+                ])
+        check(
+            "plan never offers a row that writes or acts, even on Allow",
+            [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
+                .noteWrite]
+                .allSatisfy { !offered($0, allAllowed, scope: plan) && offered($0, allAllowed) })
+        check(
+            "plan keeps a new read at its own decision",
+            decide(AgentCall(tool: .filesRead), scope: plan) == .ask
+                && decide(AgentCall(tool: .webFetch), allAllowed, scope: plan) == .allow
+                && decide(AgentCall(tool: .selectedText), allAllowed, scope: plan) == .allow)
         check(
             "plan keeps a read's own decision",
             decide(AgentCall(tool: .calendarRead), scope: plan) == .ask
@@ -562,7 +709,11 @@ struct AgentPolicyTests {
             AgentCall.mcp("x", readOnly: true).isReadOnly
                 && !AgentCall.mcp("x", readOnly: false).isReadOnly
                 && !AgentCall(tool: .mcp("x")).isReadOnly
-                && AgentTool.builtIn.filter(\.isReadOnly) == [.calendarRead, .remindersRead, .webSearch])
+                && AgentTool.builtIn.filter(\.isReadOnly) == [
+                    .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
+                    .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
+                    .selectedText, .currentClipboard
+                ])
         check(
             "the hint is never read as a command",
             AgentCall.mcp("x", readOnly: true).command == nil
@@ -701,7 +852,7 @@ struct AgentPolicyTests {
         check(
             "the defaults offer only the read rows and web search",
             Set(AgentPolicy.offered(tools, rules: .defaults, mcpTrust: mcpTrust, scope: open))
-                == [.calendarRead, .remindersRead, .webSearch])
+                == Set(AgentTool.builtIn.filter(\.isReadOnly)))
         check(
             "offered keeps the given order",
             AgentPolicy.offered(
@@ -826,9 +977,7 @@ struct AgentPolicyTests {
 
         // MARK: This chat's grants
 
-        let asking = AgentRules(
-            shell: .ask, calendarRead: .ask, calendarWrite: .ask, remindersRead: .deny,
-            remindersWrite: .ask, webSearch: .allow)
+        let asking = table(.ask, [.remindersRead: .deny, .webSearch: .allow])
         var grantedScope = AgentSessionScope()
         for tool: AgentTool in [
             .calendarRead, .remindersRead, .shell, .calendarWrite, .mcp("ask"), .mcp("never")
@@ -864,7 +1013,10 @@ struct AgentPolicyTests {
             AgentSessionScope().granted.isEmpty && grantedScope != AgentSessionScope())
         check(
             "only reads and servers can be allowed for a chat",
-            AgentTool.builtIn.filter(\.canAllowForSession) == [.calendarRead, .remindersRead]
+            AgentTool.builtIn.filter(\.canAllowForSession) == [
+                .filesRead, .webFetch, .calendarRead, .remindersRead, .contactsRead, .noteRead,
+                .clipboardRead, .snippetsRead, .frontmostApp, .selectedText, .currentClipboard
+            ]
                 && AgentTool.mcp("x").canAllowForSession)
 
         // MARK: Always Allow a pattern
@@ -930,6 +1082,269 @@ struct AgentPolicyTests {
         var blank = withShell(.ask, [])
         blank.allow("  ", for: "ls")
         check("an empty pattern is never added", blank.shellRules.isEmpty)
+
+        // MARK: Path rules — matching
+
+        let home = "/Users/me"
+        func pathMatches(_ pattern: String, _ path: String) -> Bool {
+            PathRule(pattern: pattern, decision: .allow).matches(path, homeDirectory: home)
+        }
+        check("* matches within a folder", pathMatches("~/Downloads/*", "/Users/me/Downloads/a.txt"))
+        check(
+            "* never crosses a folder",
+            !pathMatches("~/Downloads/*", "/Users/me/Downloads/sub/a.txt")
+                && !pathMatches("/Users/*/Downloads", "/Users/a/b/Downloads")
+                && pathMatches("/Users/*/Downloads", "/Users/me/Downloads"))
+        check(
+            "** crosses folders",
+            pathMatches("~/Downloads/**", "/Users/me/Downloads/a.txt")
+                && pathMatches("~/Downloads/**", "/Users/me/Downloads/sub/deeper/a.txt"))
+        check(
+            "a trailing /** also matches the folder itself",
+            pathMatches("~/Downloads/**", "/Users/me/Downloads")
+                && !pathMatches("~/Downloads/**", "/Users/me/Downloads2"))
+        check(
+            "** in the middle matches no folder or many",
+            pathMatches("~/**/*.pdf", "/Users/me/a.pdf")
+                && pathMatches("~/**/*.pdf", "/Users/me/x/y/a.pdf")
+                && !pathMatches("~/**/*.pdf", "/Users/me/x/a.txt"))
+        check("/** matches everything, the root too", pathMatches("/**", "/") && pathMatches("/**", "/etc/hosts"))
+        check(
+            "~ is the home folder, and only it",
+            pathMatches("~", "/Users/me") && !pathMatches("~", "/Users/me/a")
+                && pathMatches("~/a", "/Users/me/a"))
+        check("~user is not expanded", !pathMatches("~other/**", "/Users/other/a"))
+        check("? is one character", pathMatches("~/a?.txt", "/Users/me/ab.txt") && !pathMatches("~/a?.txt", "/Users/me/a.txt"))
+        check(
+            "matching ignores case, as a Mac volume does",
+            pathMatches("~/downloads/*.TXT", "/Users/me/Downloads/a.txt")
+                && pathMatches("/USERS/ME/**", "/Users/me/x"))
+        check(
+            "and compares canonically equivalent characters",
+            pathMatches("~/Caf\u{E9}/**", "/Users/me/Cafe\u{301}/menu"))
+        check(
+            ".. and . are resolved before matching",
+            pathMatches("~/.ssh/**", "/Users/me/Projects/../.ssh/id_rsa")
+                && pathMatches("~/Downloads/*", "/Users/me/./Downloads//a.txt")
+                && !pathMatches("~/Projects/**", "/Users/me/Projects/../.ssh/id_rsa"))
+        check(
+            "the canonical path never climbs past the root",
+            PathRule.canonical("/../../etc/./hosts", homeDirectory: home) == "/etc/hosts"
+                && PathRule.canonical("~/a/../b/", homeDirectory: home) == "/Users/me/b"
+                && PathRule.canonical("/", homeDirectory: home) == "/")
+        check(
+            "a relative path has no canonical form, and matches nothing",
+            PathRule.canonical("Downloads/a", homeDirectory: home) == nil
+                && !pathMatches("/**", "Downloads/a"))
+        check(
+            "a relative pattern matches nothing",
+            !pathMatches("Downloads/**", "/Users/me/Downloads/a")
+                && !pathMatches("*.txt", "/Users/me/a.txt"))
+        check("an empty pattern matches nothing", !pathMatches("", "/Users/me/a") && !pathMatches("  ", "/"))
+        check(
+            "without a home folder, ~ matches nothing",
+            !PathRule(pattern: "~/**", decision: .deny).matches("/Users/me/a", homeDirectory: ""))
+        check(
+            "a rule weighs the file rows its access names",
+            PathRule(pattern: "/**", decision: .deny).applies(to: .filesRead)
+                && PathRule(pattern: "/**", decision: .deny).applies(to: .filesWrite)
+                && PathRule(pattern: "/**", access: .read, decision: .deny).applies(to: .filesRead)
+                && !PathRule(pattern: "/**", access: .read, decision: .deny).applies(to: .filesWrite)
+                && PathRule(pattern: "/**", access: .write, decision: .deny).applies(to: .filesWrite)
+                && !PathRule(pattern: "/**", access: .write, decision: .deny).applies(to: .filesRead)
+                && !PathRule(pattern: "/**", decision: .deny).applies(to: .shell))
+
+        // MARK: Path rules — seeds
+
+        let seeds = PathRule.seeds(bundleID: "de.fa-krug.blitz")
+        check(
+            "the seeds deny where secrets and Blitz's own state live",
+            seeds.map(\.pattern) == [
+                "~/.ssh/**", "~/.gnupg/**", "~/.aws/**", "~/Library/Keychains/**",
+                "~/Library/Cookies/**", "~/Library/Application Support/*/Cookies*/**",
+                "~/Library/Application Support/de.fa-krug.blitz/**",
+                "~/Library/Preferences/de.fa-krug.blitz.plist", "/System/**"
+            ] && seeds.allSatisfy { $0.decision == .deny })
+        check(
+            "every seed covers reads and writes, but /System only writes",
+            seeds.dropLast().allSatisfy { $0.access == .readAndWrite }
+                && seeds.last?.access == .write)
+        check(
+            "a Dev build seeds its own folder",
+            PathRule.seeds(bundleID: "de.fa-krug.blitz.dev").map(\.pattern).contains(
+                "~/Library/Application Support/de.fa-krug.blitz.dev/**"))
+        check(
+            "seeds keep their ids, so seeding twice gives the same rules",
+            PathRule.seeds(bundleID: "x") == PathRule.seeds(bundleID: "x")
+                && Set(seeds.map(\.id)).count == seeds.count)
+        check(
+            "a browser's cookie store is covered, file or folder",
+            seeds.contains { $0.matches("/Users/me/Library/Application Support/Arc/Cookies", homeDirectory: home) }
+                && seeds.contains {
+                    $0.matches(
+                        "/Users/me/Library/Application Support/Arc/Cookies-journal",
+                        homeDirectory: home)
+                })
+
+        // MARK: Path rules — the policy
+
+        func files(_ tool: AgentTool, _ paths: String...) -> AgentCall {
+            AgentCall.files(tool, paths: paths, homeDirectory: home)
+        }
+        func withPaths(
+            read: AgentDecision = .allow, write: AgentDecision = .allow,
+            _ rules: [PathRule] = seeds
+        ) -> AgentRules {
+            var built = table(.ask, [.filesRead: read, .filesWrite: write])
+            built.pathRules = rules
+            return built
+        }
+        let seeded = withPaths()
+        check("a path no rule matches takes the row", decide(files(.filesRead, "/Users/me/a.txt"), seeded) == .allow)
+        check(
+            "a seed denies a read under an Allow row",
+            decide(files(.filesRead, "/Users/me/.ssh/id_rsa"), seeded) == .deny)
+        check(
+            "Blitz's own support folder is denied both ways",
+            decide(
+                files(.filesRead, "/Users/me/Library/Application Support/de.fa-krug.blitz/x"),
+                seeded) == .deny
+                && decide(
+                    files(.filesWrite, "/Users/me/Library/Application Support/de.fa-krug.blitz/x"),
+                    seeded) == .deny)
+        check(
+            "/System is readable but never writable",
+            decide(files(.filesRead, "/System/Library/a"), seeded) == .allow
+                && decide(files(.filesWrite, "/System/Library/a"), seeded) == .deny)
+        let denyBelowAllow = withPaths(read: .ask, [
+            PathRule(pattern: "~/**", decision: .allow),
+            PathRule(pattern: "~/secret/**", decision: .deny)
+        ])
+        check(
+            "a matching Deny wins wherever it sits",
+            decide(files(.filesRead, "/Users/me/secret/a"), denyBelowAllow) == .deny
+                && decide(files(.filesRead, "/Users/me/open/a"), denyBelowAllow) == .allow)
+        let firstMatch = withPaths(read: .deny, write: .ask, [
+            PathRule(pattern: "~/Projects/**", decision: .ask),
+            PathRule(pattern: "~/**", decision: .allow)
+        ])
+        check(
+            "otherwise the first matching rule decides",
+            decide(files(.filesWrite, "/Users/me/Projects/a"), firstMatch) == .ask
+                && decide(files(.filesWrite, "/Users/me/b"), firstMatch) == .allow)
+        check(
+            "a Deny row is final, patterns or not",
+            decide(files(.filesRead, "/Users/me/b"), firstMatch) == .deny)
+        check(
+            "an Ask row asks outside its patterns",
+            decide(files(.filesWrite, "/tmp/x"), firstMatch) == .ask)
+        check(
+            "a move takes the narrowest of its paths",
+            decide(files(.filesWrite, "/Users/me/b", "/Users/me/Projects/b"), firstMatch) == .ask
+                && decide(files(.filesWrite, "/Users/me/b", "/Users/me/.ssh/b"), withPaths()) == .deny
+                && decide(files(.filesWrite, "/Users/me/b", "/Users/me/c"), firstMatch) == .allow)
+        check(
+            "a path that cannot be read asks, never allows",
+            decide(files(.filesRead, "notes.txt"), withPaths()) == .ask
+                && decide(files(.filesRead, "notes.txt"), withPaths(read: .deny)) == .deny)
+        check(
+            "a write-only rule leaves reads alone",
+            decide(
+                files(.filesRead, "/Users/me/x"),
+                withPaths(read: .ask, [PathRule(pattern: "~/**", access: .write, decision: .allow)]))
+                == .ask)
+        check(
+            "a bare file row takes its decision, so it is offered",
+            decide(AgentCall(tool: .filesRead), seeded) == .allow && offered(.filesRead, seeded))
+        check(
+            "path rules never reach a command",
+            decide(.shell("cat ~/.ssh/id_rsa"), withShell(.allow, [])) == .allow)
+        check(
+            "plan keeps a read's path decision and refuses every write",
+            decide(files(.filesRead, "/Users/me/a"), seeded, scope: plan) == .allow
+                && decide(files(.filesRead, "/Users/me/.ssh/a"), seeded, scope: plan) == .deny
+                && decide(files(.filesWrite, "/Users/me/a"), seeded, scope: plan) == .deny)
+        check(
+            "auto answers a path's Ask and never its Deny",
+            decide(files(.filesWrite, "/Users/me/Projects/a"), firstMatch, scope: auto) == .allow
+                && decide(files(.filesRead, "/Users/me/.ssh/a"), withPaths(read: .ask), scope: auto)
+                    == .deny)
+        var filesGranted = AgentSessionScope()
+        filesGranted.grant(.filesRead)
+        check(
+            "a chat grant answers a read's Ask, never a seed's Deny",
+            decide(files(.filesRead, "/Users/me/a"), withPaths(read: .ask), scope: filesGranted) == .allow
+                && decide(files(.filesRead, "/Users/me/.aws/c"), withPaths(read: .ask), scope: filesGranted)
+                    == .deny)
+
+        // MARK: Path rules — Always Allow
+
+        func suggested(_ path: String) -> String? {
+            AgentPolicy.suggestedPathPattern(for: path, homeDirectory: home, seeds: seeds)
+        }
+        check("the containing folder, under ~", suggested("/Users/me/Projects/app/main.swift") == "~/Projects/app/**")
+        check("a folder outside home is spelled whole", suggested("/etc/hosts") == "/etc/**")
+        check("never the root", suggested("/hosts") == nil)
+        check("never the home folder itself", suggested("/Users/me/notes.txt") == nil)
+        check("never a folder holding home", suggested("/Users/shared.txt") == nil)
+        check("never a folder holding home, in any case", suggested("/users/shared.txt") == nil)
+        check("never under a seed", suggested("/Users/me/.ssh/config") == nil)
+        check(
+            "nor under Blitz's own folder, nor /System",
+            suggested("/Users/me/Library/Application Support/de.fa-krug.blitz/rules.json") == nil
+                && suggested("/System/Library/x") == nil)
+        check(
+            "the path is canonical first",
+            suggested("/Users/me/Projects/../Projects/app/./a") == "~/Projects/app/**")
+        check("an unreadable path suggests nothing", suggested("app/a") == nil)
+
+        func pathPatterns(_ rules: AgentRules) -> [String] {
+            rules.pathRules.map { "\($0.pattern) \($0.access.rawValue) → \($0.decision.rawValue)" }
+        }
+        var projects = withPaths(read: .ask, write: .ask, [
+            PathRule(pattern: "~/Projects/secret/**", decision: .deny),
+            PathRule(pattern: "~/Projects/**", decision: .ask)
+        ])
+        let readApp = files(.filesRead, "/Users/me/Projects/app/a")
+        check("before: the read asks", decide(readApp, projects) == .ask)
+        projects.allowPath("~/Projects/app/**", for: readApp)
+        check(
+            "a new read-only Allow lands before the first non-deny rule that decides the call",
+            pathPatterns(projects) == [
+                "~/Projects/secret/** readAndWrite → deny", "~/Projects/app/** read → allow",
+                "~/Projects/** readAndWrite → ask"
+            ])
+        check(
+            "the read now runs, and a write there still asks",
+            decide(readApp, projects) == .allow
+                && decide(files(.filesWrite, "/Users/me/Projects/app/a"), projects) == .ask)
+        projects.allowPath("  ~/Projects/app/**  ", for: readApp)
+        check("the same pattern is never added twice", projects.pathRules.count == 3)
+        let writeApp = files(.filesWrite, "/Users/me/Projects/app/a")
+        projects.allowPath("~/Projects/app/**", for: writeApp)
+        check(
+            "a write gets its own write-only rule",
+            pathPatterns(projects) == [
+                "~/Projects/secret/** readAndWrite → deny", "~/Projects/app/** read → allow",
+                "~/Projects/app/** write → allow", "~/Projects/** readAndWrite → ask"
+            ] && decide(writeApp, projects) == .allow)
+        var twin = withPaths(read: .ask, [
+            PathRule(pattern: "~/**", decision: .allow),
+            PathRule(pattern: "~/Docs/**", access: .read, decision: .ask)
+        ])
+        twin.allowPath("~/Docs/**", for: files(.filesRead, "/Users/me/Docs/a"))
+        check(
+            "an existing twin turns Allow and moves up before the rule that decided the call",
+            pathPatterns(twin) == ["~/Docs/** read → allow", "~/** readAndWrite → allow"])
+        var untouched = withPaths()
+        untouched.allowPath("", for: readApp)
+        untouched.allowPath("~/x/**", for: .shell("ls"))
+        check("an empty pattern or a call without paths adds nothing", untouched == withPaths())
+        var elsewhere = withPaths(read: .ask, [])
+        elsewhere.allowPath("~/Other/**", for: readApp)
+        check(
+            "with no rule deciding the call, it goes at the end",
+            pathPatterns(elsewhere) == ["~/Other/** read → allow"])
 
         // MARK: Context card rows
 

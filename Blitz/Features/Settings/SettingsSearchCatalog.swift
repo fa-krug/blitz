@@ -321,6 +321,32 @@ enum SettingsSearchCatalog {
             group: .aiAgent, "Web search",
             keywords: ["browse", "internet", "search engine", "tools"]),
         .init(
+            group: .aiAgent, "File access",
+            keywords: [
+                "read files", "change files", "write", "trash", "folders", "documents", "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Fetch web pages",
+            keywords: ["url", "download", "internet", "website", "browse", "tools"]),
+        .init(
+            group: .aiAgent, "Mac actions",
+            keywords: [
+                "open apps", "open links", "apple shortcuts", "system actions", "window layouts",
+                "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Personal data",
+            keywords: [
+                "contacts", "note", "clipboard history", "snippets", "quicklinks", "privacy",
+                "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Context",
+            keywords: [
+                "frontmost app", "selected text", "selection", "clipboard", "accessibility",
+                "tools"
+            ]),
+        .init(
             group: .aiAgent, "MCP server trust",
             keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
         .init(
@@ -334,6 +360,12 @@ enum SettingsSearchCatalog {
         .init(
             .aiShellRules, "Add Shell Rule",
             keywords: ["shell", "terminal", "command", "pattern", "always allow"]),
+        .init(
+            group: .aiPathRules, "Path rules",
+            keywords: ["files", "folders", "paths", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .aiPathRules, "Add Path Rule",
+            keywords: ["files", "folder", "path", "pattern", "always allow"]),
         .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),

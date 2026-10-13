@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1, 1b and 2 built; phases 3–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phases 1, 1b, 2 and 3a built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -250,17 +250,54 @@ Known limits:
   up while a turn runs; the app-server itself was not available to check, so whether it ever
   abandons an elicitation is unverified. Nothing needs doing in Blitz for now.
 
-## Phase 3: toolbox (one tool group per step, each with its catalog, runner, rule row and harness)
+## Phase 3: toolbox (one tool group per step, each with its catalog, runner and harness)
 
-1. **Files:** list, read (clipped), write, move to Trash. Path patterns like the shell's
-   (`~/Downloads/**`). Writing outside an Allow pattern always asks.
-2. **Web fetch:** a URL as readable text, on a private `.ephemeral`, `urlCache = nil` session
-   (`CurrencyRateStore` shape), with a size and time cap.
-3. **Mac:** open an app or URL, run an Apple Shortcut, system actions, window layouts.
-4. **Personal:** contacts (read), the floating note (read/append), clipboard history (read),
-   snippets and quicklinks (read).
-5. **Context on request:** the frontmost app, selected text, and the current clipboard. Each is a
-   tool under the same rules, never pushed into a turn by itself.
+### 3a: the foundation (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#the-rule-table): every toolbox row is in
+the table now, so each later step adds only a catalog, a runner, its wire names and its dialogs.
+
+- **Rows.** `AgentTool` gained `.filesRead`, `.filesWrite`, `.webFetch`, `.openItems`,
+  `.shortcuts`, `.systemActions`, `.windowLayouts`, `.contactsRead`, `.noteRead`, `.noteWrite`,
+  `.clipboardRead`, `.snippetsRead`, `.frontmostApp`, `.selectedText` and `.currentClipboard`, each
+  with a title, glyph, `isReadOnly`, a stable storage key and an `AgentTool.Group` (Commands, Files,
+  Web, Mac, Calendar & Reminders, Personal, Context); `builtIn` is that order. Reads default to Ask,
+  everything that acts to Deny (`AgentRules.defaultDecision`).
+- **Not offered until it exists.** `AgentTool.isHosted` is true only for a row a catalog's wire name
+  maps to, and the composer's menu and context card list only hosted rows; the model's offer list
+  was already built from the catalogs. A step makes its rows offerable by adding their wire names.
+- **Tolerant decode.** `AgentRules` keeps its decisions keyed by row and decodes each row,
+  `shellRules` and `pathRules` with `decodeIfPresent ?? default`, so a stored table missing later
+  rows keeps the rest — evolution, not a migration.
+- **Ceilings.** `AgentFeatureCeiling` maps each row to its feature switch — Contacts, Notes,
+  Clipboard, Snippets or Quicklinks, Apple Shortcuts, System Actions, Window Management — and Read
+  Selected Text to the Accessibility grant; the gate and Settings both read it.
+- **Path rules.** `PathRule` (pattern, access, decision) with `~`, `*` and `**` over canonical,
+  symlink-resolved paths, matched ignoring case; Deny wins, else the first match, else the row; a
+  call with several paths takes the narrowest. `AgentCall.files(_:paths:homeDirectory:)`, Deny seeds
+  for secrets, Blitz's own folder and preferences, and `/System` writes;
+  `AgentPolicy.suggestedPathPattern` and `AgentRules.allowPath` for Always Allow. A rule's access
+  (Read & Write, Read, Write) is beyond the original sketch: `/System/**` is denied for writes only,
+  and Always Allow on a read must not allow writes there.
+- **Settings.** The Agent section groups its rows; a **Path rules** section lists and edits the
+  patterns; `AISettingsStore` adds, updates, removes, moves and Always-Allows them.
+
+### Remaining steps
+
+1. **3b Files** — `.filesRead` (list, read clipped), `.filesWrite` (write, move to Trash): the
+   catalog and wire names, a runner that resolves symlinks before it builds `AgentCall.files`, the
+   dialogs with **Always Allow "`<folder>/**`"** (`AgentPolicy.suggestedPathPattern`,
+   `AISettingsStore.allowPathPattern`), and the gate applying that choice. Decide here whether a
+   write no Allow pattern matches is capped at Ask whatever the row says, as first sketched; 3a
+   gives it the row's decision.
+2. **3c Web fetch** — `.webFetch`: a URL as readable text, on a private `.ephemeral`,
+   `urlCache = nil` session (`CurrencyRateStore` shape), with a size and time cap.
+3. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
+   `.systemActions` (Blitz's system actions), `.windowLayouts` (a window layout).
+4. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
+   `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
+   and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
+   turn by itself.
 
 ## Phase 4: memory
 

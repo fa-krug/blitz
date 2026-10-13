@@ -6,17 +6,30 @@ struct AgentSettingsSection: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(MCPCoordinator.self) private var mcpCoordinator
     @Environment(MCPSettingsStore.self) private var mcpStore
+    @Environment(VisibilityStore.self) private var visibility
+
+    /// Polled like the Permissions pane: the grant lands in System Settings, which sends nothing.
+    @State private var isTrusted = Permissions.isAccessibilityTrusted()
 
     var body: some View {
         @Bindable var settings = settings
+        let ceiling = AgentFeatureCeiling(
+            settings: appSettings, visibility: visibility, isAccessibilityTrusted: { isTrusted })
         Section {
-            ForEach(AgentTool.builtIn, id: \.self) { tool in
-                AgentDecisionPicker(
-                    title: tool.title, subtitle: subtitle(for: tool),
-                    choices: AgentDecisionPicker.choices(canAsk: tool.canAsk),
-                    selection: decision(for: tool)
-                )
-                .settingsEnabled(isAvailable(tool))
+            ForEach(AgentTool.Group.allCases, id: \.self) { group in
+                AgentToolGroupHeader(title: group.title)
+                ForEach(group.tools, id: \.self) { tool in
+                    AgentDecisionPicker(
+                        title: tool.title,
+                        subtitle: ceiling.unavailableReason(for: tool) ?? subtitle(for: tool),
+                        choices: AgentDecisionPicker.choices(canAsk: tool.canAsk),
+                        selection: decision(for: tool)
+                    )
+                    .settingsEnabled(ceiling.isAvailable(tool))
+                }
+            }
+            if !mcpStore.servers.isEmpty {
+                AgentToolGroupHeader(title: "MCP Servers")
             }
             ForEach(mcpStore.servers) { server in
                 AgentDecisionPicker(
@@ -47,31 +60,24 @@ struct AgentSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-    }
-
-    /// The feature switch is where macOS was asked for access, so the table cannot reach past it.
-    private func isAvailable(_ tool: AgentTool) -> Bool {
-        switch tool {
-        case .calendarRead, .calendarWrite: appSettings.calendarEnabled
-        case .remindersRead, .remindersWrite: appSettings.remindersEnabled
-        case .shell, .webSearch, .mcp: true
+        .task {
+            while !Task.isCancelled {
+                isTrusted = Permissions.isAccessibilityTrusted()
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
     }
 
+    /// Shown only while the row's feature is on; a row held below its ceiling says why instead.
     private func subtitle(for tool: AgentTool) -> String? {
         switch tool {
-        case .shell:
-            return "Runs in your login shell, as you."
-        case .calendarRead, .calendarWrite:
-            guard appSettings.calendarEnabled else { return "Turn on Calendar first." }
-            return tool == .calendarRead ? "The calendars switched on in Calendar." : nil
-        case .remindersRead, .remindersWrite:
-            guard appSettings.remindersEnabled else { return "Turn on Reminders first." }
-            return tool == .remindersRead ? "The lists switched on in Reminders." : nil
-        case .webSearch:
-            return "The provider runs the search, so Blitz cannot stop it to ask."
-        case .mcp:
-            return nil
+        case .shell: "Runs in your login shell, as you."
+        case .filesRead, .filesWrite: "Within the path rules below."
+        case .webSearch: "The provider runs the search, so Blitz cannot stop it to ask."
+        case .calendarRead: "The calendars switched on in Calendar."
+        case .remindersRead: "The lists switched on in Reminders."
+        case .selectedText: "In the app in front, through Accessibility."
+        default: nil
         }
     }
 
@@ -92,6 +98,18 @@ struct AgentSettingsSection: View {
         Binding(
             get: { server.trust.decision },
             set: { mcpCoordinator.setTrust(MCPTrust($0), for: server.id) })
+    }
+}
+
+/// A small label over a group's rows, quieter than the section's own header.
+private struct AgentToolGroupHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(Theme.Typography.sectionHeader)
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

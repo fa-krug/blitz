@@ -423,7 +423,7 @@ final class AIChatCoordinator {
 
     /// The composer's switch, offered only where the route searches and the rules allow it.
     func offersWebSearch(in chat: AIChatState) -> Bool {
-        capabilities(for: chat).webSearch && gate.rules.webSearch == .allow
+        capabilities(for: chat).webSearch && gate.rules.decision(for: .webSearch) == .allow
     }
 
     private func webSearch(for chat: AIChatState) -> Bool {
@@ -625,7 +625,7 @@ final class AIChatCoordinator {
     /// Built-in rows the composer's menu lists: only where this route carries Blitz's own tools.
     func listedBuiltInTools(for chat: AIChatState) -> [AgentTool] {
         guard model(for: chat)?.reachesBlitzTools == true else { return [] }
-        return gate.listed(AgentTool.builtIn.filter { $0 != .webSearch })
+        return gate.listed(AgentTool.builtIn.filter(\.isHosted))
     }
 
     /// The servers the composer's menu lists; one the table denies is left out, like the model.

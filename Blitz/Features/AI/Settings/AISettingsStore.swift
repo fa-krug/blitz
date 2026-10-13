@@ -363,14 +363,44 @@ final class AISettingsStore {
         agentRules.shellRules.removeAll { $0.id == id }
     }
 
-    /// A rule moved past either end stays where it is.
     func moveShellRule(id: UUID, by offset: Int) {
-        var rules = agentRules.shellRules
+        agentRules.shellRules = Self.moving(id: id, by: offset, in: agentRules.shellRules)
+    }
+
+    func addPathRule(_ rule: PathRule) {
+        agentRules.pathRules.append(rule)
+    }
+
+    /// Unlike Add Path Rule, the pattern lands where it decides the call that asked.
+    func allowPathPattern(_ pattern: String, for call: AgentCall) {
+        agentRules.allowPath(pattern, for: call)
+    }
+
+    func updatePathRule(_ rule: PathRule) {
+        guard let index = agentRules.pathRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        agentRules.pathRules[index] = rule
+    }
+
+    func removePathRule(id: UUID) {
+        agentRules.pathRules.removeAll { $0.id == id }
+    }
+
+    func movePathRule(id: UUID, by offset: Int) {
+        agentRules.pathRules = Self.moving(id: id, by: offset, in: agentRules.pathRules)
+    }
+
+    /// A rule moved past either end stays where it is.
+    private static func moving<Rule: Identifiable<UUID>>(
+        id: UUID, by offset: Int, in rules: [Rule]
+    ) -> [Rule] {
+        var rules = rules
         guard let index = rules.firstIndex(where: { $0.id == id }),
             rules.indices.contains(index + offset)
-        else { return }
+        else { return rules }
         rules.insert(rules.remove(at: index), at: index + offset)
-        agentRules.shellRules = rules
+        return rules
     }
 
     func override(for kind: InstalledAIKind) -> InstalledAIOverride {

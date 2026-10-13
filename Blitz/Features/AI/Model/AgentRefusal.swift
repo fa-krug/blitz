@@ -17,11 +17,26 @@ enum AgentRefusal: Equatable, Sendable {
     private static func action(of tool: AgentTool) -> String {
         switch tool {
         case .shell: "run this command"
+        case .filesRead: "read this file"
+        case .filesWrite: "change this file"
+        case .webSearch: "search the web"
+        case .webFetch: "fetch this page"
+        case .openItems: "open this"
+        case .shortcuts: "run this shortcut"
+        case .systemActions: "run this system action"
+        case .windowLayouts: "apply this window layout"
         case .calendarRead: "read the calendar"
         case .calendarWrite: "add this event"
         case .remindersRead: "read reminders"
         case .remindersWrite: "change reminders"
-        case .webSearch: "search the web"
+        case .contactsRead: "read contacts"
+        case .noteRead: "read the note"
+        case .noteWrite: "add to the note"
+        case .clipboardRead: "read clipboard history"
+        case .snippetsRead: "read snippets and quicklinks"
+        case .frontmostApp: "see the frontmost app"
+        case .selectedText: "read the selected text"
+        case .currentClipboard: "read the clipboard"
         case .mcp: "call this server's tools"
         }
     }

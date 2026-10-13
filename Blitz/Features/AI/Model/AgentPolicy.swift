@@ -30,6 +30,8 @@ enum AgentPolicy {
         var decision = base
         if call.tool == .shell, let command = call.command {
             decision = shellDecision(for: command, base: base, rules: rules.shellRules)
+        } else if call.tool.usesPathRules, !call.paths.isEmpty {
+            decision = pathDecision(for: call, base: base, rules: rules.pathRules)
         }
         return applying(scope.mode, to: decision, for: call)
     }
@@ -92,6 +94,29 @@ enum AgentPolicy {
         return word + " *"
     }
 
+    /// What file "Always Allow" proposes: the folder holding `path`, then `/**`.
+    static func suggestedPathPattern(
+        for path: String, homeDirectory: String, seeds: [PathRule] = PathRule.seeds
+    ) -> String? {
+        guard let path = PathRule.canonical(path, homeDirectory: homeDirectory),
+            let home = PathRule.canonical(homeDirectory, homeDirectory: homeDirectory)
+        else { return nil }
+        let folder = (path as NSString).deletingLastPathComponent
+        // Lowercased, as matching is: `/users/**` would cover `/Users/me` just the same.
+        let (lowerFolder, lowerHome) = (folder.lowercased(), home.lowercased())
+        guard lowerFolder != "/", lowerFolder != lowerHome, !lowerHome.hasPrefix(lowerFolder + "/")
+        else { return nil }
+        let isSeeded = seeds.contains { seed in
+            seed.decision == .deny
+                && (seed.matches(folder, homeDirectory: homeDirectory)
+                    || seed.matches(path, homeDirectory: homeDirectory))
+        }
+        guard !isSeeded else { return nil }
+        let spelled =
+            lowerFolder.hasPrefix(lowerHome + "/") ? "~" + folder.dropFirst(home.count) : folder
+        return spelled + "/**"
+    }
+
     /// Auto confirms every Ask; Plan lets only reads through, and asks before every command.
     private static func applying(
         _ mode: AgentMode, to decision: AgentDecision, for call: AgentCall
@@ -131,6 +156,21 @@ enum AgentPolicy {
         }
         return segments.map { segmentDecision(for: $0, base: base, rules: rules) }.min()
             ?? min(base, .ask)
+    }
+
+    /// The narrowest path decides; one that is not absolute cannot be weighed, so it asks.
+    private static func pathDecision(
+        for call: AgentCall, base: AgentDecision, rules: [PathRule]
+    ) -> AgentDecision {
+        let applying = rules.filter { $0.applies(to: call.tool) }
+        return call.paths.map { path in
+            guard PathRule.canonical(path, homeDirectory: call.homeDirectory) != nil else {
+                return min(base, .ask)
+            }
+            let matching = applying.filter { $0.matches(path, homeDirectory: call.homeDirectory) }
+            if matching.contains(where: { $0.decision == .deny }) { return .deny }
+            return matching.first?.decision ?? base
+        }.min() ?? base
     }
 
     /// Any matching Deny wins, so no Allow placed above it can shadow it; else the first match.

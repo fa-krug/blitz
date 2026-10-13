@@ -22,14 +22,10 @@ final class AgentGateCoordinator {
 
     /// The table under each feature's own switch, which is where macOS was asked for access.
     var rules: AgentRules {
-        let settings = core.settings
-        return core.aiSettings.agentRules.restricted { tool in
-            switch tool {
-            case .calendarRead, .calendarWrite: settings.calendarEnabled
-            case .remindersRead, .remindersWrite: settings.remindersEnabled
-            case .shell, .webSearch, .mcp: true
-            }
-        }
+        let ceiling = AgentFeatureCeiling(
+            settings: core.settings, visibility: core.visibility,
+            isAccessibilityTrusted: Permissions.isAccessibilityTrusted)
+        return core.aiSettings.agentRules.restricted { ceiling.isAvailable($0) }
     }
 
     func decision(for call: AgentCall, in chat: AIChatState) -> AgentDecision {

@@ -2,7 +2,9 @@
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
 calls the tools one rule table allows: the shell, the calendar, reminders, web search and each MCP
-server. The table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell; a
+server, with rows already in the table for the Phase 3 toolbox — files, web fetch, Mac actions,
+personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
+tool, plus ordered command patterns for the shell and path patterns for files; a
 session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
 a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in Plan, `write_plan`.
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
@@ -29,7 +31,8 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   picker puts the chat back there. Auto never shows a dialog, and Plan lets through only calls that look, plus commands it
   asks about one by one. See [Modes](#modes).
 - **Read-only is the row's or the server's word, never the model's.** `AgentTool.isReadOnly` is true
-  for the calendar and reminders reads and web search. An MCP tool is read-only only when its server
+  for every row that only looks — the calendar, reminders, contacts, note, clipboard history and
+  snippets reads, Read Files, both web rows and the three context rows. An MCP tool is read-only only when its server
   listed it with `annotations.readOnlyHint` set to `true` (`MCPTool.isReadOnly`); a missing,
   `false` or non-boolean hint, or a tool Blitz never saw listed, changes things. A server's bare row
   says nothing for all its tools, so Plan weighs them one at a time.
@@ -55,6 +58,15 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   `AgentWait.of(isStreaming:pendingApprovals:hasQuestion:)`: `.approval` while any Ask request is
   open, held or with its dialog up, else `.answer` while an `ask_user` question waits, and nil
   whenever no turn runs, so a badge can never outlive its turn.
+- **A row with no runner is never offered.** `AgentTool.isHosted` is true only for a row some
+  catalog's wire name maps to (`builtInToolNames`), so a toolbox row added to the table ahead of its
+  runner shows in Settings and nowhere else: the composer's menu and the context card list
+  `builtIn.filter(\.isHosted)`, and the model's own offer list is built from the catalogs. Adding
+  a group's wire names is what makes its rows offerable.
+- **The stored table decodes field by field.** A row, `shellRules` or `pathRules` missing from
+  `aiAgentRules` decodes as its default (`decodeIfPresent ?? default`), so a table stored before a
+  row existed keeps every row it has; this is ordinary evolution of the table, not a migration. A
+  value no `AgentDecision` spells still fails the whole table, which then reads as the defaults.
 - **The shell matcher fails toward Ask.** A command the splitter cannot read with confidence never
   reaches a pattern; it asks, or is denied by a Deny row. See [Shell patterns](#shell-patterns).
 - **A Deny pattern is a backstop, not a sandbox.** Patterns match a segment's text, not the program
@@ -62,11 +74,15 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   take the row and still ask; under an Allow row they run. An Allow row plus Deny patterns is a
   blocklist, and the Settings footer says so.
 - **A matching Deny pattern always wins.** Order decides only among the rest, so no Allow pattern,
-  wherever it sits, can shadow a Deny one.
-- **The feature switches stay the ceiling.** Calendar and Reminders each need their own switch,
-  which is where macOS was asked, and a server needs MCP on and itself enabled.
-  `AgentGateCoordinator.rules` reads a calendar or reminders row as Deny while its feature is off,
-  and a server that is off or gone answers Deny.
+  wherever it sits, can shadow a Deny one. Path rules work the same way.
+- **Path rules see canonical paths only.** `PathRule.matches` resolves `~`, `.`, `..` and repeated
+  slashes itself, but never touches the disk: a runner resolves symlinks
+  (`URL.resolvingSymlinksInPath()`) before it builds `AgentCall.files`. A path that is not absolute
+  cannot be weighed and takes `min(row, Ask)`. See [Path rules](#path-rules).
+- **The feature switches stay the ceiling.** Each row with a feature behind it needs that feature's
+  switch (`AgentFeatureCeiling`), and a server needs MCP on and itself enabled.
+  `AgentGateCoordinator.rules` reads a row as Deny while its ceiling is not met, and a server that
+  is off or gone answers Deny. See [The rule table](#the-rule-table) for each row's ceiling.
 - **MCP trust is not copied.** A server's row is its `MCPServer.trust` — `.always` ↔ Allow, `.ask` ↔
   Ask, `.never` ↔ Deny (`MCPAgentMapping.swift`) — read and written in place, so the Agent table and
   the server editor cannot disagree.
@@ -83,18 +99,45 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
 
 ## The rule table
 
-`AgentRules` is one decision per built-in row plus `shellRules`; an MCP server's row is its own
-trust. `AgentDecision` orders `deny < ask < allow`, so `min` is the narrower of two.
+`AgentRules` is one decision per built-in row plus `shellRules` and `pathRules`; an MCP server's row
+is its own trust. `AgentDecision` orders `deny < ask < allow`, so `min` is the narrower of two.
+`AgentRules.defaultDecision(for:)` is the whole default rule: a read-only row asks, every row that
+writes or acts is denied, and web search is Allow, its composer globe being the opt-in.
 
-| Row (`AgentTool`) | Settings title | Covers | Choices | Default |
-| --- | --- | --- | --- | --- |
-| `.shell` | Run Commands | `shell_run_command` | Allow, Ask, Deny | Deny |
-| `.calendarRead` | Read Calendar | `calendar_list_events` | Allow, Ask, Deny | Ask |
-| `.calendarWrite` | Add Calendar Events | `calendar_create_event` | Allow, Ask, Deny | Deny |
-| `.remindersRead` | Read Reminders | `reminders_list` | Allow, Ask, Deny | Ask |
-| `.remindersWrite` | Change Reminders | `reminders_create`, `reminders_update`, `reminders_complete` | Allow, Ask, Deny | Deny |
-| `.webSearch` | Web Search | the route's own search | Allow, Deny | Allow |
-| `.mcp(slug)` | the server's title | every tool of that server | Allow, Ask, Deny | its trust, `.ask` |
+`AgentTool.builtIn` is Settings order, and runs group by group (`AgentTool.Group`): Commands,
+Files, Web, Mac, Calendar & Reminders, Personal, Context.
+
+| Group | Row (`AgentTool`) | Settings title | Covers | Read-only | Default | Ceiling |
+| --- | --- | --- | --- | --- | --- | --- |
+| Commands | `.shell` | Run Commands | `shell_run_command` | no | Deny | — |
+| Files | `.filesRead` | Read Files | list and read (3b) | yes | Ask | — |
+| | `.filesWrite` | Change Files | write, move to Trash (3b) | no | Deny | — |
+| Web | `.webSearch` | Web Search | the route's own search | yes | Allow (no Ask) | — |
+| | `.webFetch` | Fetch Web Pages | a URL as text (3c) | yes | Ask | — |
+| Mac | `.openItems` | Open Apps, Files and Links | (3d) | no | Deny | — |
+| | `.shortcuts` | Run Shortcuts | an Apple Shortcut (3d) | no | Deny | Apple Shortcuts on |
+| | `.systemActions` | Run System Actions | Blitz's system actions (3d) | no | Deny | System Actions on (`VisibilityStore`) |
+| | `.windowLayouts` | Apply Window Layouts | a window layout (3d) | no | Deny | Window Management on |
+| Calendar & Reminders | `.calendarRead` | Read Calendar | `calendar_list_events` | yes | Ask | Calendar on |
+| | `.calendarWrite` | Add Calendar Events | `calendar_create_event` | no | Deny | Calendar on |
+| | `.remindersRead` | Read Reminders | `reminders_list` | yes | Ask | Reminders on |
+| | `.remindersWrite` | Change Reminders | `reminders_create`, `reminders_update`, `reminders_complete` | no | Deny | Reminders on |
+| Personal | `.contactsRead` | Read Contacts | (3e) | yes | Ask | Contacts on |
+| | `.noteRead` | Read the Note | the floating note (3e) | yes | Ask | Notes on |
+| | `.noteWrite` | Add to the Note | append (3e) | no | Deny | Notes on |
+| | `.clipboardRead` | Read Clipboard History | (3e) | yes | Ask | Clipboard on |
+| | `.snippetsRead` | Read Snippets and Quicklinks | (3e) | yes | Ask | Snippets or Quicklinks on |
+| Context | `.frontmostApp` | See the Frontmost App | (3e) | yes | Ask | — |
+| | `.selectedText` | Read Selected Text | (3e) | yes | Ask | Accessibility granted |
+| | `.currentClipboard` | Read the Clipboard | (3e) | yes | Ask | — |
+| — | `.mcp(slug)` | the server's title | every tool of that server | per tool | its trust, `.ask` | MCP and the server on |
+
+A step in parentheses names the Phase 3 step that brings the row's runner; until then the row is not
+hosted, so nothing offers it. Every read-only row but web search can be allowed for the chat.
+`AgentFeatureCeiling` is the one place that says each row's ceiling and the sentence Settings shows
+under a row held below it ("Turn on Contacts first."); Selected Text's is the Accessibility grant,
+read through `Permissions.isAccessibilityTrusted()` at each decision and polled once a second while
+Settings shows the Agent section.
 
 `AgentTool(wireName:)` maps a model's call onto its row — the built-in names first, then
 `MCPToolName.parse` — and `AgentCall(toolCall:)` adds the command a shell call would run. A name
@@ -102,7 +145,8 @@ neither Blitz nor a server spells has no row.
 
 `AgentPolicy.decision` applies, in order: a tool the session switched off is Deny; the row's own
 decision, with Deny final; a chat grant turning that row's Ask into Allow; for the shell, the
-patterns below; then the session's mode, which never touches a Deny.
+patterns below, and for a file call, the path rules; then the session's mode, which never touches a
+Deny.
 
 ## Modes
 
@@ -114,11 +158,13 @@ patterns below; then the session's mode, which never touches a Deny.
 | Auto | `bolt` | runs, with no dialog | Allow and Deny as written, so it offers exactly what Manual does |
 | Plan | `list.bullet.clipboard` | Blitz's dialog | only read-only calls keep their decision; every command asks; everything else is Deny |
 
-Plan's read-only set is `AgentCall.isReadOnly`: the calendar and reminders reads, web search and an
-MCP tool its server marked read-only, each still at its own decision, grants included. The shell
+Plan's read-only set is `AgentCall.isReadOnly`: every read-only row — Read Files, both web rows,
+the calendar, reminders and personal reads and the three context rows — and an MCP tool its server
+marked read-only, each still at its own decision, path rules and grants included. The shell
 is offered while its row is not Deny, and every command asks, under any Allow pattern — Always
 Allow's included, so the new pattern takes effect once the chat leaves Plan — while a Deny pattern
-still refuses. Calendar and reminders writes and every other MCP tool are Deny. `ask_user` and
+still refuses. Every row that writes or acts — Change Files, the Mac rows, the calendar,
+reminders and note writes — and every other MCP tool are Deny. `ask_user` and
 `write_plan` are offered besides, and `AgentModeInstructions.plan` rides each Plan turn: look
 without changing anything, ask where the answer changes the plan, finish with `write_plan`, and
 never start carrying it out. [AI](ai.md#plans) has the plan card that carries it out.
@@ -169,6 +215,61 @@ effect for the command that asked, without ever adding a second rule for one pat
 So `[git push * → Ask]` plus Always Allow `git *` for `git push origin` puts `git *` first, and that
 command now runs. A Deny is never a place to insert before, and since a matching Deny always wins,
 the new rule cannot shadow one.
+
+## Path rules
+
+`AgentRules.pathRules` is an ordered `[PathRule]`, each a pattern, an `Access` — Read & Write, Read
+or Write, the file rows it weighs — and a decision. `AgentCall.files(_:paths:homeDirectory:)`
+carries every path a call touches, a move's source and destination both; `AgentPolicy` weighs each
+path on its own and the call takes the narrowest:
+
+- A path any applicable Deny rule matches is Deny, wherever that rule sits.
+- Otherwise the first applicable rule that matches decides, so an Allow pattern raises a path above
+  an Ask row, and an Ask or Deny pattern narrows an Allow row.
+- A path no rule matches takes the row's decision; a Deny row is Deny before any of this.
+- A path that is not absolute, or a home folder that is not, takes `min(row, Ask)`.
+- A call with no path — the bare row, as `isOffered` asks — takes the row.
+
+`PathRule.matches(_:homeDirectory:)` is pure. Both the pattern and the path have `~` and `~/`
+expanded to the home folder (`~user` is not), `.` and empty components dropped and `..` resolved,
+never above `/`; a pattern that is not absolute then matches nothing, nor does an empty one. Then,
+component by component:
+
+- `*` matches any run of characters within one component, `?` one character.
+- `**` as a whole component matches no component or any number, so `~/Downloads/**` covers the
+  folder itself and everything in it, and `~/**/*.pdf` a PDF at any depth.
+- Matching ignores case, since a Mac volume usually does, and compares characters as canonical
+  equivalents, so a decomposed `é` matches a precomposed one. On a case-sensitive volume a pattern
+  can therefore match more than the disk would.
+
+Symlinks are the runner's: it resolves each path with `URL.resolvingSymlinksInPath()` before it asks,
+so a link inside an allowed folder cannot reach a denied one.
+
+**Seeds.** A table with no `pathRules` — a fresh one, the migrated one or one stored before path
+rules existed — gets `PathRule.seeds`, every one Deny, with fixed IDs so seeding twice gives the same
+rules:
+
+| Pattern | Access | Why |
+| --- | --- | --- |
+| `~/.ssh/**`, `~/.gnupg/**`, `~/.aws/**` | Read & Write | keys and credentials |
+| `~/Library/Keychains/**`, `~/Library/Cookies/**` | Read & Write | the keychain files and Safari's cookies |
+| `~/Library/Application Support/*/Cookies*/**` | Read & Write | an app's cookie store, file or folder |
+| `~/Library/Application Support/<bundle id>/**` | Read & Write | Blitz's own folder (`AppPaths.applicationSupport`): chat history and the rest |
+| `~/Library/Preferences/<bundle id>.plist` | Read & Write | Blitz's preferences, where the rule table itself is stored |
+| `/System/**` | Write | the sealed system volume |
+
+The bundle ID is the running build's, so a Dev build seeds `de.fa-krug.blitz.dev`. Seeds are ordinary
+rules: Settings can edit or remove them, and a table that removed them keeps them removed.
+
+**Always Allow** for a file call proposes `AgentPolicy.suggestedPathPattern(for:homeDirectory:)`:
+the canonical folder holding the path, spelled under `~` where it can be, plus `/**`. It proposes
+nothing for a path that is not absolute, for `/`, for the home folder or a folder holding it
+(compared ignoring case, as matching is), or for a folder or path any Deny seed matches.
+`AgentRules.allowPath(_:for:)` places it as `allow(_:for:)` places a shell pattern, as a Read rule
+for a read and a Write rule for a write: a rule with the same pattern and access becomes Allow and
+moves up if it must; otherwise a new one goes in just before the first non-Deny rule that would
+decide one of the call's paths, or at the end. `AISettingsStore.allowPathPattern(_:for:)` persists
+it. The dialog choice that calls it arrives with the files runner (3b).
 
 ## The gate and its dialogs
 
@@ -221,8 +322,8 @@ refusal of that one call; only Settings withholds a tool for good.
   [Shell patterns](#shell-patterns) describes; Settings' Add Shell Rule appends through
   `addShellRule` instead.
 - **Always Allow** on a server sets its trust to `.always` through `MCPCoordinator.setTrust`.
-- **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — the two reads and MCP
-  servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
+- **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — every read-only row but
+  web search, and MCP servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
   `AgentSessionScope.granted`, and only while that chat still shows the conversation that asked;
   `AgentPolicy` turns that row's Ask into Allow from it, in Plan too. It never lifts a Deny.
 
@@ -238,8 +339,9 @@ later arrives switched on.
 The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits what the chat may call:
 
 - **Use Tools** — off offers nothing, Blitz's tools, `ask_user` and every server alike.
-- **Blitz** — one switch per built-in row the table does not deny, on a route that reaches Blitz's
-  tools (`AIChatCoordinator.listedBuiltInTools`); web search is not among them.
+- **Blitz** — one switch per hosted built-in row the table does not deny, on a route that reaches
+  Blitz's tools (`AIChatCoordinator.listedBuiltInTools`); web search, the provider's own, and the
+  toolbox rows with no runner yet are not among them.
 - **MCP Servers** — one switch per server the table does not deny.
 - **Agent Settings…** opens Settings → AI on the Agent section.
 
@@ -356,21 +458,28 @@ it stays out of backups with the rest of the AI setup (`SettingsBackupCoverage.d
 
 Settings → AI holds two sections, between Default model and Conversations:
 
-- **Agent** (`AgentSettingsSection`) — a picker per built-in row, disabled with "Turn on Calendar
-  first." or "Turn on Reminders first." while that feature is off; a picker per MCP server, written
-  to its trust and disabled while MCP or the server is off; **Tool call rounds**; and **Notify when
-  the agent is waiting** ([Notifications](#notifications)).
+- **Agent** (`AgentSettingsSection`) — the built-in rows under a small header per
+  `AgentTool.Group`, in `builtIn` order, each a picker disabled with its ceiling's sentence ("Turn
+  on Contacts first.", "Allow Blitz Accessibility access first.") while `AgentFeatureCeiling` holds
+  it; then, under an MCP Servers header, a picker per server, written to its trust and disabled
+  while MCP or the server is off; **Tool call rounds**; and **Notify when the agent is waiting**
+  ([Notifications](#notifications)). A toolbox row whose runner has not landed is listed and
+  editable like any other.
 - **Shell rules** (`ShellRulesSection`) — the ordered patterns, each with a pattern field, a
   decision, Move Up, Move Down and Remove, then **Add Shell Rule**, which adds an empty Allow
   pattern and focuses it. An empty pattern matches nothing.
+- **Path rules** (`PathRulesSection`) — the same, with an Applies to picker (Read & Write, Read,
+  Write) beside each decision, then **Add Path Rule**; the footer explains `~`, `*` and `**`, that
+  a Deny always wins, and that paths are checked once symlinks resolve, ignoring case. Both lists
+  draw their rows with `AgentRuleRow`.
 
 `AISettingsStore.agentRules` is the table, encoded as JSON under `AppSettingsKey.aiAgentRules`.
 Loading it:
 
 | Stored | Result |
 | --- | --- |
-| `aiAgentRules` that decodes | that table |
-| `aiAgentRules` that does not decode, or lacks a row | `AgentRules.defaults`; no old key is read or removed |
+| `aiAgentRules` that decodes | that table; a row, `shellRules` or `pathRules` it lacks takes its default or the seeds |
+| `aiAgentRules` that does not decode | `AgentRules.defaults`; no old key is read or removed |
 | no `aiAgentRules`, no old key | `AgentRules.defaults`, written under the new key |
 | no `aiAgentRules`, any old key | `AgentRules.migrated`, written under the new key; the old keys are removed |
 
@@ -384,7 +493,8 @@ Loading it:
 | Reminders Read & Write | Allow | Allow — it wrote straight away |
 | `aiShellCommands` on / off | shell Ask / Deny | |
 
-Web search migrates as Allow. `AIDataAccess` survives only to read the old values, and the three
+Web search migrates as Allow, every row added since takes its default and `pathRules` its seeds.
+`AIDataAccess` survives only to read the old values, and the three
 old keys stay in `SettingsBackupCoverage.deliberatelyExcluded` until this migration is deleted.
 
 ## Routes
@@ -423,10 +533,15 @@ Each route honours the mode where it decides what to offer:
 ## Harnesses
 
 - `agent-policy-test` — the splitter's splits and refusals, glob matching, decision order, wire
-  names, the MCP trust mapping, defaults and the web-search rule, migration, `Codable`, the session
+  names, the rows' groups and order, which rows are hosted, the MCP trust mapping, defaults and the
+  web-search rule, migration, `Codable` and its tolerance of a table stored before later rows, path
+  matching (`*` and `**`, `~`, a trailing `/**`, `..`, case, relative paths), the seeds, path
+  precedence and a move's narrowest path, the suggested path pattern, Always Allow for a path, the
+  session
   scope, the policy's precedence and offers, the suggested pattern and `neverSuggested`, calls from
   the wire, every `AgentPrompt`, both refusals, chat grants on the scope, Always Allow's placement,
-  each mode's decisions and offers, MCP tools weighed one at a time and servers handed to a CLI in
+  each mode's decisions and offers, the new reads offered in Plan and the new writes refused, MCP
+  tools weighed one at a time and servers handed to a CLI in
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
   the plan instruction, and the context card's rows per mode.
 - `agent-wait-test` — `AgentWait.of`'s precedence and wording, `AgentApprovals` holding each request
@@ -434,9 +549,9 @@ Each route honours the mode where it decides what to offer:
   wait that changes kind, and each `AgentWaitNotice`: its wording, one identifier per chat, the
   click's chat ID read back and the question's clipping.
 - `ai-provider-test` — `AISettingsStore`: every old combination migrates once and leaves no old key,
-  a fresh install starts on the defaults, a broken table falls back without migrating, shell
-  rules keep their order, Always Allow persists a pattern once, and the waiting notification is on
-  by default and persists off.
+  a fresh install starts on the defaults, a broken table falls back without migrating, a table
+  missing rows keeps the rest and fills those in, shell and path rules keep their order, Always
+  Allow persists a pattern once, and the waiting notification is on by default and persists off.
 - `ai-chat-test` — the scope per chat, open, in Manual and without grants on a new or deleted chat;
   requests held off screen, let go on screen and declined exactly once by Stop, a cancelled task,
   a delete or the turn's end; `awaiting` derived from the turn; and which surface holds a chat.
@@ -466,6 +581,12 @@ Each route honours the mode where it decides what to offer:
   where a call to one of its other tools is refused without a dialog.
 - Switching a chat in Plan to a Codex model hides the pill, and the context card shows no Mode row.
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
+- Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
+  Personal and Context; switching Contacts off greys Read Contacts with "Turn on Contacts first.",
+  and with Accessibility not granted Read Selected Text says so. None of the toolbox rows appears in
+  the composer's tools menu or the context card, whatever they are set to.
+- Settings → AI → Path rules starts with the Deny seeds; a rule edited, moved or removed there is
+  still so after a relaunch.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model
   is not offered it.
 - Leave a chat that asks: with the shell row on Ask, send a request that runs a command, then switch
