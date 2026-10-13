@@ -24,7 +24,8 @@ struct AIToolServerCall: Equatable, Sendable {
 /// How a route whose own client runs the tool loop reaches Blitz's servers and its reader.
 struct AIToolServerSession: Sendable {
     let servers: @Sendable () async -> [AIToolServer]
-    let consent: @Sendable (AIToolServerCall) async -> Bool
+    /// Main-actor so a caller there joins the queue before suspending; a hop would race the order.
+    let consent: @MainActor @Sendable (AIToolServerCall) async -> Bool
     /// The BYOK loop's bound, `nil` for none, applied to the CLI's own loop so a reply stops alike.
     let rounds: Int?
 
@@ -36,7 +37,7 @@ struct AIToolServerSession: Sendable {
         self.rounds = rounds
         self.servers = servers
         let queue = ConsentQueue()
-        self.consent = { call in await queue.ask { await consent(call) } }
+        self.consent = { @MainActor call in await queue.ask { await consent(call) } }
     }
 
     /// One question at a time: a second would find the dialog busy, and must see the first's grant.
