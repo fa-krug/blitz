@@ -670,6 +670,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   still finds the command, and it still lists the meetings
 - Adding or deleting an event in Calendar.app updates an open palette without a reopen
 - A meeting with no link is listed and searchable, and answers Open in Calendar rather than Join
+- A calendar set to Outlook reads `Open in Outlook` everywhere, ⌘O opens Outlook on the meeting's
+  day — or Calendar.app with Outlook missing — and Outlook on the web opens that day in the browser
 - Import a backup taken with Calendar on: it comes back **off**, and no calendar toggle travels
 - Calendar in Menu Bar on Disabled: the calendar item is gone and Blitz's own item is unaffected;
   turning `Show in menu bar` off leaves an enabled calendar item in place, and both off leaves neither
@@ -682,8 +684,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Hide Current Event on Automatically clears the entry at the start and hands the space to the next
   event inside its lead time; on 5 minutes it lingers counting up, then clears
 - Clicking the calendar item opens `Join <title>`, `Open in Calendar...`, `My Schedule` and
-  `Calendar Settings...` and nothing else; the second opens that event in Calendar.app, while a bare
-  click never joins
+  `Calendar Settings...` and nothing else; the second opens that event where its calendar opens,
+  while a bare click never joins
 - Camera Preview on: ↵ on the join card opens the panel **already showing live video** — no black
   frame, no blank mid-preview; ↵ joins, Esc drops the join; the camera light goes out with the
   panel, and the first run prompts once, before any panel appears

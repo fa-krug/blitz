@@ -143,8 +143,7 @@ struct LauncherScreen: PaletteScreen {
         switch row(at: clampedSelection) {
         case .calc: return "Copy Answer"
         case .color: return "Copy Color"
-        case .meeting(let meeting):
-            return meeting.link == nil ? "Open in Calendar" : "Join Meeting"
+        case .meeting(let meeting): return core.calendarCoordinator.activationTitle(for: meeting)
         case .entry(let app): return app.kind.descriptor.openVerb
         case .fallback(let fallback, _): return fallback.openVerb
         case nil: return "Open Application"

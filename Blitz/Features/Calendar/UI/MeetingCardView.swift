@@ -94,10 +94,11 @@ enum MeetingActionsMenu {
         }
         items.append(
             PopoverMenuItem(
-                title: "Open in Calendar", systemImage: "calendar", startsSection: true,
+                title: core.calendarCoordinator.openTarget(for: meeting).actionTitle,
+                systemImage: "calendar", startsSection: true,
                 shortcut: meeting.link == nil ? "↵" : "⌘O"
             ) {
-                core.calendarCoordinator.openInCalendar(meeting)
+                core.calendarCoordinator.open(meeting)
             })
         if offersDetails {
             items.append(
@@ -129,7 +130,7 @@ enum MeetingActionsMenu {
     ) -> Bool {
         switch shortcut {
         case .openInApp:
-            core.calendarCoordinator.openInCalendar(meeting)
+            core.calendarCoordinator.open(meeting)
         case .showDetails where offersDetails:
             core.calendarCoordinator.showDetails(of: meeting)
         default:

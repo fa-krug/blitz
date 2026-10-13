@@ -43,6 +43,7 @@ struct CalendarTests {
         chatToolListing()
         chatToolCreation()
         chatToolAnswers()
+        openTargets()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -674,6 +675,37 @@ struct CalendarTests {
                 && MeetingSpan.nextSevenDays.possessivePhrase == "the next 7 days'"
                 && MeetingSpan.nextSevenDays.orPhrase == "in the next 7 days",
             "the wording follows the span")
+    }
+
+    // MARK: - Open targets
+
+    static func openTargets() {
+        var pacific = Calendar(identifier: .gregorian)
+        pacific.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let evening = pacific.date(
+            from: DateComponents(year: 2026, month: 3, day: 5, hour: 22, minute: 30))!
+        expect(
+            calendar.component(.day, from: evening) == 6,
+            "the evening start is already the next day in UTC")
+        expect(
+            CalendarOpenTarget.outlook.url(for: evening, calendar: pacific)?.absoluteString
+                == "ms-outlook://events?view=day&date=2026-03-05",
+            "Outlook opens the local day, zero-padded")
+        expect(
+            CalendarOpenTarget.outlookWeb.url(for: evening, calendar: pacific)?.absoluteString
+                == "https://outlook.office.com/calendar/view/day/2026/3/5",
+            "Outlook on the web opens the local day, unpadded")
+        expect(
+            CalendarOpenTarget.calendar.url(for: evening, calendar: pacific) == nil,
+            "Calendar opens the event itself, not a day link")
+        expect(
+            CalendarOpenTarget.allCases.map(\.actionTitle)
+                == ["Open in Calendar", "Open in Outlook", "Open in Outlook"],
+            "both Outlook targets read as Outlook")
+        expect(
+            CalendarOpenTarget.allCases.allSatisfy { CalendarOpenTarget(rawValue: $0.rawValue) == $0 },
+            "every target survives its stored raw value")
+        expect(CalendarOpenTarget(rawValue: "teams") == nil, "an unknown stored value reads as none")
     }
 
     // MARK: - Chat tools

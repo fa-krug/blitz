@@ -27,6 +27,9 @@ final class CalendarStore {
     private let hiddenKey = "hiddenMeetingCalendars"
     /// Exclusions, not inclusions, so a calendar added after this was written defaults to on.
     private var hiddenCalendarIDs: Set<String>
+    private let openTargetsKey = "meetingCalendarOpenTargets"
+    /// Only the calendars sent elsewhere, so a calendar added later opens in Calendar.
+    private var openTargets: [String: CalendarOpenTarget]
 
     /// Built on first use, so a Mac with the feature off never loads EventKit at launch.
     @ObservationIgnored private var eventStore: EKEventStore?
@@ -39,6 +42,8 @@ final class CalendarStore {
 
     init() {
         hiddenCalendarIDs = Set(defaults.stringArray(forKey: hiddenKey) ?? [])
+        let storedTargets = defaults.dictionary(forKey: openTargetsKey) as? [String: String] ?? [:]
+        openTargets = storedTargets.compactMapValues(CalendarOpenTarget.init(rawValue:))
     }
 
     /// TCC sends nothing when a grant changes in Settings, so anything acting on `access` re-reads.
@@ -336,7 +341,7 @@ final class CalendarStore {
             url: link?.url.absoluteString ?? event.url?.absoluteString)
     }
 
-    // MARK: - Per-calendar switches
+    // MARK: - Per-calendar choices
 
     func isEnabled(_ calendar: MeetingCalendar) -> Bool {
         !hiddenCalendarIDs.contains(calendar.id)
@@ -350,5 +355,14 @@ final class CalendarStore {
         }
         defaults.set(Array(hiddenCalendarIDs), forKey: hiddenKey)
         reload()
+    }
+
+    func openTarget(forCalendarID id: String) -> CalendarOpenTarget {
+        openTargets[id] ?? .calendar
+    }
+
+    func setOpenTarget(_ target: CalendarOpenTarget, for calendar: MeetingCalendar) {
+        openTargets[calendar.id] = target == .calendar ? nil : target
+        defaults.set(openTargets.mapValues(\.rawValue), forKey: openTargetsKey)
     }
 }

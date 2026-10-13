@@ -298,12 +298,12 @@ final class CalendarCoordinator {
         }
     }
 
-    func openNextMeetingInCalendar() {
+    func openNextMeeting() {
         guard let meeting = window.joinable(from: store.events, now: Date()) ?? agenda.first else {
             report("Nothing scheduled \(settings.calendarSpan.orPhrase)")
             return
         }
-        openInCalendar(meeting)
+        open(meeting)
     }
 
     /// Live rather than clock-driven: a chord fires without the palette, so nothing is ticking.
@@ -372,7 +372,7 @@ final class CalendarCoordinator {
 
     // MARK: - Row actions
 
-    /// ↵ on a meeting row: join it, or hand a linkless one to Calendar.
+    /// ↵ on a meeting row: join it, or open a linkless one where its calendar opens.
     func activateMeeting(id: String) {
         guard let meeting = store.event(id: id) else { return }
         join(meeting)
@@ -385,7 +385,7 @@ final class CalendarCoordinator {
     /// `uninvited` marks an auto join, the only case that may have to ask before it acts.
     func join(_ meeting: MeetingEvent, uninvited: Bool = false) {
         guard let link = meeting.link else {
-            openInCalendar(meeting)
+            open(meeting)
             return
         }
         paletteCoordinator.hidePalette(restoreFocus: false)
@@ -428,9 +428,21 @@ final class CalendarCoordinator {
         core.showMessage("Meeting link copied")
     }
 
-    func openInCalendar(_ meeting: MeetingEvent) {
+    func openTarget(for meeting: MeetingEvent) -> CalendarOpenTarget {
+        store.openTarget(forCalendarID: meeting.calendarID)
+    }
+
+    /// ↵'s label on a meeting: `join` opens a linkless one where its calendar says instead.
+    func activationTitle(for meeting: MeetingEvent?) -> String {
+        guard let meeting else { return CalendarOpenTarget.calendar.actionTitle }
+        return meeting.link == nil ? openTarget(for: meeting).actionTitle : "Join Meeting"
+    }
+
+    func open(_ meeting: MeetingEvent) {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        MeetingLauncher.showInCalendar(meeting)
+        let target = openTarget(for: meeting)
+        let browserBundleID = settings.meetingBrowserBundleID
+        Task { await MeetingLauncher.show(meeting, in: target, browserBundleID: browserBundleID) }
     }
 
     func showSchedule() {

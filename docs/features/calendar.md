@@ -45,9 +45,9 @@ camera preview, and individual events as searchable launcher entries.
   grants**, so a prompt that fails or is dismissed can never leave the feature reading as on with no
   access. Enabling is re-offered whenever access is anything but granted — by the Calendar pane and by
   the Permissions pane — so a TCC record lost after the setting was already on never strands it.
-- **Per-calendar toggles live on `CalendarStore`, not `AppSettings`.** Calendar identifiers are
-  machine-specific, so they are deliberately outside the backup mirror — the same reasoning as
-  `palettePosition`.
+- **Per-calendar toggles and open targets live on `CalendarStore`, not `AppSettings`.** Calendar
+  identifiers are machine-specific, so they are deliberately outside the backup mirror — the same
+  reasoning as `palettePosition`.
 - **`MeetingEvent` carries only what a row needs.** Location, notes and attendees are read for one
   occurrence when its details page opens, never for the whole span, so a busy calendar's invites
   never sit in the snapshot every surface diffs.
@@ -70,6 +70,7 @@ camera preview, and individual events as searchable launcher entries.
   `Monday, Oct 5`. A meeting still running from before midnight is Today. `MeetingDayGroup.grouping` cuts
   the agenda into days, so My Schedule and the menu bar head the same days the same way.
 - **`MeetingSpan`** — how far ahead the store reads, and the phrasing that names those days.
+- **`CalendarOpenTarget`** — where a calendar's meetings open, and the Outlook day links.
 - **`MenuBarSummary`** — which event the menu bar carries, and for how long.
 - **`AutoJoinPolicy`** — whether a meeting should open itself, and which one.
 - **`EventDraft`** — what the New Event prompt collects, before anything touches the calendar.
@@ -114,6 +115,15 @@ URL. **`MeetingLink.url` stays the link as written**: it is what the failure rep
 
 No brand artwork ships with the app, so every named provider draws `video.fill` and the **name**
 carries the identity; `.generic` draws `link`.
+
+**Opening a meeting follows its calendar.** `MeetingLauncher.show` hands it to Calendar.app by
+default, or to Outlook for Mac or Outlook on the web when its calendar says so — an iCloud calendar
+can live in Outlook too, so the choice is per calendar, not per account type. Both Outlook targets
+open **the meeting's day**, not the event: EventKit exposes an Apple-side identifier rather than the
+Exchange item's, so no link can name the event. The day comes from the occurrence's local date.
+Outlook for Mac is reached through `ms-outlook://events?view=day&date=…`, an undocumented link new
+Outlook answers; when nothing claims the scheme the meeting opens in Calendar instead. The web day
+link opens in the meeting browser, like a join.
 
 ## The card
 
@@ -162,7 +172,7 @@ the option to hide a current event immediately or after a chosen delay.
 | My Schedule | Opens the `.schedule` palette mode. | yes |
 | Create Event | Prompts for a title, a start and a duration, and writes the event. | yes |
 | Copy Meeting Link | The same meeting's link, to the pasteboard. | no |
-| Open in Calendar | Hands the meeting to Calendar.app. | no |
+| Open Next Meeting | Opens the same meeting where its calendar opens. | no |
 
 **A command that opens a surface is bindable**; the two that act on the next meeting are reached
 through the join card's own ⌘K menu instead, where the meeting they act on is on screen.
@@ -201,7 +211,8 @@ already-finished one with it.
 
 `MeetingActionsMenu` is a meeting's ⌘K menu everywhere it is a row: the card, the launcher's Meetings
 section, My Schedule and the details page. Its `secondary` and `perform` answer the menu's chords —
-⌘↵ copies the link, ⌘O opens Calendar, ⌘I shows details — so every label has a key that works.
+⌘↵ copies the link, ⌘O opens it where its calendar opens, ⌘I shows details — so every label has a
+key that works.
 My Schedule alone passes `offersNewEvent`, adding **New Event** (⌘N): its `perform` answers ⌘N before
 it needs a row, so an empty schedule ("Press ⌘N to create one") creates one too. The launcher and
 the details page leave the key to themselves, so their menus never show it.
@@ -252,9 +263,9 @@ minute tick. SwiftUI writes
 `false` back through `isInserted` when it removes the item itself, so the insertion setter ignores a
 removal while the item is hidden for being empty: only a drag-out turns the display to `.disabled`.
 
-`CalendarMenuBarMenu` lists calendar actions only — `Join <title>`, `Open in Calendar` and
-`Dismiss Event` for the displayed event, then the agenda, then `My Schedule` (⌘O) and
-`Calendar Settings…` (⌘,) — so the two menus never repeat each other. Each block is a `Section`, so
+`CalendarMenuBarMenu` lists calendar actions only — `Join <title>`, `Open in Calendar` (or
+`Open in Outlook`) and `Dismiss Event` for the displayed event, then the agenda, then
+`My Schedule` (⌘O) and `Calendar Settings…` (⌘,) — so the two menus never repeat each other. Each block is a `Section`, so
 SwiftUI draws the separators and a missing block never leaves a stray one. `Join` is absent for a linkless appointment rather than
 opening Calendar under a name that lies. **A bare click never joins**: the menu bar is not a button,
 and a mis-click there would open a call.
@@ -262,8 +273,8 @@ and a mis-click there would open a call.
 The agenda is `CalendarCoordinator.menuBarAgenda`: `UpcomingWindow.agenda` over the span, read off
 `MeetingClock`, so a meeting that ends leaves on the minute, then cut into one section per day by
 `MeetingDayGroup`. Each row reads `start – end title` beside a ring in its calendar's colour, filled
-while the meeting is under way, and goes through `join`, so a linkless event opens Calendar and every gate still applies. **It is the schedule, not
-the title's candidate list**: it ignores `Only show events with meetings` and dismissals, which
+while the meeting is under way, and goes through `join`, so a linkless event opens where its
+calendar opens and every gate still applies. **It is the schedule, not the title's candidate list**: it ignores `Only show events with meetings` and dismissals, which
 decide only what the item itself shows, and keeps the displayed event so the list never shifts
 under a handover.
 
@@ -299,7 +310,7 @@ Every join — the card, the chord, the menu bar, auto join — funnels through
 
 ```
 join(meeting)
-  ├─ no link ────────────► openInCalendar
+  ├─ no link ────────────► open
   ├─ camera preview on ──► CameraPreviewController.present → join, or drop
   ├─ uninvited + confirm ► core.confirm → join, or drop
   └─ otherwise ──────────► MeetingLauncher.join
@@ -341,7 +352,10 @@ join-window picker, and the per-calendar checkbox list — one `Form` row holdin
 because a `Form` realizes every row it is handed.
 
 The hidden-calendar set stores **exclusions**, so a calendar added after the setting was written
-defaults to on. Holidays and Birthdays are what people switch off.
+defaults to on. Holidays and Birthdays are what people switch off. Each row also carries a picker
+for where its meetings open; only the calendars sent to Outlook are stored, so a new one defaults to
+Calendar. The Outlook choice is disabled while nothing on this Mac answers `ms-outlook:`, yet a
+stored one still shows, because opening falls back anyway.
 
 `autoJoinMeetings` and `cameraPreview` join `calendarEnabled` in
 `SettingsBackupCoverage.deliberatelyExcluded`: one arms the app to open links unattended and the

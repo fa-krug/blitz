@@ -13,13 +13,42 @@ enum MeetingLauncher {
         if let appURL = link.appURL, workspace.urlForApplication(toOpen: appURL) != nil {
             return workspace.open(appURL)
         }
+        return await openWeb(link.webURL, browserBundleID: browserBundleID)
+    }
+
+    /// Outlook's targets reach the meeting's day; an Outlook link nothing claims opens Calendar.
+    @MainActor
+    @discardableResult
+    static func show(
+        _ event: MeetingEvent, in target: CalendarOpenTarget, browserBundleID: String?
+    ) async -> Bool {
+        let workspace = NSWorkspace.shared
+        switch (target, target.url(for: event.start, calendar: .current)) {
+        case (.outlook, let url?) where workspace.urlForApplication(toOpen: url) != nil:
+            return workspace.open(url)
+        case (.outlookWeb, let url?):
+            return await openWeb(url, browserBundleID: browserBundleID)
+        default:
+            return showInCalendar(event)
+        }
+    }
+
+    /// Probes the scheme itself: the same check `show` makes before it falls back to Calendar.
+    @MainActor
+    static var isOutlookInstalled: Bool {
+        guard let probe = URL(string: "ms-outlook://events") else { return false }
+        return NSWorkspace.shared.urlForApplication(toOpen: probe) != nil
+    }
+
+    @MainActor
+    private static func openWeb(_ url: URL, browserBundleID: String?) async -> Bool {
+        let workspace = NSWorkspace.shared
         guard let browserBundleID,
             let browser = workspace.urlForApplication(withBundleIdentifier: browserBundleID)
-        else { return workspace.open(link.webURL) }
+        else { return workspace.open(url) }
         do {
             _ = try await workspace.open(
-                [link.webURL], withApplicationAt: browser,
-                configuration: NSWorkspace.OpenConfiguration())
+                [url], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration())
             return true
         } catch {
             return false
@@ -42,8 +71,7 @@ enum MeetingLauncher {
 
     /// Calendar.app's own handle; a recurring occurrence opens its series.
     @MainActor
-    @discardableResult
-    static func showInCalendar(_ event: MeetingEvent) -> Bool {
+    private static func showInCalendar(_ event: MeetingEvent) -> Bool {
         guard
             let url = URL(
                 string: "ical://ekevent/\(event.calendarItemID)?method=show&options=more")
