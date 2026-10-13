@@ -23,7 +23,7 @@ enum SmartReminderRunner {
             guard case .text(let delta) = event else { continue }
             reply += delta
         }
-        guard let draft = SmartReminderPrompt.draft(from: reply, calendar: calendar) else {
+        guard let draft = SmartReminderPrompt.draft(from: reply, note: note, calendar: calendar) else {
             throw Failure.unreadable
         }
         return draft

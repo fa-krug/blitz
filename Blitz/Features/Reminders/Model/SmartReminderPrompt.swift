@@ -12,21 +12,26 @@ enum SmartReminderPrompt {
             You turn a note someone typed into one reminder for their to-do list.
 
             Reply with one JSON object and nothing else, no prose and no code fence:
-            {"title": "…", "due": "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM" or null, "notes": "…" or null}
+            {"title": "…", "when": "…" or null, "due": "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM" or null, \
+            "notes": "…" or null}
 
             title: a short task to act on, starting with a verb, in the language of the note. \
             Keep every name, and leave the date and time out of it.
-            due: only a day or time the note itself names, resolved against the dates below. \
+            when: the exact words of the note that name a day or time, copied letter for letter, \
+            or null when it names none.
+            due: only the day or time those words name, resolved against the dates below. \
             Add a time only when the note names one: morning is 09:00, noon 12:00, \
             afternoon 15:00, evening 18:00, tonight 20:00; a time with no day is today. \
             When the note names no day and no time, due is null. Never guess one, and never \
             default to today or tomorrow: a reminder without a due date is a valid answer.
-            notes: any detail the title leaves out, otherwise null.
+            notes: any detail of the note the title leaves out, otherwise null. \
+            Never add anything the note does not say.
 
             Example: "Greg wants tomorrow a cake" becomes \
-            {"title": "Give Greg a cake", "due": "\(day(tomorrow, calendar))", "notes": null}
+            {"title": "Give Greg a cake", "when": "tomorrow", "due": "\(day(tomorrow, calendar))", \
+            "notes": null}
             Example: "ask Anna about the slides" becomes \
-            {"title": "Ask Anna about the slides", "due": null, "notes": null}
+            {"title": "Ask Anna about the slides", "when": null, "due": null, "notes": null}
 
             Now: \(weekday(now, calendar)) \(day(now, calendar)) \(clock(now, calendar)), \
             time zone \(calendar.timeZone.identifier).
@@ -34,16 +39,24 @@ enum SmartReminderPrompt {
             """
     }
 
-    /// Nil when the reply holds no title; a due date it cannot read is dropped, never guessed.
-    static func draft(from reply: String, calendar: Calendar) -> ReminderDraft? {
+    /// Nil when the reply holds no title; a due date it cannot read or ground is dropped.
+    static func draft(from reply: String, note: String, calendar: Calendar) -> ReminderDraft? {
         guard let open = reply.firstIndex(of: "{"), let close = reply.lastIndex(of: "}"),
             open < close,
             let decoded = try? JSONDecoder().decode(Reply.self, from: Data(reply[open...close].utf8))
         else { return nil }
         let draft = ReminderDraft(
             title: decoded.title ?? "", notes: decoded.notes ?? "",
-            due: decoded.due.flatMap { due(from: $0, calendar: calendar) })
+            due: isGrounded(decoded.when, in: note)
+                ? decoded.due.flatMap { due(from: $0, calendar: calendar) } : nil)
         return draft.isValid ? draft : nil
+    }
+
+    /// Small models echo the prompt's own `Now` as a due date, so a date must quote the note.
+    static func isGrounded(_ when: String?, in note: String) -> Bool {
+        guard let when = when?.trimmingCharacters(in: .whitespacesAndNewlines), !when.isEmpty
+        else { return false }
+        return note.range(of: when, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 
     /// `YYYY-MM-DD`, optionally followed by `THH:MM`; the same spelling every Blitz tool reads.
@@ -54,16 +67,18 @@ enum SmartReminderPrompt {
     /// Lenient field by field: a model that writes a number where a string goes loses that field.
     private struct Reply: Decodable {
         let title: String?
+        let when: String?
         let due: String?
         let notes: String?
 
         private enum CodingKeys: String, CodingKey {
-            case title, due, notes
+            case title, when, due, notes
         }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             title = try? container.decodeIfPresent(String.self, forKey: .title)
+            when = try? container.decodeIfPresent(String.self, forKey: .when)
             due = try? container.decodeIfPresent(String.self, forKey: .due)
             notes = try? container.decodeIfPresent(String.self, forKey: .notes)
         }
