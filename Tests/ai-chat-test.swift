@@ -75,6 +75,9 @@ struct AIChatTests {
         plansSitWhereTheyWereWrittenAndReachLaterTurns()
         await plansAreStoredReplacedAndEdited()
         await aPlanNeedsATurnAndAnEditWaitsForIt()
+        await approvalsWaitOffScreenAndEndExactlyOnce()
+        await aWaitIsDerivedFromTheTurn()
+        surfacesSayWhichChatTheyShow()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -2156,6 +2159,105 @@ extension AIChatTests {
             "and saved")
     }
 
+    /// The gate's half of an Ask, without the dialog: held off screen, let go on screen.
+    static func approvalsWaitOffScreenAndEndExactlyOnce() async {
+        let (store, directory) = temporaryStore("approvals")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stalled = StalledProvider()
+        let chats = AIChatSurfacesState(history: store)
+        let chat = chats.window
+        let outcomes = HeldOutcomes()
+        chat.send("Tidy my Downloads", using: stalled)
+
+        let shown = chat.beginApproval()
+        Task { outcomes.all.append(await chat.holdApproval(shown)) }
+        await waitUntil { chat.hasHeldApprovals }
+        expect(outcomes.all.isEmpty, "a request for a chat off screen waits, with no dialog")
+        chat.releaseApprovals()
+        await waitUntil { !outcomes.all.isEmpty }
+        expect(outcomes.all == [true], "coming on screen lets it go on to its dialog")
+        expect(chat.awaiting == .approval, "and the chat still waits while its dialog is up")
+        chat.endApproval(shown)
+        expect(chat.awaiting == nil, "answered, the wait is over")
+
+        let first = chat.beginApproval()
+        let second = chat.beginApproval()
+        Task { outcomes.all.append(await chat.holdApproval(first)) }
+        Task { outcomes.all.append(await chat.holdApproval(second)) }
+        await waitUntil { chat.hasHeldApprovals }
+        try? await Task.sleep(for: .milliseconds(20))
+        chat.cancel()
+        await waitUntil { outcomes.all.count == 3 }
+        expect(outcomes.all.suffix(2) == [false, false], "Stop declines every request still held")
+        chat.endApproval(first)
+        chat.endApproval(second)
+        chat.releaseApprovals()
+        expect(
+            outcomes.all.count == 3 && chat.awaiting == nil && !chat.isApprovalPending(first),
+            "and each is told once: a later end or release finds nothing to resume")
+        let late = await chat.holdApproval(first)
+        expect(!late, "a request that already ended is never held")
+
+        chat.send("Again", using: stalled)
+        let cancelled = chat.beginApproval()
+        let task = Task { await chat.holdApproval(cancelled) }
+        await waitUntil { chat.hasHeldApprovals }
+        task.cancel()
+        let refused = await task.value
+        expect(!refused && !chat.hasHeldApprovals, "a cancelled turn's request is told no")
+        chat.endApproval(cancelled)
+
+        let deleted = chat.beginApproval()
+        Task { outcomes.all.append(await chat.holdApproval(deleted)) }
+        await waitUntil { chat.hasHeldApprovals }
+        chats.delete(id: chat.session.id)
+        await waitUntil { outcomes.all.count == 4 }
+        expect(outcomes.all.last == false, "deleting the chat declines what it was asking")
+
+        let replaced = chats.window
+        replaced.send("Once more", using: stalled)
+        let finished = replaced.beginApproval()
+        Task { outcomes.all.append(await replaced.holdApproval(finished)) }
+        await waitUntil { replaced.hasHeldApprovals }
+        stalled.finishAll()
+        await waitUntil { outcomes.all.count == 5 }
+        expect(
+            outcomes.all.last == false && replaced.awaiting == nil,
+            "a turn that ends any other way declines it too")
+    }
+
+    static func aWaitIsDerivedFromTheTurn() async {
+        let (store, directory) = temporaryStore("awaiting")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chat = AIChatState(history: store)
+        expect(chat.awaiting == nil, "a chat with no turn waits on nobody")
+        let results = AskedResults()
+        chat.send(
+            "Export it",
+            using: askingLoop(ScriptedProvider(rounds: [[askFormat], [.finished]]), chat,
+                results: results))
+        await waitUntil { chat.pendingQuestion != nil }
+        expect(chat.awaiting == .answer, "a pending question waits for an answer")
+        let approval = chat.beginApproval()
+        expect(chat.awaiting == .approval, "an Ask beside it waits for approval first")
+        chat.endApproval(approval)
+        expect(chat.awaiting == .answer, "and the question is still waiting after it")
+        chat.answerQuestion(chat.pendingQuestion?.answer(choosing: 0))
+        await settle(chat)
+        expect(chat.awaiting == nil, "answered, the turn goes on and waits on nobody")
+    }
+
+    static func surfacesSayWhichChatTheyShow() {
+        let (store, directory) = temporaryStore("surfaces-presence")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chats = AIChatSurfacesState(history: store)
+        expect(chats.surface(of: chats.window) == .window, "the window's chat is the window's")
+        expect(chats.surface(of: chats.quickAI) == .quickAI, "Quick AI's is Quick AI's")
+        expect(
+            chats.surface(of: AIChatState(history: store)) == nil,
+            "a chat neither holds is shown nowhere")
+    }
+
     /// Replies stream on a task; a few turns of the main actor let the scripted events land.
     static func settle(_ chat: AIChatState) async {
         for _ in 0..<50 where chat.isStreaming {
@@ -2208,6 +2310,12 @@ final class ScriptedProvider: AIProvider, @unchecked Sendable {
             continuation.finish()
         }
     }
+}
+
+/// What each held approval was told: true to go on to its dialog, false to decline.
+@MainActor
+final class HeldOutcomes {
+    var all: [Bool] = []
 }
 
 /// What each `ask_user` call handed back to the loop.

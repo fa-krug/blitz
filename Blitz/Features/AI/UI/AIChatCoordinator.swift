@@ -15,7 +15,10 @@ final class AIChatCoordinator {
     /// Chats with a title request in flight, so a quick second reply never asks twice.
     @ObservationIgnored private var naming: [UUID: Task<Void, Never>] = [:]
     /// Every tool call on either surface is decided, and asked about, here.
-    @ObservationIgnored private lazy var gate = AgentGateCoordinator(core: core)
+    @ObservationIgnored private lazy var gate = AgentGateCoordinator(
+        core: core, isOnScreen: { [unowned self] chat in isOnScreen(chat) })
+    /// What can bring a chat on screen without anything in the chats changing.
+    @ObservationIgnored private var presenceObservers: [NotificationToken] = []
 
     init(
         chats: AIChatSurfacesState, settings: AppSettings, appIndex: AppIndex,
@@ -29,7 +32,7 @@ final class AIChatCoordinator {
         self.settingsCoordinator = settingsCoordinator
         self.core = core
         window = AppWindowController(
-            title: "AI Chat", contentSize: Theme.Size.aiChatWindow,
+            title: "AI Agent", contentSize: Theme.Size.aiChatWindow,
             minimumSize: Theme.Size.aiChatWindowMinimum, resizable: true,
             autosaveName: "AIChatWindow", activation: core.activationPolicy, closesOnEscape: true)
         chats.onReplyFinished = { [weak self] chat in self?.nameIfNeeded(chat) }
@@ -49,6 +52,7 @@ final class AIChatCoordinator {
             return
         }
         core.applyInstalledAILifecycle()
+        watchWaits()
         // Deferred off the launch path like the clipboard's own read; history fills in behind it.
         Task {
             core.chatHistory.load()
@@ -219,6 +223,101 @@ final class AIChatCoordinator {
             core.codexSubscription.turns.discardConversation(id: conversation.id)
         }
         chats.deleteAll()
+    }
+
+    // MARK: - Waiting
+
+    /// The one definition of on screen: the window in front on this chat, or Quick AI's screen up.
+    func isOnScreen(_ chat: AIChatState) -> Bool {
+        ChatPresence(
+            windowVisible: window.isOnScreen, appActive: NSApp.isActive,
+            paletteVisible: core.palette.isVisible, paletteOnQuickAI: core.palette.mode == .ai
+        ).shows(chats.surface(of: chat))
+    }
+
+    func isOnScreen(chatID id: UUID) -> Bool {
+        chats.holder(of: id).map(isOnScreen) ?? false
+    }
+
+    /// A notification's click: the window on that chat, where its dialog or question comes up.
+    func openWaitingChat(id: UUID) {
+        guard settings.aiEnabled else { return }
+        if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
+        openChat(id: id)
+        showWindow()
+    }
+
+    /// Idempotent; started with the feature and left running, since nothing waits while it is off.
+    private func watchWaits() {
+        guard presenceObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        presenceObservers = [
+            NSApplication.didBecomeActiveNotification, NSWindow.didChangeOcclusionStateNotification
+        ].map { name in
+            NotificationToken(
+                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    // Delivered on the main queue, which `queue: .main` guarantees.
+                    MainActor.assumeIsolated { self?.releaseShownApprovals() }
+                },
+                center: center)
+        }
+        trackPresence()
+        trackWaits()
+    }
+
+    /// Which chat each surface holds and whether the palette is on Quick AI; never a reply's text.
+    private func trackPresence() {
+        withObservationTracking {
+            _ = chats.window
+            _ = chats.quickAI
+            _ = core.palette.isVisible
+            _ = core.palette.mode
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.trackPresence()
+                self?.releaseShownApprovals()
+            }
+        }
+    }
+
+    private func releaseShownApprovals() {
+        for chat in chats.live where chat.hasHeldApprovals && isOnScreen(chat) {
+            chat.releaseApprovals()
+        }
+    }
+
+    /// Re-read on every streaming flush, so only a wait that starts or ends reaches anything.
+    private func trackWaits() {
+        let current = withObservationTracking {
+            liveWaits
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackWaits() }
+        }
+        guard current != chats.waits else { return }
+        let changes = AgentWaitEpisodes.changes(from: chats.waits, to: current)
+        chats.waits = current
+        for id in changes.ended { core.agentNotifications.withdraw(chatID: id) }
+        for (id, wait) in changes.started { notifyIfAway(id, wait) }
+    }
+
+    private var liveWaits: [UUID: AgentWait] {
+        var current: [UUID: AgentWait] = [:]
+        for chat in chats.live {
+            if let wait = chat.awaiting { current[chat.session.id] = wait }
+        }
+        return current
+    }
+
+    /// Posted only for a chat off screen, so a dialog already in front is never announced too.
+    private func notifyIfAway(_ id: UUID, _ wait: AgentWait) {
+        guard core.aiSettings.notifiesWhenWaiting, let chat = chats.holder(of: id),
+            !isOnScreen(chat)
+        else { return }
+        core.agentNotifications.post(
+            AgentWaitNotice(
+                wait: wait, chatID: id, chatTitle: title(of: chat),
+                question: chat.pendingQuestion?.question.question,
+                appName: Bundle.main.appDisplayName))
     }
 
     // MARK: - Titles

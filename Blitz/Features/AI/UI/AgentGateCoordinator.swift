@@ -4,11 +4,20 @@ import Foundation
 @MainActor
 final class AgentGateCoordinator {
     private unowned let core: AppCore
-    /// Shared by every chat: there is one dialog, and a second call must wait for it.
+    /// Shared by every chat on screen: there is one dialog, and a second call must wait for it.
     private let consent = AIConsentQueue()
+    /// The one definition of on screen, `AIChatCoordinator.isOnScreen`; an Ask asks nowhere else.
+    private let isOnScreen: @MainActor (AIChatState) -> Bool
 
-    init(core: AppCore) {
+    private enum Turn: Sendable {
+        case answered(AgentRefusal?)
+        /// The chat left the screen while an earlier dialog was up, so this one waits again.
+        case offScreen
+    }
+
+    init(core: AppCore, isOnScreen: @escaping @MainActor (AIChatState) -> Bool) {
         self.core = core
+        self.isOnScreen = isOnScreen
     }
 
     /// The table under each feature's own switch, which is where macOS was asked for access.
@@ -61,7 +70,7 @@ final class AgentGateCoordinator {
             prompt: .mcp(serverTitle: server.title, tool: call.tool), in: chat)
     }
 
-    /// Nil runs the call; read again when a queued call's turn comes, and once its dialog closes.
+    /// Nil runs the call. An Ask waits until its chat is on screen, then joins the dialog line.
     func authorize(
         _ call: AgentCall, prompt: AgentPrompt, in chat: AIChatState
     ) async -> AgentRefusal? {
@@ -71,19 +80,40 @@ final class AgentGateCoordinator {
         case .deny: return .denied
         case .ask: break
         }
-        return await consent.ask(cancelled: .declined) { @MainActor [weak self, weak chat] in
-            guard let self, let chat else { return .declined }
-            switch decision(for: call, scope: chat.agentScope) {
-            case .allow: return nil
-            case .deny: return .denied
-            case .ask: break
+        let approval = chat.beginApproval()
+        defer { chat.endApproval(approval) }
+        while await isShown(chat, approval: approval) {
+            let declined = Turn.answered(.declined)
+            let turn = await consent.ask(cancelled: declined) { @MainActor [weak self, weak chat] in
+                guard let self, let chat, chat.isApprovalPending(approval) else { return declined }
+                guard isOnScreen(chat) else { return .offScreen }
+                return .answered(await ask(call, prompt: prompt, in: chat, session: session))
             }
-            let choice = await ask(prompt)
-            guard choice.allows else { return .declined }
-            apply(choice, for: call, in: chat, session: session)
-            let after = decision(for: call, scope: chat.agentScope)
-            return after == .deny ? .denied : nil
+            if case .answered(let refusal) = turn { return refusal }
         }
+        return .declined
+    }
+
+    /// False once the request ended first: Stop, a delete or a clear declines what still waits.
+    private func isShown(_ chat: AIChatState, approval: UUID) async -> Bool {
+        guard chat.isApprovalPending(approval) else { return false }
+        if isOnScreen(chat) { return true }
+        return await chat.holdApproval(approval)
+    }
+
+    /// Read again at its turn, since an earlier dialog may have answered it, and once it closes.
+    private func ask(
+        _ call: AgentCall, prompt: AgentPrompt, in chat: AIChatState, session: UUID
+    ) async -> AgentRefusal? {
+        switch decision(for: call, scope: chat.agentScope) {
+        case .allow: return nil
+        case .deny: return .denied
+        case .ask: break
+        }
+        let choice = await ask(prompt)
+        guard choice.allows else { return .declined }
+        apply(choice, for: call, in: chat, session: session)
+        return decision(for: call, scope: chat.agentScope) == .deny ? .denied : nil
     }
 
     private func decision(for call: AgentCall, scope: AgentSessionScope) -> AgentDecision {

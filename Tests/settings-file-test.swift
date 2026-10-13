@@ -64,6 +64,9 @@ struct SettingsFileTest {
         check(
             "no capability grant has a settings.json key",
             grantPaths.allSatisfy { SettingsFileKey(rawValue: $0) == nil })
+        check(
+            "the waiting notification is an ordinary preference, so the file carries it",
+            SettingsFileKey(rawValue: "ai.notifyWhenWaiting") == .aiNotifyWhenWaiting)
     }
 
     // MARK: - Values

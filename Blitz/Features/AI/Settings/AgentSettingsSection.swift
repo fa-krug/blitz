@@ -34,6 +34,10 @@ struct AgentSettingsSection: View {
                     "A reply stops after this many; Unlimited runs until Stop. "
                         + "API connections, Codex and Claude.")
             }
+            Toggle(isOn: $settings.notifiesWhenWaiting) {
+                SettingsRowTitle(.aiAgent, "Notify when the agent is waiting")
+                Text("When a chat you left needs an approval or an answer.")
+            }
         } header: {
             SettingsSectionHeader(.aiAgent)
         } footer: {

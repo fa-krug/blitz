@@ -171,6 +171,8 @@ run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRul
                            Blitz/Features/MCP/Model/MCPServer.swift \
                            Blitz/Features/MCP/Model/MCPTool.swift \
                            Blitz/Features/MCP/Model/MCPAgentMapping.swift
+run agent-wait-test        $A/AgentWait.swift $A/AgentApprovals.swift $A/AgentWaitEpisodes.swift \
+                           $A/AgentWaitNotice.swift $A/ChatPresence.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
 Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
@@ -695,6 +697,9 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/AgentSessionScope.swift \
                            Blitz/Features/AI/Model/AgentMode.swift \
                            Blitz/Features/AI/Model/AgentModeInstructions.swift \
+                           Blitz/Features/AI/Model/AgentWait.swift \
+                           Blitz/Features/AI/Model/AgentApprovals.swift \
+                           Blitz/Features/AI/Model/ChatPresence.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \

@@ -1134,12 +1134,15 @@ struct AIProviderTests {
         expect(fresh.opensTo == .recent, "chat reopens on the recent conversation by default")
         expect(fresh.newChatAfter == .fiveMinutes, "the idle window defaults to five minutes")
         expect(fresh.toolRounds == .twentyFive, "a reply's tool rounds default to 25")
+        expect(fresh.notifiesWhenWaiting, "a waiting agent notifies by default")
 
         fresh.retention = .week
         fresh.opensTo = .newConversation
         fresh.newChatAfter = .never
         fresh.toolRounds = .fifty
+        fresh.notifiesWhenWaiting = false
         let reopened = AISettingsStore(defaults: defaults)
+        expect(!reopened.notifiesWhenWaiting, "switching the notification off persists")
         expect(reopened.toolRounds == .fifty, "the tool round cap persists")
         reopened.toolRounds = .unlimited
         expect(

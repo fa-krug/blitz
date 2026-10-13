@@ -45,6 +45,12 @@ final class AISettingsStore {
     var toolRounds: AIToolRounds {
         didSet { defaults.set(toolRounds.rawValue, forKey: AppSettingsKey.aiToolRounds.rawValue) }
     }
+    /// On by default: a turn left waiting where nobody looks is otherwise easy to forget.
+    var notifiesWhenWaiting: Bool {
+        didSet {
+            defaults.set(notifiesWhenWaiting, forKey: AppSettingsKey.aiNotifyWhenWaiting.rawValue)
+        }
+    }
     /// Every tool call is decided by this one table; MCP rows live on their servers' trust.
     var agentRules: AgentRules {
         didSet { persistAgentRules() }
@@ -116,6 +122,8 @@ final class AISettingsStore {
         toolRounds =
             AIToolRounds(rawValue: defaults.integer(forKey: AppSettingsKey.aiToolRounds.rawValue))
             ?? .twentyFive
+        notifiesWhenWaiting =
+            defaults.object(forKey: AppSettingsKey.aiNotifyWhenWaiting.rawValue) as? Bool ?? true
         agentRules = Self.loadAgentRules(from: defaults)
         shownModels =
             defaults.dictionary(forKey: AppSettingsKey.aiShownModels.rawValue) as? [String: [String]]

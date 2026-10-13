@@ -143,6 +143,9 @@ enum SettingsBackupCoverage {
         AppSettingsKey.aiToolRounds.rawValue:
             "Decides how much a tool-driven reply may spend on this Mac's own connections; no other "
             + "AI setting travels, and an import must not raise a spending limit unasked.",
+        AppSettingsKey.aiNotifyWhenWaiting.rawValue:
+            "Whether a waiting agent posts notifications is part of the AI setup, none of which "
+            + "travels in a backup, so an import would set it for a feature it cannot configure.",
         AppSettingsKey.aiAgentRules.rawValue:
             "Decides which tools a chat model may call on this Mac, from the calendar to the "
             + "shell; a table that grants capabilities is never carried by a backup.",

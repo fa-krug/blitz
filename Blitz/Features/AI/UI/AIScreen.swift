@@ -31,7 +31,7 @@ struct AIScreen: PaletteScreen {
         }
         items.append(
             PopoverMenuItem(
-                title: chat.session.messages.isEmpty ? "Open AI Chat" : "Continue in AI Chat",
+                title: chat.session.messages.isEmpty ? "Open AI Agent" : "Continue in AI Agent",
                 systemImage: "bubble.left.and.bubble.right", shortcut: "⌘J"
             ) {
                 coordinator.continueInChat()

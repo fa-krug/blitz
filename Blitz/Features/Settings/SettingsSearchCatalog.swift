@@ -326,6 +326,9 @@ enum SettingsSearchCatalog {
         .init(
             .aiAgent, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "unlimited"]),
         .init(
+            .aiAgent, "Notify when the agent is waiting",
+            keywords: ["notification", "alert", "banner", "approval", "question", "background"]),
+        .init(
             group: .aiShellRules, "Shell rules",
             keywords: ["shell", "terminal", "commands", "patterns", "allow", "deny", "glob"]),
         .init(

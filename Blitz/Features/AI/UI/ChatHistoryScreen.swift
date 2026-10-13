@@ -103,7 +103,7 @@ enum ChatHistoryActionsMenu {
                     coordinator.openChat(id: conversation.id)
                 },
                 PopoverMenuItem(
-                    title: "Continue in AI Chat", systemImage: "bubble.left.and.bubble.right",
+                    title: "Continue in AI Agent", systemImage: "bubble.left.and.bubble.right",
                     shortcut: "⌘J"
                 ) {
                     coordinator.continueInChat(id: conversation.id)

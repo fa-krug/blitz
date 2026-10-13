@@ -233,6 +233,8 @@ final class AppCore {
         chats: aiChats, settings: settings, appIndex: appIndex,
         paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
         core: self)
+    /// The agent's waiting notifications, and the delegate a click on one comes back through.
+    @ObservationIgnored private(set) lazy var agentNotifications = AgentNotificationPresenter()
     @ObservationIgnored private(set) lazy var quickAICoordinator = QuickAICoordinator(
         chats: aiChats, settings: settings, palette: palette,
         paletteCoordinator: paletteCoordinator, core: self)
@@ -313,6 +315,13 @@ final class AppCore {
             notesCoordinator.applyEnabled()
             installedAI.launchSettings = { [aiSettings] in aiSettings.launch(for: $0) }
             codexSubscription.launchSettings = { [aiSettings] in aiSettings.launch(for: .codex) }
+            agentNotifications.onOpen = { [unowned self] in
+                aiChatCoordinator.openWaitingChat(id: $0)
+            }
+            agentNotifications.isOnScreen = { [unowned self] in
+                aiChatCoordinator.isOnScreen(chatID: $0)
+            }
+            agentNotifications.start()
             aiChatCoordinator.applyEnabled()
             mcpCoordinator.applyEnabled()
             customQuickActions.onChange = { [weak self] _ in
@@ -612,6 +621,7 @@ final class AppCore {
         snippetListener.stop()
         snippetsStore.stop()
         aiChats.reset()
+        agentNotifications.withdrawAll()
         codexSubscription.stop()
         mcpOAuth.stop()
         mcp.stop()

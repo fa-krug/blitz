@@ -12,6 +12,9 @@ final class AIChatSurfacesState {
     /// Window conversations left mid-reply; each saves itself when its reply ends.
     private var answeringElsewhere: [UUID: AIChatState] = [:]
 
+    /// Each live chat's wait as `AIChatCoordinator` last read it, written only when one changes.
+    var waits: [UUID: AgentWait] = [:]
+
     private let history: ChatHistoryStore
 
     /// Handed to every state, so a chat that finishes its first answer can be named wherever it is.
@@ -35,6 +38,8 @@ final class AIChatSurfacesState {
         return state
     }
 
+    var isAnyWaiting: Bool { !waits.isEmpty }
+
     /// Conversations with a reply still arriving, wherever they are shown.
     var answeringIDs: Set<UUID> {
         Set(live.filter(\.isStreaming).map(\.session.id))
@@ -43,6 +48,13 @@ final class AIChatSurfacesState {
     /// Whoever holds `id` right now, so a second surface never edits the same transcript.
     func holder(of id: UUID) -> AIChatState? {
         live.first { $0.holds(id) }
+    }
+
+    /// Nil for a chat left answering while another took the window: no surface shows it.
+    func surface(of chat: AIChatState) -> ChatPresence.Surface? {
+        if chat === window { return .window }
+        if chat === quickAI { return .quickAI }
+        return nil
     }
 
     // MARK: - The window

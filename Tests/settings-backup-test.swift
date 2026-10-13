@@ -84,6 +84,11 @@ struct SettingsBackupTest {
                 excluded[key.rawValue] != nil && mirrored.values.allSatisfy { $0 != key })
         }
 
+        check(
+            "the waiting notification stays with this Mac's AI setup",
+            excluded[AppSettingsKey.aiNotifyWhenWaiting.rawValue] != nil
+                && mirrored.values.allSatisfy { $0 != .aiNotifyWhenWaiting })
+
         // A reason that only echoes the key name explains nothing, so it fails like a missing one.
         let emptyReasons = excluded.filter { key, reason in
             let trimmed = reason.trimmingCharacters(in: .whitespaces)

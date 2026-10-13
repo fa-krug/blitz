@@ -33,6 +33,13 @@ final class AIChatState {
     /// The `ask_user` call the turn is paused on; whoever ends the wait resumes it, exactly once.
     @ObservationIgnored private var questionWaiter: QuestionWaiter?
 
+    /// The turn's Ask requests; a held one resumes true once on screen, false once its turn ends.
+    @ObservationIgnored private var approvalWaiters = AgentApprovals<ApprovalWaiter>()
+    /// How many Ask requests are open, kept beside the waiters so only the count is observed.
+    private var pendingApprovals = 0
+
+    private typealias ApprovalWaiter = CheckedContinuation<Bool, Never>
+
     private struct QuestionWaiter {
         let id: UUID
         let continuation: CheckedContinuation<ChatQuestion.Answer, Never>
@@ -163,6 +170,7 @@ final class AIChatState {
 
     func cancel() {
         resolveQuestion(with: .none)
+        endApprovals()
         replyGeneration += 1
         replyTask?.cancel()
         replyTask = nil
@@ -267,6 +275,56 @@ final class AIChatState {
             session.replaceLast(with: message)
         }
         waiter.continuation.resume(returning: answer)
+    }
+
+    // MARK: - Approvals
+
+    /// What the running turn waits on the reader for; derived, so it can never outlive the turn.
+    var awaiting: AgentWait? {
+        AgentWait.of(
+            isStreaming: isStreaming, pendingApprovals: pendingApprovals,
+            hasQuestion: pendingQuestion != nil)
+    }
+
+    var hasHeldApprovals: Bool { approvalWaiters.hasHeld }
+
+    func beginApproval() -> UUID {
+        defer { pendingApprovals = approvalWaiters.count }
+        return approvalWaiters.begin()
+    }
+
+    func isApprovalPending(_ id: UUID) -> Bool {
+        approvalWaiters.isPending(id)
+    }
+
+    func endApproval(_ id: UUID) {
+        approvalWaiters.end(id)?.resume(returning: false)
+        pendingApprovals = approvalWaiters.count
+    }
+
+    /// True once the chat is on screen to ask in; false when the request ended while it waited.
+    func holdApproval(_ id: UUID) async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if !approvalWaiters.hold(id, continuation) { continuation.resume(returning: false) }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.approvalWaiters.unhold(id)?.resume(returning: false)
+            }
+        }
+    }
+
+    /// The chat came on screen: each held request goes on to its dialog, oldest first.
+    func releaseApprovals() {
+        for waiter in approvalWaiters.release() { waiter.resume(returning: true) }
+    }
+
+    /// Stop, delete, clear or a turn ending: whatever was still asking is declined.
+    private func endApprovals() {
+        let held = approvalWaiters.endAll()
+        pendingApprovals = 0
+        for waiter in held { waiter.resume(returning: false) }
     }
 
     // MARK: - Plans
@@ -419,6 +477,7 @@ final class AIChatState {
     private func finishLast(state: ChatMessage.State, fallback: String) {
         // However the turn ended, nobody is left to read an answer given after it.
         resolveQuestion(with: .none)
+        endApprovals()
         flushPendingText()
         discardPendingText()
         guard var message = session.messages.last, message.role == .assistant else { return }
