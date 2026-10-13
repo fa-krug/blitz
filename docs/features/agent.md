@@ -3,20 +3,38 @@
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
 calls the tools one rule table allows: the shell, the calendar, reminders, web search and each MCP
 server. The table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell; a
-session can only narrow it. `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks, and the
-tools themselves stay with their features — [AI](ai.md#invariants) for the shell runner,
+session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
+a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in Plan, `write_plan`.
+`AgentPolicy` decides, `AgentGateCoordinator` enforces and asks, and the tools themselves stay with
+their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
 
 - **`AgentPolicy` is the whole rule, and it is pure.** `decision(for:rules:mcpTrust:scope:)` takes
-  an `AgentCall`, the table, each server's trust and the session's `AgentSessionScope`, and answers
-  `.allow`, `.ask` or `.deny`. It lives in `Model/`, and `agent-policy-test` pins it. Nothing else
-  decides.
+  an `AgentCall`, the table, each server's trust and the session's `AgentSessionScope`, mode
+  included, and answers `.allow`, `.ask` or `.deny`. It lives in `Model/`, and `agent-policy-test`
+  pins it. Nothing else decides.
 - **A denied tool is never offered.** Every offer list — Blitz's own tools, the loop's MCP tools,
   the servers handed to Codex or Claude — goes through `AgentPolicy.isOffered`, which is the
   decision for a bare call to the tool. A shell row on Deny hides the tool whatever its patterns
   say, and calendar and reminders offer their read and write halves independently.
+- **Nothing a session holds lifts a Deny.** The tools menu switches tools off, "Allow This Chat"
+  answers one row's Ask ahead of time, Auto answers every Ask, and Plan narrows to what only looks;
+  a row or pattern on Deny refuses under all of them, and a denied tool is still not offered. All
+  of it lives on the session scope, so it ends with the scope and is never stored.
+- **The mode is the session's.** `AgentSessionScope.mode` is an `AgentMode`, never stored: a new
+  chat, a reopened one or deleting the open one starts in Manual, and picking a route with no mode
+  picker puts the chat back there. Auto never shows a dialog, and Plan lets through only calls that look, plus commands it
+  asks about one by one. See [Modes](#modes).
+- **Read-only is the row's or the server's word, never the model's.** `AgentTool.isReadOnly` is true
+  for the calendar and reminders reads and web search. An MCP tool is read-only only when its server
+  listed it with `annotations.readOnlyHint` set to `true` (`MCPTool.isReadOnly`); a missing,
+  `false` or non-boolean hint, or a tool Blitz never saw listed, changes things. A server's bare row
+  says nothing for all its tools, so Plan weighs them one at a time.
+- **Asking the reader and writing a plan are no capability.** `ask_user` and `write_plan`
+  (`AgentChatTool`) have no row and never pass the gate. `AgentPolicy.isOffered(_:scope:)` offers
+  `ask_user` in every mode and `write_plan` only in Plan, and neither with Use Tools off.
 - **Every call is decided when it arrives, not when it was offered.** The gate reads the table at
   the call, again when a queued call's turn comes, and again once its dialog closes, so a Settings
   change mid-reply binds the next call. A call the model makes to a tool that went to Deny after
@@ -27,10 +45,6 @@ tools themselves stay with their features — [AI](ai.md#invariants) for the she
   it runs: `env rm x`, `/bin/rm x` and `xargs rm` all slip past a `rm *` Deny. Under an Ask row they
   take the row and still ask; under an Allow row they run. An Allow row plus Deny patterns is a
   blocklist, and the Settings footer says so.
-- **A session can only narrow.** The composer's tools menu switches tools off for the chat or turns
-  every Allow into Ask; it never widens past the table. "Allow This Chat" answers a read's or a
-  server's Ask ahead of time and never lifts a Deny. All of it lives on the session scope, so it
-  ends with the scope and is never stored.
 - **A matching Deny pattern always wins.** Order decides only among the rest, so no Allow pattern,
   wherever it sits, can shadow a Deny one.
 - **The feature switches stay the ceiling.** Calendar and Reminders each need their own switch,
@@ -41,8 +55,8 @@ tools themselves stay with their features — [AI](ai.md#invariants) for the she
   Ask, `.never` ↔ Deny (`MCPAgentMapping.swift`) — read and written in place, so the Agent table and
   the server editor cannot disagree.
 - **Web search has no Ask.** The provider runs the search, so Blitz never sees a call it could stop.
-  `AgentRules` stores an Ask on that row as Deny, Ask for Everything leaves it alone, and Allow only
-  means the composer offers its globe.
+  `AgentRules` stores an Ask on that row as Deny, no mode makes it ask, and Allow only means the
+  composer offers its globe.
 - **The table is a capability grant.** `aiAgentRules` is in
   `SettingsBackupCoverage.deliberatelyExcluded` and has no `SettingsFileKey`, so neither a backup
   nor `settings.json` can arm a tool.
@@ -72,8 +86,32 @@ neither Blitz nor a server spells has no row.
 
 `AgentPolicy.decision` applies, in order: a tool the session switched off is Deny; the row's own
 decision, with Deny final; a chat grant turning that row's Ask into Allow; for the shell, the
-patterns below; then Ask for Everything caps the result at Ask for every row that can ask, grants
-included.
+patterns below; then the session's mode, which never touches a Deny.
+
+## Modes
+
+`AgentMode` is the composer's mode pill, held on `AgentSessionScope.mode`:
+
+| Mode | Glyph | An Ask | Otherwise |
+| --- | --- | --- | --- |
+| Manual (default) | `hand.raised` | Blitz's dialog | the table as written |
+| Auto | `bolt` | runs, with no dialog | Allow and Deny as written, so it offers exactly what Manual does |
+| Plan | `list.bullet.clipboard` | Blitz's dialog | only read-only calls keep their decision; every command asks; everything else is Deny |
+
+Plan's read-only set is `AgentCall.isReadOnly`: the calendar and reminders reads, web search and an
+MCP tool its server marked read-only, each still at its own decision, grants included. The shell
+is offered while its row is not Deny, and every command asks, under any Allow pattern — Always
+Allow's included, so the new pattern takes effect once the chat leaves Plan — while a Deny pattern
+still refuses. Calendar and reminders writes and every other MCP tool are Deny. `ask_user` and
+`write_plan` are offered besides, and `AgentModeInstructions.plan` rides each Plan turn: look
+without changing anything, ask where the answer changes the plan, finish with `write_plan`, and
+never start carrying it out. [AI](ai.md#plans) has the plan card that carries it out.
+
+`AgentCall.mcp(_:readOnly:)` carries the hint; `AgentCall(_:)` builds it from a listed `MCPTool`,
+`AgentCall.mcp(_:listed:)` from a CLI's call matched by server and tool name, and
+`AgentCall.server(_:listed:)` for a whole server, read-only while any one of its tools is. A bare
+`AgentCall(tool: .mcp(slug))` is never read-only, so `isOffered` on a server's row says no in
+Plan.
 
 ## Shell patterns
 
@@ -129,6 +167,11 @@ the new rule cannot shadow one.
   `can_use_tool` — calls `AgentGateCoordinator.authorize`. A Claude question about Blitz's own
   `ClaudeHostedServer` is allowed there, because the runner behind it asks the gate itself.
 
+`authorize` weighs an MCP call by what its server listed, `MCPCoordinator.listedTools(slug:)`, so in
+Plan a CLI's call to a tool without the hint, or to one the list lacks, is Deny. `ask_user` and
+`write_plan` never reach the gate: their runners check `AgentPolicy.isOffered(_:scope:)` and answer
+themselves.
+
 On Allow the call runs. On Deny it fails with `AgentRefusal.denied`'s sentence, "Blitz's agent rules
 do not let the model …". On Ask the gate queues the question on its `AIConsentQueue`, one dialog
 for every chat, since `DialogController` refuses a second. When the question's turn comes the
@@ -156,38 +199,48 @@ refusal of that one call; only Settings withholds a tool for good.
 - **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — the two reads and MCP
   servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
   `AgentSessionScope.granted`, and only while that chat still shows the conversation that asked;
-  `AgentPolicy` turns that row's Ask into Allow from it. It never lifts a Deny.
-- **Under Ask for Everything** a grant would be capped straight back to Ask, so the gate shows
-  `AgentPrompt.scoped(to:)`: a read offers **Allow** ↵ and Don't Allow, and a server offers Always
-  Allow, **Allow** ↵ — once — and Don't Allow. Always Allow writes the table, not the chat, so it
-  stays.
+  `AgentPolicy` turns that row's Ask into Allow from it, in Plan too. It never lifts a Deny.
+
+Auto raises no dialog at all: every Ask is Allow before the gate would ask.
 
 ## The session scope and the composer
 
 `AgentSessionScope` lives on `AIChatState.agentScope` and is never stored: a new chat, a reopened
-one, or deleting the open one starts it fresh. It holds `isEnabled`, the `excluded` tools,
-`asksForEverything` and the `granted` tools, so a chat grant ends exactly when the scope does. A
-server added later arrives switched on.
+one, or deleting the open one starts it fresh. It holds `isEnabled`, the `excluded` tools, the
+`mode` and the `granted` tools, so a chat grant ends exactly when the scope does. A server added
+later arrives switched on.
 
-The AI Chat composer's tools menu (`AIToolsPicker`) is the scope's only editor:
+The AI Chat composer's tools menu (`AIToolsPicker`) edits what the chat may call:
 
-- **Use Tools** — off offers nothing, Blitz's tools and every server alike.
-- **Ask for Everything** — every Allow becomes Ask for the chat; the menu's glyph becomes a raised
-  hand.
+- **Use Tools** — off offers nothing, Blitz's tools, `ask_user` and every server alike.
 - **Blitz** — one switch per built-in row the table does not deny, on a route that reaches Blitz's
   tools (`AIChatCoordinator.listedBuiltInTools`); web search is not among them.
 - **MCP Servers** — one switch per server the table does not deny.
 - **Agent Settings…** opens Settings → AI on the Agent section.
 
 The label counts what is on, "`n` of `m`". A route that cannot call tools shows the menu disabled
-and says why, and with nothing the table allows it says so. Quick AI has no menu, so its scope stays
-open: the same gate and rules, every tool the table offers, nothing forced to ask.
+and says why, and with nothing the table allows it says so. The menu lists the table's reach in
+Manual whatever the mode, so a switch never vanishes when Plan would refuse its tool.
+
+The mode pill (`AIModePicker`) follows the tools menu, only where `AIChatCoordinator.offersModes`:
+a route that calls tools and reaches Blitz's — an API connection or the Claude command, never
+Codex, which reaches no `write_plan` to plan with. Each entry is the mode's title, `summary` and
+glyph, and the pill shows the current one. Auto's pill is filled and tinted with the warning
+colour, since its calls run without a dialog. `setMode` keeps a chat with no picker in Manual, and
+`selectModel` drops the chat back to Manual when the new route has none, so a mode nobody can see
+never applies.
+
+Quick AI has neither menu nor pill, so its scope stays open and Manual: the same gate and rules,
+every tool the table offers, `ask_user` included.
 
 The composer's web-search globe appears only where the route searches and the Web Search row is
 Allow (`AIChatCoordinator.offersWebSearch`). It flips `aiWebSearch`, off by default, and a turn
-searches only with both. The context card's **Tools** rows list each tool the next turn is offered
-with the decision a bare call to it would get, grants and scope included, or one "Offered: None"
-row; its **Web search** row says whether the next turn searches.
+searches only with both. The context card's **Tools** section opens on a **Mode** row where the
+route offers modes, then lists each tool the next turn is offered with the decision a bare call to
+it would get, grants, scope and mode included, or one "Offered: None" row; its **Web search** row
+says whether the next turn searches. A server's row is `AgentCall.server(_:listed:)` over
+`MCPCoordinator.listedTools(slug:)`, so in Plan it shows while any listed tool is read-only, and a
+CLI route's server Blitz has never listed is missing until a Plan turn lists it.
 
 ## Settings and storage
 
@@ -233,20 +286,40 @@ old keys stay in `SettingsBackupCoverage.deliberatelyExcluded` until this migrat
 | Apple Intelligence, Grok, OpenCode, Cursor | none | none | — |
 
 `AIModelSelection.reachesBlitzTools` is false only for Codex, and `AIModelCapabilities.tools` is
-false for the last row. `@server` addresses one server, so Blitz's own tools sit that turn out. A
-Codex chat's title request borrows the reply's servers and refuses every call.
+false for the last row. `@server` addresses one server, so Blitz's own tools — `ask_user` and
+`write_plan` included — sit that turn out, and the loop refuses a call to either with its
+`notOffered` sentence. A Codex chat's title request borrows the reply's servers and refuses every
+call.
+
+Each route honours the mode where it decides what to offer:
+
+- **API connection.** The loop is offered Blitz's tools and each MCP tool on its own,
+  `AgentCall(_:)` over the listing Blitz's own connection holds, so Plan offers only a server's
+  read-only tools; every call is decided again at the gate.
+- **Claude command.** Blitz's tools as on the loop, through `ClaudeHostedServer`. The CLI is handed
+  whole servers, so outside Plan a server goes while its row is not Deny, and in Plan only once one
+  of its tools is read-only. `MCPCoordinator.listTools(of:)` answers that: Blitz's own listing
+  while its connection is ready, else one short-lived connection of its own, kept by server until
+  the server is saved or removed or MCP goes off. A server whose list was empty is listed again on
+  every Plan turn. Consent then weighs each call by that list, as [the gate](#the-gate-and-its-dialogs)
+  says.
+- **Codex.** No mode pill, so always Manual; it reaches neither `ask_user` nor `write_plan`.
 
 ## Harnesses
 
 - `agent-policy-test` — the splitter's splits and refusals, glob matching, decision order, wire
   names, the MCP trust mapping, defaults and the web-search rule, migration, `Codable`, the session
   scope, the policy's precedence and offers, the suggested pattern and `neverSuggested`, calls from
-  the wire, every `AgentPrompt` and its scoped form, both refusals, chat grants on the scope,
-  Always Allow's placement and the context card's rows.
+  the wire, every `AgentPrompt`, both refusals, chat grants on the scope, Always Allow's placement,
+  each mode's decisions and offers, MCP tools weighed one at a time and servers handed to a CLI in
+  Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
+  the plan instruction, and the context card's rows per mode.
 - `ai-provider-test` — `AISettingsStore`: every old combination migrates once and leaves no old key,
   a fresh install starts on the defaults, a broken table falls back without migrating, shell
   rules keep their order, and Always Allow persists a pattern once.
-- `ai-chat-test` — the scope per chat, open and without grants on a new or deleted chat.
+- `ai-chat-test` — the scope per chat, open, in Manual and without grants on a new or deleted chat.
+- `mcp-test` — `MCPTool.isReadOnly` from a plain `true` hint alone, and the `AgentCall` built from a
+  listing, a CLI's call and a whole server.
 - `calendar-test` and `reminders-test` — read and write halves offered independently, and the
   reminder dialogs' summary.
 - `settings-backup-test` and `settings-file-test` — `aiAgentRules` and the old keys excluded, and no
@@ -260,8 +333,13 @@ Codex chat's title request borrows the reply's servers and refuses every call.
   Allow pattern above it, and `ls $(pwd)` asks even with `ls *` allowed.
 - With a `git push * → Ask` rule, `Always Allow "git *"` on `git push origin` lands above it, and
   the next `git push` runs.
-- Ask for Everything makes an allowed command ask, and a read's dialog offers no Allow This Chat; a
-  new chat starts with it off, and with no grant from the last one.
+- In Auto, with the shell row on Ask, `ls` runs with no dialog and `rm x` under a `rm *` Deny
+  pattern is still refused; the pill is tinted, and a new chat starts in Manual with no grant from
+  the last one.
+- In Plan, a command asks even under `ls *`, Add Calendar Events is not offered even on Allow, and
+  of a server whose tools carry `readOnlyHint`, only those are offered — on the Claude command too,
+  where a call to one of its other tools is refused without a dialog.
+- Switching a chat in Plan to a Codex model hides the pill, and the context card shows no Mode row.
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model
   is not offered it.

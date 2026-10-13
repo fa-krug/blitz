@@ -53,9 +53,13 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   conversation alone, held on its `AgentSessionScope`, and **Don't Allow** — which is what Escape does —
   refuses that one call and lets the next ask again. Escape is never allowed to persist a decision,
   and `.never` is set in the server's editor or its row in Settings → AI → Agent, both writing the
-  same `MCPServer.trust`. `AgentPolicy`, which is pure, turns trust and a chat grant into an
-  `AgentDecision`; under Ask for Everything the grant is not offered, and the middle answer allows
-  the one call.
+  same `MCPServer.trust`. `AgentPolicy`, which is pure, turns trust, a chat grant and the chat's
+  mode into an `AgentDecision`: Auto runs an Ask server's calls with no dialog, and Plan lets
+  through only the tools the server itself marks read-only.
+- **Read-only is the server's own word.** `MCPTool.isReadOnly` is true only when the tool's
+  `annotations.readOnlyHint` is the boolean `true`; a missing, `false` or non-boolean hint, a hint
+  outside `annotations`, or a tool Blitz never saw listed, changes things. Plan mode is the only
+  reader ([Agent](agent.md#modes)), and the model never gets a say.
 - **A refused or failed call is content, never a thrown error.** It comes back as an `AIToolResult`
   the model can read and work around, so a declined tool ends in an honest sentence rather than a
   failed turn.
@@ -75,8 +79,9 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   the model inside the CLI, and what the transcript keeps is the row. Unlimited reaches a CLI route
   as an `AIToolServerSession.rounds` of `nil`: Claude is given no `--max-turns`, since it has no
   cap without one, and Codex counts nothing, so there too only the model or Stop ends the turn. A
-  Claude turn with no server to run is a different case and keeps `--max-turns 1` whatever the
-  setting.
+  Claude turn with nothing to call — no server and none of Blitz's own tools, which with `ask_user`
+  offered means Use Tools off, an `@server` turn with nothing handed over or a managed MCP policy —
+  is a different case and keeps `--max-turns 1` whatever the setting.
 - **A server's handle is derived, never typed.** `MCPSlug` makes it from the name and uniques it, so
   `@slug` can never name two servers or nothing at all. An unknown handle is not an address: the text
   is sent exactly as it was typed.
@@ -130,7 +135,7 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   with a JSON-RPC error. The client advertises no capabilities in `initialize`.
 - **The protocol lives in `Model/`, where a harness reaches it.** `mcp-test` compiles the shipped
   models and pins the framing,
-  handles, tool names, output flattening, trust and addressing; `mcp-stdio-test` drives a real
+  handles, tool names, the read-only hint, output flattening, trust and addressing; `mcp-stdio-test` drives a real
   subprocess. `mcp-oauth-test` pins OAuth parsing, PKCE, endpoint binding, callback lifetime,
   dynamic and supplied client registration, refresh coalescing, redirects and bounded 401 recovery.
 
@@ -209,8 +214,10 @@ passing text, thinking and usage straight through while collecting `.toolCallReq
 was requested it yields `.finished` and stops. Otherwise it appends the assistant turn with its
 calls, and for each one yields `.toolCall`, awaits the invoker, yields `.toolResult` and appends a
 tool turn — then goes round again with the same tools armed. The invoker `AIChatCoordinator` passes
-in sends Blitz's own calendar, reminders and shell tools to their runners, and every other call to
-the agent's gate and then `MCPCoordinator.invoke`, which runs only what the gate let through.
+in sends Blitz's own calendar, reminders, shell, `ask_user` and `write_plan` tools to their runners,
+and every other call to the agent's gate and then `MCPCoordinator.invoke`, which runs only what the
+gate let through. `MCPCoordinator.tools(scopedTo:)` hands over the live `[MCPTool]`, so the
+coordinator weighs each tool with its own read-only hint before it becomes an `AITool`.
 
 The two tool events are deliberately separate. `.toolCallRequested` is what a transport emits and
 carries only the wire name; the loop consumes it and never forwards it. `.toolCall` is what the loop
@@ -231,7 +238,15 @@ Blitz runs itself, and `MCPServer.toolServer` is the one place the mapping happe
 many rounds it may spend. `MCPCoordinator.toolServers` builds the list from `enabledServers`
 honouring `@slug` and keeping only the servers the agent's gate offers the chat, which drops
 `.never` and any the tools menu switched off; its `consent` is `AgentGateCoordinator.authorize`,
-with the same three-way dialog. The session asks one question at a time: a CLI can hold two calls
+with the same three-way dialog.
+
+A CLI is handed a whole server, so in Plan the gate needs to know whether any of its tools only
+looks. `MCPCoordinator.listedTools(slug:)` answers from Blitz's own connection while it is ready;
+otherwise `listTools(of:)` starts a short-lived connection, reads the list and stops it, and keeps
+the list by server until the server is saved or removed or MCP goes off. A list read while the
+server was edited is dropped, and an empty list counts as none, so a server with no tools is
+listed again on each Plan turn. Consent reads the same list, so in Plan a call to a tool without the hint, or one
+the list lacks, is refused without a dialog. The session asks one question at a time: a CLI can hold two calls
 open at once, where the API loop never does, and `DialogController` shows one dialog and refuses
 the next, which read as the reader declining a call nobody showed them. So a second question waits
 for the first dialog to close and is then decided afresh, seeing whatever grant it made; one still
@@ -346,6 +361,8 @@ Settings → AI → Agent, written through `MCPCoordinator.setTrust`.
 - The first call raises the dialog. Allow This Chat does not ask again in that conversation and does
   in the next; Always Allow survives a relaunch and shows as Allow in Settings → AI → Agent; Escape
   refuses only that call.
+- In Plan, a server whose tools carry `readOnlyHint: true` offers only those, on an API route and
+  on the Claude command alike; a server with none is not offered at all.
 - `@filesystem list my desktop` shows the tools glyph after the text, sends without the prefix, and
   offers only that server's tools. `@nosuch hello` is sent verbatim.
 - On Apple Intelligence, Grok, OpenCode or Cursor, no tool is offered and the reply streams as before.

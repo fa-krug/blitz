@@ -166,8 +166,8 @@ Notes adds `noteWindow 520×420` (opening size on a first run only), `noteWindow
 AI Chat adds `aiChatWindow 960×660` (opening size), `aiChatWindowMinimum 680×440`, a sidebar of
 `aiChatSidebarMinimum 240`–`aiChatSidebarMaximum 340`, `aiChatDetailMinimum 440`,
 `aiChatReadingWidth 760` for the transcript and composer column, `aiChatComposerMaxHeight 180`, and
-`chatContextGauge 14` for the composer's context ring, and `chatContextCard 300` for the card it
-raises on hover.
+`chatContextGauge 14` for the composer's context ring, `chatContextCard 300` for the card it
+raises on hover, and `chatPlanEditor 280` for a plan's editor, past which its Markdown scrolls.
 
 The AI Providers panel adds `aiProvidersPanel 840×520` (the height is its two columns', stated so
 that selecting a longer provider never resizes the panel), `aiProvidersList 262`, `aiUsageBar 110`
@@ -330,13 +330,19 @@ AI Chat is a titled window built the way Settings is, not a palette sibling like
 `NSSplitViewController` whose sidebar item takes the system sidebar material, a unified toolbar with
 an inline title, and native `List`, `Menu` and context menus. Nothing about it scales with Interface
 Size. The composer is untinted Liquid Glass at `Radius.dialog`, stacked under the transcript so nothing
-scrolls behind it, with `.glass` capsules for its model and reasoning menus, and its glass on a
-background layer rather than the box.
+scrolls behind it, with `.glass` capsules for its model, reasoning, tools and mode menus, and its
+glass on a background layer rather than the box. The mode pill alone changes shape with its value:
+in Auto, `modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.warning`, since its calls
+run with no dialog.
 The title bar keeps the system's own toolbar band, as any document window's does. The context card
 the gauge raises on hover is glass over a solid `windowBackgroundColor`, because it rises over
 transcript text, and sits in the transcript's own frame at its bottom edge, so no window size can
 push it off screen. A reply's choices are `.glass` capsules that rise out of the composer's top
-edge. Find marks words in `Colors.findMatch` / `findCurrent`, the system yellow, with
+edge, each a `ChatChoiceChip` — a glyph then the option — which a waiting question's options use
+too. `ChatQuestionCard` and `ChatPlanCard` are cards in the transcript, `cardFill` under a
+`cardStroke` at `Radius.row`: the question with its chips, then its answer as plain capsules; the
+plan as rendered Markdown with **Edit** and `.glass` **Execute in Auto** beside the
+`.glassProminent` **Execute**, a replaced plan folded behind a chevron. Find marks words in `Colors.findMatch` / `findCurrent`, the system yellow, with
 `findCurrentInk` black on the solid one in both appearances. Transcript lines sit
 `spacing.chatLine 4` apart on both surfaces. The transcript itself is the palette's `ChatTranscriptView`
 with `surface: .window`, which leaves out `edgeDissolve` and `thinScrollbar` — both are measured

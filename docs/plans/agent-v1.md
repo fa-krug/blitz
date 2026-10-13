@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phase 1 built; phases 2–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phases 1 and 1b built; phases 2–4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -14,7 +14,9 @@ scope; it keeps MCP servers only.
   patterns for the shell. The table replaces this PR's scattered switches: Calendar access, Reminders
   access, the shell master switch, and the per-chat Confirm/Auto-run toggle.
 - **A session can only narrow.** The composer can switch tools off for the session or turn every
-  Allow into Ask. It can never widen past the table, and the narrowing is not stored.
+  Allow into Ask. It can never widen past the table, and the narrowing is not stored. (Phase 1b's
+  modes replace the Ask toggle: Auto answers every Ask, Plan narrows to reads, and neither lifts a
+  Deny.)
 - **Asks are answered in Blitz, never from a notification.** A turn that waits shows a badge in the
   sidebar and posts an alert-only notification (phase 2).
 - **Routes:** API connections run through `AIToolLoopProvider`, and the Claude command runs through
@@ -38,7 +40,8 @@ scope; it keeps MCP servers only.
     splitter cannot read with confidence means Ask, never Allow.
   - Patterns are globs over a whole segment (`git *`, `ls`, `brew list*`).
   - A Deny row is final; within a segment a matching Deny pattern wins, and otherwise the first
-    matching pattern does, so order is the user's; a session's "ask everything" caps Allow at Ask. Deny patterns are a backstop, not a sandbox.
+    matching pattern does, so order is the user's; the session's mode applies last and never lifts a
+    Deny. Deny patterns are a backstop, not a sandbox.
 - **The table is a capability grant.** It is excluded from backups (`SettingsBackupCoverage.
   deliberatelyExcluded`) and has no `settings.json` key, like `aiCalendarAccess` today.
 - **The feature switches stay the ceiling.** Calendar and Reminders still need their own feature
@@ -61,7 +64,7 @@ scope; it keeps MCP servers only.
 | `AgentRules.swift` | `Codable` table: a default per built-in tool, plus `[ShellRule]` (pattern + decision, ordered). Defaults: everything Deny except Calendar/Reminders read = Ask once their feature is on, and web search = Allow (its composer toggle stays the opt-in). Encodes to one JSON blob. |
 | `ShellCommandSegments.swift` | The conservative splitter: `segments(of:) -> [String]?`, where nil means "cannot read, Ask". |
 | `AgentPolicy.swift` | `decision(for: AgentCall, rules:, scope:) -> AgentDecision`. `AgentCall` is the tool plus its arguments (the command, for the shell). Also `offered(_ tools:, rules:, scope:)` for the offer list, and `suggestedPattern(for command:)`, the first word + ` *` that "Always Allow" proposes. |
-| `AgentSessionScope.swift` | Replaces `ChatToolScope` and `ShellCommandApproval`: `isEnabled`, `excluded: Set<AgentTool>` (MCP slugs included), `asksForEverything`. |
+| `AgentSessionScope.swift` | Replaces `ChatToolScope` and `ShellCommandApproval`: `isEnabled`, `excluded: Set<AgentTool>` (MCP slugs included), `asksForEverything` (Phase 1b's `mode` replaces it). |
 
 ### Service / settings
 
@@ -112,7 +115,8 @@ scope; it keeps MCP servers only.
   - The round cap moves here from Chat.
 - **Composer:** the tools menu becomes the session scope.
   - Per-tool on/off for the session, MCP servers included.
-  - An **Ask for everything** toggle, which replaces the terminal Confirm/Auto-run glyph.
+  - An **Ask for everything** toggle, which replaces the terminal Confirm/Auto-run glyph; Phase 1b's
+    mode pill replaces it in turn.
   - The context card lists the effective decision per tool.
 - **Settings search catalog and anchors** are updated for the moved rows.
 
@@ -145,39 +149,46 @@ scope; it keeps MCP servers only.
 4. **Docs and verification:** docs, the full suite, build, lint, and a real run in the Dev build
    (`ls` → Ask → Always Allow `ls *` → the next `ls` runs straight away). *(the parent)*
 
-## Phase 1b: modes, questions and plans (in progress)
+## Phase 1b: modes, questions and plans (built)
 
 ### Modes
 
 `AgentMode` is per session, on `AgentSessionScope`: never stored, and every new or reopened chat
-starts in Manual. The composer's mode picker replaces the "Ask for Everything" toggle, which goes.
+starts in Manual, as does one switched to a route with no mode picker. The composer's mode picker
+replaces the "Ask for Everything" toggle, which goes. Only a route that reaches Blitz's tools — an
+API connection or the Claude command — has the picker; Codex has none and stays in Manual.
 
 | Mode | What it does |
 | --- | --- |
 | **Manual** (default) | The rule table as written: Allow runs, Ask asks, Deny refuses. |
 | **Auto** | Every Ask is confirmed without a dialog. Deny still refuses and a denied tool is still not offered: the table stays the ceiling. |
-| **Plan** | Read-only. Offered: calendar and reminders read, web search, MCP tools whose server marks them `readOnlyHint`, the shell (every command asks, whatever the rules say), `ask_user`, `write_plan`. Never offered: calendar and reminders writes, other MCP tools. Each still needs its table row past Deny. |
+| **Plan** | Read-only. Offered: calendar and reminders read, web search, MCP tools whose server marks them `annotations.readOnlyHint: true`, the shell (every command asks, whatever the rules say), `ask_user`, `write_plan`. Never offered: calendar and reminders writes, other MCP tools. Each still needs its table row past Deny. |
 
 Plan mode adds an instruction for that turn: investigate read-only, ask with `ask_user` where the
 answer changes the plan, and finish by calling `write_plan`. A plan never changes anything by itself.
 
 ### `ask_user`
 
-- A Blitz tool on every route that reaches Blitz's tools, in every mode. It has no rule row: asking
-  the reader is never a capability.
+- A Blitz tool on every route that reaches Blitz's tools, in every mode, while Use Tools is on and
+  outside an `@server` turn. It has no rule row: asking the reader is never a capability.
 - Arguments: `question`, `options` (2–6 short strings), `multiSelect` (default false). A free-text
   answer is always possible.
 - The turn pauses. The transcript shows the question with its options as chips. A chip, or text
   typed in the composer while a question is pending, is the answer; it does not start a new turn.
 - The answer is the tool result. The question and answer are stored with the message, the way
   searches and tool calls are, so a reopened chat shows both.
-- Stop, or leaving the chat, answers "The user did not answer." and the turn ends as stopped does.
+- Stop, or deleting the chat, answers "The user did not answer." and the turn ends as stopped
+  does. As built, leaving the chat does not: the turn is parked, as any reply is, and its question
+  keeps waiting until the chat is reopened and answered.
+- As built, a second question while one waits is refused with a sentence asking the model for one
+  at a time, rather than queued.
 
 ### `write_plan`
 
-- Offered only in Plan mode. Arguments: `title`, `markdown`. A second call replaces the chat's plan.
+- Offered only in Plan mode. Arguments: `title`, `markdown`. A second call replaces the chat's live
+  plan; as built, the earlier card stays in the transcript, folded and marked "Replaced".
 - The plan is a card in the transcript, rendered Markdown, stored with the conversation, and
-  editable from the card.
+  editable from the card — the live plan only, and never while a turn runs.
 - The card offers **Execute** (switches the chat to Manual) and **Execute in Auto**. Either one sends
   a message that carries the plan's current text and asks the agent to carry it out.
 
@@ -191,6 +202,13 @@ answer changes the plan, and finish by calling `write_plan`. A plan never change
 3. **Modes and plans:** the composer mode picker, the plan card with editing and Execute, plan
    storage, MCP `readOnlyHint` plumbing, the per-turn instruction.
 4. **Docs and verification:** `agent.md`, `ai.md`, the full suite, build, lint.
+
+### Known limits
+
+- On the Claude command a server is handed over in Plan only once Blitz has its tool list. One Blitz
+  has never listed is missing from the context card's Tools rows in Plan until a Plan turn lists it.
+- A server that lists no tools is listed again on every Plan turn, since an empty list reads as
+  never listed.
 
 ## Phase 2: turns you can leave
 
