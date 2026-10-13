@@ -1,7 +1,7 @@
 # Support
 
 One window, one checkout link, and a checkbox deciding whether it may ever reopen itself. Every other
-surface — the website's hero and footer, the docs sidebar, the README badge — is a bare link to the
+surface — the website's hero and footer and the docs sidebar — is a bare link to the
 same URL, so `SupportCoordinator.checkout` is the only place the destination is written down.
 
 ## Invariants
