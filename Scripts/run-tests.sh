@@ -157,6 +157,17 @@ run contacts-test          Blitz/Features/Contacts/Model/*.swift
 run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            Blitz/Features/AI/Service/ShellToolRunner.swift
+# The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
+run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
+                           $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
+                           $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
+                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
+                           $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
+                           Blitz/Features/Reminders/Model/*.swift \
+                           Blitz/Features/MCP/Model/MCPServer.swift \
+                           Blitz/Features/MCP/Model/MCPTool.swift \
+                           Blitz/Features/MCP/Model/MCPAgentMapping.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
 Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
@@ -711,6 +722,8 @@ run mcp-test               Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Settings/MCPSettingsStore.swift
 run -O text-diff-test      Blitz/Features/QuickActions/Model/TextDiffEngine.swift
@@ -738,6 +751,8 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
@@ -752,6 +767,8 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow codex-turn-test   Blitz/Platform/AppPaths.swift \
