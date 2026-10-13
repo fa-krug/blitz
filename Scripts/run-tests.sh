@@ -161,7 +161,9 @@ run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValu
 run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
                            $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
-                           $A/AgentPrompt.swift $A/AgentRefusal.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift $A/AskUserToolCatalog.swift \
+                           $A/PlanToolCatalog.swift $A/ChatPlan.swift $A/AgentModeInstructions.swift \
                            $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
@@ -683,6 +685,7 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
                            Blitz/Features/AI/Model/AgentTool.swift \
                            Blitz/Features/AI/Model/AgentSessionScope.swift \
+                           Blitz/Features/AI/Model/AgentMode.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \

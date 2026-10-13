@@ -31,19 +31,32 @@ enum AgentPolicy {
         if call.tool == .shell, let command = call.command {
             decision = shellDecision(for: command, base: base, rules: rules.shellRules)
         }
-        if scope.asksForEverything, call.tool.canAsk {
-            decision = min(decision, .ask)
-        }
-        return decision
+        return applying(scope.mode, to: decision, for: call)
     }
 
-    /// A tool whose bare decision is Deny is never shown to the model, whatever its patterns say.
+    /// A call whose bare decision is Deny is never shown to the model, whatever its patterns say.
+    static func isOffered(
+        _ call: AgentCall, rules: AgentRules, mcpTrust: (String) -> AgentDecision,
+        scope: AgentSessionScope
+    ) -> Bool {
+        decision(for: call, rules: rules, mcpTrust: mcpTrust, scope: scope) != .deny
+    }
+
+    /// A bare row; in Plan an MCP row is a call without the read-only hint, so it is refused.
     static func isOffered(
         _ tool: AgentTool, rules: AgentRules, mcpTrust: (String) -> AgentDecision,
         scope: AgentSessionScope
     ) -> Bool {
-        decision(for: AgentCall(tool: tool), rules: rules, mcpTrust: mcpTrust, scope: scope)
-            != .deny
+        isOffered(AgentCall(tool: tool), rules: rules, mcpTrust: mcpTrust, scope: scope)
+    }
+
+    /// Answers without the table, which has no row for them; Use Tools off still offers none.
+    static func isOffered(_ tool: AgentChatTool, scope: AgentSessionScope) -> Bool {
+        guard scope.isEnabled else { return false }
+        switch tool {
+        case .askUser: return true
+        case .writePlan: return scope.mode == .plan
+        }
     }
 
     static func offered(
@@ -59,15 +72,14 @@ enum AgentPolicy {
         let decision: AgentDecision
     }
 
-    /// In the order given, leaving out every tool the turn is not offered.
+    /// In the order given, leaving out every call the turn is not offered.
     static func decisions(
-        for tools: [AgentTool], rules: AgentRules, mcpTrust: (String) -> AgentDecision,
+        for calls: [AgentCall], rules: AgentRules, mcpTrust: (String) -> AgentDecision,
         scope: AgentSessionScope
     ) -> [ToolDecision] {
-        tools.compactMap { tool in
-            let decision = decision(
-                for: AgentCall(tool: tool), rules: rules, mcpTrust: mcpTrust, scope: scope)
-            return decision == .deny ? nil : ToolDecision(tool: tool, decision: decision)
+        calls.compactMap { call in
+            let decision = decision(for: call, rules: rules, mcpTrust: mcpTrust, scope: scope)
+            return decision == .deny ? nil : ToolDecision(tool: call.tool, decision: decision)
         }
     }
 
@@ -78,6 +90,20 @@ enum AgentPolicy {
         let word = ShellCommandSegments.leadingWord(of: segments[0])
         guard !word.contains("/"), !neverSuggested.contains(word) else { return nil }
         return word + " *"
+    }
+
+    /// Auto confirms every Ask; Plan lets only reads through, and asks before every command.
+    private static func applying(
+        _ mode: AgentMode, to decision: AgentDecision, for call: AgentCall
+    ) -> AgentDecision {
+        guard decision != .deny else { return .deny }
+        switch mode {
+        case .manual: return decision
+        case .auto: return .allow
+        case .plan:
+            if call.tool == .shell { return .ask }
+            return call.isReadOnly ? decision : .deny
+        }
     }
 
     /// A grant answers only an Ask, so it never lifts a Deny.

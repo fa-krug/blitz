@@ -466,24 +466,143 @@ struct AgentPolicyTests {
         check("a shell row that asks is offered", offered(.shell, gitRules))
         check("a shell row that allows is offered", offered(.shell, withShell(.allow, [])))
 
-        var askEverything = AgentSessionScope()
-        askEverything.asksForEverything = true
+        check("a fresh scope is in Manual", open.mode == .manual)
         check(
-            "ask for everything caps an allow pattern",
-            decide(.shell("git status"), gitRules, scope: askEverything) == .ask)
+            "manual is the table as written",
+            decide(.shell("git status"), gitRules) == .allow && decide(.shell("ls"), gitRules) == .ask
+                && decide(.shell("rm x"), gitRules) == .deny)
+
+        var auto = AgentSessionScope()
+        auto.mode = .auto
         check(
-            "and an allow row",
-            decide(AgentCall(tool: .calendarRead), calendarAllowed, scope: askEverything) == .ask)
+            "auto turns an asking command into allow", decide(.shell("ls"), gitRules, scope: auto) == .allow)
         check(
-            "and an MCP server that is always trusted",
-            decide(AgentCall(tool: .mcp("always")), scope: askEverything) == .ask)
+            "and an asking row and server",
+            decide(AgentCall(tool: .calendarRead), scope: auto) == .allow
+                && decide(AgentCall(tool: .mcp("ask")), scope: auto) == .allow)
+        check("but never lifts a deny pattern", decide(.shell("rm x"), gitRules, scope: auto) == .deny)
+        check("nor a deny row", decide(.shell("git status"), shellOff, scope: auto) == .deny)
+        check("nor a withheld server", decide(AgentCall(tool: .mcp("never")), scope: auto) == .deny)
         check(
-            "but never lifts a deny",
-            decide(.shell("rm x"), gitRules, scope: askEverything) == .deny)
+            "nor a tool the session switched off",
+            decide(
+                .shell("ls"), gitRules,
+                scope: {
+                    var s = auto; s.toggle(.shell); return s
+                }())
+                == .deny)
         check(
-            "web search has no ask, so it stays allowed",
-            decide(AgentCall(tool: .webSearch), scope: askEverything) == .allow)
-        check("and stays offered", offered(.webSearch, scope: askEverything))
+            "an unreadable command under auto runs too",
+            decide(.shell("ls $(pwd)"), gitRules, scope: auto) == .allow)
+        let allCandidates = tools + [.mcp("always"), .mcp("ask"), .mcp("never"), .mcp("gone")]
+        check(
+            "auto offers exactly what manual offers",
+            [everythingAsks, .defaults, shellOff, gitRules].allSatisfy { rules in
+                allCandidates.allSatisfy {
+                    offered($0, rules, scope: auto) == offered($0, rules, scope: open)
+                }
+            })
+
+        var plan = AgentSessionScope()
+        plan.mode = .plan
+        let allAllowed = AgentRules(
+            shell: .allow, calendarRead: .allow, calendarWrite: .allow, remindersRead: .allow,
+            remindersWrite: .allow, webSearch: .allow)
+        check(
+            "plan offers exactly the reads, web search and the shell",
+            AgentPolicy.offered(tools, rules: allAllowed, mcpTrust: mcpTrust, scope: plan)
+                == [.shell, .calendarRead, .remindersRead, .webSearch])
+        check(
+            "plan keeps a read's own decision",
+            decide(AgentCall(tool: .calendarRead), scope: plan) == .ask
+                && decide(AgentCall(tool: .calendarRead), allAllowed, scope: plan) == .allow)
+        check(
+            "writes are denied in plan, even when the table allows them",
+            decide(AgentCall(tool: .calendarWrite), allAllowed, scope: plan) == .deny
+                && decide(AgentCall(tool: .remindersWrite), allAllowed, scope: plan) == .deny)
+        check(
+            "every command asks in plan, even under an allow pattern",
+            decide(.shell("git status"), gitRules, scope: plan) == .ask
+                && decide(.shell("ls"), withShell(.allow, [("*", .allow)]), scope: plan) == .ask)
+        check("a deny pattern still denies in plan", decide(.shell("rm x"), gitRules, scope: plan) == .deny)
+        check("a shell deny row is not offered in plan", !offered(.shell, shellOff, scope: plan))
+        check("an asking shell row is offered in plan", offered(.shell, gitRules, scope: plan))
+        check(
+            "web search stays allowed in plan",
+            decide(AgentCall(tool: .webSearch), scope: plan) == .allow)
+        check(
+            "a read-only MCP tool takes its server's trust in plan",
+            decide(.mcp("always", readOnly: true), scope: plan) == .allow
+                && decide(.mcp("ask", readOnly: true), scope: plan) == .ask)
+        check(
+            "a read-only hint never lifts a withheld server",
+            decide(.mcp("never", readOnly: true), scope: plan) == .deny
+                && decide(.mcp("gone", readOnly: true), scope: plan) == .deny)
+        check(
+            "an MCP tool without the hint is denied in plan",
+            decide(.mcp("always", readOnly: false), scope: plan) == .deny)
+        check(
+            "MCP read-only is per tool: one server, two answers",
+            AgentPolicy.isOffered(
+                AgentCall.mcp("always", readOnly: true), rules: everythingAsks, mcpTrust: mcpTrust,
+                scope: plan)
+                && !AgentPolicy.isOffered(
+                    AgentCall.mcp("always", readOnly: false), rules: everythingAsks,
+                    mcpTrust: mcpTrust, scope: plan)
+        )
+        check("a bare server row is not offered in plan", !offered(.mcp("always"), scope: plan))
+        check(
+            "the read-only hint changes nothing outside plan",
+            [open, auto].allSatisfy { scope in
+                decide(.mcp("ask", readOnly: false), scope: scope)
+                    == decide(.mcp("ask", readOnly: true), scope: scope)
+            })
+        check(
+            "an MCP call carries the hint, a built-in row its own",
+            AgentCall.mcp("x", readOnly: true).isReadOnly
+                && !AgentCall.mcp("x", readOnly: false).isReadOnly
+                && !AgentCall(tool: .mcp("x")).isReadOnly
+                && AgentTool.builtIn.filter(\.isReadOnly) == [.calendarRead, .remindersRead, .webSearch])
+        check(
+            "the hint is never read as a command",
+            AgentCall.mcp("x", readOnly: true).command == nil
+                && AgentCall.mcp("x", readOnly: true) != AgentCall(tool: .mcp("x")))
+        check(
+            "web search is never ask, whatever the mode",
+            [open, auto, plan].allSatisfy { scope in
+                [everythingAsks, .defaults].allSatisfy {
+                    decide(AgentCall(tool: .webSearch), $0, scope: scope) != .ask
+                }
+            })
+
+        // MARK: Tools with no rule row
+
+        let modes: [AgentMode] = [.manual, .auto, .plan]
+        func modeScope(_ mode: AgentMode, enabled: Bool = true) -> AgentSessionScope {
+            var scope = AgentSessionScope()
+            scope.mode = mode
+            scope.isEnabled = enabled
+            return scope
+        }
+        check(
+            "ask_user is offered in every mode",
+            modes.allSatisfy { AgentPolicy.isOffered(.askUser, scope: modeScope($0)) })
+        check(
+            "write_plan is offered only in plan",
+            modes.filter { AgentPolicy.isOffered(.writePlan, scope: modeScope($0)) } == [.plan])
+        check(
+            "tools off offers neither",
+            modes.allSatisfy { mode in
+                AgentChatTool.allCases.allSatisfy {
+                    !AgentPolicy.isOffered($0, scope: modeScope(mode, enabled: false))
+                }
+            })
+        check(
+            "every mode has a title, a symbol and a summary",
+            AgentMode.allCases == modes
+                && Set(modes.map(\.title)) == ["Manual", "Auto", "Plan"]
+                && Set(modes.map(\.symbolName)).count == 3
+                && modes.allSatisfy { !$0.summary.isEmpty && $0.summary.hasSuffix(".") })
 
         var withoutShell = AgentSessionScope()
         withoutShell.toggle(.shell)
@@ -517,14 +636,6 @@ struct AgentPolicyTests {
         var noSearch = AgentRules.defaults
         noSearch.set(.deny, for: .webSearch)
         check("web search denied → deny", decide(AgentCall(tool: .webSearch), noSearch) == .deny)
-        check(
-            "web search is never ask, whatever the scope",
-            [open, askEverything].allSatisfy { scope in
-                [everythingAsks, .defaults].allSatisfy {
-                    decide(AgentCall(tool: .webSearch), $0, scope: scope) != .ask
-                }
-            })
-
         check(
             "the defaults offer only the read rows and web search",
             Set(AgentPolicy.offered(tools, rules: .defaults, mcpTrust: mcpTrust, scope: open))
@@ -676,12 +787,16 @@ struct AgentPolicyTests {
         check(
             "without the grant, the read and the server still ask",
             granted(.calendarRead, scope: open) == .ask && granted(.mcp("ask"), scope: open) == .ask)
-        var grantedAsking = grantedScope
-        grantedAsking.asksForEverything = true
+        var grantedPlan = grantedScope
+        grantedPlan.mode = .plan
         check(
-            "ask for everything caps a grant back to ask",
-            granted(.calendarRead, scope: grantedAsking) == .ask
-                && granted(.mcp("ask"), scope: grantedAsking) == .ask)
+            "a grant still answers a read in plan",
+            granted(.calendarRead, scope: grantedPlan) == .allow
+                && granted(.remindersRead, scope: grantedPlan) == .deny)
+        check(
+            "and a read-only tool of a granted server, but no other",
+            decide(.mcp("ask", readOnly: true), asking, scope: grantedPlan) == .allow
+                && decide(.mcp("ask", readOnly: false), asking, scope: grantedPlan) == .deny)
         check(
             "a fresh scope carries no grant",
             AgentSessionScope().granted.isEmpty && grantedScope != AgentSessionScope())
@@ -689,36 +804,6 @@ struct AgentPolicyTests {
             "only reads and servers can be allowed for a chat",
             AgentTool.builtIn.filter(\.canAllowForSession) == [.calendarRead, .remindersRead]
                 && AgentTool.mcp("x").canAllowForSession)
-
-        // MARK: No chat grant under Ask for Everything
-
-        check("an open scope offers grants", open.offersGrants && !askEverything.offersGrants)
-        check("an open scope leaves a read's dialog alone", read.scoped(to: open) == read)
-        check("and a server's", server.scoped(to: open) == server)
-        let scopedRead = read.scoped(to: askEverything)
-        check(
-            "a read under ask for everything drops Allow This Chat",
-            titles(scopedRead) == ["Allow", "Don't Allow"] && scopedRead.defaultIndex == 0
-                && scopedRead.choices[0] == .allowOnce("Allow"))
-        let scopedServer = server.scoped(to: askEverything)
-        check(
-            "a server under ask for everything allows once instead, still by default",
-            titles(scopedServer) == ["Always Allow", "Allow", "Don't Allow"]
-                && scopedServer.defaultIndex == 1 && scopedServer.choices[1] == .allowOnce("Allow"))
-        check(
-            "and keeps Always Allow, which writes the table rather than the chat",
-            scopedServer.choices.first == .alwaysAllowServer)
-        check(
-            "a dialog with no chat grant is untouched",
-            [ls, write].allSatisfy { $0.scoped(to: askEverything) == $0 })
-        check(
-            "no scoped dialog offers Allow This Chat",
-            [ls, write, read, server].allSatisfy { prompt in
-                let scoped = prompt.scoped(to: askEverything)
-                return !scoped.choices.contains(.allowThisChat)
-                    && scoped.choices.last?.allows == false
-                    && scoped.choices.indices.contains(scoped.defaultIndex)
-            })
 
         // MARK: Always Allow a pattern
 
@@ -786,8 +871,9 @@ struct AgentPolicyTests {
 
         // MARK: Context card rows
 
+        func calls(_ tools: [AgentTool]) -> [AgentCall] { tools.map { AgentCall(tool: $0) } }
         let rows = AgentPolicy.decisions(
-            for: [.shell, .calendarRead, .remindersRead, .mcp("github"), .mcp("files")],
+            for: calls([.shell, .calendarRead, .remindersRead, .mcp("github"), .mcp("files")]),
             rules: asking, mcpTrust: { $0 == "github" ? .allow : .deny },
             scope: AgentSessionScope())
         check(
@@ -798,19 +884,240 @@ struct AgentPolicyTests {
             ])
         var narrowed = AgentSessionScope()
         narrowed.excluded = [.shell]
-        narrowed.asksForEverything = true
         check(
-            "the chat's scope removes and narrows rows",
+            "the chat's scope removes rows",
             AgentPolicy.decisions(
-                for: [.shell, .mcp("github")], rules: asking,
+                for: calls([.shell, .mcp("github")]), rules: asking,
                 mcpTrust: { _ in .allow }, scope: narrowed)
-                == [.init(tool: .mcp("github"), decision: .ask)])
+                == [.init(tool: .mcp("github"), decision: .allow)])
         narrowed.isEnabled = false
         check(
             "tools off leaves no rows",
             AgentPolicy.decisions(
-                for: AgentTool.builtIn, rules: asking, mcpTrust: { _ in .allow }, scope: narrowed)
-                .isEmpty)
+                for: calls(AgentTool.builtIn), rules: asking, mcpTrust: { _ in .allow },
+                scope: narrowed
+            )
+            .isEmpty)
+        let cardCalls =
+            calls([.shell, .calendarRead, .calendarWrite, .webSearch])
+            + [.mcp("ask", readOnly: true), .mcp("always", readOnly: false)]
+        func card(_ mode: AgentMode) -> [AgentPolicy.ToolDecision] {
+            AgentPolicy.decisions(
+                for: cardCalls, rules: asking, mcpTrust: mcpTrust, scope: modeScope(mode))
+        }
+        check(
+            "manual rows are the table",
+            card(.manual) == [
+                .init(tool: .shell, decision: .ask), .init(tool: .calendarRead, decision: .ask),
+                .init(tool: .calendarWrite, decision: .ask), .init(tool: .webSearch, decision: .allow),
+                .init(tool: .mcp("ask"), decision: .ask), .init(tool: .mcp("always"), decision: .allow)
+            ])
+        check(
+            "auto rows allow every ask and drop nothing",
+            card(.auto) == card(.manual).map { .init(tool: $0.tool, decision: .allow) })
+        check(
+            "plan rows keep the reads, ask for the shell and drop the writes",
+            card(.plan) == [
+                .init(tool: .shell, decision: .ask), .init(tool: .calendarRead, decision: .ask),
+                .init(tool: .webSearch, decision: .allow), .init(tool: .mcp("ask"), decision: .ask)
+            ])
+
+        // MARK: ask_user
+
+        let askID = UUID()
+        func ask(_ arguments: String) -> AskUserToolCatalog.Question? {
+            try? AskUserToolCatalog.question(arguments: arguments, id: askID)
+        }
+        func askRefusal(_ arguments: String) -> String? {
+            do throws(AIToolArguments.Invalid) {
+                _ = try AskUserToolCatalog.question(arguments: arguments, id: askID)
+                return nil
+            } catch {
+                return error.message
+            }
+        }
+        let askTool = AskUserToolCatalog.tools()
+        check(
+            "one tool named ask_user",
+            askTool.map(\.name) == ["ask_user"] && AskUserToolCatalog.handles("ask_user")
+                && !AskUserToolCatalog.handles("write_plan"))
+        let askSchema = askTool.first?.parameters.objectValue
+        check(
+            "question and options are required",
+            askSchema?["required"] == .array([.string("question"), .string("options")]))
+        let optionsSchema = askSchema?["properties"]?.objectValue?["options"]?.objectValue
+        check(
+            "options is a list of 2 to 6 strings",
+            optionsSchema?["type"] == .string("array") && optionsSchema?["minItems"] == .number(2)
+                && optionsSchema?["maxItems"] == .number(6)
+                && optionsSchema?["items"] == .object(["type": .string("string")]))
+        check(
+            "multiSelect is a boolean",
+            askSchema?["properties"]?.objectValue?["multiSelect"]?.objectValue?["type"]
+                == .string("boolean"))
+        let askDescription = askTool.first?.description ?? ""
+        check(
+            "the description says when to ask and that a free answer is possible",
+            askDescription.contains("changes what you do")
+                && askDescription.contains("their own words")
+                && askDescription.contains("under 80 characters"))
+        check(
+            "a plain question reads, trimmed, single-select by default",
+            ask(#"{"question":" Which one? ","options":[" Red ","Blue"]}"#)
+                == .init(id: askID, question: "Which one?", options: ["Red", "Blue"], multiSelect: false))
+        check(
+            "multiSelect reads as a bool or its text",
+            ask(#"{"question":"Q","options":["a","b"],"multiSelect":true}"#)?.multiSelect == true
+                && ask(#"{"question":"Q","options":["a","b"],"multiSelect":"true"}"#)?.multiSelect
+                    == true
+        )
+        check(
+            "options sent as JSON text are read like the list",
+            ask(#"{"question":"Q","options":"[\"a\",\"b\"]"}"#)?.options == ["a", "b"])
+        check(
+            "six options are fine",
+            ask(#"{"question":"Q","options":["a","b","c","d","e","f"]}"#)?.options.count == 6)
+        check(
+            "an option of exactly 80 characters is fine",
+            ask(#"{"question":"Q","options":["a","\#(String(repeating: "x", count: 80))"]}"#) != nil)
+        check(
+            "an empty question is refused",
+            askRefusal(#"{"question":"  ","options":["a","b"]}"#)
+                == "\u{201C}question\u{201D} is required.")
+        check(
+            "missing options are refused",
+            askRefusal(#"{"question":"Q"}"#)
+                == "\u{201C}options\u{201D} must be a list of 2 to 6 short answers.")
+        check(
+            "options that are not all strings are refused",
+            askRefusal(#"{"question":"Q","options":["a",2]}"#)
+                == "\u{201C}options\u{201D} must be a list of 2 to 6 short answers.")
+        check(
+            "one option is too few",
+            askRefusal(#"{"question":"Q","options":["a"]}"#) == "Offer at least 2 options.")
+        check(
+            "seven options are too many",
+            askRefusal(#"{"question":"Q","options":["a","b","c","d","e","f","g"]}"#)
+                == "Offer at most 6 options.")
+        check(
+            "an empty option is refused",
+            askRefusal(#"{"question":"Q","options":["a","  "]}"#) == "Every option needs some text.")
+        check(
+            "a long option is refused by name",
+            askRefusal(#"{"question":"Q","options":["a","\#(String(repeating: "x", count: 81))"]}"#)?
+                .hasPrefix("Keep each option under 80 characters;") == true)
+        check(
+            "a duplicate option is refused, case aside",
+            askRefusal(#"{"question":"Q","options":["Yes","yes "]}"#)
+                == "Each option must differ; \u{201C}yes\u{201D} appears twice.")
+        check(
+            "arguments that are not an object are refused",
+            askRefusal("[1]") == "The arguments must be one JSON object.")
+
+        let colours = AskUserToolCatalog.Question(
+            id: askID, question: "Which?", options: ["Red", "Green", "Blue"], multiSelect: true)
+        func answer(_ selected: [Int], _ text: String? = nil) -> String {
+            AskUserToolCatalog.answer(.init(selected: selected, text: text), to: colours)
+        }
+        check("one chip", answer([1]) == "The user chose: Green")
+        check(
+            "several chips, in the question's order",
+            answer([2, 0]) == "The user chose:\n- Red\n- Blue")
+        check("free text", answer([], "  Purple ") == "The user answered: Purple")
+        check(
+            "a chip and text",
+            answer([0], "but darker") == "The user chose: Red\nThe user added: but darker")
+        check("nothing", answer([]) == "The user did not answer.")
+        check("blank text is nothing", answer([], "  ") == "The user did not answer.")
+        check(
+            "an index out of range is ignored, a repeat counted once",
+            answer([7, 1, 1]) == "The user chose: Green")
+        check(
+            "Stop answers that the user did not",
+            AskUserToolCatalog.answer(.none, to: colours) == "The user did not answer.")
+        check(
+            "the result is no error, for its call",
+            AskUserToolCatalog.result(.none, to: colours, callID: "c1")
+                == AIToolResult(callID: "c1", content: "The user did not answer.", isError: false))
+
+        // MARK: write_plan
+
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func writePlan(_ arguments: String) -> ChatPlan? {
+            try? PlanToolCatalog.plan(arguments: arguments, now: now)
+        }
+        func planRefusal(_ arguments: String) -> String? {
+            do throws(AIToolArguments.Invalid) {
+                _ = try PlanToolCatalog.plan(arguments: arguments, now: now)
+                return nil
+            } catch {
+                return error.message
+            }
+        }
+        let planTool = PlanToolCatalog.tools()
+        check(
+            "one tool named write_plan",
+            planTool.map(\.name) == ["write_plan"] && PlanToolCatalog.handles("write_plan")
+                && !PlanToolCatalog.handles("ask_user"))
+        check(
+            "title and markdown are required",
+            planTool.first?.parameters.objectValue?["required"]
+                == .array([.string("title"), .string("markdown")]))
+        let planDescription = planTool.first?.description ?? ""
+        check(
+            "the description says once complete, that a call replaces, and that the user decides",
+            planDescription.contains("once it is complete")
+                && planDescription.contains("replaces")
+                && planDescription.contains("decides whether to carry it out"))
+        check(
+            "a plan reads, stamped with now",
+            writePlan(#"{"title":" Tidy Downloads ","markdown":"1. Look\n2. Sort"}"#)
+                == ChatPlan(title: "Tidy Downloads", markdown: "1. Look\n2. Sort", updatedAt: now))
+        check(
+            "a missing title is refused",
+            planRefusal(#"{"markdown":"x"}"#) == "\u{201C}title\u{201D} is required.")
+        check(
+            "an empty plan is refused",
+            planRefusal(#"{"title":"T","markdown":"   "}"#) == "\u{201C}markdown\u{201D} is required.")
+        check(
+            "a long title is refused",
+            planRefusal(#"{"title":"\#(String(repeating: "t", count: 121))","markdown":"x"}"#)
+                == "Keep the title under 120 characters.")
+        let fullPlan = String(repeating: "x", count: PlanToolCatalog.markdownLimit)
+        check(
+            "a plan of exactly 32 KB is fine",
+            writePlan(#"{"title":"T","markdown":"\#(fullPlan)"}"#)?.markdown.utf8.count == 32 * 1024)
+        check(
+            "a larger one is refused with its size",
+            planRefusal(#"{"title":"T","markdown":"\#(fullPlan)é"}"#)
+                == "Keep the plan under 32 KB; this one is 33 KB. Shorten it and call write_plan again.")
+        check(
+            "the result tells the model to stop",
+            PlanToolCatalog.result(callID: "p1")
+                == AIToolResult(
+                    callID: "p1",
+                    content: "The plan is shown to the user. Stop here; do not start carrying it out.",
+                    isError: false))
+
+        // MARK: Mode instructions
+
+        let planInstruction = AgentModeInstructions.instruction(for: .plan) ?? ""
+        check(
+            "only plan adds an instruction",
+            AgentModeInstructions.instruction(for: .manual) == nil
+                && AgentModeInstructions.instruction(for: .auto) == nil && !planInstruction.isEmpty)
+        check(
+            "the plan instruction names both tools by their wire names",
+            planInstruction.contains("ask_user") && planInstruction.contains("write_plan"))
+        check(
+            "and says to investigate without changing anything, and not to carry it out",
+            planInstruction.contains("without changing anything")
+                && planInstruction.contains("Never start carrying the plan out"))
+        check(
+            "executing a plan carries its current text",
+            AgentModeInstructions.execute(
+                ChatPlan(title: "Tidy", markdown: "1. Sort\n2. Trash", updatedAt: now))
+                == "Carry out this plan: Tidy\n\n1. Sort\n2. Trash")
 
         exit(failures == 0 ? 0 : 1)
     }

@@ -41,6 +41,25 @@ struct AIToolArguments: Sendable {
         fields[key]?.intValue ?? string(key).flatMap { Int($0) }
     }
 
+    func bool(_ key: String) -> Bool? {
+        if let value = fields[key]?.boolValue { return value }
+        switch string(key)?.lowercased() {
+        case "true": return true
+        case "false": return false
+        default: return nil
+        }
+    }
+
+    /// Nil unless every element is a string; a list sent as JSON text is read like the list.
+    func strings(_ key: String) -> [String]? {
+        let sent = fields[key]?.arrayValue
+        guard let list = sent ?? string(key).flatMap({ JSONValue(data: Data($0.utf8))?.arrayValue })
+        else { return nil }
+        let strings = list.compactMap(\.stringValue)
+        guard strings.count == list.count else { return nil }
+        return strings.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
     func date(_ key: String, calendar: Calendar) throws(Invalid) -> AIToolDate? {
         guard let text = string(key) else { return nil }
         guard let date = AIToolDate(parsing: text, calendar: calendar) else {

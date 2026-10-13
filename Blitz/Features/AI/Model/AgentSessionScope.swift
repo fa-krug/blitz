@@ -1,12 +1,11 @@
 import Foundation
 
-/// How one session narrows the rule table; never stored, and a grant only answers an Ask early.
+/// How one session applies the rule table; never stored, and nothing in it ever lifts a Deny.
 struct AgentSessionScope: Equatable, Sendable {
     var isEnabled = true
     /// Switched off for this session; an MCP server added later arrives switched on.
     var excluded: Set<AgentTool> = []
-    /// Turns every Allow into Ask, except where a tool has no Ask to turn it into.
-    var asksForEverything = false
+    var mode = AgentMode.manual
     /// "Allow This Chat" answers, so they end exactly when the session's scope does.
     private(set) var granted: Set<AgentTool> = []
 
@@ -17,9 +16,6 @@ struct AgentSessionScope: Equatable, Sendable {
     func grants(_ tool: AgentTool) -> Bool {
         tool.canAllowForSession && granted.contains(tool)
     }
-
-    /// Ask for Everything would cap a grant straight back to Ask, so none is offered under it.
-    var offersGrants: Bool { !asksForEverything }
 
     mutating func grant(_ tool: AgentTool) {
         guard tool.canAllowForSession else { return }

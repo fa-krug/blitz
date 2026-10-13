@@ -18,6 +18,19 @@ enum AIToolJSON {
         .object(["type": .string("integer"), "description": .string(description)])
     }
 
+    static func boolean(_ description: String) -> JSONValue {
+        .object(["type": .string("boolean"), "description": .string(description)])
+    }
+
+    static func strings(_ description: String, count: ClosedRange<Int>) -> JSONValue {
+        .object([
+            "type": .string("array"), "description": .string(description),
+            "items": .object(["type": .string("string")]),
+            "minItems": .number(Double(count.lowerBound)),
+            "maxItems": .number(Double(count.upperBound))
+        ])
+    }
+
     /// Sorted keys, so the same answer is the same text and a harness can pin it.
     static func text(_ value: JSONValue) -> String {
         guard

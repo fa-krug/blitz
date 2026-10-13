@@ -38,7 +38,8 @@ final class AgentGateCoordinator {
 
     func decisions(for tools: [AgentTool], in chat: AIChatState) -> [AgentPolicy.ToolDecision] {
         AgentPolicy.decisions(
-            for: tools, rules: rules, mcpTrust: mcpTrust, scope: chat.agentScope)
+            for: tools.map { AgentCall(tool: $0) }, rules: rules, mcpTrust: mcpTrust,
+            scope: chat.agentScope)
     }
 
     /// Bound to one call, for a runner to put its dialog to once it has read the arguments.
@@ -74,7 +75,7 @@ final class AgentGateCoordinator {
             case .deny: return .denied
             case .ask: break
             }
-            let choice = await ask(prompt.scoped(to: chat.agentScope))
+            let choice = await ask(prompt)
             guard choice.allows else { return .declined }
             apply(choice, for: call, in: chat, session: session)
             let after = decision(for: call, scope: chat.agentScope)

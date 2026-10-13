@@ -1654,7 +1654,7 @@ extension AIChatTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let chat = AIChatState(history: ChatHistoryStore(directory: directory))
         chat.agentScope.excluded = [.shell]
-        chat.agentScope.asksForEverything = true
+        chat.agentScope.mode = .plan
         chat.agentScope.grant(.calendarRead)
         chat.startNewChat()
         expect(

@@ -480,10 +480,6 @@ final class AIChatCoordinator {
         chat.agentScope.toggle(tool)
     }
 
-    func setAsksForEverything(_ asks: Bool, in chat: AIChatState) {
-        chat.agentScope.asksForEverything = asks
-    }
-
     /// Every enabled server, before the agent's rules have their say.
     private var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
 

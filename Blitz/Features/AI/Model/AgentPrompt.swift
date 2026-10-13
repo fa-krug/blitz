@@ -27,11 +27,6 @@ struct AgentPrompt: Equatable, Sendable {
             if case .refuse = self { return false }
             return true
         }
-
-        fileprivate var isOnce: Bool {
-            if case .allowOnce = self { return true }
-            return false
-        }
     }
 
     let title: String
@@ -70,17 +65,6 @@ struct AgentPrompt: Equatable, Sendable {
             message: "What it reads is sent to the model's provider.", symbol: tool.symbolName,
             choices: [.allowOnce("Allow"), .allowThisChat, .refuse("Don't Allow")],
             defaultIndex: 0)
-    }
-
-    /// Without grants, "Allow This Chat" goes, or becomes a one-off Allow where there is none.
-    func scoped(to scope: AgentSessionScope) -> AgentPrompt {
-        guard !scope.offersGrants, choices.contains(.allowThisChat) else { return self }
-        let hasOnce = choices.contains(where: \.isOnce)
-        let kept = choices.indices.filter { !(hasOnce && choices[$0] == .allowThisChat) }
-        let scoped = kept.map { choices[$0] == .allowThisChat ? .allowOnce("Allow") : choices[$0] }
-        let index = kept.firstIndex(of: defaultIndex) ?? scoped.firstIndex(where: \.isOnce) ?? 0
-        return AgentPrompt(
-            title: title, message: message, symbol: symbol, choices: scoped, defaultIndex: index)
     }
 
     /// The server's own three-way question; only Settings can withhold a server for good.

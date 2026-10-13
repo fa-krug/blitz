@@ -311,7 +311,7 @@ private struct AIReasoningPicker: View {
     }
 }
 
-/// This chat's session scope: which tools it may call, and whether every call asks first.
+/// This chat's session scope: which tools it may call.
 private struct AIToolsPicker: View {
     let chat: AIChatState
     let coordinator: AIChatCoordinator
@@ -333,13 +333,6 @@ private struct AIToolsPicker: View {
                     isOn: Binding(
                         get: { scope.isEnabled },
                         set: { coordinator.setToolsEnabled($0, in: chat) }))
-                Toggle(
-                    "Ask for Everything",
-                    isOn: Binding(
-                        get: { scope.asksForEverything },
-                        set: { coordinator.setAsksForEverything($0, in: chat) })
-                )
-                .disabled(!scope.isEnabled)
                 if !builtIn.isEmpty {
                     Section("Blitz") {
                         ForEach(builtIn, id: \.self) { tool in
@@ -360,7 +353,7 @@ private struct AIToolsPicker: View {
         } label: {
             Label(
                 total == 0 || !scope.isEnabled ? "Tools" : "\(active) of \(total)",
-                systemImage: scope.asksForEverything ? "hand.raised" : "wrench.and.screwdriver"
+                systemImage: "wrench.and.screwdriver"
             )
             .labelStyle(.titleAndIcon)
         }
