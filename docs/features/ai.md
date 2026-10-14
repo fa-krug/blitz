@@ -115,11 +115,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   reminders, personal data, context, other chats, web search and each MCP server are rows of
   `AgentRules`, decided by `AgentPolicy` and enforced by
   `AgentGateCoordinator`, which `AIChatCoordinator` owns: a denied tool is never offered, every call
-  is decided when it arrives, and an Ask is Blitz's own dialog. The composer's tools menu — Use
-  Tools and a switch per tool — and its mode pill — Manual, Auto or Plan — edit the chat's
+  is decided when it arrives, and an Ask is Blitz's own dialog. The ⌘K Tools menu — Use
+  Tools and a switch per tool — and the composer's mode pill — Manual, Auto or Plan — edit the chat's
   `AgentSessionScope`, held on `AIChatState.agentScope` and never stored; nothing in it lifts a
-  Deny, and `@server` still narrows one turn inside it. A route that cannot call tools shows the
-  menu disabled and says why. All of it is [Agent](agent.md).
+  Deny, and `@server` still narrows one turn inside it. A route that cannot call tools has no
+  Tools row. All of it is [Agent](agent.md).
 - **A reply can stop to ask, and the answer is only ever a tool result.** `ask_user` is offered
   wherever Blitz's tools reach, Use Tools is on and no `@server` narrows the turn, in every mode. The turn waits on the reader,
   one question at a time; the answer goes back to the model as the call's result and never starts
@@ -553,7 +553,11 @@ and the Actions menu's own chords, and dies with the window.
 - **Actions** (⌘K): Quick AI's ⌘K menu for a window, on the same chords — Stop Response (`⌘.`), New
   Chat (`⌘N`), Regenerate (`⌘R`), Copy Last Response (`⇧⌘C`), Remove Attachments, Find in Chat
   (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin, Archive (not
-  for a pinned chat, nor while it answers) and Delete.
+  for a pinned chat, nor while it answers) and Delete. Its middle group holds the chat options the
+  composer leaves out: **Reasoning** (a submenu of the model's efforts, shown only when it has
+  some), **Tools** ([Agent](agent.md#the-session-scope-and-the-composer)) — each with its current
+  value as the row's badge — and a **Web Search** switch when the route searches and the agent's
+  Web Search row is Allow.
   `AIChatActionsMenu` builds it per open from the chat's state, as an `NSMenu` hung under the
   toolbar button whether the click or ⌘K opened it.
 - **Escape closes the window** (`closesOnEscape`), the composer focused or not. An open menu, Find
@@ -597,10 +601,8 @@ and the Actions menu's own chords, and dies with the window.
   `insertNewline:` only outside input-method composition, so Return sends and ⇧↩ or ⌥↩ breaks the
   line without Return ever stealing an IME's confirm. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
-  menu, the reasoning menu (always shown, disabled for a model with no efforts, so the row never
-  changes shape), the tools menu and the mode pill, which edit this chat's agent scope
-  ([Agent](agent.md#the-session-scope-and-the-composer)), a web-search toggle when the route
-  searches and the agent's Web Search row is Allow, a context gauge, and Send/Stop. While a
+  menu, the mode pill ([Agent](agent.md#the-session-scope-and-the-composer)), a context gauge,
+  and Send/Stop; reasoning, tools and web search live in the ⌘K menu. While a
   question waits, Send is Answer, the placeholder reads "Answer the question…", and Stop gets a
   button of its own beside it.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
@@ -611,7 +613,7 @@ and the Actions menu's own chords, and dies with the window.
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
   thinking share and cost; then what the next message sends — model, history of budget, messages
-  sent of total, staged files, and whether the system prompt and web search ride along; then **Tools**: the chat's **Mode** where the route offers modes, and a row per tool the next turn is offered, with what a call to it would get — Allow or Ask. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
+  sent of total, staged files, and whether the system prompt and web search ride along; then **Tools**: the chat's **Mode** where the route offers modes, and a row per tool the next turn is offered, with what a call to it would get — Allow or Ask. The model menu and ⌘K's Reasoning are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
   the refusals a paste does. The unsent text lives on `AIChatState.draft`, so it survives closing
   the window.
 
@@ -978,8 +980,8 @@ Settings records a model into `AIConnection.visionModels` when it is added from 
 model added by hand is assumed text-only. A vendor API is assumed to take images; a model that
 doesn't simply returns the provider's error.
 
-Web search is the composer's globe, `aiWebSearch`, off by default: a prompt reaches a search engine
-only once the user has opted in. The globe is offered only while the agent's Web Search row is
+Web search is the ⌘K menu's Web Search switch, `aiWebSearch`, off by default: a prompt reaches a
+search engine only once the user has opted in. The switch is offered only while the agent's Web Search row is
 Allow ([Agent](agent.md#the-rule-table)), which has no Ask because the provider runs the search.
 It's still excluded from backups — which Mac may send prompts to a search engine is that Mac's call.
 Nothing *guesses* at a capability: images ride on what the model's own catalog said, and a vendor
