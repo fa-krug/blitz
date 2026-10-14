@@ -142,21 +142,104 @@ run app-name-test          Blitz/Platform/AppDisplayName.swift \
                            Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift
 run favorites-test         $L/FavoriteSlots.swift
-run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/*.swift
+run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/AppleShortcut.swift
 run calc-test              Blitz/Features/Calculator/Model/*.swift
 run index calc-performance Blitz/Features/Calculator/Model/*.swift
-# The chat tools' catalogs speak the AI layer's tool shapes, so both harnesses compile those too.
+# The chat tools' catalogs speak the AI layer's tool shapes (`T`), so their harnesses compile those.
 A=Blitz/Features/AI/Model
-run calendar-test          Blitz/Features/Calendar/Model/*.swift \
-                           $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
-                           $A/AIToolArguments.swift $A/AIToolJSON.swift
-run reminders-test         Blitz/Features/Reminders/Model/*.swift \
-                           $A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift \
-                           $A/AIToolArguments.swift $A/AIToolJSON.swift
-run contacts-test          Blitz/Features/Contacts/Model/*.swift
+T="$A/AITool.swift $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift"
+run calendar-test          Blitz/Features/Calendar/Model/*.swift $T
+run reminders-test         Blitz/Features/Reminders/Model/*.swift $T
+run contacts-test          Blitz/Features/Contacts/Model/*.swift $T
 run shell-tool-test        $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
                            $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
                            Blitz/Features/AI/Service/ShellToolRunner.swift
+run file-tool-test         $A/FileToolCatalog.swift $A/ShellToolCatalog.swift $A/AITool.swift \
+                           $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
+                           $A/AIToolJSON.swift $A/AgentTool.swift $A/AgentDecision.swift \
+                           $A/AgentRules.swift $A/PathRule.swift $A/ShellRule.swift \
+                           $A/ShellCommandSegments.swift $A/AgentCall.swift $A/AgentSessionScope.swift \
+                           $A/AgentPolicy.swift $A/AIDataAccess.swift $A/AgentPrompt.swift \
+                           $A/AgentMode.swift $A/AgentChatTool.swift \
+                           Blitz/Features/AI/Service/FileToolRunner.swift
+run web-fetch-test         $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift \
+                           $A/LocalNetworkPolicy.swift $A/AITool.swift $A/JSONValue.swift \
+                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
+                           $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
+                           $A/PathRule.swift $A/ShellRule.swift $A/ShellCommandSegments.swift \
+                           $A/AgentCall.swift $A/AgentSessionScope.swift $A/AgentPolicy.swift \
+                           $A/AIDataAccess.swift $A/AgentPrompt.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift Blitz/Features/AI/Service/WebFetchRunner.swift \
+                           Blitz/Features/MCP/Model/MCPServer.swift \
+                           Blitz/Features/MCP/Model/MCPTool.swift \
+                           Blitz/Features/MCP/Model/MCPAgentMapping.swift $A/AIToolServer.swift
+run session-tool-test      $A/*.swift
+# `F` is the Mac rows' feature catalogs, each over the feature model it names.
+F="Blitz/Features/AppleShortcuts/Model/AppleShortcut.swift \
+   Blitz/Features/AppleShortcuts/Model/ShortcutToolCatalog.swift \
+   Blitz/Features/SystemActions/Model/SystemAction.swift \
+   Blitz/Features/SystemActions/Model/SystemActionToolCatalog.swift \
+   Blitz/Features/WindowManagement/Model/WindowLayoutToolCatalog.swift"
+# `P` is the personal and context catalogs, each over the feature model it names.
+P="Blitz/Features/Contacts/Model/ContactToolCatalog.swift \
+   Blitz/Features/Notes/Model/NoteToolCatalog.swift \
+   Blitz/Features/Clipboard/Model/ClipboardToolCatalog.swift \
+   Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+   Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
+   Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+   Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+   Blitz/Features/Clipboard/Model/ColorValue.swift \
+   Blitz/Features/Clipboard/Model/ColorFormat.swift \
+   Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+   Blitz/Features/Snippets/Model/Snippet.swift \
+   Blitz/Features/Snippets/Model/SnippetToolCatalog.swift \
+   Blitz/Features/Quicklinks/Model/Quicklink.swift \
+   Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+   Blitz/Features/Quicklinks/Model/QuicklinkToolCatalog.swift \
+   $A/ContextToolCatalog.swift Blitz/Platform/PasteboardSensitivity.swift"
+# The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
+run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
+                           $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
+                           $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift $A/AskUserToolCatalog.swift \
+                           $A/PlanToolCatalog.swift $A/ChatPlan.swift $A/AgentModeInstructions.swift \
+                           $A/ShellToolCatalog.swift $A/FileToolCatalog.swift \
+                           $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift \
+                           $A/LocalNetworkPolicy.swift $A/SessionToolCatalog.swift $A/AITool.swift \
+                           $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
+                           $A/OpenToolCatalog.swift $A/AgentNameMatch.swift $F $P \
+                           $A/AgentMemory.swift $A/MemoryToolCatalog.swift \
+                           $A/AIToolJSON.swift $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
+                           Blitz/Features/Reminders/Model/*.swift \
+                           Blitz/Features/MCP/Model/MCPServer.swift \
+                           Blitz/Features/MCP/Model/MCPTool.swift \
+                           Blitz/Features/MCP/Model/MCPAgentMapping.swift
+run mac-tool-test          $A/OpenToolCatalog.swift $A/AgentNameMatch.swift $A/FileToolCatalog.swift \
+                           $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
+                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
+                           $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
+                           $A/PathRule.swift $A/ShellRule.swift $A/ShellCommandSegments.swift \
+                           $A/AgentCall.swift $A/AgentSessionScope.swift $A/AgentPolicy.swift \
+                           $A/AIDataAccess.swift $A/AgentPrompt.swift $A/AgentRefusal.swift \
+                           $A/AgentMode.swift $A/AgentChatTool.swift $F \
+                           Blitz/Features/AI/Service/FileToolRunner.swift \
+                           Blitz/Features/AI/Service/OpenToolRunner.swift
+run personal-tool-test     $P $T $A/AgentNameMatch.swift $A/AgentTool.swift $A/AgentDecision.swift \
+                           $A/AgentRules.swift $A/PathRule.swift $A/ShellRule.swift \
+                           $A/ShellCommandSegments.swift $A/AgentCall.swift \
+                           $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift
+run memory-test            $A/AgentMemory.swift $A/MemoryToolCatalog.swift \
+                           $A/AgentMemoryInstructions.swift $T $A/AgentTool.swift \
+                           $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
+                           $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
+                           $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift Blitz/Features/AI/Service/AgentMemoryStore.swift
+run agent-wait-test        $A/AgentWait.swift $A/AgentApprovals.swift $A/AgentWaitEpisodes.swift \
+                           $A/AgentWaitNotice.swift $A/ChatPresence.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
 Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
@@ -167,14 +250,14 @@ run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ColorFormat.swift \
                            Blitz/Features/Clipboard/Model/ColorSpaces.swift \
                            Blitz/Features/Clipboard/Model/ClipDragPayload.swift $Q
-run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q
-run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q
-run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q \
+run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q $T
+run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q $T
+run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q $T \
                            Blitz/Features/Clipboard/Service/ClipboardTextExtractor.swift \
                            Blitz/Features/Clipboard/Service/ClipboardTextIndexer.swift \
                            Blitz/Features/Clipboard/Service/ClipboardTextWorker.swift \
                            Blitz/Platform/ProcessExit.swift
-run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
+run pasteboard-test        Blitz/Platform/PasteboardFiles.swift Blitz/Platform/PasteboardSensitivity.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
@@ -185,7 +268,7 @@ run pasteboard-test        Blitz/Platform/PasteboardFiles.swift \
                            Blitz/Features/Clipboard/Service/ClipboardManager.swift \
                            Blitz/Features/Clipboard/Service/Paster.swift
 run index clipboard-file-performance \
-                           Blitz/Platform/PasteboardFiles.swift \
+                           Blitz/Platform/PasteboardFiles.swift Blitz/Platform/PasteboardSensitivity.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
@@ -462,6 +545,7 @@ run quicklink-coordinator-test Blitz/Platform/BrowserTab.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkFavicon.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkStore.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkArchive.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkToolCatalog.swift $T \
                            Blitz/Features/Quicklinks/UI/QuicklinkCoordinator.swift \
                            Blitz/Features/Quicklinks/UI/QuicklinkArgumentsAccessory.swift \
                            Blitz/Features/Snippets/Model/Snippet.swift \
@@ -470,12 +554,12 @@ run slow snippets-test     Blitz/Platform/NotificationToken.swift \
                            Blitz/Platform/HealthTicker.swift \
                            Blitz/Platform/BrowserTab.swift \
                            Blitz/Platform/AccessibilityText.swift \
-                           Blitz/Features/Snippets/Model/*.swift \
+                           Blitz/Features/Snippets/Model/*.swift $T $A/AgentNameMatch.swift \
                            Blitz/Features/Snippets/Service/*.swift \
                            Blitz/Features/TextInjection/Service/*.swift
 run notes-test             Blitz/Platform/Signposts.swift \
                            $L/SearchRelevance.swift \
-                           Blitz/Features/Notes/Model/*.swift \
+                           Blitz/Features/Notes/Model/*.swift $T \
                            Blitz/Features/Notes/Service/*.swift
 run notes-editor-test      Blitz/Platform/Signposts.swift \
                            Blitz/Platform/Appearance.swift \
@@ -663,14 +747,27 @@ run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatQuestion.swift \
+                           Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/ChatPlan.swift \
+                           Blitz/Features/AI/Model/ChatWrittenPlan.swift \
+                           Blitz/Features/AI/Model/PlanToolCatalog.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolJSON.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatSession.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/ChatTitle.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
-                           Blitz/Features/AI/Model/ChatToolScope.swift \
-                           Blitz/Features/AI/Model/ShellCommandApproval.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentSessionScope.swift \
+                           Blitz/Features/AI/Model/AgentMode.swift \
+                           Blitz/Features/AI/Model/AgentModeInstructions.swift \
+                           Blitz/Features/AI/Model/AgentWait.swift \
+                           Blitz/Features/AI/Model/AgentApprovals.swift \
+                           Blitz/Features/AI/Model/ChatPresence.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
@@ -690,6 +787,14 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
                            Blitz/Features/AI/Model/ChatMessage.swift \
+                           Blitz/Features/AI/Model/ChatQuestion.swift \
+                           Blitz/Features/AI/Model/AskUserToolCatalog.swift \
+                           Blitz/Features/AI/Model/ChatPlan.swift \
+                           Blitz/Features/AI/Model/ChatWrittenPlan.swift \
+                           Blitz/Features/AI/Model/PlanToolCatalog.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolJSON.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
@@ -711,6 +816,11 @@ run mcp-test               Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Settings/MCPSettingsStore.swift
 run -O text-diff-test      Blitz/Features/QuickActions/Model/TextDiffEngine.swift
@@ -738,6 +848,11 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
@@ -752,6 +867,11 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
+                           Blitz/Features/AI/Model/AgentTool.swift \
+                           Blitz/Features/AI/Model/AgentDecision.swift \
+                           Blitz/Features/AI/Model/AgentCall.swift \
+                           Blitz/Features/AI/Model/AIToolArguments.swift \
+                           Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/MCP/Model/*.swift \
                            Blitz/Features/MCP/Service/*.swift
 run slow codex-turn-test   Blitz/Platform/AppPaths.swift \

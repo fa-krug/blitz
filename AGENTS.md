@@ -24,8 +24,9 @@ Write code as if the platform released yesterday:
 - **No compatibility layers, no legacy workarounds, no older architectural patterns.** Delete rather
   than deprecate; raising the minimum macOS *deletes* the code that supported the old one.
 - **Never introduce backwards compatibility unless explicitly asked for it.** No version flags, no
-  migration scaffolding, no "just in case" fallbacks. The codebase carries one migration (custom
-  commands' Root Search flag), and adding another needs an explicit task saying so.
+  migration scaffolding, no "just in case" fallbacks. The codebase carries two migrations (custom
+  commands' Root Search flag, and the AI access settings folded into the agent's rule table), and
+  adding another needs an explicit task saying so.
 
 Carbon is a deliberate capability-gap dependency rather than inertia: nothing modern registers a
 system-wide chord, HIToolbox's TIS APIs remain the public input-source mechanism, and its `kVK_`

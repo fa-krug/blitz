@@ -16,8 +16,10 @@ struct AIScreen: PaletteScreen {
 
     let rows = [Row()]
 
-    /// One footer pill for Return's two jobs: Send, or Stop while a response streams.
-    var primaryActionTitle: String { chat.isStreaming ? "Stop" : "Send" }
+    /// One footer pill for Return's jobs: Send, Answer while a question waits, else Stop.
+    var primaryActionTitle: String {
+        chat.pendingQuestion != nil ? "Answer" : chat.isStreaming ? "Stop" : "Send"
+    }
 
     func actions(at selection: Int) -> PopoverMenuContent? {
         var items: [PopoverMenuItem] = []
@@ -29,7 +31,7 @@ struct AIScreen: PaletteScreen {
         }
         items.append(
             PopoverMenuItem(
-                title: chat.session.messages.isEmpty ? "Open AI Chat" : "Continue in AI Chat",
+                title: chat.session.messages.isEmpty ? "Open AI Agent" : "Continue in AI Agent",
                 systemImage: "bubble.left.and.bubble.right", shortcut: "⌘J"
             ) {
                 coordinator.continueInChat()
@@ -82,7 +84,9 @@ struct AIScreen: PaletteScreen {
 
     /// Return and the pill are the same action; an empty composer sends nothing.
     func activate(at selection: Int) {
-        if chat.isStreaming {
+        if chat.pendingQuestion != nil {
+            if coordinator.send(vm.query) { vm.query = "" }
+        } else if chat.isStreaming {
             coordinator.stopResponse()
         } else if coordinator.send(vm.query) {
             vm.query = ""
@@ -144,7 +148,8 @@ struct AIScreen: PaletteScreen {
                 availability: { chatCoordinator.availability(for: chat) },
                 onConfigure: chatCoordinator.showSettings,
                 onAppear: chatCoordinator.prepareForChat,
-                onChoose: { coordinator.send($0) }))
+                onChoose: { coordinator.send($0) },
+                onQuestion: { chatCoordinator.respond($0, in: chat) }))
     }
 }
 
@@ -154,6 +159,7 @@ private struct AIChatView: View {
     let onConfigure: () -> Void
     let onAppear: () -> Void
     let onChoose: (String) -> Void
+    let onQuestion: (ChatQuestionInput) -> Void
 
     var body: some View {
         Group {
@@ -170,7 +176,8 @@ private struct AIChatView: View {
                     status: chat.liveStatus,
                     usage: chat.usage,
                     surface: .palette,
-                    onChoose: chat.isStreaming ? nil : onChoose)
+                    onChoose: chat.isStreaming ? nil : onChoose,
+                    onQuestion: onQuestion)
             }
         }
         .onAppear(perform: onAppear)

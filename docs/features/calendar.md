@@ -53,8 +53,8 @@ camera preview, and individual events as searchable launcher entries.
   never sit in the snapshot every surface diffs.
 - **A chat reads any window it asks for, never more than the pane allows.** `CalendarStore.toolEvents`
   queries the window a model names, up to `CalendarToolCatalog.maxSpanDays`, on the calendars switched
-  on here; it never widens `span` or touches the snapshot every surface reads. An event a chat adds is
-  confirmed in Blitz's own dialog first. See [Chat tools](#chat-tools).
+  on here; it never widens `span` or touches the snapshot every surface reads. Whether a chat may read
+  or add an event, and whether it asks first, is the agent's rule table. See [Chat tools](#chat-tools).
 - **EventKit lives in `Service/CalendarStore.swift` and nothing EventKit-shaped leaves it**, so
   `calendar-test` compiles the shipped `Model/` sources without it.
 
@@ -312,11 +312,12 @@ still lands on top of it. The session, the panel and the stage are the `Camera` 
 
 ## Chat tools
 
-With Calendar on and Settings → AI → Personal data → Calendar access set past Off, a chat on an API
-connection or the Claude command is offered `calendar_list_events`, and with Read & Write
-`calendar_create_event` too —
-see [AI](ai.md) for who gets offered what. `CalendarCoordinator.chatTools` decides the list and
-`runTool` answers a call; the reading and the answer are `CalendarToolCatalog`'s, harness-pinned.
+With Calendar on, a chat on an API connection or the Claude command is offered
+`calendar_list_events` while the agent's Read Calendar row is not Deny, and `calendar_create_event`
+while Add Calendar Events is not — each half on its own, so a write can be offered without the read.
+The rows, the dialogs and who gets offered what are [Agent](agent.md)'s. `CalendarCoordinator.chatTools`
+builds the list from the halves the gate offers, and `runTool` reads a call, then puts its dialog to
+the gate before it acts; the reading and the answer are `CalendarToolCatalog`'s, harness-pinned.
 
 Every date goes both ways as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM` in the Mac's own zone
 (`AIToolDate`), and each tool's description carries now — weekday, date, clock, zone — because a
@@ -329,8 +330,9 @@ are. The query runs on the main actor like `reload`: a quarter of events is stil
 
 A create call names a title and a start — a date-only start is all day — and an end or a duration,
 half an hour unless given. It is checked before anyone is asked: a refusal is a sentence the model
-can correct, never a dialog. The event goes on the default calendar, named in the confirmation, and
-the answer says where it landed. The New Event prompt is not reused: it offers starts from now, and
+can correct, never a dialog. The event goes on the default calendar; at Ask the dialog names it
+with the rest of the summary, at Allow it is added straight away, and either way the answer says
+where it landed. The New Event prompt is not reused: it offers starts from now, and
 a chat asks for any day.
 
 ## Settings

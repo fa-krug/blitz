@@ -322,6 +322,51 @@ final class NotesCoordinator {
         AppLauncher.showInFinder(fileURL)
     }
 
+    // MARK: - Chat tools
+
+    /// The note named in the dialog is the one acted on, and an addition lands as an edit would.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: NoteToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try NoteToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let row: AgentTool = request == .read ? .noteRead : .noteWrite
+        let denied = AgentRefusal.denied.message(for: row)
+        guard settings.notesEnabled else { return .failure(call.id, denied) }
+        if !store.isLoaded, !(await store.start()) {
+            return .failure(call.id, NoteToolCatalog.noNote)
+        }
+        guard settings.notesEnabled else { return .failure(call.id, denied) }
+        guard let id = store.activeID else { return .failure(call.id, NoteToolCatalog.noNote) }
+        let title = store.activeTitle
+        let prompt =
+            switch request {
+            case .read: AgentPrompt.readNote(title)
+            case .append(let text): AgentPrompt.appendToNote(title, text: text)
+            }
+        if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+        guard settings.notesEnabled else { return .failure(call.id, denied) }
+        guard store.activeID == id else {
+            return .failure(call.id, NoteToolCatalog.changed(title))
+        }
+        switch request {
+        case .read:
+            let answer = NoteToolCatalog.answer(title: title, source: store.source)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .append(let text):
+            let source = store.source
+            let addition = NoteToolCatalog.addition(text, to: source)
+            if !windowController.append(addition, to: source) {
+                store.updateSource(source + addition)
+            }
+            guard await store.flush() else { return .failure(call.id, NoteToolCatalog.notSaved) }
+            let answer = NoteToolCatalog.appended(text, title: title)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+    }
+
     func moveToTopRight() {
         windowController.moveToTopRight()
     }

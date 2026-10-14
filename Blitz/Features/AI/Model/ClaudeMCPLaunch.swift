@@ -14,7 +14,10 @@ enum ClaudeMCPLaunch {
     static func configuration(servers: [AIToolServer], hosting: Bool = false) -> String {
         var entries: [String: Any] = [:]
         if hosting {
-            entries[ClaudeHostedServer.handle] = ["type": "sdk", "name": ClaudeHostedServer.handle]
+            entries[ClaudeHostedServer.handle] = [
+                "type": "sdk", "name": ClaudeHostedServer.handle,
+                "timeout": ClaudeHostedServer.callTimeoutMilliseconds
+            ]
         }
         for server in servers {
             switch server.transport {

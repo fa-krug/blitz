@@ -1,20 +1,20 @@
 # AI providers and chat
 
 Blitz has one app-wide provider layer for features that need text generation. Chat chooses its
-model from Quick AI's header or the AI Chat composer, and `AIChatCoordinator.provider(for:)`
+model from Quick AI's header or the AI Agent window's composer, and `AIChatCoordinator.provider(for:)`
 builds that chat's route through `AIProviderFactory` to stream an `AIRequest`.
 Chat is the first consumer and [Quick Actions](quick-actions.md) the second; the provider layer
 depends on neither, and Quick Actions carries its own route rather than borrowing this one.
 
 Chat has two surfaces over one history, as Raycast's does. **Quick AI** is the palette screen: Tab
-from the launcher asks what you typed, and the answer appears in place. **AI Chat** is a window —
+from the launcher asks what you typed, and the answer appears in place. **AI Agent** is a window —
 saved conversations in a sidebar on the left, the open one on the right, and a composer at the
 bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 
 ## Invariants
 
 - **AI is off out of the box, and off means fully off.** `AppSettings.aiEnabled` is the flag:
-  no `Quick AI` or `AI Chat` command in the launcher, no history database opened or created, no Codex
+  no `Quick AI` or `AI Agent` command in the launcher, no history database opened or created, no Codex
   helper for chat, no stop for it on Tab's ring, the palette leaves `.ai` and the window closes.
   Installed providers may still remain available for Quick Actions, which has its own switch and route. Turning AI off cancels
   every streaming reply and drops both transcripts, but touches neither the saved conversations in
@@ -52,6 +52,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   Blitz over anything else. It is not shown in the pane, and `AIPreamble.swift` holds the only
   copy of it — edit the prompt there, not here. `compose` returns `nil` when the user has turned
   the system prompt off, and every transport drops a nil instruction, so a turn then carries none.
+  After it, `AIChatCoordinator.instructions(for:)` appends the memory block while Read Memory is
+  Allow and the chat's Use Memory is on (`AgentMemoryInstructions.appending`,
+  [Agent](agent.md#memory)), then a mode's instruction (`AgentModeInstructions.appending`); each
+  has its own switch, so the system prompt switch withholds neither.
 - **API keys live only in the login Keychain.** `AIConnection` persists the provider, endpoint and
   model identifiers in `UserDefaults`; it never contains a key. Keys are addressed by connection UUID
   through `KeychainSecretStore.aiAPIKeys`, and never enter logs, errors or settings backups. A key is issued for one
@@ -107,45 +111,84 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   linked `[n]`: `ChatCitations` finds each link's sentence end in the drawn text and inserts after
   it, two sources in one sentence sharing it, so prose and chips always agree. The preamble asks the model to link a page it relies on inline, so a cited
   answer carries its sources without a second request.
-- **Tools are chosen per chat.** The composer's tools menu switches MCP off for the chat or turns
-  single servers off (`ChatToolScope`, held on `AIChatState`, not stored); `@server` still narrows
-  one turn inside that. The scope binds both shapes alike: Blitz's loop is offered only the
-  allowed servers' tools, and a Codex or Claude turn is handed only the allowed servers. A route that
-  cannot call tools shows the menu disabled and says why.
-- **The Mac's own calendar and reminders are tools Blitz runs, and off until asked for.**
-  Settings → AI → Personal data holds `aiCalendarAccess` and `aiRemindersAccess`, each an
-  `AIDataAccess` of Off, Read Only or Read & Write, both Off out of the box. A store is offered only
-  while its own feature is on too — that switch is where macOS was asked — and only to a route that
-  can call Blitz back: an API connection, through Blitz's loop, or the Claude command, through the
-  in-process server `ClaudeHostedServer` answers (see below). Codex is handed servers alone, never
-  Blitz's tools; Apple Intelligence calls none. Read Only offers no tool
-  that writes, so the model never sees one it may not use; every call re-checks the setting, since
-  it can change mid-reply. An event is shown first through Blitz's confirm; a reminder is
-  written straight away, Read & Write being the consent, and edited in place by id rather than
-  duplicated — and the result tells the model what was actually saved. `@server` narrows a turn to that server alone, and the
-  chat's Use Tools switch withholds these with the rest. Both keys are excluded from backups and
-  have no `settings.json` key: each grants a model a capability. The tools themselves live with
-  their features — see [Calendar](calendar.md#chat-tools) and [Reminders](reminders.md#chat-tools).
-- **A model can run shell commands, off until asked for, and each one asks first by default.**
-  Settings → AI → Shell holds `aiShellCommands`, Off out of the box; while it is on,
-  `shell_run_command` (`ShellToolCatalog`) is offered to exactly the routes the calendar is, and
-  `@server` and Use Tools withhold it alike. Every call re-checks the switch. A chat's
-  `AIChatState.shellApproval` is the composer's terminal toggle: Confirm, the default, puts the
-  command verbatim and its folder in Blitz's own confirm, one at a time through `AIConsentQueue`,
-  the mode read again when its turn comes; Auto-run skips the dialog. It is never stored, and a new,
-  reopened or cleared chat asks again; Quick AI has no toggle, so it always asks.
-  `ShellToolRunner` runs `$SHELL -l -c` (else the account's shell, else zsh) in the folder asked
-  for, home by default, with stdin empty and `BLITZ=1`; at 60 s it signals the command's process
-  group, TERM then KILL. Each stream keeps its first 16 KB and counts the rest, and the model reads
-  the exit status, both streams and what was cut; a declined or refused call is a failure result.
-  The key is excluded from backups and has no `settings.json` key: it grants a model a capability.
-  `shell-tool-test` pins the schema, call reading and answers, and runs the runner against zsh.
+- **Every tool call answers to the agent's one rule table.** Shell, files, the Mac, calendar,
+  reminders, personal data, context, other chats, web search and each MCP server are rows of
+  `AgentRules`, decided by `AgentPolicy` and enforced by
+  `AgentGateCoordinator`, which `AIChatCoordinator` owns: a denied tool is never offered, every call
+  is decided when it arrives, and an Ask is Blitz's own dialog. The composer's tools menu — Use
+  Tools and a switch per tool — and its mode pill — Manual, Auto or Plan — edit the chat's
+  `AgentSessionScope`, held on `AIChatState.agentScope` and never stored; nothing in it lifts a
+  Deny, and `@server` still narrows one turn inside it. A route that cannot call tools shows the
+  menu disabled and says why. All of it is [Agent](agent.md).
+- **A reply can stop to ask, and the answer is only ever a tool result.** `ask_user` is offered
+  wherever Blitz's tools reach, Use Tools is on and no `@server` narrows the turn, in every mode. The turn waits on the reader,
+  one question at a time; the answer goes back to the model as the call's result and never starts
+  a turn, and every way the wait can end resolves it exactly once. See [Questions](#questions).
+- **A plan changes nothing until the reader carries it out.** `write_plan` is offered only in
+  Plan, and its plan is a card in the transcript: the chat's live plan is the last one written, the
+  reader may edit it between turns, and only its **Execute** buttons act on it, by sending it as
+  the reader's next message. See [Plans](#plans).
+- **The Mac's own calendar and reminders are tools Blitz runs.** Their read and write halves are
+  separate rows, offered only while the feature's own switch is on — that switch is where macOS was
+  asked — and only to a route that can call Blitz back: an API connection, through Blitz's loop, or
+  the Claude command, through the in-process server `ClaudeHostedServer` answers (see below). Codex
+  is handed servers alone, never Blitz's tools; Apple Intelligence calls none. A reminder is edited
+  in place by id rather than duplicated, and the result tells the model what was actually saved.
+  The tools themselves live with their features — see [Calendar](calendar.md#chat-tools) and
+  [Reminders](reminders.md#chat-tools).
+- **A model can run shell commands as the user, only as the agent's rules allow.**
+  `shell_run_command` (`ShellToolCatalog`) is offered to exactly the routes the calendar is, while
+  the Run Commands row is not Deny; each command is decided by its row and the ordered shell
+  patterns, and an Ask puts the command verbatim and its folder in Blitz's own dialog — see
+  [Agent](agent.md#shell-patterns). `ShellToolRunner` runs `$SHELL -l -c` (else the account's
+  shell, else zsh) in the folder asked for, home by default, with stdin empty and `BLITZ=1`; at
+  60 s it signals the command's process group, TERM then KILL. Each stream keeps its first 16 KB and
+  counts the rest, and the model reads the exit status, both streams and what was cut; a declined
+  or refused call is a failure result. `shell-tool-test` pins the schema, call reading and answers,
+  and runs the runner against zsh.
+- **A model can list, read and change the user's files, only as the path rules allow.**
+  `files_list` and `files_read` (Read Files), and `files_write`, `files_move` and `files_trash`
+  (Change Files), from `FileToolCatalog`, go to the same routes as the shell. Every path is weighed
+  with its symlinks resolved, resolved again just before the runner acts, and nothing is ever
+  deleted for good — the Trash is the furthest it goes. See [Agent](agent.md#file-tools).
+- **A model can list and read the reader's other chats, and archive them, only as the rules
+  allow.** `sessions_list` and `sessions_read` (Read Other Chats), and `sessions_archive` and
+  `sessions_unarchive` (Archive Chats), from `SessionToolCatalog`, go to the same routes; a chat
+  never reads or archives itself, and a transcript comes back as text, 64 KB at a time. See
+  [Agent](agent.md#session-tools).
+- **A model can act on the Mac, only as the rules allow and never past undoing.** `mac_open`
+  (`OpenToolCatalog`, Open Apps, Files and Links) opens an installed app, a file or folder by path,
+  or an `http`, `https` or `mailto` link; `shortcuts_list` and `shortcuts_run` (Run Shortcuts) list
+  and run an Apple Shortcut with optional text input; `system_actions_list` and `system_action_run`
+  (Run System Actions) run a Blitz system action; `window_layouts_list` and `window_layout_apply`
+  (Apply Window Layouts) apply a saved layout. They go to the same routes, all four rows start on
+  Deny, Plan never offers them and each run asks every time. A path is weighed as a read with its
+  links resolved; a script, installer or link file, every other scheme and the system actions that
+  end the session or lose something are refused outright. See [Agent](agent.md#mac-tools).
+- **A model can read the reader's own data and context, and add to the note, only as the rules
+  allow.** `contacts_search` (Read Contacts), `note_read` (Read the Note), `clipboard_history`
+  (Read Clipboard History), `snippets_list`, `snippets_read` and `quicklinks_list` (Read Snippets
+  and Quicklinks), and `context_frontmost_app`, `context_selected_text` and `context_clipboard`
+  (the three Context rows) only read; each asks by default, may be allowed for the chat and is
+  offered in Plan. `note_append` (Add to the Note) adds to the end of the open note, starts on
+  Deny and asks every time. Each runs through its feature's coordinator under that feature's
+  switch, never past its exclusions: no contact note or photo, no copy marked secret, nothing an
+  ignored app copied. The context rows read the app the reader was in before Blitz, never Blitz
+  itself. See [Agent](agent.md#personal-and-context-tools).
+- **A model can read one web page as text, and a local address always asks.** `web_fetch`
+  (`WebFetchToolCatalog`, under Fetch Web Pages) goes to the same routes, fetches an `http` or
+  `https` URL on its own cacheless, cookieless `.ephemeral` session (`WebFetchRunner`) — 30 s, 5 MB
+  and five redirects at most, each redirect checked again — and answers with the final URL, the
+  status, the title and the page's readable text (`HTMLTextEngine`), cut at `maxCharacters`. Images,
+  PDFs and other files are refused naming their type. A URL on this Mac or its local network asks
+  whatever the row, a chat grant or Auto say. See [Agent](agent.md#web-fetch).
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
   on-device model tends to drop the fence and write a bare `choices` line over a list, so a
   label on its own line with nothing but list items after it, to the reply's end, counts too; and
-  `ChatSuggestionChips` draws the options as glass capsules: in the window they rise out of the
+  `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a waiting
+  question's options use too: in the window they rise out of the
   composer, sitting on its top edge until the reader starts typing; in Quick AI they close the
   transcript. A click sends the option as the reader's next message, through the same `send` a
   typed one takes. Older replies lose their chips, since only the last question is still open. It is text in, text out, so it
@@ -187,7 +230,13 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   run that loop themselves, so `AIModelSelection.runsItsOwnTools` hands them an
   `AIToolServerSession` instead of a wrapper — same servers, same trust, same rows, and the same
   round cap counted in whatever unit the CLI counts in. Only chat wraps or arms: `quickActionProvider()`
-  rewrites the reader's own selected text and has nothing to call. A turn's tool messages stay inside
+  rewrites the reader's own selected text and has nothing to call. Since `ask_user` rides every
+  chat turn with Use Tools on, every such turn on an API connection or the Claude command is
+  wrapped or armed. `AITool.showsCallRow` is false for `ask_user` and `write_plan`, whose own cards
+  stand in: the loop yields no `.toolCall` or `.toolResult` for them, and the Claude stream decoder
+  drops their `tool_use` row. Each such call — the loop's, or a hosted one on Claude's pipe — first
+  yields `.barrier` and runs only once `AIChatState` has applied the text before it and passed it, so
+  a card never lands ahead of that text; Stop or a turn ending frees it. A turn's tool messages stay inside
   the loop — what the transcript keeps is a `ChatToolUse` record, pinned at a text offset like a
   search, so `boundedContext` can never separate a stored call from its result.
 - **Every HTTP request uses a private ephemeral `URLSession` with no URL cache.** Provider traffic must
@@ -207,14 +256,20 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `--disallowedTools "*"` comes off because it removes the MCP tools too, `--max-turns` carries
   the round cap instead of the constant 1, or is left out on Unlimited, and
   `--permission-mode default` with an ask rule per server keeps the reader's own allow rules and
-  default mode from answering before Blitz does. The calendar, reminders and shell arm a turn the
-  same way with no server at all: the configuration names `blitz_data` as an `sdk` server, which the CLI
+  default mode from answering before Blitz does. Blitz's own tools — the calendar, reminders, the
+  shell, `ask_user` and `write_plan` — arm a turn the same way with no server at all: the
+  configuration names `blitz_data` as an `sdk` server, which the CLI
   reaches as `mcp_message` control requests on the turn's own pipe, and `ClaudeHostedServer`
   answers its JSON-RPC from the tools resolved when the turn started. A call runs through the same
-  code the loop calls, so it re-checks the setting and confirms a calendar write or a command itself; its
-  `can_use_tool` question is allowed without MCP's trust dialog for that reason. `MCPSlug` never
+  code the loop calls, so it passes the agent's gate and asks there itself; its `can_use_tool`
+  question is allowed without a second dialog for that reason. The entry carries a `timeout` of
+  `ClaudeHostedServer.callTimeoutMilliseconds`, 24 h, because a call may wait on the reader — a
+  question, or an Ask dialog — and a server's own timeout outranks a short `MCP_TOOL_TIMEOUT` the
+  reader set for their own servers. `MCPSlug` never
   yields `_`, so no server the reader adds can take that handle. `@server` and the chat's Use
-  Tools switch withhold it as they do in the loop.
+  Tools switch withhold it as they do in the loop. Since `ask_user` is offered whenever Use Tools
+  is on, a Claude chat turn is left with nothing to call only with Use Tools off, on an `@server`
+  turn whose server is not handed over, or under a managed MCP policy.
   Grok runs with `--deny *`,
   `dontAsk` permissions and a workspace sandbox, and never `--always-approve`, so a user's always-approve
   config cannot arm tools for this route. OpenCode runs `--pure` with deny-all permissions, disabled
@@ -296,11 +351,21 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `ON DELETE CASCADE`, so they needed no migration and a deleted chat takes its facts with it.
 - **Pinned chats are the ones asked to be kept.** Retention skips them, and so does Delete All Chats
   — which says so in its confirmation — the way a clipboard clear keeps its pins.
+- **Archiving puts a chat away and never loses it.** `chat_archive` (`conversation_id` keyed to
+  `conversations` with `ON DELETE CASCADE`, `archived_at`) is `CREATE TABLE IF NOT EXISTS` like the
+  rest, so it needed no migration. `ChatHistoryStore.saved` holds every chat; `conversations`, which
+  the sidebar, ⌃⇥, Quick AI's Chat History and its open policy read, leaves archived ones out, and
+  `archived` holds only those. Only a delete or retention removes an archived chat: Delete All Chats
+  spares it as it spares a pinned one, while `Keep conversations` still prunes it. A pinned chat is
+  never archived — `archive` refuses it, and nothing offers to — and neither is a chat whose reply
+  is still arriving. A chat that takes a turn leaves the archive (`save` drops its row), and opening
+  one from Archived unarchives it first, so an archived chat is never live on a surface. See
+  **Archive** under [AI Agent](#ai-agent).
 - **Retention is enforced only while AI is on.** `Keep conversations` prunes on the enable transition
   and whenever the setting changes, through `AIChatCoordinator.applyRetention` — never on a schedule
   and never while `aiEnabled` is false, because age passes while the feature is off and "off means
   fully off" promises the file is untouched. A Mac left off for four months keeps its chats.
-  `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats, that cascades to messages, images and searches,
+  `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats but not archived ones, that cascades to messages, images, searches and the archive row,
   and it `VACUUM`s only when something actually went: pictures live inline as BLOBs, so this is the
   one store where a delete alone frees pages without ever shrinking the file.
 - **Everything but the newest message is bounded.** `ChatSession.boundedContext` sends that message
@@ -406,10 +471,12 @@ a debug description written for a log, so each case maps to a plain sentence ins
 The built-in `Quick AI` launcher command enters `AIScreen`, and carries a bindable global shortcut
 (`HotKeyAction.command(.quickAI)`) that does the same thing from any app; Tab from the launcher is the
 third way in. Settings → AI holds the recorder and a checkbox for the command's place in launcher
-search, beside `AI Chat`'s; either shortcut keeps working while its command is hidden, and does
+search, beside `AI Agent`'s; either shortcut keeps working while its command is hidden, and does
 nothing at all while the feature is off. The palette search field becomes the single-line composer.
-The footer pill and Return are one action, `activate`: Send, or Stop while a response streams — an
-empty composer sends nothing, so the pill never needs a disabled state. The header's trailing model
+The footer pill and Return are one action, `activate`: Send, Answer while a question waits, or Stop
+while a response streams — an empty composer sends nothing, so the pill never needs a disabled
+state. While a question waits the field's placeholder is "Answer the question…", and Stop is ⌘K →
+Stop Response (`⌘.`). The header's trailing model
 switcher opens by click or ⌘P, uses the same in-window menu control as Clipboard's type filter and
 changes the chat route for the next message. For installed routes and OpenRouter models whose catalog
 reports the capability, it also shows the supported reasoning efforts and changes the chat effort for
@@ -417,20 +484,23 @@ the next message. Other API routes keep their provider default because their mod
 portable effort contract. Neither change interrupts a response already streaming; stopping one is
 the pill's job, so the header never has to fit a third control beside the switcher.
 
-The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Chat
-(`⌘J`; Open AI Chat while the chat is empty), New Chat (`⌘N`), Chat History (`⌘Y`) and AI Settings
+The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Agent
+(`⌘J`; Open AI Agent while the chat is empty), New Chat (`⌘N`), Chat History (`⌘Y`) and AI Settings
 (`⌥⌘,`), plus Stop Response (`⌘.`), Regenerate Response (`⌘R`), Copy Last Response (`⇧⌘C`) and
 Remove Attachments when those apply. The chords are Raycast's where it has one, and `AIScreen.perform`
 maps each `PaletteShortcut` to its action. AI Settings takes ⌥⌘, because ⌘, stays the app's own
 Settings on every screen. Continuing closes the palette and carries the half-typed line into the
 window's composer with the conversation. Chat History is the palette's own browser over the same
 saved chats the window's sidebar lists: ↵ opens one in Quick AI, or in the window when the window
-already holds it, and Continue in AI Chat (`⌘J`) takes it to the window either way.
+already holds it, and Continue in AI Agent (`⌘J`) takes it to the window either way.
 
-### AI Chat
+### AI Agent
 
-The `AI Chat` command (`command:ai-chat-window`, `HotKeyAction.command(.aiChat)`) opens a titled
-`AppWindowController` window owned by `AIChatCoordinator`, autosaved as `AIChatWindow`. Its shortcut
+The `AI Agent` command (`command:ai-chat-window`, `HotKeyAction.command(.aiChat)`; the ID and the
+type names keep "chat") opens a titled `AppWindowController` window owned by `AIChatCoordinator`,
+created with the title "AI Agent", which the chrome replaces with the open chat's, and autosaved
+as `AIChatWindow`. The launcher finds it by `chat` and `agent`
+alike ([boosted terms](launcher.md#kind-priority-and-boosts)). Its shortcut
 toggles: `toggleWindow` closes the window when it is key, as Escape would, and one open behind
 another app comes forward instead. The palette row always opens it, since `LauncherCoordinator`
 reads whether the palette was up before hiding it can hand key status back to the chat. It is built
@@ -445,7 +515,9 @@ and the Actions menu's own chords, and dies with the window.
   window and steps match by match, not message by message:
   `ChatFindIndex` walks each message exactly as the transcript draws it — reasoning folds, every
   paragraph, list item, code block and table cell, in order — and lists every occurrence as
-  (message, drawn text, index within it). A reply's hidden choices fence never matches. A drawn
+  (message, drawn text, index within it). A reply's hidden choices fence never matches; a plan's
+  Markdown does, and a replaced plan holding a match unfolds, while a question card is not
+  searched. A drawn
   text is named by its position path (segment, block, item or cell), not its content, so two
   identical table cells are two matches. An equation draws as one character, so find never matches
   inside its source. `ChatTextHighlight` rides the environment into every text
@@ -480,24 +552,39 @@ and the Actions menu's own chords, and dies with the window.
   since it may be a price.
 - **Actions** (⌘K): Quick AI's ⌘K menu for a window, on the same chords — Stop Response (`⌘.`), New
   Chat (`⌘N`), Regenerate (`⌘R`), Copy Last Response (`⇧⌘C`), Remove Attachments, Find in Chat
-  (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin and Delete.
+  (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin, Archive (not
+  for a pinned chat, nor while it answers) and Delete.
   `AIChatActionsMenu` builds it per open from the chat's state, as an `NSMenu` hung under the
   toolbar button whether the click or ⌘K opened it.
 - **Escape closes the window** (`closesOnEscape`), the composer focused or not. An open menu, Find
   in Chat or a rename takes Escape first, and the sidebar clears a non-empty filter before the next
   Escape closes. Closing keeps the draft and leaves a reply streaming.
 
-- **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat, Pinned
+- **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat not archived, Pinned
   first and then bucketed by day like Clipboard. The open chat is the selected row; ⌃⇥ / ⌃⇧⇥ open
   the next or previous one, wrapping, over every saved chat whatever the filter shows, in the same
   `pinnedFirst` order the sections are built from. ⌘B shows or hides the sidebar. A new chat has
   none until its first message saves it, so starting one or leaving an empty one never adds or
-  drops a row under the pointer. A row shows a spinner while its reply streams, else a pin when
-  pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
+  drops a row under the pointer. A row shows the agent's waiting badge while its turn waits on the
+  reader — a raised hand for an approval, a question bubble for a question
+  ([Agent](agent.md#the-badge-and-the-dot)) — else a spinner while its reply streams, else a pin
+  when pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
   shape — never blinks off crossing between rows.
-  The context menu pins, renames in place, copies or exports the chat as Markdown
-  (`ChatSession.markdownTranscript`), and deletes one or all through `DialogController`; ⌫ deletes
-  the selected chat the same way.
+  The context menu pins, archives — offered for an unpinned chat, disabled while it answers —
+  renames in place, copies or exports the chat as Markdown
+  (`ChatSession.markdownTranscript`: each turn's text and its plans under "**Plan: title**", never
+  its questions and answers), and deletes one or all through `DialogController`; ⌫ deletes
+  the selected chat the same way. Delete All's confirmation says archived chats are kept.
+  While anything is archived, an **Archived** row with the count sits under the list.
+- **Archive**: archiving the window's chat (`AIChatCoordinator.archiveChat`, through
+  `AIChatSurfacesState.archive`) starts a new chat in its place, as deleting it does, and archiving
+  Quick AI's empties Quick AI; nothing else changes. The **Archived** row swaps the list for
+  `AIChatArchiveList`: a back chevron and the title over the same search field, which now searches
+  archived chats (`searchArchived`, title and last message as the history's search does), then
+  their rows, newest first, each with the day it was last active. Choosing a row opens it — it is
+  unarchived first and appears in its day as any chat — and the sidebar goes back to the list. The
+  context menu opens, unarchives or deletes it through the usual confirmation. Escape clears the
+  field, then goes back, then closes the window. Quick AI's Chat History lists no archived chats.
 - **Transcript**: `ChatTranscriptView` with `surface: .window`, which drops the palette's edge
   dissolve and thin scrollbar (both are measured against the palette's bars) and centres the column
   at `aiChatReadingWidth`. The last finished reply offers Regenerate beside Copy: `AIChatState`
@@ -511,8 +598,11 @@ and the Actions menu's own chords, and dies with the window.
   line without Return ever stealing an IME's confirm. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
   menu, the reasoning menu (always shown, disabled for a model with no efforts, so the row never
-  changes shape), a web-search toggle when the route offers search, the shell's Confirm / Auto-run
-  toggle while commands are offered, a context gauge, and Send/Stop.
+  changes shape), the tools menu and the mode pill, which edit this chat's agent scope
+  ([Agent](agent.md#the-session-scope-and-the-composer)), a web-search toggle when the route
+  searches and the agent's Web Search row is Allow, a context gauge, and Send/Stop. While a
+  question waits, Send is Answer, the placeholder reads "Answer the question…", and Stop gets a
+  button of its own beside it.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
   last reply's `contextTokens` against the model's window when the route reported one, and
   `ChatSession.historyBytes` against Blitz's history budget otherwise — orange from 80%, red at
@@ -521,13 +611,15 @@ and the Actions menu's own chords, and dies with the window.
   solid under its glass so the transcript cannot show through. `ChatContextReport`
   lays it out: tokens in context of the window, input with its cached share, output with its
   thinking share and cost; then what the next message sends — model, history of budget, messages
-  sent of total, staged files, and whether the system prompt, web search, MCP servers, personal data and shell commands ride along. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
+  sent of total, staged files, and whether the system prompt and web search ride along; then **Tools**: the chat's **Mode** where the route offers modes, and a row per tool the next turn is offered, with what a call to it would get — Allow or Ask. The model and reasoning menus are this chat's, as Quick AI's header is Quick AI's. Files arrive by ⌘V, a drop anywhere on the pane, or the paperclip, and all three take
   the refusals a paste does. The unsent text lives on `AIChatState.draft`, so it survives closing
   the window.
 
 `AIChatState` turns provider-neutral stream events into one live assistant message. Thinking state is
 shown without entering the transcript, partial text is preserved on failure, cancellation invalidates
-the active generation, and only completed assistant messages become context for the next request.
+the active generation, and only completed assistant messages become context for the next request —
+as `ChatMessage.contextText`, the reply's text with each answered question and each plan set in
+where it happened.
 Assistant replies render Markdown and LaTeX math; user messages remain literal. A reply keeps streaming while the
 palette is hidden, the window is closed or showing another chat — the state is `AppCore`'s, not the
 view's — and is saved when it finishes.
@@ -535,7 +627,8 @@ view's — and is saved when it finishes.
 Tool activity persists in `message_tools` beside `message_searches`, and `ChatMessage.segments`
 interleaves the two by text offset so a reply renders what it did in the order it did it. Offsets tie
 whenever no text arrived between two of them, so each search and call also takes a `sequence` — its
-place among the reply's searches and calls — as it is created, and that breaks the tie. Both tables
+place among the reply's searches, calls, questions and plans (`nextSequence`) — as it is created,
+and that breaks the tie. Both tables
 store it as their `position`, so no column was added; a chat saved earlier holds each table's own
 index there, so its ties go by that index and then to the search. Consecutive tool calls render as
 one run: the latest running call while live, then an expandable count with any failures once done.
@@ -545,7 +638,76 @@ streaming gets.
 
 `ChatHistoryStore` writes `ai-chats.sqlite3` below the bundle-specific Application Support directory.
 It uses the system SQLite already linked by Blitz, stores no provider credentials, and repairs a
-reply left streaming by a prior process into an interrupted failure when loaded.
+reply left streaming by a prior process into an interrupted failure when loaded. The agent's
+memories are not in it: they outlive every chat — Delete All Chats, retention and deleting the
+chat a memory came from all leave it — so `AgentMemoryStore` keeps them in `agent-memory.json`
+beside it ([Agent](agent.md#memory)).
+
+## Questions and plans
+
+`ask_user` (`AskUserToolCatalog`) and `write_plan` (`PlanToolCatalog`) are Blitz's tools with no
+rule row ([Agent](agent.md#modes)). `AIChatCoordinator` runs both itself, on the loop and through
+`ClaudeHostedServer` alike, and neither passes the gate. Each is pinned in the reply where it
+happened, like a search or a call — `ChatMessage.questions` as `ChatSegment.question`,
+`ChatMessage.plans` as `ChatSegment.plan` — and stored with its message in `message_questions` and
+`message_plans`, `CREATE TABLE IF NOT EXISTS` with `ON DELETE CASCADE` like the rest.
+
+### Questions
+
+- **The call** is `question`, 2–6 distinct `options` of under 80 characters each, and
+  `multiSelect`, false unless set. A malformed one is a failure result the model can correct, never
+  a card.
+- **The turn waits.** `AIChatState.ask` pins a `ChatQuestion` to the streaming reply and suspends
+  the call on it. `ChatQuestionCard` draws the question and its options as `ChatChoiceChip`s: a
+  single-choice chip answers at once; a multi-select one toggles, and the card's Send answers with
+  what is picked. Text typed while a question waits answers it too, with any picked chips:
+  `AIChatCoordinator.send` hands it to the question instead of starting a turn. Answered, the card
+  is a record of the chosen options and typed text, or "Not answered".
+- **The answer is the result**: "The user chose: …", "The user answered: …", "The user added: …"
+  after chips, or "The user did not answer."
+- **One question at a time.** A second `ask_user` while one waits is refused with
+  `AskUserToolCatalog.oneAtATime` and draws no card; one asked after its turn ended draws nothing
+  and answers that nobody did.
+- **Every path resolves the wait exactly once.** An answer, Stop, deleting the chat, turning AI
+  off, the turn ending any other way or its task being cancelled all go through one resolve, and a
+  later answer finds nothing to resume. Stop answers "did not answer" and the turn ends as Stop
+  ends it. Leaving the chat does not end it: the parked chat keeps its question waiting, picked
+  chips and all, and reopening it shows the same card live. A question stored unanswered belonged
+  to a process that is gone, and reads back as not answered.
+- **Later turns read the exchange** where it was asked, through `contextText`
+  (`AskUserToolCatalog.record`: `ask_user:` and the question, then the answer). Copy Chat leaves
+  questions out.
+
+### Plans
+
+- **The call** is `title`, under 120 characters, and `markdown`, under 32 KB
+  (`PlanToolCatalog.markdownLimit`); a larger plan is refused with its size, so the model can
+  shorten it. Outside Plan it is refused with `notOffered`, after its turn ended with `turnEnded`,
+  and otherwise its result tells the model to stop rather than carry the plan out.
+- **The live plan is the last one written.** `AIChatState.writePlan` pins a `ChatWrittenPlan`, and
+  `ChatSession.livePlan` is the last any reply wrote. `ChatPlanCard` renders it as Markdown with
+  **Edit**, **Execute** and **Execute in Auto**; each earlier one folds under its title, marked
+  "Replaced", and stays the record it was.
+- **Edit is the live plan's, and never mid-turn.** It opens a monospaced editor
+  `Theme.Size.chatPlanEditor` tall. Save writes the plan where it was written —
+  `ChatSession.editedLivePlan` works the edit out, `ChatHistoryStore.savePlan` stores it, an
+  `UPDATE` of its row, since the save after a turn rewrites only the stored tail, and only then does
+  `ChatSession.replacePlan` land it in the chat. While a reply streams every control on the card
+  is disabled and `AIChatState.editPlan` refuses, because the turn may still replace the plan.
+- **An edit that is not saved is not shown.** When the `UPDATE` fails or matches no row,
+  `AIChatState.editPlan` answers `.unsaved` and leaves the plan as it was, so the card, Execute and
+  a reopened chat all read the same text, and `AIChatCoordinator` reports "The plan edit could not
+  be saved." through the message HUD. The editor has closed by then, so the edit is lost.
+- **Execute carries out the plan as it reads now.** Execute sets Manual and Execute in Auto sets
+  Auto, through `setMode`, then sends `AgentModeInstructions.execute` — "Carry out this plan:", the
+  title and the current, possibly edited, Markdown — as the reader's next message. Only the window
+  carries a plan out; in Quick AI a plan card is a record.
+- **Plan's instruction rides every Plan turn.** `AgentModeInstructions.appending` puts
+  `AgentModeInstructions.plan` after the preamble and the reader's prompt, or alone with the system
+  prompt switched off, so the mode holds either way.
+- **A reply that only wrote a plan completes as it is**, without the "No response" fallback.
+- **Later turns read each plan** where it was written (`PlanToolCatalog.record`: `write_plan:` and
+  the title, then the Markdown as last saved). Copy Chat includes every plan.
 
 ## Palette integration
 
@@ -558,8 +720,8 @@ Two palette modes carry Quick AI, and neither changes the shell's rules:
 
 Chat History backs out to Quick AI; both are sub-screens, so the header shows the back chevron.
 Quick AI's command is `command:quick-ai`; the window's is `command:ai-chat-window`. The search field
-is the composer: Return submits, or stops a streaming response, and the footer pill
-reads Send `↵` / Stop `↵` to match. The model switcher is a `HeaderMenuButton` — the
+is the composer: Return submits, answers a waiting question, or stops a streaming response, and the
+footer pill reads Send `↵` / Answer `↵` / Stop `↵` to match. The model switcher is a `HeaderMenuButton` — the
 active label, glyph and disclosure chevron layered over `BarButton` — which is also what Clipboard's
 type filter is, so the two header menus hover and open identically. Its menu is the palette's
 fourth `OpenMenu` case, `.topTrailing` like the type filter, and it opens on the selected model. Each
@@ -580,11 +742,12 @@ unrelated render recomputed hover — and one left mounted let part of the dismi
 the rows. Consuming the whole press at the window avoids both; see
 [palette.md](palette.md#one-menu-at-a-time).
 
-Seven more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
-`CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AIChatSurfacesState` (which
-owns every live `AIChatState`), `MCPSettingsStore` and `MCPServerManager`. `AIChatCoordinator` — the
-window, and every chat action either surface sends — is the nineteenth feature coordinator,
-`MCPCoordinator` the twentieth and `QuickAICoordinator` the twenty-first.
+Eight more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
+`CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AgentMemoryStore`,
+`AIChatSurfacesState` (which owns every live `AIChatState`), `MCPSettingsStore` and
+`MCPServerManager`. `AIChatCoordinator` — the window, and every chat action either surface sends —
+is the nineteenth feature coordinator, `MCPCoordinator` the twentieth, `QuickAICoordinator` the
+twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-second.
 
 ### Manual sweep
 
@@ -627,31 +790,57 @@ window, and every chat action either surface sends — is the nineteenth feature
   source. A reply that mentions "$5 and $10" keeps both prices as prose, and in a narrow Quick AI a
   long equation shrinks to fit rather than running off the edge.
 - Return sends, ⇧↩ breaks the line, and a Japanese IME's Return confirms its text without sending.
+- Ask a question the model must clarify, on an API connection and on the Claude command: the card
+  shows its chips, Send reads Answer with Stop beside it, and a chip or a typed answer continues the
+  same reply. Stop instead ends the turn with the card reading "Not answered". In Quick AI the pill
+  reads Answer.
+- In Plan, ask for a plan: it arrives as a card; a second one folds the first as "Replaced". Edit
+  and Save, reopen the chat, and the edit holds; Execute in Auto switches the pill to Auto and sends
+  the edited text.
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
+- Archive a chat from the sidebar's context menu: it leaves the list, an Archived row with a count
+  appears at the bottom, and ⌃⇥ and Quick AI's Chat History skip it. Archive the open chat from ⌘K:
+  the window starts a new chat. A pinned chat offers no Archive, and one still answering shows it
+  disabled. In Archived, search finds the chat; choosing it opens it back in the sidebar; Unarchive
+  and Delete work from its context menu, and Escape goes back. Delete All Chats keeps archived
+  chats, and `Keep conversations` still prunes an old one.
 - Collapse the sidebar with the toolbar button or ⌘B; ⌘N and ⌘Q (Close Window) still work, and ⌘Q
   with Settings in front closes Settings instead.
-- Press the AI Chat shortcut twice: the window opens, then closes; with it open behind another app,
-  the shortcut brings it forward. Summon the palette over the open window and run AI Chat: it stays
+- Press the AI Agent shortcut twice: the window opens, then closes; with it open behind another app,
+  the shortcut brings it forward. Summon the palette over the open window and run AI Agent: it stays
   open.
-- Escape with the composer focused closes AI Chat; reopening shows the draft, and a reply that was
+- Escape with the composer focused closes AI Agent; reopening shows the draft, and a reply that was
   streaming has kept going. With a sidebar filter typed, the first Escape clears it, the second
   closes; a rename field and Find in Chat each cancel before a further Escape closes.
 - Harnesses: `ai-provider-test` (endpoints, request bodies, stream decoding including leading
   think tags across content and SSE splits, persistence repair,
   Codex framing, on-device routing, the two MCP launch encodings and the two consent channels, the
-  shown-model and switched-off-route rules, and a tool's override from settings to launch),
+  shown-model and switched-off-route rules, a tool's override from settings to launch, and the
+  agent table's storage and one-off migration),
+  `agent-policy-test` (the agent's rules, dialogs and refusals — see [Agent](agent.md#harnesses)),
   `ai-chat-test` (`ChatSession`, `MarkdownBlock` with its math delimiters, LaTeX subset and
-  mid-stream hold-back, `ChatHistoryStore` with renames and pins,
-  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, and
-  `AIChatSurfacesState`'s one-live-place rule),
+  mid-stream hold-back, `ChatHistoryStore` with renames, pins and the archive — kept out of the
+  lists and their search, found by the archive's, never for a pinned chat, surviving a reopen, left
+  by a new turn, spared by Delete All, still pruned by retention and cascading with a delete —
+  archiving refused while a reply arrives and making a surface start over,
+  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, the agent scope each chat
+  starts open and in Manual, `AIChatSurfacesState`'s one-live-place rule, questions — answers from
+  chips and text, their place and their context, the paused turn, Stop, leaving and deleting each
+  resolving once, one at a time — plans — their place and context, storage, replacement,
+  editing, an edit that waits out the turn and one the store cannot save — and Ask requests held
+  off screen, with the wait each chat reports),
+  `agent-wait-test` (the waiting state, held requests, on screen and the notification — see
+  [Agent](agent.md#harnesses)),
   `codex-turn-test` (the Stop path, driven against a stub app-server stalled where Stop races the
   turn ID, plus the MCP launch boundary, one launch for concurrent starts, the elicitation, the
   rows, the call cap, a custom provider's access without an account, and when a chat's thread is
   resumed and when it starts afresh),
   `installed-ai-test` (Claude/Grok/OpenCode/Cursor flags, prompt
-  framing, streaming and cleanup, and Claude's private MCP configuration, control channel, round
-  cap and managed-policy branch, a reader's variables against Blitz's own, and a set command
+  framing, streaming and cleanup, and Claude's private MCP configuration with the hosted server's
+  timeout, control channel, round cap and managed-policy branch, an `ask_user` call drawing no row,
+  the boundary a Plan turn is told,
+  a reader's variables against Blitz's own, and a set command
   path that runs or fails) and `apple-intelligence-test` (status copy, snapshot deltas,
   transcript assembly, error mapping, plus one real generation when this Mac can run one), all in
   `run-tests.sh`.
@@ -789,8 +978,9 @@ Settings records a model into `AIConnection.visionModels` when it is added from 
 model added by hand is assumed text-only. A vendor API is assumed to take images; a model that
 doesn't simply returns the provider's error.
 
-Web search is a Settings → AI toggle, `aiWebSearch`, off by default: a prompt reaches a search engine
-only once the user has opted in.
+Web search is the composer's globe, `aiWebSearch`, off by default: a prompt reaches a search engine
+only once the user has opted in. The globe is offered only while the agent's Web Search row is
+Allow ([Agent](agent.md#the-rule-table)), which has no Ask because the provider runs the search.
 It's still excluded from backups — which Mac may send prompts to a search engine is that Mac's call.
 Nothing *guesses* at a capability: images ride on what the model's own catalog said, and a vendor
 API that does not take one simply returns its error. What is gated is only what a route provably
@@ -810,15 +1000,15 @@ through to the field editor as a normal paste. **Only `isFileURL` URLs are read*
 filter a copied `https://…/a.png` reaches `Data(contentsOf:)`, turning a keystroke into a network
 request. Every file is **sized before it is read**, so a huge CSV can never be slurped into memory.
 
-**A text file is inlined by `ChatSession.boundedContext`, never into `ChatMessage.text`.** That
-seam is load-bearing: `ChatSession.title` summarises the first user message, so folding a CSV into
-the stored text would make the dump the conversation's title in the AI Chat sidebar, its preview, and what
-the user bubble renders back. Inlining after the transcript and before the transport also means
-only the newest turn carries it, so a chat's payload cannot grow turn on turn. The block names the
-file and fences it with a run longer than any inside it, so a Markdown file holding its own fence
-cannot escape; a staged name is stripped of newlines and capped, so a file called
-`a\nAttached file: passwd` cannot forge a second header. Undecodable bytes are refused rather than
-guessed at, and a file past `AIAttachmentBudget.maxInlinedTextBytes` is refused rather than
+**A text file is inlined by `ChatSession.boundedContext`, never into `ChatMessage.text`.** That seam
+is load-bearing: `ChatSession.title` summarises the first user message, so folding a CSV into the
+stored text would make the dump the conversation's title in the AI Agent window's sidebar, its
+preview, and what the user bubble renders back. Inlining after the transcript and before the
+transport also means only the newest turn carries it, so a chat's payload cannot grow turn on turn.
+The block names the file and fences it with a run longer than any inside it, so a Markdown file
+holding its own fence cannot escape; a staged name is stripped of newlines and capped, so a file
+called `a\nAttached file: passwd` cannot forge a second header. Undecodable bytes are refused rather
+than guessed at, and a file past `AIAttachmentBudget.maxInlinedTextBytes` is refused rather than
 truncated — a silently truncated CSV is a lie the model then answers confidently.
 
 `AIAttachmentPolicy` is the one place deciding what may be attached and as what. It is pure and
@@ -874,11 +1064,13 @@ width and clipped the search field well short of the button.
 
 ## Settings and backup boundary
 
-Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI
-section owns the feature switch and the **Providers → Manage…** action, and **Default model** below
-it picks the app-wide route and its reasoning effort. A
-pick in Quick AI's header or the AI Chat composer sets that chat's model and moves this default with
-it, while Quick Actions keeps its own model selection.
+Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI section
+owns the feature switch and the **Providers → Manage…** action, and **Default model** below it picks
+the app-wide route and its reasoning effort. A pick in Quick AI's header or the AI Agent window's
+composer sets that chat's model and moves this default with it, while Quick Actions keeps its own
+model selection. **Agent**, **Shell rules**, **Path rules** and **Memory** follow it
+([Agent](agent.md#settings-and-storage)), then **Conversations**, **System prompt** and **MCP
+Servers**.
 
 Provider management opens as an editor panel laid out like Mail's Accounts: every route in a list on
 the left — **On This Mac**, **Installed**, **API Connections** — each with its mark and a one-line
@@ -924,8 +1116,11 @@ preamble is the part that is billed on every turn for every user and has no othe
 disables the editor rather than hiding it, so what is being withheld stays readable. One thing it
 deliberately cannot reach: every installed CLI route prepends its own instruction never to run
 commands or touch files, and never to invoke a tool beyond the MCP tools an armed Codex or Claude
-turn supplies. That is a sandbox boundary on a local CLI, not Blitz describing itself, and a user
-switch must not be able to lift it.
+turn supplies — on a Claude Plan turn, only to look ([Agent](agent.md#routes)). That is a sandbox
+boundary on a local CLI, not Blitz describing itself, and a user switch must not be able to lift it.
+Nor does it reach Plan's instruction, which is the chat's mode speaking, not a prompt: a Plan turn
+carries it with the switch off ([Plans](#plans)). The memory block is the same: Read Memory and
+the chat's Use Memory are its switches ([Agent](agent.md#memory)).
 
 `mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).
 `aiConnections`, `aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt` and
@@ -936,9 +1131,14 @@ answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and
 join them: all three are decisions about conversations that never leave the Mac that had them, and
 an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
 limits what a tool-driven reply may spend, and an import must not raise that unasked.
-`aiCalendarAccess` and `aiRemindersAccess` let a model read, or change, this Mac's calendar and
-reminders, and `aiShellCommands` lets it run commands as the user; a flag that grants a capability
-travels in neither a backup nor `settings.json`.
+`aiNotifyWhenWaiting`, Settings → AI → Agent → **Notify when the agent is waiting**
+([Agent](agent.md#notifications)), stays behind with the rest of the AI setup, though as an
+ordinary preference it has a `settings.json` key, `ai.notifyWhenWaiting`.
+`aiAgentRules` decides which tools a model may call, from the calendar to the shell; a table that
+grants capabilities travels in neither a backup nor `settings.json`, and the three keys it was
+migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)). The agent's memories
+are no preference at all: `agent-memory.json` is personal data every turn sends, so no backup
+category and no `settings.json` key carries it ([Agent](agent.md#memory)).
 `aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
 another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
 with, and an import must never decide which program a Mac launches. None of the three has a

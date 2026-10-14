@@ -380,6 +380,28 @@ final class LauncherCoordinator {
         quit(bundleID: bundleID, force: force)
     }
 
+    // MARK: - Chat tools
+
+    /// The installed apps `mac_open` resolves a name against: the launcher's own index.
+    func openToolApps() -> [OpenToolCatalog.App] {
+        core.appIndex.apps.filter { $0.kind == .application }.map { entry in
+            OpenToolCatalog.App(
+                name: entry.name, alternateNames: entry.alternateTitles, bundleID: entry.bundleID,
+                path: entry.url.path)
+        }
+    }
+
+    /// Nil once macOS took it, else why not; the palette stays, since a chat may be on it.
+    func openForAgent(_ url: URL, isApplication: Bool) async -> String? {
+        guard isApplication else { return AppLauncher.open(url) ? nil : "no app accepted it" }
+        do {
+            try await AppLauncher.launch(url)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     /// Switch Windows quits through here too: its rows carry a bundle ID, not an `AppEntry`.
     func quit(bundleID: String, force: Bool = false) {
         // Nothing here takes focus, so hand it back unless that app is on its way out.

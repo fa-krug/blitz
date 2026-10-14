@@ -46,11 +46,12 @@ resolution-independent by construction.
 | `Model/WindowLayoutPlan.swift` | Foundation + CoreGraphics | **Pure.** What a run will do, decided before any write |
 | `Model/WindowLayoutStore.swift` | Foundation | The library, as JSON in `UserDefaults` |
 | `Model/WindowLayoutDraft.swift` | Foundation + CoreGraphics | One in-flight edit, owned by the panel |
+| `Model/WindowLayoutToolCatalog.swift` | Foundation | **Pure.** The agent's two tools, their calls and answers |
 | `Service/AXWindowAccess.swift` | AppKit + ApplicationServices | Every `AXUIElement` call, shared with the mover |
 | `Service/AXScreens.swift` | AppKit + ColorSync | `AXGeometry`, and displays with their UUIDs |
 | `Service/WindowInventory.swift` | AppKit + ApplicationServices | What is on screen, read once per gesture |
 | `Service/WindowLayoutRunner.swift` | AppKit | Applies a plan; opens what isn't running |
-| `UI/WindowLayoutCoordinator.swift` | AppKit | The one run funnel, the library, the editor handoff |
+| `UI/WindowLayoutCoordinator.swift` | AppKit | The run funnels, the library, the editor handoff |
 | `Settings/WindowLayout*.swift` | SwiftUI | The pane's section and the editor panel |
 
 The first seven compile into `Tests/window-layout-test.swift`, so none of them may gain an AppKit,
@@ -85,7 +86,8 @@ the one bug the round-trip sweep caught.
 ## Running
 
 `WindowLayoutCoordinator.runWindowLayout(id:)` is the one funnel for a palette row, a global shortcut
-and the pane's Run button alike, so the feature switch cannot be bypassed. It hides the palette with
+and the pane's Run button alike, so the feature switch cannot be bypassed; the agent's `runTool` is
+the only other, behind the same switch (see [Chat tools](#chat-tools)). It hides the palette with
 `restoreFocus: false` — an app the layout opens activates itself, and handing focus back first
 pulls a different app forward mid-pass.
 
@@ -209,6 +211,20 @@ also removes a whole failure class and any run-time dependency on `QuicklinkStor
 - **Two commands** — `Create Window Layout` and `Create Layout from Current Windows`, both dropped
   from the launcher with the feature.
 
+## Chat tools
+
+With Window Management on, a chat on an API connection or the Claude command is offered
+`window_layouts_list` and `window_layout_apply` while the agent's Apply Window Layouts row is not
+Deny. The row, its dialog and who gets offered what are [Agent](agent.md#window-layouts)'s.
+`WindowLayoutCoordinator.runTool` reads a call through `WindowLayoutToolCatalog`, lists without a
+dialog, finds a layout by name or id, refuses with a sentence while Accessibility is not granted —
+it never prompts, since that request belongs to a gesture of the user's — then puts the dialog to
+the gate. Once allowed it reads the switch and the layout again, replaces any run in progress as
+`runWindowLayout` does, never hides the palette, and answers with the windows placed, the apps
+opened and the same summary of what did not happen the launcher's notice shows, rather than a
+notice. Moving a single window is deliberately not a tool: while the agent runs, the frontmost
+window is usually the chat.
+
 ## Testing
 
 `Tests/window-layout-test.swift` covers the record and its entry id, the anchor grid and the
@@ -219,6 +235,9 @@ Codable round trips including a minimal hand-written payload, the frontmost mark
 plan only when its entry is placed, store CRUD including a duplicate's remapped mark, validation,
 sanitisation and persistence, and a fuzz sweep over every anchor × fraction × offset × gap ×
 display.
+
+`Tests/mac-tool-test.swift` pins `WindowLayoutToolCatalog`: the calls, lookup and near names, the
+listing, the Accessibility sentence, the dialog and each outcome's answer.
 
 `AXWindowAccess`, `AXScreens`, `WindowInventory` and `WindowLayoutRunner` are not compiled into the
 harness and have no automated coverage, exactly as `WindowMover` and `SpaceSwitcher` do not. They need

@@ -79,6 +79,8 @@ struct AIChatDetailView: View {
                 messages: chat.session.messages, status: chat.liveStatus, usage: chat.usage,
                 surface: .window,
                 onRegenerate: chat.isStreaming ? nil : { coordinator.regenerate(in: chat) },
+                onQuestion: { coordinator.respond($0, in: chat) },
+                onPlan: { coordinator.respond($0, in: chat) },
                 find: find.isSearching
                     ? ChatFindHighlight(
                         query: find.needle, matches: Set(occurrences.map(\.messageID)),
@@ -120,9 +122,13 @@ private struct AIChatComposer: View {
     @Binding var showsContext: Bool
 
     private var canSend: Bool {
-        !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if let question = chat.pendingQuestion { return question.answer(typing: chat.draft) != nil }
+        return !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !chat.pendingAttachments.isEmpty
     }
+
+    /// While the turn waits on a question, Send answers it and Stop gets a button of its own.
+    private var isAnswering: Bool { chat.pendingQuestion != nil }
 
     var body: some View {
         @Bindable var chat = chat
@@ -135,7 +141,7 @@ private struct AIChatComposer: View {
             chips
             ZStack(alignment: .topLeading) {
                 if chat.draft.isEmpty {
-                    Text("Ask anything…")
+                    Text(isAnswering ? "Answer the question…" : "Ask anything…")
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                 }
@@ -177,15 +183,16 @@ private struct AIChatComposer: View {
             AIModelPicker(chat: chat, selected: coordinator.model(for: chat), coordinator: coordinator)
             AIReasoningPicker(chat: chat, coordinator: coordinator)
             AIToolsPicker(chat: chat, coordinator: coordinator)
-            if coordinator.capabilities(for: chat).webSearch {
-                WebSearchToggle(settings: settings)
+            if coordinator.offersModes(in: chat) {
+                AIModePicker(chat: chat, coordinator: coordinator)
             }
-            if coordinator.offersShellCommands(in: chat) {
-                ShellApprovalToggle(chat: chat, coordinator: coordinator)
+            if coordinator.offersWebSearch(in: chat) {
+                WebSearchToggle(settings: settings)
             }
             Spacer(minLength: 0)
             ContextGauge(
                 report: coordinator.contextReport(for: chat, detailed: false), hovered: $showsContext)
+            if isAnswering { stopButton }
             sendButton
         }
     }
@@ -202,21 +209,37 @@ private struct AIChatComposer: View {
     }
 
     private var sendButton: some View {
-        Button(action: submit) {
-            Image(systemName: chat.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
+        let stops = chat.isStreaming && !isAnswering
+        return Button(action: submit) {
+            Image(systemName: stops ? "stop.circle.fill" : "arrow.up.circle.fill")
                 .font(.title2)
                 .symbolRenderingMode(.hierarchical)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.borderless)
-        .disabled(!chat.isStreaming && !canSend)
-        .help(chat.isStreaming ? "Stop Response" : "Send  ↵")
-        .accessibilityLabel(chat.isStreaming ? "Stop Response" : "Send")
+        .disabled(!stops && !canSend)
+        .help(stops ? "Stop Response" : isAnswering ? "Answer  ↵" : "Send  ↵")
+        .accessibilityLabel(stops ? "Stop Response" : isAnswering ? "Answer" : "Send")
     }
 
-    /// Return and the button are one action: Send, or Stop while a reply streams.
+    private var stopButton: some View {
+        Button {
+            coordinator.stopResponse(in: chat)
+        } label: {
+            Image(systemName: "stop.circle.fill")
+                .font(.title2)
+                .symbolRenderingMode(.hierarchical)
+        }
+        .buttonStyle(.borderless)
+        .help("Stop Response")
+        .accessibilityLabel("Stop Response")
+    }
+
+    /// Return and the button are one action: Send, Answer while a question waits, else Stop.
     private func submit() {
-        if chat.isStreaming {
+        if isAnswering {
+            if coordinator.send(chat.draft, in: chat) { chat.draft = "" }
+        } else if chat.isStreaming {
             coordinator.stopResponse(in: chat)
         } else if coordinator.send(chat.draft, in: chat) {
             chat.draft = ""
@@ -314,42 +337,57 @@ private struct AIReasoningPicker: View {
     }
 }
 
-/// This chat's MCP servers: all of them, some, or none; the model must be one that calls tools.
+/// This chat's session scope: which tools it may call.
 private struct AIToolsPicker: View {
     let chat: AIChatState
     let coordinator: AIChatCoordinator
 
     var body: some View {
-        let servers = coordinator.mcpServers
-        let scope = chat.toolScope
+        let builtIn = coordinator.listedBuiltInTools(for: chat)
+        let servers = coordinator.listedServers(for: chat)
+        let scope = chat.agentScope
         let takesTools = coordinator.capabilities(for: chat).tools
-        let active = servers.filter { scope.allows($0.slug) }.count
+        let total = builtIn.count + servers.count
+        let active =
+            builtIn.count(where: scope.allows) + servers.count { scope.allows(.mcp($0.slug)) }
         Menu {
-            if servers.isEmpty {
-                Text("No MCP servers are connected")
+            if total == 0 {
+                Text("The agent's rules allow no tools")
             } else {
                 Toggle(
                     "Use Tools",
                     isOn: Binding(
                         get: { scope.isEnabled },
                         set: { coordinator.setToolsEnabled($0, in: chat) }))
-                Section("Servers") {
-                    ForEach(servers) { server in
-                        Toggle(
-                            server.name.isEmpty ? server.slug : server.name,
-                            isOn: Binding(
-                                get: { scope.allows(server.slug) },
-                                set: { _ in coordinator.toggleToolServer(server.slug, in: chat) })
-                        )
-                        .disabled(!scope.isEnabled)
+                if !builtIn.isEmpty {
+                    Section("Blitz") {
+                        ForEach(builtIn, id: \.self) { tool in
+                            toggle(tool.title, for: tool, in: scope)
+                        }
+                    }
+                }
+                if !servers.isEmpty {
+                    Section("MCP Servers") {
+                        ForEach(servers) { server in
+                            toggle(server.title, for: .mcp(server.slug), in: scope)
+                        }
                     }
                 }
             }
+            if coordinator.offersMemorySwitch {
+                Section("Memory") {
+                    Toggle(
+                        "Use Memory",
+                        isOn: Binding(
+                            get: { scope.usesMemory },
+                            set: { coordinator.setUsesMemory($0, in: chat) }))
+                }
+            }
             Divider()
-            Button("MCP Settings…", action: coordinator.showMCPSettings)
+            Button("Agent Settings…", action: coordinator.showAgentSettings)
         } label: {
             Label(
-                servers.isEmpty || !scope.isEnabled ? "Tools" : "\(active) of \(servers.count)",
+                total == 0 || !scope.isEnabled ? "Tools" : "\(active) of \(total)",
                 systemImage: "wrench.and.screwdriver"
             )
             .labelStyle(.titleAndIcon)
@@ -360,6 +398,51 @@ private struct AIToolsPicker: View {
             takesTools
                 ? "Choose the tools this chat may call"
                 : "This model can't call tools")
+    }
+
+    private func toggle(
+        _ title: String, for tool: AgentTool, in scope: AgentSessionScope
+    ) -> some View {
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { scope.allows(tool) },
+                set: { _ in coordinator.toggleTool(tool, in: chat) })
+        )
+        .disabled(!scope.isEnabled)
+    }
+}
+
+/// This chat's mode; Auto is tinted, since its calls run without anyone being asked.
+private struct AIModePicker: View {
+    let chat: AIChatState
+    let coordinator: AIChatCoordinator
+
+    var body: some View {
+        let selected = chat.agentScope.mode
+        Menu {
+            ForEach(AgentMode.allCases) { mode in
+                Toggle(
+                    isOn: Binding(
+                        get: { selected == mode },
+                        set: { if $0 { coordinator.setMode(mode, in: chat) } })
+                ) {
+                    Label {
+                        Text(mode.title)
+                        Text(mode.summary)
+                    } icon: {
+                        Image(systemName: mode.symbolName)
+                    }
+                }
+            }
+        } label: {
+            Label(selected.title, systemImage: selected.symbolName)
+                .labelStyle(.titleAndIcon)
+        }
+        .modePill(isTinted: selected == .auto)
+        .help(selected.summary)
+        .accessibilityLabel("Mode")
+        .accessibilityValue(selected.title)
     }
 }
 
@@ -397,7 +480,7 @@ private struct FindCounter: View {
     }
 }
 
-/// The same switch as Settings → AI's: a prompt reaches a search engine only once it is on.
+/// Offered where the rules allow web search; a prompt reaches a search engine only once it is on.
 private struct WebSearchToggle: View {
     let settings: AISettingsStore
 
@@ -410,29 +493,6 @@ private struct WebSearchToggle: View {
         .buttonStyle(.borderless)
         .help(settings.webSearchEnabled ? "Web search is on" : "Web search is off")
         .accessibilityLabel("Web search")
-    }
-}
-
-/// This chat's own choice; Settings → AI decides whether a model may run commands at all.
-private struct ShellApprovalToggle: View {
-    let chat: AIChatState
-    let coordinator: AIChatCoordinator
-
-    var body: some View {
-        let automatic = chat.shellApproval == .automatic
-        Toggle(
-            isOn: Binding(
-                get: { automatic },
-                set: { coordinator.setShellApproval($0 ? .automatic : .ask, in: chat) })
-        ) {
-            Image(systemName: automatic ? "terminal.fill" : "terminal")
-        }
-        .toggleStyle(.button)
-        .buttonStyle(.borderless)
-        .help(
-            automatic
-                ? "Shell commands run without asking" : "Shell commands ask before they run")
-        .accessibilityLabel("Run shell commands without asking")
     }
 }
 
@@ -522,14 +582,17 @@ private struct ContextCard: View {
                 }
                 row("System prompt", report.systemPrompt ? "On" : "Off")
                 row("Web search", report.webSearch ? "On" : "Off")
-                row(
-                    "MCP servers",
-                    report.toolServers == 0 ? "None" : "\(report.toolServers) in reach")
-                row(
-                    "Personal data",
-                    report.personalData.isEmpty
-                        ? "None" : report.personalData.joined(separator: ", "))
-                row("Shell commands", shellTitle)
+                row("Memory", memory)
+                section("Tools")
+                if let mode = report.mode {
+                    row("Mode", mode.title)
+                }
+                if report.tools.isEmpty {
+                    row("Offered", "None")
+                }
+                ForEach(Array(report.tools.enumerated()), id: \.offset) { _, tool in
+                    row(tool.title, tool.decision.title)
+                }
             }
             .font(.callout)
         }
@@ -539,6 +602,15 @@ private struct ContextCard: View {
         // Solid under the glass: the transcript's text must not show through the card.
         .background { shape.fill(Theme.Colors.windowSurface) }
         .shadow(color: Theme.Colors.tooltipShadow, radius: Theme.Spacing.xl, y: Theme.Spacing.xs)
+    }
+
+    private var memory: String {
+        switch report.memories {
+        case nil: "Off"
+        case 0?: "None"
+        case 1?: "1 memory"
+        case let count?: "\(count) memories"
+        }
     }
 
     private func section(_ title: String) -> some View {
@@ -560,14 +632,6 @@ private struct ContextCard: View {
 
     private func bytes(_ count: Int) -> String {
         count.formatted(.byteCount(style: .file))
-    }
-
-    private var shellTitle: String {
-        switch report.shellCommands {
-        case .ask?: "Confirm each"
-        case .automatic?: "Run without asking"
-        case nil: "Off"
-        }
     }
 
     private func tokens(_ count: Int, of window: Int?) -> String {
@@ -602,6 +666,20 @@ extension View {
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
             .fixedSize()
+    }
+
+    /// Auto's pill is filled, so a reader notices that calls run without a dialog.
+    @ViewBuilder
+    fileprivate func modePill(isTinted: Bool) -> some View {
+        if isTinted {
+            menuStyle(.button)
+                .buttonStyle(.glassProminent)
+                .tint(Theme.Colors.warning)
+                .buttonBorderShape(.capsule)
+                .fixedSize()
+        } else {
+            composerPill()
+        }
     }
 }
 

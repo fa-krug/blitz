@@ -350,6 +350,55 @@ final class ClipboardCoordinator {
         palette.followToken = UUID()
     }
 
+    // MARK: - Chat tools
+
+    /// The history as the palette holds it, minus what an ignored app copied; asked first.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: ClipboardToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try ClipboardToolCatalog.request(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let denied = AgentRefusal.denied.message(for: .clipboardRead)
+        guard settings.clipboardEnabled else { return .failure(call.id, denied) }
+        let prompt = AgentPrompt.readClipboardHistory(query: request.query, limit: request.limit)
+        if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+        guard settings.clipboardEnabled else { return .failure(call.id, denied) }
+        let matched = ClipboardToolCatalog.entries(
+            clipboardStore.items, query: request.query,
+            ignoredApps: Set(settings.clipboardDisabledApps))
+        let shown = Array(matched.prefix(request.limit))
+        let images = shown.compactMap { item in
+            clipboardStore.imageURL(for: item).map { (item.id, $0) }
+        }
+        let sizes = await Task.detached(priority: .userInitiated) {
+            Dictionary(
+                images.compactMap { id, url in
+                    ImageThumbnail.pixelSize(of: url).map {
+                        (id, ClipboardToolCatalog.ImageSize(
+                            width: Int($0.width), height: Int($0.height)))
+                    }
+                },
+                uniquingKeysWith: { first, _ in first })
+        }.value
+        let answer = ClipboardToolCatalog.listing(
+            shown, request: request, total: matched.count, imageSizes: sizes,
+            appNames: Self.appNames(for: shown), calendar: .current)
+        return AIToolResult(callID: call.id, content: answer, isError: false)
+    }
+
+    /// Launch Services' name for each source app still installed; the rest keep their bundle ID.
+    private static func appNames(for items: [ClipboardItem]) -> [String: String] {
+        var names: [String: String] = [:]
+        for bundleID in Set(items.compactMap(\.sourceBundleID)) {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            else { continue }
+            names[bundleID] = FileManager.default.displayName(atPath: url.path)
+        }
+        return names
+    }
+
     /// Select `item`'s row as currently filtered; a moved row isn't always index 0.
     private func selectClip(_ item: ClipboardItem) {
         palette.selection =

@@ -44,7 +44,7 @@ These are the things that quietly break the look if changed. Preserve them unles
 - **The panel corner is clipped once, at the root.** `RootPaletteView.body` ends with `.background(panelScrim) → .background(GlassEffectView()) → .clipShape(RoundedRectangle(26, .continuous))`. Keep that order; the scrim goes _over_ the glass, and the clip is last.
 - **Don't use the native scroll edge effect.** Inside a transparent panel it renders a hard-bounded rectangle. Use `edgeDissolve()`, or a gradient `mask` where a surface owns its own fade — `scrollEdgeEffectStyle` draws a *material* where a scroll view meets a safe area, so over a panel that already has `panelScrim` + `GlassEffectView` it composites to nothing, with or without `safeAreaBar`; `QuickActionResultView`'s own gradient mask is the shape to copy. This is a rule about the borderless panels; the Settings window is a titled `NSWindow` whose system titlebar draws the band itself (see "Settings").
 - **Test over a light desktop.** Transparency and corner masking bugs only show over bright wallpaper. Dark wallpaper hides them.
-- **No `NSAlert`, and no system popover on the palette's surfaces.** Every confirmation, failure report, value prompt and transient readout is Blitz's own SwiftUI surface (see "Dialogs & HUD"), and every palette menu is Blitz's own `PopoverMenu` (see "Liquid Glass") — never `NSMenu`, `NSPopover`, `.contextMenu` or SwiftUI `.popover`. An Aqua alert on an alpha-over-vibrancy app reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath. Two scoped exceptions: the system share picker (`Platform/SharePicker.swift`), since AirDrop, Mail and Messages are the system's to draw; and Settings and the AI Chat window, stock titled windows whose pickers and menus are SwiftUI `.popover`, `Menu` and context menus by design (see "Settings").
+- **No `NSAlert`, and no system popover on the palette's surfaces.** Every confirmation, failure report, value prompt and transient readout is Blitz's own SwiftUI surface (see "Dialogs & HUD"), and every palette menu is Blitz's own `PopoverMenu` (see "Liquid Glass") — never `NSMenu`, `NSPopover`, `.contextMenu` or SwiftUI `.popover`. An Aqua alert on an alpha-over-vibrancy app reads as a different product, and its `runModal` run loop keeps Carbon hotkeys firing underneath. Two scoped exceptions: the system share picker (`Platform/SharePicker.swift`), since AirDrop, Mail and Messages are the system's to draw; and Settings and the AI Agent window, stock titled windows whose pickers and menus are SwiftUI `.popover`, `Menu` and context menus by design (see "Settings").
 - **A dialog has three independent axes; never let one infer another.** The **icon** (`DialogRequest.symbol`, required) is always the *subject's* own glyph — a command being confirmed uses its `SystemAction.sfSymbol`, so the Restart dialog shows the same icon as the Restart row. Tone never picks an icon. The **tone** (`DialogTone`: `.neutral` / `.success` / `.danger`) tints only that glyph. The **button** takes its color from `DialogAction.Role` (`.standard` white / `.destructive` red / `.cancel` secondary), so a red-glyph security warning can still carry a plain white button — as "Import executable commands?" does.
 - **Resolve every glyph through `SymbolImage`, not `Image(systemName:)`.** Some catalog symbols are bundled assets in `Assets.xcassets` (`toggleBluetooth`), and `Image(systemName:)` silently renders nothing for those.
 - **↵ runs the primary action, Escape cancels, and Cancel always renders leading** (the left button), matching macOS convention. A button never prints its key cap; a deliberate hover reveals its outlined `KeyCapChip` in a `Tooltip`.
@@ -163,11 +163,11 @@ Notes adds `noteWindow 520×420` (opening size on a first run only), `noteWindow
 `noteTitlebar 44`, `noteTitleInset 120`, `noteEditorInset 16`, `noteSearchHeight 34`,
 `noteFooterHeight 28`, `noteGlyph 16`, `noteEmptyGlyph 28`, and `noteHeadingMenu 220×159`.
 
-AI Chat adds `aiChatWindow 960×660` (opening size), `aiChatWindowMinimum 680×440`, a sidebar of
-`aiChatSidebarMinimum 240`–`aiChatSidebarMaximum 340`, `aiChatDetailMinimum 440`,
+The AI Agent window adds `aiChatWindow 960×660` (opening size), `aiChatWindowMinimum 680×440`, a
+sidebar of `aiChatSidebarMinimum 240`–`aiChatSidebarMaximum 340`, `aiChatDetailMinimum 440`,
 `aiChatReadingWidth 760` for the transcript and composer column, `aiChatComposerMaxHeight 180`, and
-`chatContextGauge 14` for the composer's context ring, and `chatContextCard 300` for the card it
-raises on hover.
+`chatContextGauge 14` for the composer's context ring, `chatContextCard 300` for the card it raises
+on hover, and `chatPlanEditor 280` for a plan's editor, past which its Markdown scrolls.
 
 The AI Providers panel adds `aiProvidersPanel 840×520` (the height is its two columns', stated so
 that selecting a longer provider never resizes the panel), `aiProvidersList 262`, `aiUsageBar 110`
@@ -322,25 +322,36 @@ title. Its hover buttons are hidden from accessibility so those actions are anno
 
 ---
 
-## AI Chat window
+## AI Agent window
 
 Source: `Features/AI/UI/AIChatSplitViewController.swift`, `AIChatDetailView.swift`.
 
-AI Chat is a titled window built the way Settings is, not a palette sibling like Notes: a real
+AI Agent is a titled window built the way Settings is, not a palette sibling like Notes: a real
 `NSSplitViewController` whose sidebar item takes the system sidebar material, a unified toolbar with
 an inline title, and native `List`, `Menu` and context menus. Nothing about it scales with Interface
-Size. The composer is untinted Liquid Glass at `Radius.dialog`, stacked under the transcript so nothing
-scrolls behind it, with `.glass` capsules for its model and reasoning menus, and its glass on a
-background layer rather than the box.
-The title bar keeps the system's own toolbar band, as any document window's does. The context card
-the gauge raises on hover is glass over a solid `windowBackgroundColor`, because it rises over
-transcript text, and sits in the transcript's own frame at its bottom edge, so no window size can
-push it off screen. A reply's choices are `.glass` capsules that rise out of the composer's top
-edge. Find marks words in `Colors.findMatch` / `findCurrent`, the system yellow, with
+Size. The composer is untinted Liquid Glass at `Radius.dialog`, stacked under the transcript so
+nothing scrolls behind it, with `.glass` capsules for its model, reasoning, tools and mode menus,
+and its glass on a background layer rather than the box. The mode pill alone changes shape with its
+value: in Auto, `modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.warning`, since its
+calls run with no dialog. The title bar keeps the system's own toolbar band, as any document
+window's does. The context card the gauge raises on hover is glass over a solid
+`windowBackgroundColor`, because it rises over transcript text, and sits in the transcript's own
+frame at its bottom edge, so no window size can push it off screen. A reply's choices are `.glass`
+capsules that rise out of the composer's top edge, each a `ChatChoiceChip` — a glyph then the
+option — which a waiting question's options use too. A sidebar row whose chat waits on the reader trades
+its spinner for the wait's symbol in `Colors.warning`. While anything is archived, the sidebar's foot
+is an **Archived** row under a divider — `archivebox`, the title and the count in secondary, hover
+in `Colors.rowHover` at `Radius.row` as the rows have — and choosing it swaps the list for
+`AIChatArchiveList` under a back chevron and an "Archived" headline, the search field kept between
+them; archived rows show the day they were last active in secondary caption type. `ChatQuestionCard` and `ChatPlanCard` are
+cards in the transcript, `cardFill` under a `cardStroke` at `Radius.row`: the question with its
+chips, then its answer as plain capsules; the plan as rendered Markdown with **Edit** and `.glass`
+**Execute in Auto** beside the `.glassProminent` **Execute**, a replaced plan folded behind a
+chevron. Find marks words in `Colors.findMatch` / `findCurrent`, the system yellow, with
 `findCurrentInk` black on the solid one in both appearances. Transcript lines sit
-`spacing.chatLine 4` apart on both surfaces. The transcript itself is the palette's `ChatTranscriptView`
-with `surface: .window`, which leaves out `edgeDissolve` and `thinScrollbar` — both are measured
-against the palette's bars — and caps the column at `aiChatReadingWidth`, centred.
+`spacing.chatLine 4` apart on both surfaces. The transcript itself is the palette's `ChatTranscriptView` with
+`surface: .window`, which leaves out `edgeDissolve` and `thinScrollbar` — both are measured against
+the palette's bars — and caps the column at `aiChatReadingWidth`, centred.
 
 ---
 
@@ -731,7 +742,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   Back/Forward chevrons. `SettingsWindowChrome` installs *before* the content mounts: the bridged toolbar
   restores the title flags it mounted over, so a later `titleVisibility = .visible` is undone on the
   first navigation.
-- **Settings and AI Chat are the windows that keep the system titlebar.** `AppWindowController` builds
+- **Settings and AI Agent are the windows that keep the system titlebar.** `AppWindowController` builds
   every window with `titlebarAppearsTransparent = true`, which opts the titlebar out of the system's
   glass band; `SettingsWindowChrome.install(in:)` and `AIChatWindowChrome.install(in:)` set it back to
   `false`, so the band and its scroll edge effect are drawn by AppKit as a pane's `Form` or the
@@ -937,6 +948,12 @@ running clean through it, so the disc falls into two halves.
 - **The menu-bar template is the same mark with the cut grown by 30**, cropped to the disc. At 16pt
   the wider cut is what keeps the bolt from closing up into a plain circle.
 - Keep the two files' paths in step when editing either.
+- **The menu-bar item carries one piece of feature state: the agent's waiting dot.** While any chat
+  waits on the reader (`AIChatSurfacesState.isAnyWaiting`), `MenuBarLabel` swaps the template for
+  `MenuBarIcon.waiting`: the same image with a 5 pt dot in its top-right corner, parted from the
+  mark by a 1.5 pt ring cleared out of it, and still a template, so the bar tints mark and dot
+  alike. Nothing else may hide or reshape the item. See
+  [features/agent.md](features/agent.md#the-badge-and-the-dot).
 
 ---
 

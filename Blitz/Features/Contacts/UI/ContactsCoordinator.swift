@@ -178,6 +178,40 @@ final class ContactsCoordinator {
         if !ContactLauncher.show(contact) { report("Contacts isn't available on this Mac") }
     }
 
+    // MARK: - Chat tools
+
+    /// Nothing is read before the dialog; the search then reads only the cards it returns.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: ContactToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try ContactToolCatalog.request(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        if let refusal = toolRefusal() { return .failure(call.id, refusal) }
+        if let refusal = await authorize(AgentPrompt.searchContacts(request.query)) {
+            return .failure(call.id, refusal)
+        }
+        if let refusal = toolRefusal() { return .failure(call.id, refusal) }
+        let matches = ContactDirectory.matching(store.contacts, query: request.query)
+        let ids = matches.prefix(request.limit).map(\.id)
+        guard let cards = await store.toolCards(ids: Array(ids)) else {
+            return .failure(call.id, ContactToolCatalog.noAccess)
+        }
+        let answer = ContactToolCatalog.answer(cards, query: request.query, matches: matches.count)
+        return AIToolResult(callID: call.id, content: answer, isError: false)
+    }
+
+    /// The switch, macOS's grant and a finished read, each checked before and after asking.
+    private func toolRefusal() -> String? {
+        guard settings.contactsEnabled else {
+            return AgentRefusal.denied.message(for: .contactsRead)
+        }
+        store.refreshAccess()
+        guard store.access == .granted else { return ContactToolCatalog.noAccess }
+        return store.hasLoaded ? nil : ContactToolCatalog.loading
+    }
+
     // MARK: - Reports
 
     private func reportGone(_ contact: ContactItem) async {

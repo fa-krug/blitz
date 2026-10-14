@@ -188,7 +188,7 @@ struct QuickActionsSettingsView: View {
         } header: {
             SettingsSectionHeader(.quickActionsModel)
         } footer: {
-            Text("Separate from AI Chat's, so frequent use needn't bill an API.")
+            Text("Separate from AI Agent's, so frequent use needn't bill an API.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

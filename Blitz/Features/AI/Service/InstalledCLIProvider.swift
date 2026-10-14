@@ -43,6 +43,20 @@ private final class InstalledCLITurnRunner {
         allowed. Do not read files, inspect the environment, access any other external resource, \
         or modify anything in any other way.
         """
+    /// Plan's boundary: the same tools, but only to look, so it cannot contradict Plan's own rule.
+    private static let planToolSafetyInstructions = """
+        You are generating text inside Blitz. The only tools you may use are the MCP tools \
+        supplied with this request, and only to read, investigate, ask the user or write the \
+        plan: nothing may be changed, through them or in any other way. Do not read files, \
+        inspect the environment, or access external resources in any other way.
+        """
+    private static let planToolSearchSafetyInstructions = """
+        You are generating text inside Blitz. The only tools you may use are WebSearch, to search \
+        the web, and the MCP tools supplied with this request, and those only to read, \
+        investigate, ask the user or write the plan: nothing may be changed, through them or in \
+        any other way. Do not read files, inspect the environment, or access any other external \
+        resource.
+        """
     /// A search is a tool round trip, and a model may search more than once before it answers.
     private static let searchRounds = 6
 
@@ -337,11 +351,15 @@ private final class InstalledCLITurnRunner {
     }
 
     private var boundary: String {
+        let readsOnly = toolServers?.readsOnly == true
         switch (isArmed, offersSearch) {
-        case (false, false): Self.safetyInstructions
-        case (true, false): Self.toolSafetyInstructions
-        case (false, true): Self.searchSafetyInstructions
-        case (true, true): Self.toolSearchSafetyInstructions
+        case (false, false): return Self.safetyInstructions
+        case (false, true): return Self.searchSafetyInstructions
+        case (true, false):
+            return readsOnly ? Self.planToolSafetyInstructions : Self.toolSafetyInstructions
+        case (true, true):
+            return readsOnly
+                ? Self.planToolSearchSafetyInstructions : Self.toolSearchSafetyInstructions
         }
     }
 
@@ -531,14 +549,19 @@ private final class InstalledCLITurnRunner {
 
     /// The server Blitz hosts: listing is answered at once, a call once its tool has run.
     private func serve(_ message: ClaudeHostedServer.Message, token: TurnToken) {
-        let tools = activeHosted
+        let served = ClaudeHostedServer.reply(to: message.body, tools: activeHosted)
+        let barrier = rowlessCallBarrier(for: served)
         answers.append(
             Task { [weak self] in
                 let reply: JSONValue
-                switch ClaudeHostedServer.reply(to: message.body, tools: tools) {
+                switch served {
                 case .answer(let answer):
                     reply = answer
                 case .call(let call, let id):
+                    if let barrier {
+                        await barrier.wait()
+                        guard !Task.isCancelled else { return }
+                    }
                     let run = self?.toolServers?.hosted.run ?? AIHostedTools.none.run
                     reply = ClaudeHostedServer.result(await run(call), id: id)
                 }
@@ -548,6 +571,14 @@ private final class InstalledCLITurnRunner {
                 else { return }
                 self.write(line, closing: false)
             })
+    }
+
+    /// Yielded now, behind the text before it, so a rowless call pins its card after that text.
+    private func rowlessCallBarrier(for served: ClaudeHostedServer.Reply) -> AIStreamBarrier? {
+        guard case .call(let call, _) = served,
+            activeHosted.first(where: { $0.name == call.name })?.showsCallRow == false
+        else { return nil }
+        return continuation?.barrier()
     }
 
     /// A question still waiting its turn belongs to a turn that is over, so it is never asked.

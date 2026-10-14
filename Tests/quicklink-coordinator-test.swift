@@ -18,6 +18,7 @@ struct QuicklinkCoordinatorTests {
         try copying()
         try editing()
         try revealing()
+        try await chatTool()
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }
@@ -207,6 +208,38 @@ struct QuicklinkCoordinatorTests {
         expect(AppLauncher.revealed.count == 1, "only the folder link reached Finder")
     }
 
+    static func chatTool() async throws {
+        let fixture = try Fixture(link: "https://docs.test/?q={query}")
+        defer { fixture.cleanUp() }
+        let call = AIToolCall(id: "1", name: QuicklinkToolCatalog.listName, arguments: "{}")
+        var asked: [AgentPrompt] = []
+        let allow: AgentAuthorization = { prompt in
+            asked.append(prompt)
+            return nil
+        }
+        expect(
+            fixture.coordinator.chatTools(read: true).map(\.name) == ["quicklinks_list"],
+            "the listing is offered while quicklinks are on")
+        let listed = await fixture.coordinator.runTool(call, authorize: allow)
+        expect(
+            !listed.isError && asked.count == 1
+                && listed.content.contains("Wikipedia\thttps://docs.test/?q={query}"),
+            "an allowed listing asks once, then names each template")
+        let declined = await fixture.coordinator.runTool(call) { _ in "declined" }
+        expect(declined.isError && declined.content == "declined", "a decline is the answer")
+        fixture.settings.quicklinksEnabled = false
+        asked = []
+        let off = await fixture.coordinator.runTool(call, authorize: allow)
+        expect(
+            off.isError && off.content == "denied" && asked.isEmpty,
+            "with quicklinks off the call is refused before asking")
+        expect(fixture.coordinator.chatTools(read: true).isEmpty, "and nothing is offered")
+        let bad = AIToolCall(id: "2", name: QuicklinkToolCatalog.listName, arguments: "[]")
+        expect(
+            await fixture.coordinator.runTool(bad, authorize: allow).isError,
+            "arguments that are not an object are refused")
+    }
+
     static func waitForOpen() async {
         let deadline = ContinuousClock.now + .seconds(2)
         while QuicklinkLauncher.opened.isEmpty, ContinuousClock.now < deadline {
@@ -264,6 +297,14 @@ struct QuicklinkCoordinatorTests {
 }
 
 // Every collaborator below is inert, so the shipped coordinator never opens or reads anything real.
+
+typealias AgentAuthorization = @MainActor @Sendable (AgentPrompt) async -> String?
+struct AgentPrompt: Sendable { static func readQuicklinks() -> AgentPrompt { AgentPrompt() } }
+enum AgentTool { case snippetsRead }
+enum AgentRefusal {
+    case denied
+    func message(for tool: AgentTool) -> String { "denied" }
+}
 
 @MainActor
 final class AppSettings {

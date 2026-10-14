@@ -45,24 +45,15 @@ final class AISettingsStore {
     var toolRounds: AIToolRounds {
         didSet { defaults.set(toolRounds.rawValue, forKey: AppSettingsKey.aiToolRounds.rawValue) }
     }
-    /// Off by default: a model reaches the calendar only once the reader has said so.
-    var calendarAccess: AIDataAccess {
+    /// On by default: a turn left waiting where nobody looks is otherwise easy to forget.
+    var notifiesWhenWaiting: Bool {
         didSet {
-            defaults.set(calendarAccess.rawValue, forKey: AppSettingsKey.aiCalendarAccess.rawValue)
+            defaults.set(notifiesWhenWaiting, forKey: AppSettingsKey.aiNotifyWhenWaiting.rawValue)
         }
     }
-    var remindersAccess: AIDataAccess {
-        didSet {
-            defaults.set(
-                remindersAccess.rawValue, forKey: AppSettingsKey.aiRemindersAccess.rawValue)
-        }
-    }
-    /// Off by default: a model runs nothing on this Mac until the reader has said so.
-    var shellCommandsEnabled: Bool {
-        didSet {
-            defaults.set(
-                shellCommandsEnabled, forKey: AppSettingsKey.aiShellCommands.rawValue)
-        }
+    /// Every tool call is decided by this one table; MCP rows live on their servers' trust.
+    var agentRules: AgentRules {
+        didSet { persistAgentRules() }
     }
     /// Per route, the models its picker lists; no entry lists all it offers, later ones too.
     private(set) var shownModels: [String: [String]] {
@@ -131,15 +122,9 @@ final class AISettingsStore {
         toolRounds =
             AIToolRounds(rawValue: defaults.integer(forKey: AppSettingsKey.aiToolRounds.rawValue))
             ?? .twentyFive
-        calendarAccess =
-            AIDataAccess(
-                rawValue: defaults.integer(forKey: AppSettingsKey.aiCalendarAccess.rawValue))
-            ?? .off
-        remindersAccess =
-            AIDataAccess(
-                rawValue: defaults.integer(forKey: AppSettingsKey.aiRemindersAccess.rawValue))
-            ?? .off
-        shellCommandsEnabled = defaults.bool(forKey: AppSettingsKey.aiShellCommands.rawValue)
+        notifiesWhenWaiting =
+            defaults.object(forKey: AppSettingsKey.aiNotifyWhenWaiting.rawValue) as? Bool ?? true
+        agentRules = Self.loadAgentRules(from: defaults)
         shownModels =
             defaults.dictionary(forKey: AppSettingsKey.aiShownModels.rawValue) as? [String: [String]]
             ?? [:]
@@ -358,6 +343,66 @@ final class AISettingsStore {
         enabledInstalledProviders = providers
     }
 
+    func addShellRule(_ rule: ShellRule) {
+        agentRules.shellRules.append(rule)
+    }
+
+    /// Unlike Add Shell Rule, the pattern lands where it decides the command that asked.
+    func allowShellPattern(_ pattern: String, for command: String) {
+        agentRules.allow(pattern, for: command)
+    }
+
+    func updateShellRule(_ rule: ShellRule) {
+        guard let index = agentRules.shellRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        agentRules.shellRules[index] = rule
+    }
+
+    func removeShellRule(id: UUID) {
+        agentRules.shellRules.removeAll { $0.id == id }
+    }
+
+    func moveShellRule(id: UUID, by offset: Int) {
+        agentRules.shellRules = Self.moving(id: id, by: offset, in: agentRules.shellRules)
+    }
+
+    func addPathRule(_ rule: PathRule) {
+        agentRules.pathRules.append(rule)
+    }
+
+    /// Unlike Add Path Rule, the pattern lands where it decides the call that asked.
+    func allowPathPattern(_ pattern: String, for call: AgentCall) {
+        agentRules.allowPath(pattern, for: call)
+    }
+
+    func updatePathRule(_ rule: PathRule) {
+        guard let index = agentRules.pathRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        agentRules.pathRules[index] = rule
+    }
+
+    func removePathRule(id: UUID) {
+        agentRules.pathRules.removeAll { $0.id == id }
+    }
+
+    func movePathRule(id: UUID, by offset: Int) {
+        agentRules.pathRules = Self.moving(id: id, by: offset, in: agentRules.pathRules)
+    }
+
+    /// A rule moved past either end stays where it is.
+    private static func moving<Rule: Identifiable<UUID>>(
+        id: UUID, by offset: Int, in rules: [Rule]
+    ) -> [Rule] {
+        var rules = rules
+        guard let index = rules.firstIndex(where: { $0.id == id }),
+            rules.indices.contains(index + offset)
+        else { return rules }
+        rules.insert(rules.remove(at: index), at: index + offset)
+        return rules
+    }
+
     func override(for kind: InstalledAIKind) -> InstalledAIOverride {
         installedOverrides[kind] ?? InstalledAIOverride()
     }
@@ -461,6 +506,37 @@ final class AISettingsStore {
             uniqueKeysWithValues: keyed.compactMap { key, value in
                 InstalledAIKind(rawValue: key).map { ($0, value) }
             })
+    }
+
+    private func persistAgentRules() {
+        guard let data = try? JSONEncoder().encode(agentRules) else { return }
+        defaults.set(data, forKey: AppSettingsKey.aiAgentRules.rawValue)
+    }
+
+    /// A stored table that no longer decodes falls back to the defaults, never to a migration.
+    private static func loadAgentRules(from defaults: UserDefaults) -> AgentRules {
+        if let data = defaults.data(forKey: AppSettingsKey.aiAgentRules.rawValue) {
+            return (try? JSONDecoder().decode(AgentRules.self, from: data)) ?? .defaults
+        }
+        return migrateAgentRules(in: defaults)
+    }
+
+    /// The old access pickers and shell switch, read once and then dropped for good.
+    private static func migrateAgentRules(in defaults: UserDefaults) -> AgentRules {
+        let oldKeys: [AppSettingsKey] = [.aiCalendarAccess, .aiRemindersAccess, .aiShellCommands]
+        let isFresh = oldKeys.allSatisfy { defaults.object(forKey: $0.rawValue) == nil }
+        let rules = isFresh ? AgentRules.defaults : AgentRules.migrated(
+            calendarAccess: AIDataAccess(
+                rawValue: defaults.integer(forKey: AppSettingsKey.aiCalendarAccess.rawValue))
+                ?? .off,
+            remindersAccess: AIDataAccess(
+                rawValue: defaults.integer(forKey: AppSettingsKey.aiRemindersAccess.rawValue))
+                ?? .off,
+            shellCommandsEnabled: defaults.bool(forKey: AppSettingsKey.aiShellCommands.rawValue))
+        guard let data = try? JSONEncoder().encode(rules) else { return rules }
+        defaults.set(data, forKey: AppSettingsKey.aiAgentRules.rawValue)
+        for key in oldKeys { defaults.removeObject(forKey: key.rawValue) }
+        return rules
     }
 
     private func persistSmartReminderModel() {

@@ -172,6 +172,7 @@ enum InstalledAIStreamDecoder {
                 else { return nil }
                 if call.handle == ClaudeHostedServer.handle {
                     let tool = hosted.first { $0.name == call.tool }
+                    guard tool?.showsCallRow ?? true else { return nil }
                     return .toolCall(
                         id: id, origin: tool?.origin ?? "Blitz",
                         title: AIToolServerRow.label(tool?.title ?? call.tool))

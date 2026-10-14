@@ -249,6 +249,31 @@ final class QuicklinkCoordinator {
             .flatMap { FileManager.default.displayName(atPath: $0.path) }
     }
 
+    // MARK: - Chat tools
+
+    /// Offered only while quicklinks are on, though the row also opens to snippets.
+    func chatTools(read: Bool) -> [AITool] {
+        read && settings.quicklinksEnabled ? QuicklinkToolCatalog.tools() : []
+    }
+
+    /// Lists templates only; nothing is opened and no placeholder is filled.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let query: String?
+        do throws(AIToolArguments.Invalid) {
+            query = try QuicklinkToolCatalog.query(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let denied = AgentRefusal.denied.message(for: .snippetsRead)
+        guard settings.quicklinksEnabled else { return .failure(call.id, denied) }
+        if let refusal = await authorize(AgentPrompt.readQuicklinks()) {
+            return .failure(call.id, refusal)
+        }
+        guard settings.quicklinksEnabled else { return .failure(call.id, denied) }
+        let answer = QuicklinkToolCatalog.listing(store.quicklinks, query: query)
+        return AIToolResult(callID: call.id, content: answer, isError: false)
+    }
+
     // MARK: - Library
 
     @discardableResult

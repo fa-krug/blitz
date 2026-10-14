@@ -7,7 +7,6 @@ enum ShellToolCatalog {
     /// Per stream: a chatty command must flood neither the model's context nor Blitz's memory.
     static let outputLimit = 16 * 1024
     static let timeout: Duration = .seconds(60)
-    static let declined = "The user declined to run this command."
 
     private typealias Invalid = AIToolArguments.Invalid
 
@@ -113,7 +112,7 @@ enum ShellToolCatalog {
         return Output(text: text, omittedBytes: totalBytes - kept.count)
     }
 
-    private static func droppingPartialScalar(_ bytes: ArraySlice<UInt8>) -> ArraySlice<UInt8> {
+    static func droppingPartialScalar(_ bytes: ArraySlice<UInt8>) -> ArraySlice<UInt8> {
         guard let lead = bytes.suffix(4).lastIndex(where: { $0 & 0xC0 != 0x80 }) else {
             return bytes
         }

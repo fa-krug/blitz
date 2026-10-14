@@ -104,6 +104,10 @@ struct AIProviderTests {
         subscriptionSelectionsReconcile()
         onDeviceSelectionsRoundTripAndLead()
         conversationSettingsPersistAndDecide()
+        agentRulesMigrateOnceThenPersist()
+        aBrokenAgentTableFallsBackToTheDefaults()
+        shellRulesKeepTheirOrder()
+        pathRulesKeepTheirOrder()
         toolCatalogsAndTurnsEncodePerProvider()
         toolArgumentsSurviveArrivingInFragments()
         anthropicSearchesOnItsOwnServer()
@@ -1131,12 +1135,15 @@ struct AIProviderTests {
         expect(fresh.opensTo == .recent, "chat reopens on the recent conversation by default")
         expect(fresh.newChatAfter == .fiveMinutes, "the idle window defaults to five minutes")
         expect(fresh.toolRounds == .twentyFive, "a reply's tool rounds default to 25")
+        expect(fresh.notifiesWhenWaiting, "a waiting agent notifies by default")
 
         fresh.retention = .week
         fresh.opensTo = .newConversation
         fresh.newChatAfter = .never
         fresh.toolRounds = .fifty
+        fresh.notifiesWhenWaiting = false
         let reopened = AISettingsStore(defaults: defaults)
+        expect(!reopened.notifiesWhenWaiting, "switching the notification off persists")
         expect(reopened.toolRounds == .fifty, "the tool round cap persists")
         reopened.toolRounds = .unlimited
         expect(
@@ -1208,6 +1215,155 @@ struct AIProviderTests {
         expect(
             without.defaultModel == .appleIntelligence,
             "an unavailable model does not silently reroute a stored on-device selection")
+    }
+
+    /// The old access pickers and shell switch are read exactly once, then never again.
+    static func agentRulesMigrateOnceThenPersist() {
+        let suite = "AIProviderTests.agentMigration"
+        let oldKeys = [
+            AppSettingsKey.aiCalendarAccess.rawValue, AppSettingsKey.aiRemindersAccess.rawValue,
+            AppSettingsKey.aiShellCommands.rawValue
+        ]
+        for calendar in AIDataAccess.allCases {
+            for reminders in AIDataAccess.allCases {
+                for shell in [false, true] {
+                    let defaults = isolatedDefaults(suite)
+                    defaults.set(calendar.rawValue, forKey: oldKeys[0])
+                    defaults.set(reminders.rawValue, forKey: oldKeys[1])
+                    defaults.set(shell, forKey: oldKeys[2])
+                    let expected = AgentRules.migrated(
+                        calendarAccess: calendar, remindersAccess: reminders,
+                        shellCommandsEnabled: shell)
+                    let combination = "\(calendar.title) / \(reminders.title) / shell \(shell)"
+                    expect(
+                        AISettingsStore(defaults: defaults).agentRules == expected,
+                        "\(combination) migrates into the agent table")
+                    expect(
+                        oldKeys.allSatisfy { defaults.object(forKey: $0) == nil },
+                        "\(combination) leaves none of the old keys behind")
+                    let stored = defaults.data(forKey: AppSettingsKey.aiAgentRules.rawValue)
+                        .flatMap { try? JSONDecoder().decode(AgentRules.self, from: $0) }
+                    expect(stored == expected, "\(combination) is written under the new key")
+                    discardSuite(suite, defaults)
+                }
+            }
+        }
+
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == .defaults,
+            "a fresh install, with no old key to read, starts on the built-in defaults")
+
+        let store = AISettingsStore(defaults: defaults)
+        store.agentRules.set(.allow, for: .shell)
+        store.agentRules.set(.ask, for: .calendarWrite)
+        let kept = store.agentRules
+        defaults.set(AIDataAccess.readWrite.rawValue, forKey: oldKeys[0])
+        defaults.set(false, forKey: oldKeys[2])
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == kept,
+            "a stored table is kept, and an old key reappearing never migrates over it")
+    }
+
+    static func aBrokenAgentTableFallsBackToTheDefaults() {
+        let suite = "AIProviderTests.agentCorrupt"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        defaults.set(true, forKey: AppSettingsKey.aiShellCommands.rawValue)
+        defaults.set(Data("not a table".utf8), forKey: AppSettingsKey.aiAgentRules.rawValue)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == .defaults,
+            "an unreadable table reads as the defaults, not as a migration of what is left")
+        expect(
+            defaults.object(forKey: AppSettingsKey.aiShellCommands.rawValue) != nil,
+            "and touches no old key, since no migration ran")
+
+        defaults.set(
+            Data(#"{"shell":"allow","calendarRead":"deny","shellRules":[]}"#.utf8),
+            forKey: AppSettingsKey.aiAgentRules.rawValue)
+        let older = AISettingsStore(defaults: defaults).agentRules
+        expect(
+            older.decision(for: .shell) == .allow && older.decision(for: .calendarRead) == .deny,
+            "a table stored before later rows keeps every row it has")
+        expect(
+            older.decision(for: .filesRead) == AgentRules.defaultDecision(for: .filesRead)
+                && older.decision(for: .remindersRead) == .ask
+                && older.pathRules == PathRule.seeds,
+            "and fills each row it lacks with that row's default, and the path seeds")
+    }
+
+    static func shellRulesKeepTheirOrder() {
+        let suite = "AIProviderTests.shellRules"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let store = AISettingsStore(defaults: defaults)
+        let git = ShellRule(pattern: "git *", decision: .allow)
+        let push = ShellRule(pattern: "git push*", decision: .deny)
+        let list = ShellRule(pattern: "ls", decision: .allow)
+        for rule in [git, push, list] { store.addShellRule(rule) }
+        store.moveShellRule(id: push.id, by: -1)
+        expect(
+            store.agentRules.shellRules.map(\.id) == [push.id, git.id, list.id],
+            "a rule moves up past the one above it")
+        store.moveShellRule(id: push.id, by: -1)
+        store.moveShellRule(id: list.id, by: 1)
+        expect(
+            store.agentRules.shellRules.map(\.id) == [push.id, git.id, list.id],
+            "and a rule moved past either end stays put")
+        var edited = git
+        edited.pattern = "git status*"
+        store.updateShellRule(edited)
+        store.removeShellRule(id: list.id)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.shellRules == [push, edited],
+            "edits, removals and order persist")
+        store.allowShellPattern("ls *", for: "ls -la")
+        store.allowShellPattern("git status*", for: "git status")
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.shellRules.map(\.pattern)
+                == ["git push*", "git status*", "ls *"],
+            "Always Allow persists its pattern once, without duplicating one already there")
+    }
+
+    static func pathRulesKeepTheirOrder() {
+        let suite = "AIProviderTests.pathRules"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let store = AISettingsStore(defaults: defaults)
+        let seeds = store.agentRules.pathRules
+        expect(!seeds.isEmpty, "a fresh table starts on the path seeds")
+        let projects = PathRule(pattern: "~/Projects/**", decision: .allow)
+        let downloads = PathRule(pattern: "~/Downloads/*", access: .read, decision: .ask)
+        store.addPathRule(projects)
+        store.addPathRule(downloads)
+        store.movePathRule(id: downloads.id, by: -1)
+        expect(
+            store.agentRules.pathRules.suffix(2).map(\.id) == [downloads.id, projects.id],
+            "a path rule moves up past the one above it")
+        store.movePathRule(id: projects.id, by: 1)
+        expect(
+            store.agentRules.pathRules.last?.id == projects.id,
+            "and one moved past the end stays put")
+        var edited = projects
+        edited.access = .write
+        store.updatePathRule(edited)
+        store.removePathRule(id: seeds[0].id)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.pathRules
+                == Array(seeds.dropFirst()) + [downloads, edited],
+            "edits, removals, order and access persist, a removed seed included")
+        let read = AgentCall.files(
+            .filesRead, paths: ["/Users/me/Projects/app/a"], homeDirectory: "/Users/me")
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        let persisted = AISettingsStore(defaults: defaults).agentRules.pathRules
+        expect(
+            persisted.filter { $0.pattern == "~/Projects/app/**" }.map(\.access) == [.read],
+            "Always Allow persists a read-only pattern once")
+        expect(
+            persisted.last?.pattern == "~/Projects/app/**",
+            "placed last, since the write-only rule there never decided the read")
     }
 
     static func settingsPersistAndRepairSelections() {

@@ -61,11 +61,20 @@ struct AIToolLoopProvider: AIProvider {
             for call in round.calls {
                 try Task.checkCancellation()
                 let tool = tools.first { $0.name == call.name }
-                continuation.yield(
-                    .toolCall(
-                        id: call.id, origin: tool?.origin ?? "", title: tool?.title ?? call.name))
+                let showsRow = tool?.showsCallRow ?? true
+                if showsRow {
+                    continuation.yield(
+                        .toolCall(
+                            id: call.id, origin: tool?.origin ?? "",
+                            title: tool?.title ?? call.name))
+                } else {
+                    await continuation.barrier().wait()
+                    try Task.checkCancellation()
+                }
                 let result = await bounded(invoke(call), spent: &spent)
-                continuation.yield(.toolResult(id: call.id, isError: result.isError))
+                if showsRow {
+                    continuation.yield(.toolResult(id: call.id, isError: result.isError))
+                }
                 carried += result.content.utf8.count
                 messages.append(AIMessage(role: .tool, text: "", toolResult: result))
             }

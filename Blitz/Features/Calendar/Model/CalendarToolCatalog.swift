@@ -33,8 +33,8 @@ enum CalendarToolCatalog {
         name == listEventsName || name == createEventName
     }
 
-    /// Writing is offered only where the reader allowed it, so a read-only model never sees it.
-    static func tools(canWrite: Bool, now: Date, calendar: Calendar) -> [AITool] {
+    /// Each half is offered only where the agent's rules allow it, so a model never sees the rest.
+    static func tools(canRead: Bool, canWrite: Bool, now: Date, calendar: Calendar) -> [AITool] {
         let now = AIToolDate.describeNow(now, calendar: calendar)
         let list = AITool(
             name: listEventsName,
@@ -51,11 +51,12 @@ enum CalendarToolCatalog {
                 ],
                 required: ["start", "end"]),
             origin: origin, title: "List Events")
-        guard canWrite else { return [list] }
+        let reads = canRead ? [list] : []
+        guard canWrite else { return reads }
         let create = AITool(
             name: createEventName,
             description: "Add an event to the user's default calendar, in the user's local "
-                + "time. Now: \(now). The user sees it and confirms before it is saved.",
+                + "time. Now: \(now). The user may be asked to confirm, and may decline.",
             parameters: AIToolJSON.object(
                 properties: [
                     "title": AIToolJSON.string("What the event is called."),
@@ -71,7 +72,7 @@ enum CalendarToolCatalog {
                 ],
                 required: ["title", "start"]),
             origin: origin, title: "Create Event")
-        return [list, create]
+        return reads + [create]
     }
 
     static func request(

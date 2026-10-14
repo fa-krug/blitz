@@ -126,9 +126,12 @@ struct InstalledAITests {
         await unlimitedPassesNoTurnCap(fixture)
         await concurrentCallsAreAskedOneAtATime(fixture)
         hostedServerSpeaksJSONRPC()
+        aQuestionDrawsItsOwnCardNotACallRow()
         await claudeHostsBlitzsOwnTools(fixture)
+        await aRowlessCallRunsOnlyOnceItsTextIsApplied(fixture)
         claudeSearchFramesBecomeSearchRows()
         await claudeSearchesTheWebOnlyWhenAsked(fixture)
+        await aPlanTurnsBoundaryOnlyLetsTheToolsLook(fixture)
         await aCrashedTurnsFilesAreRemovedAtLaunch(fixture)
         await aManagedMCPPolicyLeavesBothFlagsOff(fixture)
         await aReadersVariablesReachTheToolButNeverItsIsolation(fixture)
@@ -510,6 +513,35 @@ struct InstalledAITests {
             "an armed turn allows the search beside its ask rules and keeps the reader's cap")
     }
 
+    /// Plan's instruction says change nothing, so the CLI's own boundary must not say otherwise.
+    private static func aPlanTurnsBoundaryOnlyLetsTheToolsLook(_ fixture: Fixture) async {
+        func boundary(readsOnly: Bool, webSearch: Bool) async -> String {
+            _ = await fixture.events(
+                kind: .claude, model: webSearch ? "search" : "sonnet", effort: nil,
+                toolServers: fixture.session(allowing: true, asked: Box(), readsOnly: readsOnly),
+                webSearch: webSearch)
+            let argv = fixture.lastArguments("claude-args.log")
+            return argv.firstIndex(of: "--system-prompt").map { argv[$0 + 1] } ?? ""
+        }
+        let allowedAll = "whatever one of them does is allowed"
+        let changesNothing = "nothing may be changed"
+        let manual = await boundary(readsOnly: false, webSearch: false)
+        let manualSearch = await boundary(readsOnly: false, webSearch: true)
+        expect(
+            manual.contains(allowedAll) && manualSearch.contains(allowedAll)
+                && !manual.contains(changesNothing),
+            "outside Plan an armed turn is told whatever a supplied tool does is allowed")
+        let plan = await boundary(readsOnly: true, webSearch: false)
+        let planSearch = await boundary(readsOnly: true, webSearch: true)
+        expect(
+            plan.contains(changesNothing) && planSearch.contains(changesNothing)
+                && !plan.contains(allowedAll) && !planSearch.contains(allowedAll),
+            "in Plan it is told the tools may only look and nothing may be changed")
+        expect(
+            plan.contains("MCP tools supplied") && planSearch.contains("WebSearch"),
+            "and still names the tools it may use, the search too where one is offered")
+    }
+
     private static func cursorRunsAskModeWithoutForce(_ fixture: Fixture) async {
         let events = await fixture.events(kind: .cursor, model: "composer-2.5", effort: nil)
         expect(events.contains(.text("Cursor ")), "Cursor delta text reaches the provider stream")
@@ -824,6 +856,25 @@ struct InstalledAITests {
             "a method the server does not speak is refused as JSON-RPC says")
     }
 
+    /// The transcript draws a question as its card, so the CLI's report of the call adds no row.
+    private static func aQuestionDrawsItsOwnCardNotACallRow() {
+        let reminder = AITool(
+            name: "reminders_create", description: "", parameters: .object([:]),
+            origin: "Reminders", title: "Create Reminder")
+        let hosted = AskUserToolCatalog.tools() + [reminder]
+        let line = Data(
+            """
+            {"type":"assistant","message":{"content":[\
+            {"type":"tool_use","id":"toolu_ask","name":"mcp__blitz_data__ask_user","input":{}},\
+            {"type":"tool_use","id":"t2","name":"mcp__blitz_data__reminders_create","input":{}}\
+            ]}}
+            """.utf8)
+        let events = InstalledAIStreamDecoder.decode(line, kind: .claude, hosted: hosted).events
+        expect(
+            events == [.toolCall(id: "t2", origin: "Reminders", title: "Create Reminder")],
+            "an ask_user call reports no row of its own, while a tool beside it still does")
+    }
+
     /// Calendar and Reminders reach Claude as an in-process server answered on the turn's own pipe.
     private static func claudeHostsBlitzsOwnTools(_ fixture: Fixture) async {
         let asked = Box()
@@ -853,8 +904,12 @@ struct InstalledAITests {
             "Blitz's own tools arm a turn even with no MCP server to run")
         let config = fixture.read("claude-mcp-config.log")
         expect(
-            config.contains(#""blitz_data":{"name":"blitz_data","type":"sdk"}"#),
+            config.contains(
+                #""blitz_data":{"name":"blitz_data","timeout":86400000,"type":"sdk"}"#),
             "the configuration names Blitz's in-process server, with nothing to start")
+        expect(
+            ClaudeHostedServer.callTimeoutMilliseconds == 86_400_000,
+            "a call may wait a day on the reader, past a short MCP_TOOL_TIMEOUT of their own")
         let hostedLog = fixture.read("claude-hosted.log")
         expect(
             hostedLog.contains(#""mcp_response""#) && hostedLog.contains(#""request_id":"mcp_0""#)
@@ -878,6 +933,39 @@ struct InstalledAITests {
             events.contains(.toolResult(id: "toolu_hosted", isError: false))
                 && events.last == .finished,
             "and the turn finishes on the CLI's own result")
+    }
+
+    /// A question's card pins where the reply stands, so the text before it must be applied first.
+    private static func aRowlessCallRunsOnlyOnceItsTextIsApplied(_ fixture: Fixture) async {
+        let order = HostedOrder()
+        let hosted = AIHostedTools {
+            AskUserToolCatalog.tools()
+        } run: { call in
+            await MainActor.run { order.steps.append("run \(call.name)") }
+            return AIToolResult(callID: call.id, content: "The user chose: PDF", isError: false)
+        }
+        let session = AIToolServerSession(rounds: 25, hosted: hosted) {
+            []
+        } consent: { _ in
+            false
+        }
+        await fixture.consume(kind: .claude, model: "hosted-ask", toolServers: session) { event in
+            switch event {
+            case .text(let text):
+                order.steps.append("text \(text)")
+            case .barrier(let barrier):
+                order.steps.append("applied")
+                barrier.pass()
+            default:
+                break
+            }
+        }
+        expect(
+            order.steps == ["text Let me check.", "applied", "run ask_user"],
+            "a call with no row waits until the consumer has applied the text before it: \(order.steps)")
+        expect(
+            fixture.read("claude-hosted-ask.log").contains("The user chose: PDF"),
+            "and then runs and answers on the pipe as any hosted call does")
     }
 
     private static func theRoundCapEndsTheTurnTheWayTheLoopDoes(_ fixture: Fixture) async {
@@ -1009,6 +1097,11 @@ private final class HostedRuns {
     var calls: [AIToolCall] = []
 }
 
+@MainActor
+private final class HostedOrder {
+    var steps: [String] = []
+}
+
 /// A reader who is asked once, takes a moment over it, and grants the server for the chat.
 @MainActor
 private final class GrantingReader {
@@ -1097,6 +1190,22 @@ private final class Fixture {
         }
     }
 
+    /// Each event as it arrives, for a test standing in for the consumer that passes barriers.
+    func consume(
+        kind: InstalledAIKind, model: String, toolServers: AIToolServerSession,
+        _ handle: (AIStreamEvent) -> Void
+    ) async {
+        guard let executable = executables[kind] else { return }
+        let provider = InstalledCLIProvider(
+            kind: kind, executable: executable, model: model, effort: nil, workspace: workspace,
+            launch: InstalledAILaunch(), toolServers: toolServers)
+        do {
+            for try await event in provider.stream(request()) { handle(event) }
+        } catch {
+            print("\(kind.title) stream failed: \(error)")
+        }
+    }
+
     func streamError(
         kind: InstalledAIKind, model: String, effort: String?,
         launch: InstalledAILaunch = InstalledAILaunch(),
@@ -1116,8 +1225,10 @@ private final class Fixture {
     }
 
     /// One local server, and a reader who answers every call the same way.
-    func session(allowing: Bool, asked: Box, rounds: Int? = 25) -> AIToolServerSession {
-        AIToolServerSession(rounds: rounds) {
+    func session(
+        allowing: Bool, asked: Box, rounds: Int? = 25, readsOnly: Bool = false
+    ) -> AIToolServerSession {
+        AIToolServerSession(rounds: rounds, readsOnly: readsOnly) {
             [
                 AIToolServer(
                     handle: "probe", title: "Probe",

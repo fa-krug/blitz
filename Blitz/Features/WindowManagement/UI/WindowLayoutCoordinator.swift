@@ -16,7 +16,7 @@ final class WindowLayoutCoordinator {
     /// Dialog and message-HUD presentation, and the editor handoff. Never state this type owns.
     private unowned let core: AppCore
     /// One run at a time: a held shortcut must not stack two passes over the same windows.
-    private var run: Task<Void, Never>?
+    private var run: Task<WindowLayoutRunner.Outcome, Never>?
 
     init(
         store: WindowLayoutStore, settings: AppSettings, appIndex: AppIndex,
@@ -60,7 +60,65 @@ final class WindowLayoutCoordinator {
         run = Task { [weak self] in
             let outcome = await WindowLayoutRunner.run(layout, gap: gap)
             await self?.report(outcome, for: layout)
+            return outcome
         }
+    }
+
+    // MARK: - Chat tools
+
+    /// The agent's funnel: the same switch and one-run rule, answered in text rather than a HUD.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: WindowLayoutToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try WindowLayoutToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard settings.windowManagementEnabled else {
+            return .failure(call.id, AgentRefusal.denied.message(for: .windowLayouts))
+        }
+        let layouts = store.layouts.map(Self.toolLayout)
+        guard case .apply(let name) = request else {
+            let answer = WindowLayoutToolCatalog.listing(layouts)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+        let picked: WindowLayoutToolCatalog.Layout
+        do throws(AIToolArguments.Invalid) {
+            picked = try WindowLayoutToolCatalog.layout(named: name, in: layouts)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        // Checked, never prompted for: macOS's own request belongs to a gesture of the user's.
+        guard Permissions.isAccessibilityTrusted() else {
+            return .failure(call.id, WindowLayoutToolCatalog.needsAccessibility)
+        }
+        if let refusal = await authorize(WindowLayoutToolCatalog.prompt(for: picked)) {
+            return .failure(call.id, refusal)
+        }
+        guard settings.windowManagementEnabled, let layout = store.layout(id: picked.id) else {
+            return .failure(call.id, WindowLayoutToolCatalog.gone(picked))
+        }
+        let gap = CGFloat(settings.windowGap)
+        run?.cancel()
+        let task = Task { await WindowLayoutRunner.run(layout, gap: gap) }
+        run = task
+        let outcome = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if outcome.isBlockedOnPermission {
+            return .failure(call.id, WindowLayoutToolCatalog.needsAccessibility)
+        }
+        let result = WindowLayoutToolCatalog.result(
+            of: picked,
+            outcome: .init(
+                placed: outcome.placed, opened: outcome.opened, problems: Self.detail(for: outcome)))
+        return AIToolResult(callID: call.id, content: result.text, isError: result.isError)
+    }
+
+    private static func toolLayout(_ layout: WindowLayout) -> WindowLayoutToolCatalog.Layout {
+        WindowLayoutToolCatalog.Layout(id: layout.id, name: layout.name, summary: layout.summary)
     }
 
     func prepareForTermination() {
@@ -141,7 +199,7 @@ final class WindowLayoutCoordinator {
             return
         }
         // Placing windows is its own feedback, so a clean run says nothing at all.
-        guard let detail = detail(for: outcome) else { return }
+        guard let detail = Self.detail(for: outcome) else { return }
         guard outcome.didAnything else {
             await core.showNotice(
                 title: "Couldn't Run “\(layout.name)”", message: detail, symbol: layout.symbol,
@@ -152,7 +210,7 @@ final class WindowLayoutCoordinator {
     }
 
     /// What went wrong, or nil when everything the layout asked for happened.
-    private func detail(for outcome: WindowLayoutRunner.Outcome) -> String? {
+    private static func detail(for outcome: WindowLayoutRunner.Outcome) -> String? {
         var parts: [String] = []
         if let skipped = WindowLayoutPlan(placements: [], skipped: outcome.skipped).skippedSummary {
             parts.append(skipped)

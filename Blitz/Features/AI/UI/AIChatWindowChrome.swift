@@ -271,6 +271,12 @@ enum AIChatActionsMenu {
                 ClosureMenuItem(pinned ? "Unpin Chat" : "Pin Chat", symbol: "pin") {
                     coordinator.togglePin(id: chat.session.id)
                 })
+            if coordinator.canArchive(id: chat.session.id) {
+                menu.addItem(
+                    ClosureMenuItem("Archive Chat", symbol: "archivebox") {
+                        coordinator.archiveChat(id: chat.session.id)
+                    })
+            }
             menu.addItem(
                 ClosureMenuItem("Delete Chat…", symbol: "trash") {
                     Task { await coordinator.deleteChat(id: chat.session.id) }

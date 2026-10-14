@@ -9,9 +9,8 @@ final class MCPCoordinator {
     private let store: MCPSettingsStore
     private let manager: MCPServerManager
     private unowned let core: AppCore
-
-    /// Servers each conversation was granted; keyed, since a dialog may outlive a chat switch.
-    @ObservationIgnored private var chatGrants: [UUID: Set<UUID>] = [:]
+    /// Tool lists read for a CLI route, by server; an edit or a removal makes them stale.
+    @ObservationIgnored private var listed: [UUID: [MCPTool]] = [:]
 
     init(
         settings: AppSettings, store: MCPSettingsStore, manager: MCPServerManager, core: AppCore
@@ -28,6 +27,7 @@ final class MCPCoordinator {
     func applyEnabled() {
         defer { dropWithdrawnServers() }
         guard isActive else {
+            listed = [:]
             core.mcpOAuth.stop()
             manager.stop()
             return
@@ -70,24 +70,43 @@ final class MCPCoordinator {
         return store.enabledServers.first { $0.slug == slug }
     }
 
-    /// What this turn may reach: everything enabled, or one server when `@slug` named it.
-    func tools(scopedTo slug: String?) -> [AITool] {
+    /// Every enabled server's tools, or one server's when `@slug` named it; the agent gate narrows.
+    func tools(scopedTo slug: String?) -> [MCPTool] {
         guard isActive else { return [] }
-        return manager.tools
-            .filter { tool in
-                guard slug == nil || tool.serverSlug == slug else { return false }
-                return store.server(id: tool.serverID)?.trust != .never
-            }
-            .map(\.aiTool)
+        return manager.tools.filter { slug == nil || $0.serverSlug == slug }
+    }
+
+    /// What a server last listed, from Blitz's own connection or the copy `listTools` read.
+    func listedTools(slug: String) -> [MCPTool] {
+        guard let server = server(slug: slug) else { return [] }
+        if let connection = manager.connection(slug: slug), connection.status.isReady {
+            return connection.tools
+        }
+        return listed[server.id] ?? []
+    }
+
+    /// A CLI starts its own copy, so a server Blitz isn't running is listed once, then remembered.
+    func listTools(of server: MCPServer) async -> [MCPTool] {
+        let known = listedTools(slug: server.slug)
+        guard known.isEmpty, isActive else { return known }
+        let connection = MCPServerConnection(
+            server: server, secrets: MCPSecretStore().secrets(for: server.id), oauth: core.mcpOAuth)
+        defer { connection.stop() }
+        await connection.start()
+        guard self.server(slug: server.slug) == server else { return [] }
+        listed[server.id] = connection.tools
+        return connection.tools
     }
 
     /// The same list for a CLI route; it starts its own copies, so Blitz's need not be ready.
-    func toolServers(scopedTo slug: String?) async -> [AIToolServer] {
+    func toolServers(
+        scopedTo slug: String?, offering isOffered: (MCPServer) async -> Bool
+    ) async -> [AIToolServer] {
         guard isActive else { return [] }
         let secrets = MCPSecretStore()
         var result: [AIToolServer] = []
-        for server in store.enabledServers
-        where server.trust != .never && (slug == nil || server.slug == slug) {
+        for server in store.enabledServers where slug == nil || server.slug == slug {
+            guard await isOffered(server) else { continue }
             let stored = secrets.secrets(for: server.id)
             var bearer: String?
             if server.oauth == true { bearer = try? await core.mcpOAuth.lentToken(for: server) }
@@ -101,21 +120,12 @@ final class MCPCoordinator {
         return result
     }
 
-    /// Consent for a call a vendor CLI is making, through the same policy and the same dialog.
-    func permit(_ call: AIToolServerCall, in chat: UUID) async -> Bool {
-        guard isActive, let server = server(slug: call.handle) else { return false }
-        return await isPermitted(server, tool: call.tool, in: chat)
-    }
-
-    func invoke(_ call: AIToolCall, in chat: UUID) async -> AIToolResult {
-        guard let route = MCPToolName.parse(call.name),
-            let server = server(slug: route.slug),
+    /// Runs a call the agent gate has already let through.
+    func invoke(_ call: AIToolCall) async -> AIToolResult {
+        guard let route = MCPToolName.parse(call.name), server(slug: route.slug) != nil,
             let connection = manager.connection(slug: route.slug)
         else {
             return .failure(call.id, "That tool is no longer connected.")
-        }
-        guard await isPermitted(server, tool: route.tool, in: chat) else {
-            return .failure(call.id, "The user declined this tool call.")
         }
         manager.markUsed()
         do {
@@ -147,14 +157,21 @@ final class MCPCoordinator {
         try MCPSecretStore().save(secrets, for: server.id)
         core.mcpOAuth.cancelSignIn(server.id)
         manager.disconnect(server.id)
+        listed[server.id] = nil
         store.save(server)
         applyEnabled()
+    }
+
+    func setTrust(_ trust: MCPTrust, for id: UUID) {
+        store.setTrust(trust, for: id)
+        dropWithdrawnServers()
     }
 
     func remove(_ id: UUID) throws {
         core.mcpOAuth.cancelSignIn(id)
         try MCPSecretStore().remove(for: id)
         store.remove(id: id)
+        listed[id] = nil
         applyEnabled()
     }
 
@@ -180,42 +197,5 @@ final class MCPCoordinator {
         defer { connection.stop() }
         await connection.start()
         return connection.status
-    }
-
-    private func isPermitted(_ server: MCPServer, tool: String, in chat: UUID) async -> Bool {
-        switch MCPTrustPolicy.decide(
-            trust: server.trust, isGrantedForChat: chatGrants[chat]?.contains(server.id) == true)
-        {
-        case .allow: return true
-        case .refuse: return false
-        case .ask: break
-        }
-        switch await ask(server, tool: tool) {
-        case .always:
-            store.setTrust(.always, for: server.id)
-            return true
-        case .thisChat:
-            chatGrants[chat, default: []].insert(server.id)
-            return true
-        case .refuse:
-            return false
-        }
-    }
-
-    /// Escape refuses this one call: a dialog can grant a server, only Settings can withhold one.
-    private func ask(_ server: MCPServer, tool: String) async -> MCPTrustChoice {
-        let choices: [MCPTrustChoice] = [.always, .thisChat, .refuse]
-        let index = await core.choose(
-            title: "Let \(server.title) run its tools?",
-            message: "The model wants to call \u{201C}\(tool)\u{201D}. Blitz did not write this "
-                + "server and cannot vouch for what it does.",
-            symbol: "wrench.and.screwdriver",
-            options: [
-                DialogAction(title: "Always Allow"),
-                DialogAction(title: "Allow This Chat"),
-                DialogAction(title: "Don't Allow", role: .cancel)
-            ],
-            defaultIndex: 1)
-        return choices.indices.contains(index) ? choices[index] : .refuse
     }
 }

@@ -10,7 +10,7 @@ enum AIPreamble {
 
         You happen to be built into Blitz, a native macOS menu-bar launcher and an open-source \
         alternative to Raycast that also runs Raycast extensions natively. You are reached from \
-        Quick AI in its command palette or from its AI Chat window.
+        Quick AI in its command palette or from its AI Agent window.
 
         To offer a choice of a few next steps, end with a block that opens with ```choices and \
         closes with ```, one short option per line; each becomes a button that answers for the \

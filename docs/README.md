@@ -27,6 +27,7 @@ open with an `## Invariants` section; read it before changing anything in that a
 [settings](features/settings.md) ·
 [onboarding](features/onboarding.md) ·
 [AI providers and chat](features/ai.md) ·
+[agent](features/agent.md) ·
 [MCP servers](features/mcp.md) ·
 [quick actions](features/quick-actions.md) ·
 [clipboard](features/clipboard.md) ·

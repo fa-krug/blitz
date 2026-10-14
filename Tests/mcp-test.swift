@@ -23,8 +23,8 @@ struct MCPTests {
         slugsAreDerivedAndUnique()
         toolNamesRouteBackToTheirServer()
         toolListsDropWhatCannotBeCalled()
+        readOnlyIsTheServersOwnHint()
         outputFlattensToWhatAModelCanRead()
-        trustDecidesFromStandingAndChatGrants()
         addressingTakesOnlyAKnownHandle()
         settingsPersistAndKeepHandlesApart()
         serversBecomeWhatACLICanRunItself()
@@ -147,6 +147,42 @@ struct MCPTests {
             "the transcript pair travels with the tool, so the AI layer never parses a wire name")
     }
 
+    /// Plan mode offers a tool only on this, so anything short of a plain `true` changes things.
+    static func readOnlyIsTheServersOwnHint() {
+        let listed = JSONValue([
+            "tools": [
+                ["name": "search", "annotations": ["readOnlyHint": true]],
+                ["name": "create", "annotations": ["readOnlyHint": false]],
+                ["name": "delete", "annotations": ["destructiveHint": true]],
+                ["name": "plain"],
+                ["name": "quoted", "annotations": ["readOnlyHint": "true"]],
+                ["name": "loose", "readOnlyHint": true]
+            ]
+        ])
+        let tools = MCPTool.list(listed, serverID: UUID(), serverSlug: "gh", serverTitle: "GitHub")
+        expect(
+            tools.filter(\.isReadOnly).map(\.name) == ["search"],
+            "only a tool whose annotations say readOnlyHint true is read-only")
+        let search = tools.first { $0.name == "search" }
+        expect(
+            search.map(AgentCall.init) == AgentCall.mcp("gh", readOnly: true)
+                && tools.last.map(AgentCall.init) == AgentCall.mcp("gh", readOnly: false),
+            "the policy weighs a listed tool with that hint and nothing else")
+        expect(
+            AgentCall.mcp(AIToolServerCall(handle: "gh", tool: "search"), listed: tools)
+                == AgentCall.mcp("gh", readOnly: true)
+                && AgentCall.mcp(AIToolServerCall(handle: "gh", tool: "create"), listed: tools)
+                == AgentCall.mcp("gh", readOnly: false)
+                && AgentCall.mcp(AIToolServerCall(handle: "other", tool: "search"), listed: tools)
+                == AgentCall.mcp("other", readOnly: false),
+            "a CLI's call is matched to its server's listing by handle and name")
+        expect(
+            AgentCall.server("gh", listed: tools) == AgentCall.mcp("gh", readOnly: true)
+                && AgentCall.server("gh", listed: Array(tools.dropFirst()))
+                == AgentCall.mcp("gh", readOnly: false),
+            "a server reads as read-only while any one of its tools does")
+    }
+
     static func outputFlattensToWhatAModelCanRead() {
         let text = MCPToolOutput.flatten(
             JSONValue(["content": [["type": "text", "text": "one"], ["type": "text", "text": "two"]]]))
@@ -166,21 +202,6 @@ struct MCPTests {
         expect(
             MCPToolOutput.flatten(JSONValue([:])).content.isEmpty == false,
             "an empty answer still says something rather than nothing")
-    }
-
-    static func trustDecidesFromStandingAndChatGrants() {
-        expect(
-            MCPTrustPolicy.decide(trust: .never, isGrantedForChat: true) == .refuse,
-            "a withheld server stays withheld, whatever a chat granted")
-        expect(
-            MCPTrustPolicy.decide(trust: .always, isGrantedForChat: false) == .allow,
-            "a trusted server never asks again")
-        expect(
-            MCPTrustPolicy.decide(trust: .ask, isGrantedForChat: false) == .ask,
-            "the first call of a chat is asked about")
-        expect(
-            MCPTrustPolicy.decide(trust: .ask, isGrantedForChat: true) == .allow,
-            "and the rest of that chat is not")
     }
 
     static func addressingTakesOnlyAKnownHandle() {
