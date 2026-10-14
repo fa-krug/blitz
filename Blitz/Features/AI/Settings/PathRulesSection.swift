@@ -40,7 +40,8 @@ struct PathRulesSection: View {
                 "A matching Deny always wins; otherwise each path takes the first pattern it "
                     + "matches. ~ is your home folder, * stays within one folder and ** spans "
                     + "folders, so ~/Projects/** covers the folder and everything in it. Paths "
-                    + "are checked once symlinks resolve, ignoring case.")
+                    + "are checked once symlinks resolve, ignoring case. Read rules also weigh "
+                    + "what the agent opens, but only a Deny or an Ask there changes it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -120,6 +120,39 @@ struct AgentPrompt: Equatable, Sendable {
             symbol: AgentTool.sessionsArchive.symbolName)
     }
 
+    /// An app, a path or a link; `subject` is how the title names it.
+    static func open(_ subject: String, detail: String) -> AgentPrompt {
+        write(
+            title: "Let the agent open \(subject)?", message: detail,
+            symbol: AgentTool.openItems.symbolName)
+    }
+
+    /// The input is shown as sent, clipped, since the shortcut acts on it.
+    static func runShortcut(_ name: String, input: String?) -> AgentPrompt {
+        let given = input.map { "With this input:\n\(AIToolJSON.clipped($0, to: 300))\n\n" } ?? ""
+        return write(
+            title: "Let the agent run the shortcut \u{201C}\(name)\u{201D}?",
+            message: given + "It can do anything its actions do, and what it returns is sent to "
+                + "the model\u{2019}s provider.",
+            symbol: AgentTool.shortcuts.symbolName)
+    }
+
+    static func runSystemAction(_ name: String) -> AgentPrompt {
+        write(
+            title: "Let the agent run \u{201C}\(name)\u{201D}?",
+            message: "Blitz runs it as if you chose it in the launcher.",
+            symbol: AgentTool.systemActions.symbolName)
+    }
+
+    /// `summary` says how many windows on how many displays, as the layout's row does.
+    static func applyWindowLayout(_ name: String, summary: String) -> AgentPrompt {
+        write(
+            title: "Let the agent apply the window layout \u{201C}\(name)\u{201D}?",
+            message: "\(summary). It opens the apps it names that are not running, then moves "
+                + "and resizes their windows.",
+            symbol: AgentTool.windowLayouts.symbolName)
+    }
+
     /// The server's own three-way question; only Settings can withhold a server for good.
     static func mcp(serverTitle: String, tool: String) -> AgentPrompt {
         AgentPrompt(

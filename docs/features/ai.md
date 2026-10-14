@@ -151,6 +151,15 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `sessions_unarchive` (Archive Chats), from `SessionToolCatalog`, go to the same routes; a chat
   never reads or archives itself, and a transcript comes back as text, 64 KB at a time. See
   [Agent](agent.md#session-tools).
+- **A model can act on the Mac, only as the rules allow and never past undoing.** `mac_open`
+  (`OpenToolCatalog`, Open Apps, Files and Links) opens an installed app, a file or folder by path,
+  or an `http`, `https` or `mailto` link; `shortcuts_list` and `shortcuts_run` (Run Shortcuts) list
+  and run an Apple Shortcut with optional text input; `system_actions_list` and `system_action_run`
+  (Run System Actions) run a Blitz system action; `window_layouts_list` and `window_layout_apply`
+  (Apply Window Layouts) apply a saved layout. They go to the same routes, all four rows start on
+  Deny, Plan never offers them and each run asks every time. A path is weighed as a read with its
+  links resolved; a script, installer or link file, every other scheme and the system actions that
+  end the session or lose something are refused outright. See [Agent](agent.md#mac-tools).
 - **A model can read one web page as text, and a local address always asks.** `web_fetch`
   (`WebFetchToolCatalog`, under Fetch Web Pages) goes to the same routes, fetches an `http` or
   `https` URL on its own cacheless, cookieless `.ephemeral` session (`WebFetchRunner`) — 30 s, 5 MB

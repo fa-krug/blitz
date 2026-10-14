@@ -693,6 +693,11 @@ refusal `LauncherCoordinator` — an application, a System Settings pane, Open i
 **Couldn’t Open “…”** failure dialog with the row's glyph and the system's reason where there is one.
 Clipboard and Apple Shortcuts report through the same call.
 
+**The agent opens through here too.** `mac_open` names an app against the `.application` entries
+of the index (`LauncherCoordinator.openToolApps`) and opens it, a path or a link through
+`openForAgent`, which leaves the palette where it is and returns the refusal to the model rather
+than raising the dialog. See [Agent](agent.md#opening).
+
 ## Favorites
 
 `FavoritesStore.keys` is the order — the array *is* the ranking, and it only shows while the query is

@@ -214,12 +214,16 @@ struct AgentPolicyTests {
         check(
             "only the rows a catalog serves are hosted; web search is the provider's",
             AgentTool.builtIn.filter(\.isHosted) == [
-                .shell, .filesRead, .filesWrite, .webFetch, .calendarRead, .calendarWrite,
+                .shell, .filesRead, .filesWrite, .webFetch, .openItems, .shortcuts,
+                .systemActions, .windowLayouts, .calendarRead, .calendarWrite,
                 .remindersRead, .remindersWrite, .sessionsRead, .sessionsArchive
             ] && !AgentTool.mcp("x").isHosted)
         check(
-            "only the file rows weigh paths",
-            AgentTool.builtIn.filter(\.usesPathRules) == [.filesRead, .filesWrite])
+            "the file rows and opening weigh paths",
+            AgentTool.builtIn.filter(\.usesPathRules) == [.filesRead, .filesWrite, .openItems])
+        check(
+            "reading and opening take Read rules",
+            AgentTool.builtIn.filter(\.readsPaths) == [.filesRead, .openItems])
         check("only web search has no ask", AgentTool.builtIn.filter { !$0.canAsk } == [.webSearch])
         check("an MCP server can ask", AgentTool.mcp("github").canAsk)
         check("an MCP row is titled by its slug", AgentTool.mcp("github").title == "github")
@@ -248,6 +252,16 @@ struct AgentPolicyTests {
         for name in [SessionToolCatalog.archiveName, SessionToolCatalog.unarchiveName] {
             check("\(name) archives chats", AgentTool(wireName: name) == .sessionsArchive)
         }
+        check("mac_open opens", AgentTool(wireName: OpenToolCatalog.openName) == .openItems)
+        for name in [ShortcutToolCatalog.listName, ShortcutToolCatalog.runName] {
+            check("\(name) runs shortcuts", AgentTool(wireName: name) == .shortcuts)
+        }
+        for name in [SystemActionToolCatalog.listName, SystemActionToolCatalog.runName] {
+            check("\(name) runs system actions", AgentTool(wireName: name) == .systemActions)
+        }
+        for name in [WindowLayoutToolCatalog.listName, WindowLayoutToolCatalog.applyName] {
+            check("\(name) applies window layouts", AgentTool(wireName: name) == .windowLayouts)
+        }
         check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
@@ -275,6 +289,9 @@ struct AgentPolicyTests {
             + FileToolCatalog.tools(read: true, write: true).map(\.name)
             + WebFetchToolCatalog.tools().map(\.name)
             + SessionToolCatalog.tools(read: true, archive: true).map(\.name)
+            + OpenToolCatalog.tools().map(\.name) + ShortcutToolCatalog.tools().map(\.name)
+            + SystemActionToolCatalog.tools().map(\.name)
+            + WindowLayoutToolCatalog.tools().map(\.name)
             + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",

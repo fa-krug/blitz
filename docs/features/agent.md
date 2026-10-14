@@ -1,17 +1,18 @@
 # Agent
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
-calls the tools one rule table allows: the shell, files, web fetch, the reader's other chats, the
-calendar, reminders, web search and each MCP server, with rows already in the table for the rest of
-the Phase 3 toolbox —
-Mac actions, personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
-tool, plus ordered command patterns for the shell and path patterns for files; a
-session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
-a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in Plan, `write_plan`.
+calls the tools one rule table allows: the shell, files, web fetch, the reader's other chats, Mac
+actions, the calendar, reminders, web search and each MCP server, with rows already in the table for
+the rest of the Phase 3 toolbox — personal data and context — whose runners have not landed. The
+table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell and path
+patterns for files; a session's mode — Manual, Auto or Plan — decides what an Ask does, and
+nothing a session holds lifts a Deny. Two more tools talk only to the chat and have no row:
+`ask_user` and, in Plan, `write_plan`.
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
-[File tools](#file-tools), [Web fetch](#web-fetch) and [Session tools](#session-tools) below,
+[File tools](#file-tools), [Web fetch](#web-fetch), [Session tools](#session-tools) and
+[Mac tools](#mac-tools) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -86,6 +87,11 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   slashes itself, but never touches the disk: a runner resolves symlinks
   (`URL.resolvingSymlinksInPath()`) before it builds `AgentCall.files`. A path that is not absolute
   cannot be weighed and takes `min(row, Ask)`. See [Path rules](#path-rules).
+- **A Mac tool never does what cannot be undone, and never past a coordinator.** Restart, Shut
+  Down, Log Out, Empty Trash and the rest of `SystemActionToolCatalog.excluded` are not offered at
+  all; `mac_open` refuses a file that would run or install something and every link scheme but
+  `http`, `https` and `mailto`. Each Mac row runs through its feature's coordinator, which checks
+  its feature's switch again after the dialog. See [Mac tools](#mac-tools).
 - **The feature switches stay the ceiling.** Each row with a feature behind it needs that feature's
   switch (`AgentFeatureCeiling`), and a server needs MCP on and itself enabled.
   `AgentGateCoordinator.rules` reads a row as Deny while its ceiling is not met, and a server that
@@ -121,10 +127,10 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions.
 | | `.filesWrite` | Change Files | `files_write`, `files_move`, `files_trash` | no | Deny | — |
 | Web | `.webSearch` | Web Search | the route's own search | yes | Allow (no Ask) | — |
 | | `.webFetch` | Fetch Web Pages | `web_fetch` | yes | Ask | — |
-| Mac | `.openItems` | Open Apps, Files and Links | (3e) | no | Deny | — |
-| | `.shortcuts` | Run Shortcuts | an Apple Shortcut (3e) | no | Deny | Apple Shortcuts on |
-| | `.systemActions` | Run System Actions | Blitz's system actions (3e) | no | Deny | System Actions on (`VisibilityStore`) |
-| | `.windowLayouts` | Apply Window Layouts | a window layout (3e) | no | Deny | Window Management on |
+| Mac | `.openItems` | Open Apps, Files and Links | `mac_open` | no | Deny | — |
+| | `.shortcuts` | Run Shortcuts | `shortcuts_list`, `shortcuts_run` | no | Deny | Apple Shortcuts on |
+| | `.systemActions` | Run System Actions | `system_actions_list`, `system_action_run` | no | Deny | System Actions on (`VisibilityStore`) |
+| | `.windowLayouts` | Apply Window Layouts | `window_layouts_list`, `window_layout_apply` | no | Deny | Window Management on |
 | Calendar & Reminders | `.calendarRead` | Read Calendar | `calendar_list_events` | yes | Ask | Calendar on |
 | | `.calendarWrite` | Add Calendar Events | `calendar_create_event` | no | Deny | Calendar on |
 | | `.remindersRead` | Read Reminders | `reminders_list` | yes | Ask | Reminders on |
@@ -154,8 +160,8 @@ neither Blitz nor a server spells has no row.
 
 `AgentPolicy.decision` applies, in order: a tool the session switched off is Deny; the row's own
 decision, with Deny final; a chat grant turning that row's Ask into Allow; for the shell, the
-patterns below, and for a file call, the path rules; then the session's mode, which never touches a
-Deny; and last, a local-network fetch held at Ask.
+patterns below, and for a file call or an open, the path rules; then the session's mode, which
+never touches a Deny; and last, a local-network fetch held at Ask.
 
 ## Modes
 
@@ -229,7 +235,8 @@ the new rule cannot shadow one.
 ## Path rules
 
 `AgentRules.pathRules` is an ordered `[PathRule]`, each a pattern, an `Access` — Read & Write, Read
-or Write, the file rows it weighs — and a decision. `AgentCall.files(_:paths:homeDirectory:)`
+or Write, the file rows it weighs, with Read also weighing `mac_open` (`AgentTool.readsPaths`) — and
+a decision. `AgentCall.files(_:paths:homeDirectory:)`
 carries every path a call touches, a move's source and destination both; `AgentPolicy` weighs each
 path on its own and the call takes the narrowest:
 
@@ -239,6 +246,8 @@ path on its own and the call takes the narrowest:
 - A path no rule matches takes the row's decision; a Deny row is Deny before any of this.
 - A path that is not absolute, or a home folder that is not, takes `min(row, Ask)`.
 - A call with no path — the bare row, as `isOffered` asks — takes the row.
+- An open takes the narrower of its path's decision and its row: a Deny or Ask rule holds it back,
+  but an Allow rule, written for reading, never lifts an open above Open Apps, Files and Links.
 
 `PathRule.matches(_:homeDirectory:)` is pure. Both the pattern and the path have `~` and `~/`
 expanded to the home folder (`~user` is not), `.` and empty components dropped and `..` resolved,
@@ -469,6 +478,113 @@ pinned while the dialog was up; then act. The history is read on the main actor,
 `ChatHistoryStore` lives and where opening a chat reads it too; the listing and the transcript are
 written in `Task.detached`.
 
+## Mac tools
+
+Four rows act on the Mac, so each starts on Deny, is not read-only — Plan never offers it — and is
+never allowed for the chat: an Ask is a dialog with **Allow** and **Don't Allow**, every time. Each
+runs through its feature's coordinator, and the catalogs that read the calls and word the answers
+live in that feature's `Model/`, harness-pinned by `mac-tool-test`.
+
+| Tool | Row | Arguments | What comes back |
+| --- | --- | --- | --- |
+| `mac_open` | Open Apps, Files and Links | `target`: an app's name or bundle id, a path starting with `/` or `~`, or an `http`, `https` or `mailto` link | that it opened, and where |
+| `shortcuts_list` | Run Shortcuts | `query` | a count, then one name per line |
+| `shortcuts_run` | Run Shortcuts | `name` (or identifier), `input` text, at most 20 000 characters | that it ran, and what it returned as text, cut at 20 000 characters |
+| `system_actions_list` | Run System Actions | none | id and name, one offered action per line |
+| `system_action_run` | Run System Actions | `id` (or the action's name) | that it ran, with the launcher's feedback or the volume it landed on |
+| `window_layouts_list` | Apply Window Layouts | none | name and what it arranges, one layout per line |
+| `window_layout_apply` | Apply Window Layouts | `name` (or id) | the windows placed and apps opened, and what did not happen |
+
+- **A listing asks nothing.** A `*_list` call is refused while its row is Deny, before anything is
+  looked up, and otherwise answers without a dialog, an Ask row included: it names only what the
+  user built and changes nothing. Running is what asks.
+- **Names.** `AgentNameMatch` (AI `Model/`) finds what the model named: exactly, once case, accents
+  and width are folded. Several matches are refused naming each with what tells them apart; none is
+  refused with at most five near names — those starting with it, then those holding it, then
+  those it holds. So a dialog never names something that is not there.
+- **Order of a call.** Read the arguments (a malformed call is a sentence, never a dialog); refuse
+  on a Deny row; look the name up; ask through the gate with the catalog's `AgentPrompt`; check the
+  feature again, since its switch or the item may have gone while the dialog was up; then act. The
+  palette is never hidden, since the chat may be on it.
+
+### Opening
+
+`OpenToolCatalog` (`Model/`) reads the target, `OpenToolRunner` (`Service/`) reads a path on disk,
+and `LauncherCoordinator.openForAgent` opens it: an app through `AppLauncher.launch`, anything else
+through `NSWorkspace.open`. Text starting with `/` or `~` is a path, text starting with a scheme is a
+link, and anything else is an app's name.
+
+- **An app** is named against the launcher's own index (`LauncherCoordinator.openToolApps`, the
+  `.application` entries of `AppIndex`): by bundle id, then by its name or any alternate one — the
+  localised names and a renamed copy's — with a trailing `.app` dropped. A Deny row refuses before
+  the index is asked, so it never tells which apps are installed.
+- **A link** is `http` or `https` with a host and no user name or password, or `mailto` with a
+  recipient. `file:` is refused pointing at paths, and every other scheme is refused outright:
+  `shortcuts:`, `x-apple.systempreferences:` or an app's own scheme can make an app act on its own.
+  A mail link opens a new message; nothing is sent.
+- **A path** goes the file tools' way: canonical, every link resolved (`FileToolRunner.resolved`,
+  since opening a link opens what it points to), then the gate over `AgentCall.files(.openItems, …)`
+  before the disk is asked anything else — so `~/.ssh/id_rsa`, or a link to it, is refused by its
+  seed without its existence told — then the item read, then the dialog, then the path resolved and
+  read again, refusing with "… changed while the user was asked, so nothing was opened." if it
+  moved. Path rules only narrow an open (see [Path rules](#path-rules)), and its dialog offers no
+  Always Allow.
+
+Refused without asking, since opening them would do more than show them (`OpenToolCatalog.hazards`):
+
+| Opening it | Extensions |
+| --- | --- |
+| runs code | `command`, `tool`, `terminal`, `sh`, `bash`, `zsh`, `csh`, `ksh`, `tcsh`, `fish`, `py`, `pyw`, `pyc`, `rb`, `pl`, `php`, `jar`, `jnlp`, `workflow`, `action` |
+| installs into macOS | `pkg`, `mpkg`, `mobileconfig`, `prefpane`, `saver`, `qlgenerator`, `mdimporter`, `kext`, `dext`, `systemextension`, `appex`, `plugin`, `bundle`, `osax`, `component`, `xpc`, `shortcut`, `wdgt` |
+| follows an address of its own | `webloc`, `inetloc`, `fileloc`, `url` |
+
+So is a regular file with no extension and an execute bit, which Finder would run in Terminal, and a
+pipe, device or socket. A folder named `.app` opens as an app. There is no tool listing apps: it
+would sit under an acting row with nothing to act on, and a name that misses comes back with near
+ones.
+
+### Shortcuts
+
+`ShortcutToolCatalog` and `AppleShortcutCoordinator.runTool`. The library is read fresh for each
+call (`AppleShortcutRunner.list`), falling back to the last good read. A run is
+`AppleShortcutRunner.run(id:input:)`: `shortcuts run <uuid> --output-path <file>`, with
+`--input-path` naming a file that holds the input, in a temporary folder removed afterwards. As in
+the launcher there is no timeout, since a shortcut may wait on a dialog of its own, but stopping the
+chat ends it: `ToolRunner` terminates its tool when its task is cancelled. Output that is UTF-8 with
+no NUL comes back trimmed and cut at 20 000 characters; anything else is said not to be text, and a
+failure is the tool's last lines.
+
+### System actions
+
+`SystemActionToolCatalog` and `SystemActionCoordinator.runTool`. With the category off the row is
+Deny by its ceiling; hiding one action from the launcher does not withhold it. These are excluded
+entirely — never in the schema's `enum`, never listed, refused by id or name with the reason:
+
+| Action | Why |
+| --- | --- |
+| Restart, Shut Down, Log Out | it ends the session, closing every app and this chat |
+| Empty Trash | it deletes what is in the Trash for good |
+| Quit All Applications | it quits every app at once, and unsaved work may be lost |
+| Eject All Disks | a disk comes back only once someone plugs it in again |
+| Toggle Bluetooth | turning it off can cut off the keyboard and mouse that would turn it back on |
+| Dismiss Notifications | a dismissed notification cannot be brought back |
+| Set Volume… | it asks for a level in a dialog of its own; the fixed levels are offered instead |
+
+Every action the launcher confirms first is among them, and the harness pins that. The rest run as
+the launcher runs them, against `PaletteCoordinator.targetApp`: volume and mute still show the
+volume HUD and answer the level, another action answers its pill's text, and a failure is its
+message, never a dialog. A microphone toggle while one is pending is refused.
+
+### Window layouts
+
+`WindowLayoutToolCatalog` and `WindowLayoutCoordinator.runTool`. Accessibility is checked, never
+prompted for: without it the call is refused with a sentence before any dialog, since macOS's own
+request belongs to a gesture of the user's. After the dialog the switch and the layout are read
+again; the run replaces any run in progress, as the funnel's does, and the answer counts the windows
+placed and apps opened, adding the launcher's own summary of what did not happen. A run that placed
+nothing is an error. There is no tool to move one window: while the agent runs, the frontmost window
+is usually the chat itself.
+
 ## The gate and its dialogs
 
 `AgentGateCoordinator`, owned by `AIChatCoordinator`, is the one gate. Every route reaches it:
@@ -522,6 +638,12 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | `sessions_list` | Let the agent list your chats? — what it sees and can search, and that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
 | `sessions_read` | Let the agent read your chat "`<title>`"? — that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
 | `sessions_archive` / `sessions_unarchive` | Let the agent archive "`<title>`"? / unarchive "`<title>`"? — where it goes | **Allow** ↵, Don't Allow |
+| `mac_open`, an app | Let the agent open `<app>`? — that it launches or comes forward | **Allow** ↵, Don't Allow |
+| `mac_open`, a path | Let the agent open "`<path>`"? — its default app, Finder, or the app it is | **Allow** ↵, Don't Allow |
+| `mac_open`, a link | Let the agent open `<host>` in your browser? / a new mail to `<address>`? — the link | **Allow** ↵, Don't Allow |
+| `shortcuts_run` | Let the agent run the shortcut "`<name>`"? — the input, clipped, and that its output goes to the provider | **Allow** ↵, Don't Allow |
+| `system_action_run` | Let the agent run "`<action>`"? | **Allow** ↵, Don't Allow |
+| `window_layout_apply` | Let the agent apply the window layout "`<name>`"? — what it arranges, and that it opens apps | **Allow** ↵, Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -761,7 +883,18 @@ Each route honours the mode where it decides what to offer:
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
   the plan instruction, and the context card's rows per mode; `web_fetch`'s wire name and row; the
   Sessions rows — their group and order, wire names, hosting, defaults, Plan offering the read and
-  refusing the archive, tolerant decoding without them — and their three dialogs.
+  refusing the archive, tolerant decoding without them — and their three dialogs; the Mac rows'
+  wire names and hosting, and which rows weigh paths and take Read rules.
+- `mac-tool-test` — the seven Mac schemas and wire names, the rows not read-only and never allowed
+  for the chat, Deny by default and never offered in Plan; `mac_open`'s target reading (paths, apps,
+  links, every refused scheme and credentials), app lookup (bundle id, case, `.app`, localised
+  names, accents, two apps of one name, near names), the refused extensions and programs, path
+  rules narrowing an open but never lifting it, the seeds denying a key and a link to it, and
+  `OpenToolRunner` in a scratch home — kinds, refusals and a path swapped for a link after asking;
+  shortcut calls, lookup, listing, output (none, text, bytes, clipped) and the input cap; the
+  excluded system actions, refused by id and by name, every confirming action among them and the
+  schema's `enum`; layout lookup, listing, the Accessibility sentence and each outcome; every
+  dialog's wording and choices, and the four refusals. Nothing is opened or run.
 - `session-tool-test` — the four schemas and wire names, call reading and its refusals (scope,
   limits, ids, `fromMessage`), the dialogs and refusal sentences, what settles before a dialog
   (this chat, an unknown id, a chat answering, open or pinned, an archive that changes nothing),
@@ -823,8 +956,17 @@ Each route honours the mode where it decides what to offer:
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal, Context and Sessions; switching Contacts off greys Read Contacts with "Turn on Contacts
   first.", and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only
-  Read Files, Change Files, Fetch Web Pages, Read Other Chats and Archive Chats appear in the
-  composer's tools menu and the context card.
+  Read Files, Change Files, Fetch Web Pages, the four Mac rows, Read Other Chats and Archive Chats
+  appear in the composer's tools menu and the context card.
+- With Open Apps, Files and Links on Ask, ask a chat to open Calculator, `~/Downloads`, a PDF and
+  `https://example.com`: each dialog names what opens, and Allow opens it. Asking for
+  `~/.ssh/id_rsa`, a `.command` file or a `shortcuts://` link is refused without a dialog.
+- With Run Shortcuts on Ask, ask a chat which shortcuts you have: it lists them without a dialog;
+  running one with some text shows the input in the dialog, and its output comes back. With Run
+  System Actions on Ask, ask it to empty the Trash or restart: it says it cannot, with no dialog;
+  turning the volume to 50% asks, then shows the volume HUD. With Apply Window Layouts on Ask and
+  Accessibility granted, applying a saved layout by name asks, then arranges the windows; without
+  the grant it says so without a dialog. In Plan, none of the Mac tools is offered.
 - With Read Files on Ask, ask a chat to read a file in `~/Projects/app`: the dialog names it, and
   **Always Allow "~/Projects/app/**"** adds a Read rule to Path rules, after which the next read
   there runs straight away; a write there still asks, or is refused while Change Files is Deny.

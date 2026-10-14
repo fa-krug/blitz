@@ -114,6 +114,50 @@ final class AppleShortcutCoordinator {
         }
     }
 
+    // MARK: - Chat tools
+
+    /// The agent's funnel: the switch again, the library read fresh, the dialog, then the run.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: ShortcutToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try ShortcutToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard settings.appleShortcutsEnabled else {
+            return .failure(call.id, AgentRefusal.denied.message(for: .shortcuts))
+        }
+        // Fresh, so a shortcut made a moment ago is found; a failed read falls back to the last.
+        guard let library = (try? await AppleShortcutRunner.list()) ?? shortcuts else {
+            return .failure(call.id, ShortcutToolCatalog.unreadable)
+        }
+        switch request {
+        case .list(let query):
+            let answer = ShortcutToolCatalog.listing(library, query: query)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .run(let name, let input):
+            let shortcut: AppleShortcut
+            do throws(AIToolArguments.Invalid) {
+                shortcut = try ShortcutToolCatalog.shortcut(named: name, in: library)
+            } catch {
+                return .failure(call.id, error.message)
+            }
+            let prompt = ShortcutToolCatalog.prompt(for: shortcut, input: input)
+            if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+            guard settings.appleShortcutsEnabled else {
+                return .failure(call.id, AgentRefusal.denied.message(for: .shortcuts))
+            }
+            do throws(AppleShortcutRunner.Failure) {
+                let output = try await AppleShortcutRunner.run(id: shortcut.id, input: input)
+                let answer = ShortcutToolCatalog.result(of: shortcut, output: output)
+                return AIToolResult(callID: call.id, content: answer, isError: false)
+            } catch {
+                let reason = error.errorDescription ?? "the Shortcuts tool gave no reason."
+                return .failure(call.id, ShortcutToolCatalog.failed(shortcut, reason: reason))
+            }
+        }
+    }
+
     func openShortcutsApp() {
         Task {
             do {

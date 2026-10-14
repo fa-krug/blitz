@@ -537,6 +537,8 @@ final class AIChatCoordinator {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
             || ShellToolCatalog.handles(name) || FileToolCatalog.handles(name)
             || WebFetchToolCatalog.handles(name) || SessionToolCatalog.handles(name)
+            || OpenToolCatalog.handles(name) || ShortcutToolCatalog.handles(name)
+            || SystemActionToolCatalog.handles(name) || WindowLayoutToolCatalog.handles(name)
             || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
     }
 
@@ -552,6 +554,19 @@ final class AIChatCoordinator {
             if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
             if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
             if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
+            if OpenToolCatalog.handles(call.name) { return await openItem(call, in: chat) }
+            if ShortcutToolCatalog.handles(call.name) {
+                return await runMacTool(
+                    call, row: .shortcuts, in: chat, run: core.appleShortcutCoordinator.runTool)
+            }
+            if SystemActionToolCatalog.handles(call.name) {
+                return await runMacTool(
+                    call, row: .systemActions, in: chat, run: core.systemActionCoordinator.runTool)
+            }
+            if WindowLayoutToolCatalog.handles(call.name) {
+                return await runMacTool(
+                    call, row: .windowLayouts, in: chat, run: core.windowLayoutCoordinator.runTool)
+            }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -621,6 +636,11 @@ final class AIChatCoordinator {
     private func blitzTools(for chat: AIChatState) -> [AITool] {
         let offered = { (tool: AgentTool) in self.gate.isOffered(tool, in: chat) }
         let now = Date()
+        let mac: [AITool] =
+            (offered(.openItems) ? OpenToolCatalog.tools() : [])
+            + (offered(.shortcuts) ? ShortcutToolCatalog.tools() : [])
+            + (offered(.systemActions) ? SystemActionToolCatalog.tools() : [])
+            + (offered(.windowLayouts) ? WindowLayoutToolCatalog.tools() : [])
         return core.calendarCoordinator.chatTools(
             read: offered(.calendarRead), write: offered(.calendarWrite), now: now)
             + core.remindersCoordinator.chatTools(
@@ -628,6 +648,7 @@ final class AIChatCoordinator {
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
             + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
             + (offered(.webFetch) ? WebFetchToolCatalog.tools() : [])
+            + mac
             + SessionToolCatalog.tools(
                 read: offered(.sessionsRead), archive: offered(.sessionsArchive))
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
@@ -707,6 +728,108 @@ final class AIChatCoordinator {
             return AIToolResult(callID: call.id, content: answer, isError: false)
         case .failure(let failure): return .failure(call.id, failure.message)
         }
+    }
+
+    /// A Mac row's feature reads and runs its call; a denied row refuses before any lookup.
+    private func runMacTool(
+        _ call: AIToolCall, row: AgentTool, in chat: AIChatState,
+        run: (AIToolCall, AgentAuthorization) async -> AIToolResult
+    ) async -> AIToolResult {
+        let agentCall = AgentCall(tool: row)
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: row))
+        }
+        return await run(call, gate.authorization(for: agentCall, in: chat))
+    }
+
+    /// An app is named against the launcher's index; a path is weighed canonically, as files are.
+    private func openItem(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let home = FileToolRunner.homeDirectory()
+        let target: OpenToolCatalog.Target
+        do throws(AIToolArguments.Invalid) {
+            target = try OpenToolCatalog.target(arguments: call.arguments, homeDirectory: home)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let bare = AgentCall(tool: .openItems)
+        switch target {
+        case .path(let path):
+            return await openPath(path, homeDirectory: home, callID: call.id, in: chat)
+        case .url(let url):
+            let prompt = OpenToolCatalog.prompt(forURL: url)
+            if let refusal = await gate.authorization(for: bare, in: chat)(prompt) {
+                return .failure(call.id, refusal)
+            }
+            if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: false) {
+                let subject = url.absoluteString
+                return .failure(call.id, OpenToolCatalog.notOpened(subject, reason: reason))
+            }
+            let answer = OpenToolCatalog.opened(url: url)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .app(let name):
+            // Before the index is asked, so a denied row never tells which apps are installed.
+            guard gate.decision(for: bare, in: chat) != .deny else {
+                return .failure(call.id, AgentRefusal.denied.message(for: .openItems))
+            }
+            let app: OpenToolCatalog.App
+            do throws(AIToolArguments.Invalid) {
+                app = try OpenToolCatalog.app(
+                    named: name, in: core.launcherCoordinator.openToolApps())
+            } catch {
+                return .failure(call.id, error.message)
+            }
+            let prompt = OpenToolCatalog.prompt(forApp: app)
+            if let refusal = await gate.authorization(for: bare, in: chat)(prompt) {
+                return .failure(call.id, refusal)
+            }
+            let url = URL(fileURLWithPath: app.path)
+            if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: true) {
+                return .failure(call.id, OpenToolCatalog.notOpened(app.name, reason: reason))
+            }
+            let answer = OpenToolCatalog.opened(app: app.name)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+    }
+
+    /// The gate weighs the path with its links resolved, and it is resolved again after asking.
+    private func openPath(
+        _ path: String, homeDirectory home: String, callID: String, in chat: AIChatState
+    ) async -> AIToolResult {
+        let resolved: String
+        switch await Task.detached(operation: {
+            OpenToolRunner.resolved(path, homeDirectory: home)
+        }).value {
+        case .success(let real): resolved = real
+        case .failure(let failure): return .failure(callID, failure.message)
+        }
+        let agentCall = AgentCall.files(.openItems, paths: [resolved], homeDirectory: home)
+        // Before the disk is asked anything else, so a denied path's existence is never told.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(callID, AgentRefusal.denied.message(for: .openItems))
+        }
+        let kind: OpenToolCatalog.ItemKind
+        switch await Task.detached(operation: {
+            OpenToolRunner.inspect(resolved, homeDirectory: home)
+        }).value {
+        case .success(let found): kind = found
+        case .failure(let failure): return .failure(callID, failure.message)
+        }
+        let prompt = OpenToolCatalog.prompt(forPath: resolved, kind: kind, homeDirectory: home)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(callID, refusal)
+        }
+        if let failure = await Task.detached(operation: {
+            OpenToolRunner.recheck(path, as: resolved, kind: kind, homeDirectory: home)
+        }).value {
+            return .failure(callID, failure.message)
+        }
+        let url = URL(fileURLWithPath: resolved)
+        if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: kind == .app) {
+            let shown = FileToolCatalog.shown(resolved, homeDirectory: home)
+            return .failure(callID, OpenToolCatalog.notOpened(shown, reason: reason))
+        }
+        let answer = OpenToolCatalog.opened(path: resolved, homeDirectory: home)
+        return AIToolResult(callID: callID, content: answer, isError: false)
     }
 
     /// An id is looked up before asking, so a dialog never names a chat that is not there.

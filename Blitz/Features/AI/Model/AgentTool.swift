@@ -68,6 +68,13 @@ enum AgentTool: Hashable, Sendable {
         "files_move": .filesWrite,
         "files_trash": .filesWrite,
         "web_fetch": .webFetch,
+        "mac_open": .openItems,
+        "shortcuts_list": .shortcuts,
+        "shortcuts_run": .shortcuts,
+        "system_actions_list": .systemActions,
+        "system_action_run": .systemActions,
+        "window_layouts_list": .windowLayouts,
+        "window_layout_apply": .windowLayouts,
         "sessions_list": .sessionsRead,
         "sessions_read": .sessionsRead,
         "sessions_archive": .sessionsArchive,
@@ -188,7 +195,10 @@ enum AgentTool: Hashable, Sendable {
     }
 
     /// The rows whose calls name paths, which `AgentRules.pathRules` then weighs one by one.
-    var usesPathRules: Bool { self == .filesRead || self == .filesWrite }
+    var usesPathRules: Bool { self == .filesRead || self == .filesWrite || self == .openItems }
+
+    /// Opening a file shows it, so Read rules weigh it; an Allow written for reading never lifts it.
+    var readsPaths: Bool { self == .filesRead || self == .openItems }
 }
 
 extension AgentTool: Codable {

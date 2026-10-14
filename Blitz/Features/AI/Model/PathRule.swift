@@ -2,7 +2,7 @@ import Foundation
 
 /// One ordered path pattern: `*` stays within a path component, `**` crosses them.
 struct PathRule: Codable, Equatable, Identifiable, Sendable {
-    /// Which of the two file rows a rule weighs, so a folder can be readable but not writable.
+    /// Which rows a rule weighs, so a folder can be readable but not writable; Read covers opening.
     enum Access: String, CaseIterable, Codable, Identifiable, Sendable {
         case readAndWrite
         case read
@@ -37,7 +37,7 @@ struct PathRule: Codable, Equatable, Identifiable, Sendable {
     func applies(to tool: AgentTool) -> Bool {
         switch access {
         case .readAndWrite: tool.usesPathRules
-        case .read: tool == .filesRead
+        case .read: tool.readsPaths
         case .write: tool == .filesWrite
         }
     }

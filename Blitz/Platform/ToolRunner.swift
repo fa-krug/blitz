@@ -30,7 +30,18 @@ enum ToolRunner {
         let collector = OutputCollector()
         pipe.fileHandleForReading.readabilityHandler = { collector.absorb($0.availableData) }
 
-        return try await withCheckedThrowingContinuation { continuation in
+        // Cancelling ends the tool, so a stopped chat never waits on a shortcut it ran.
+        return try await withTaskCancellationHandler {
+            try await finish(process, pipe: pipe, collector: collector, timeout: timeout)
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+    }
+
+    private static func finish(
+        _ process: Process, pipe: Pipe, collector: OutputCollector, timeout: TimeInterval?
+    ) async throws -> Result {
+        try await withCheckedThrowingContinuation { continuation in
             process.terminationHandler = { finished in
                 pipe.fileHandleForReading.readabilityHandler = nil
                 collector.absorb((try? pipe.fileHandleForReading.readToEnd()) ?? Data())

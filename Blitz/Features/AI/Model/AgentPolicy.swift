@@ -32,6 +32,7 @@ enum AgentPolicy {
             decision = shellDecision(for: command, base: base, rules: rules.shellRules)
         } else if call.tool.usesPathRules, !call.paths.isEmpty {
             decision = pathDecision(for: call, base: base, rules: rules.pathRules)
+            if call.tool == .openItems { decision = min(decision, base) }
         }
         let decided = applying(scope.mode, to: decision, for: call)
         return call.isLocalNetwork ? min(decided, .ask) : decided

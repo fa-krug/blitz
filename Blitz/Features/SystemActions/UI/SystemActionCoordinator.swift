@@ -67,6 +67,51 @@ final class SystemActionCoordinator {
         }
     }
 
+    // MARK: - Chat tools
+
+    /// The agent's funnel: never an excluded action, and the palette stays where it is.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: SystemActionToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try SystemActionToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard case .run(let action) = request else {
+            let answer = SystemActionToolCatalog.listing()
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+        if let refusal = await authorize(SystemActionToolCatalog.prompt(for: action)) {
+            return .failure(call.id, refusal)
+        }
+        let togglesMicrophone = action.id == .toggleMicrophoneMute
+        if togglesMicrophone {
+            guard !microphoneTogglePending else {
+                return .failure(call.id, SystemActionToolCatalog.microphoneBusy)
+            }
+            microphoneTogglePending = true
+        }
+        defer { if togglesMicrophone { microphoneTogglePending = false } }
+        do {
+            let feedback = try await SystemActionRunner.run(
+                action.id, previousApp: paletteCoordinator.targetApp)
+            var said = feedback?.title
+            if Self.showsVolumeFeedback.contains(action.id) {
+                let state = try SystemActionRunner.outputState()
+                volumeHUD.show(level: state.level, muted: state.muted)
+                let level = VolumeLevel.percentage(Double(state.level))
+                said = state.muted ? "Sound is muted" : "Volume is \(level)"
+            }
+            let answer = SystemActionToolCatalog.result(of: action, feedback: said)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        } catch let failure as SystemActionFailure {
+            return .failure(call.id, SystemActionToolCatalog.failed(action, reason: failure.message))
+        } catch {
+            let reason = error.localizedDescription
+            return .failure(call.id, SystemActionToolCatalog.failed(action, reason: reason))
+        }
+    }
+
     /// Level and mute actions; macOS draws its HUD only for real media keys.
     private static let showsVolumeFeedback: Set<SystemAction.ID> = [
         .setVolume, .volumeUp, .volumeDown, .toggleMute,

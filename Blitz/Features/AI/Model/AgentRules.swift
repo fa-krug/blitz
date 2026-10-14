@@ -78,7 +78,7 @@ struct AgentRules: Equatable, Sendable {
 
     /// "Always Allow" for a file call: reads or writes only, placed as `allow(_:for:)` places one.
     mutating func allowPath(_ pattern: String, for call: AgentCall) {
-        guard call.tool.usesPathRules else { return }
+        guard call.tool == .filesRead || call.tool == .filesWrite else { return }
         let key = PathRule.collapsed(pattern)
         guard !key.isEmpty else { return }
         let access: PathRule.Access = call.tool == .filesRead ? .read : .write

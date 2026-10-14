@@ -354,11 +354,32 @@ As built, in [`docs/features/agent.md`](../features/agent.md#session-tools) and
 - **Off-main where it can be.** `ChatHistoryStore` is `@MainActor`, so the chat is loaded there,
   as opening it does; the listing and the transcript are written in `Task.detached`.
 
+### 3e: Mac actions (built)
+
+- **Seven tools over the four Mac rows.** `mac_open` (Open Apps, Files and Links): an app by name
+  or bundle id from the launcher's index, a path, or an `http`, `https` or `mailto` link;
+  `shortcuts_list` and `shortcuts_run` (Run Shortcuts), with optional text input and the output read
+  back; `system_actions_list` and `system_action_run` (Run System Actions);
+  `window_layouts_list` and `window_layout_apply` (Apply Window Layouts). Each catalog lives in its
+  feature's `Model/` (`OpenToolCatalog` in AI's) and each run goes through the feature's
+  coordinator; `mac-tool-test` pins them. See [Agent](../features/agent.md#mac-tools).
+- **Decided:** every Mac row is Deny by default, never read-only, never allowed for the chat; a
+  listing answers without a dialog whenever its row is not Deny, since it changes nothing; only
+  running asks.
+- **Decided:** an open's path is weighed as a read with every link resolved, so the Deny seeds
+  apply, but path rules only narrow it: an Allow written for reading never lifts an open. Scripts,
+  installers, link files and extensionless programs are refused, and every scheme but `http`,
+  `https` and `mailto`. There is no app-listing tool.
+- **Decided:** the agent never runs Restart, Shut Down, Log Out, Empty Trash, Quit All
+  Applications, Eject All Disks, Toggle Bluetooth, Dismiss Notifications or Set Volume…, which end
+  the session, lose something, cannot be undone from the Mac, or need a dialog of their own. Every
+  action that confirms in the launcher is among them.
+- **Decided:** window layouts only — no single-window move, since the frontmost window is the chat.
+  Accessibility is checked, never prompted for.
+
 ### Remaining steps
 
-1. **3e Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
-   `.systemActions` (Blitz's system actions), `.windowLayouts` (a window layout).
-2. **3f Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
+1. **3f Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
    `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
    and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
    turn by itself.

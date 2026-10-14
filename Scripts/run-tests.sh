@@ -142,7 +142,7 @@ run app-name-test          Blitz/Platform/AppDisplayName.swift \
                            Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift
 run favorites-test         $L/FavoriteSlots.swift
-run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/*.swift
+run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/AppleShortcut.swift
 run calc-test              Blitz/Features/Calculator/Model/*.swift
 run index calc-performance Blitz/Features/Calculator/Model/*.swift
 # The chat tools' catalogs speak the AI layer's tool shapes, so both harnesses compile those too.
@@ -177,6 +177,12 @@ run web-fetch-test         $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift 
                            Blitz/Features/MCP/Model/MCPTool.swift \
                            Blitz/Features/MCP/Model/MCPAgentMapping.swift $A/AIToolServer.swift
 run session-tool-test      $A/*.swift
+# `F` is the Mac rows' feature catalogs, each over the feature model it names.
+F="Blitz/Features/AppleShortcuts/Model/AppleShortcut.swift \
+   Blitz/Features/AppleShortcuts/Model/ShortcutToolCatalog.swift \
+   Blitz/Features/SystemActions/Model/SystemAction.swift \
+   Blitz/Features/SystemActions/Model/SystemActionToolCatalog.swift \
+   Blitz/Features/WindowManagement/Model/WindowLayoutToolCatalog.swift"
 # The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
 run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
@@ -188,11 +194,22 @@ run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRul
                            $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift \
                            $A/LocalNetworkPolicy.swift $A/SessionToolCatalog.swift $A/AITool.swift \
                            $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
+                           $A/OpenToolCatalog.swift $A/AgentNameMatch.swift $F \
                            $A/AIToolJSON.swift $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
                            Blitz/Features/Reminders/Model/*.swift \
                            Blitz/Features/MCP/Model/MCPServer.swift \
                            Blitz/Features/MCP/Model/MCPTool.swift \
                            Blitz/Features/MCP/Model/MCPAgentMapping.swift
+run mac-tool-test          $A/OpenToolCatalog.swift $A/AgentNameMatch.swift $A/FileToolCatalog.swift \
+                           $A/ShellToolCatalog.swift $A/AITool.swift $A/JSONValue.swift \
+                           $A/AIToolDate.swift $A/AIToolArguments.swift $A/AIToolJSON.swift \
+                           $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift \
+                           $A/PathRule.swift $A/ShellRule.swift $A/ShellCommandSegments.swift \
+                           $A/AgentCall.swift $A/AgentSessionScope.swift $A/AgentPolicy.swift \
+                           $A/AIDataAccess.swift $A/AgentPrompt.swift $A/AgentRefusal.swift \
+                           $A/AgentMode.swift $A/AgentChatTool.swift $F \
+                           Blitz/Features/AI/Service/FileToolRunner.swift \
+                           Blitz/Features/AI/Service/OpenToolRunner.swift
 run agent-wait-test        $A/AgentWait.swift $A/AgentApprovals.swift $A/AgentWaitEpisodes.swift \
                            $A/AgentWaitNotice.swift $A/ChatPresence.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.

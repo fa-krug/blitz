@@ -18,6 +18,27 @@ enum AppleShortcutRunner {
         _ = try await invoke(["run", id.uuidString], timeout: nil)
     }
 
+    /// For the agent: text in through a file, and whatever the shortcut returns read back as bytes.
+    static func run(id: UUID, input: String?) async throws(Failure) -> Data? {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-shortcut-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let output = folder.appendingPathComponent("output")
+        var arguments = ["run", id.uuidString, "--output-path", output.path]
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            if let input {
+                let file = folder.appendingPathComponent("input.txt")
+                try Data(input.utf8).write(to: file)
+                arguments += ["--input-path", file.path]
+            }
+        } catch {
+            throw Failure(errorDescription: error.localizedDescription)
+        }
+        _ = try await invoke(arguments, timeout: nil)
+        return try? Data(contentsOf: output)
+    }
+
     private static func invoke(
         _ arguments: [String], timeout: TimeInterval?
     ) async throws(Failure) -> ToolRunner.Result {

@@ -14,7 +14,8 @@ registered, so re-enabling restores every global shortcut.
 - **Shortcuts owns the library.** Nothing about a shortcut is stored except what every launcher entry
   already keys by `preferenceKey` — alias, visibility, favorite, ranking — and its hotkey binding.
 - **`run(id:)` is the single funnel** for a launcher row and a global shortcut alike, so the switch
-  can't be bypassed.
+  can't be bypassed. The agent's `runTool` is the only other way a shortcut runs, and it checks the
+  switch before and after its dialog (see [Chat tools](#chat-tools)).
 - **A failed read keeps the last good library.** Emptying the launcher because one spawn failed would
   look like every shortcut was deleted.
 - **Only a successful read frees anything.** A shortcut missing from one loses its binding, alias,
@@ -61,6 +62,21 @@ a shortcut usually acts on the app the user was in. There is **no timeout** — 
 dialog of its own for as long as it likes. Success is silent; a non-zero exit shows the tool's last
 lines in Blitz's own dialog.
 
+## Chat tools
+
+With Apple Shortcuts on, a chat on an API connection or the Claude command is offered
+`shortcuts_list` and `shortcuts_run` while the agent's Run Shortcuts row is not Deny. The row, its
+dialog and who gets offered what are [Agent](agent.md#shortcuts)'s.
+`AppleShortcutCoordinator.runTool` reads a call through `ShortcutToolCatalog`, reads the library
+fresh (falling back to the last good read), lists without a dialog, and finds a shortcut by name or
+identifier before the dialog names it and shows the input. A run goes through
+`AppleShortcutRunner.run(id:input:)`: the input text in a file passed as `--input-path`, and
+`--output-path` a file read back afterwards, both in a temporary folder that is removed. The
+palette is not hidden, nothing is reported in a dialog — a failure is the tool's last lines, sent to
+the model — and stopping the chat terminates the `shortcuts` tool, since `ToolRunner` ends its
+process when its task is cancelled. What came back is answered as text, cut at 20 000 characters,
+or said not to be text.
+
 ## Launcher and Settings
 
 `AppEntry.Kind.appleShortcut` is its own section, published right after Quicklinks. It is file-backed
@@ -85,3 +101,6 @@ flags, since running a shortcut the user built grants no permission class. Bindi
 ```sh
 ./Scripts/run-tests.sh apple-shortcut-test
 ```
+
+`mac-tool-test` pins `ShortcutToolCatalog`: the calls and the input cap, lookup and near names, the
+listing, the dialog and each kind of output.

@@ -98,14 +98,14 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
 | navigation | `menu-search-test`, `window-switch-test` |
-| window management, layouts and rooms | `window-*`, `space-gesture-test` |
+| window management, layouts and rooms | `window-*`, `space-gesture-test`, `mac-tool-test` |
 | calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
 | hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
-| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test` |
+| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test` |
-| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
-| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `custom-command-test`, `uninstall-test` |
+| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
 | updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
@@ -482,6 +482,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Unchecking a row hides it from search, and its hotkey still fires
 - Deleting a shortcut in Shortcuts frees its alias and hotkey on the next launcher open
 - A shortcut that fails shows Blitz's dialog with the tool's error
+- With Run Shortcuts on Ask, a chat running a shortcut with text asks, showing the input, and reads
+  back what it returned; Stop while it runs ends the `shortcuts` tool
 
 ### File Search
 
@@ -789,6 +791,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Microphone Muted / Unmuted, silences and restores captured input, and leaves input gain and output
   untouched; switch the default input and repeat
 - Holding a bound hotkey does **not** stack dialogs
+- A chat asked to empty the Trash, restart or turn Bluetooth off says it cannot, with no dialog;
+  with Run System Actions on Ask, Lock Screen asks first and locks, and Quick AI's palette stays up
+  for a volume change
 - Lock Screen locks from a global hotkey with the palette closed, including a Hyper-key binding
 - Window commands move the window you were last in; cycle-on-repeat steps ½ → ⅓ → ⅔
 - "Top Half" lands flush with the top of the visible frame, on a secondary display too
