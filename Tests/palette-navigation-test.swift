@@ -126,6 +126,23 @@ struct PaletteNavigationTests {
             !pasted.collapseQueryLineBreaks() && pasted.query == "first pasted row, second pasted row third",
             "a single-line query is left alone")
 
+        // ↓ on the compact bar expands it; the bar has to come back once that expansion is spent.
+        let expanded = PaletteState()
+        expanded.prepare(mode: .launcher)
+        expanded.forceExpanded = true
+        expanded.query = " "
+        expect(expanded.forceExpanded, "whitespace alone is not a search, so ↓'s expansion holds")
+        expanded.query = "saf"
+        expect(!expanded.forceExpanded, "typing takes over, so clearing the query collapses again")
+        expect(!expanded.collapseToCompact(), "with nothing forced open there is nothing to undo")
+        expanded.query = ""
+        expanded.forceExpanded = true
+        expect(expanded.collapseToCompact(), "an empty forced expansion folds back")
+        expect(!expanded.forceExpanded, "and the compact bar is what is left")
+        expanded.forceExpanded = true
+        expanded.pushCarryingQuery(mode: .ai)
+        expect(!expanded.collapseToCompact(), "only the launcher has a compact bar to fold into")
+
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
     }

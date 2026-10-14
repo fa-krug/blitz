@@ -14,7 +14,13 @@ final class PaletteState {
     var mode: PaletteMode = .launcher
     /// The screens below `mode`, innermost last: a summon starts a new one, navigating pushes on.
     private(set) var backStack: [PaletteFrame] = []
-    var query: String = ""
+    var query: String = "" {
+        // Typing takes over from ↓, so clearing the query again lands back on the compact bar.
+        didSet {
+            guard forceExpanded, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            forceExpanded = false
+        }
+    }
     var selection: Int = 0
     /// True while an IME holds marked text, which leaves `query` empty. The panel publishes it.
     var isComposing = false
@@ -50,7 +56,7 @@ final class PaletteState {
     private(set) var emojiGridZoomToken = UUID()
     /// The last zoom from `noteEmojiGridZoom`, consumed by the SwiftUI layer.
     private(set) var emojiGridZoom: EmojiGridZoom?
-    /// Set by the compact bar's overflow to expand without a query; cleared by `prepare`.
+    /// Set by the compact bar's ↓ or overflow; cleared by typing, Escape, backspace, hide or `prepare`.
     var forceExpanded = false
     /// The paste target, mirrored on every show; `prepare` resets the screen, not this.
     var pasteTarget: PasteTarget?
@@ -135,6 +141,14 @@ final class PaletteState {
     func collapseQueryLineBreaks() -> Bool {
         guard query.contains(where: \.isNewline) else { return false }
         query = query.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return true
+    }
+
+    /// Undo a ↓ or "…" expansion; false when there was none to undo.
+    @discardableResult
+    func collapseToCompact() -> Bool {
+        guard forceExpanded, mode == .launcher else { return false }
+        forceExpanded = false
         return true
     }
 

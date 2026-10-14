@@ -632,6 +632,7 @@ struct RootPaletteView: View {
                     menuOpen: menuOpen, menuQuery: vm.menuQuery,
                     argumentFocused: argumentFocused != nil, query: vm.query, mode: vm.mode,
                     canGoBack: vm.canGoBack,
+                    expandedFromCompact: settings.compactMode && vm.forceExpanded,
                     behavior: settings.escapeKeyBehavior)
                 {
                 case .clearMenuQuery, .closeMenu:
@@ -640,6 +641,8 @@ struct RootPaletteView: View {
                     returnFocusToSearchField()
                 case .clearQuery:
                     vm.query = ""
+                case .collapseToCompact:
+                    core.paletteCoordinator.collapseToCompact()
                 case .exitExtensionScreen:
                     core.extensionCoordinator.exitExtensionScreen()
                 case .goBack:

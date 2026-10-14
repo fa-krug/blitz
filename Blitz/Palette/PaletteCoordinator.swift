@@ -128,6 +128,7 @@ final class PaletteCoordinator {
         screenshots.cancel()
         menuSearch.reset()
         windowSwitch.reset()
+        palette.forceExpanded = false
         windowController.hide(restoreFocus: restoreFocus)
     }
 
@@ -152,6 +153,11 @@ final class PaletteCoordinator {
     /// The compact bar's overflow: expand into the full launcher without typing.
     func expandFromCompact() {
         palette.forceExpanded = true
+    }
+
+    /// Escape's step back from `expandFromCompact`, taken before any close.
+    func collapseToCompact() {
+        palette.collapseToCompact()
     }
 
     /// Resize the panel to the current collapsed state, when it flips while open.
