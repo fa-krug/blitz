@@ -45,4 +45,17 @@ enum AIToolJSON {
         guard text.count > length else { return text }
         return String(text.prefix(length)) + "\u{2026}"
     }
+
+    /// The longest start of `text` within `bytes` of UTF-8, cut between characters.
+    static func prefix(_ text: String, utf8Bytes bytes: Int) -> String {
+        guard text.utf8.count > bytes else { return text }
+        var used = 0
+        var end = text.startIndex
+        for character in text {
+            used += character.utf8.count
+            guard used <= bytes else { break }
+            end = text.index(after: end)
+        }
+        return String(text[..<end])
+    }
 }

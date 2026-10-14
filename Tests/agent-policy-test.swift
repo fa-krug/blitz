@@ -212,12 +212,9 @@ struct AgentPolicyTests {
                 ]
                 && AgentTool.Group.sessions.tools == [.sessionsRead, .sessionsArchive])
         check(
-            "only the rows a catalog serves are hosted; web search is the provider's",
-            AgentTool.builtIn.filter(\.isHosted) == [
-                .shell, .filesRead, .filesWrite, .webFetch, .openItems, .shortcuts,
-                .systemActions, .windowLayouts, .calendarRead, .calendarWrite,
-                .remindersRead, .remindersWrite, .sessionsRead, .sessionsArchive
-            ] && !AgentTool.mcp("x").isHosted)
+            "every row but web search is hosted; web search is the provider's",
+            AgentTool.builtIn.filter { !$0.isHosted } == [.webSearch]
+                && !AgentTool.mcp("x").isHosted)
         check(
             "the file rows and opening weigh paths",
             AgentTool.builtIn.filter(\.usesPathRules) == [.filesRead, .filesWrite, .openItems])
@@ -263,6 +260,26 @@ struct AgentPolicyTests {
             check("\(name) applies window layouts", AgentTool(wireName: name) == .windowLayouts)
         }
         check(
+            "contacts_search reads contacts",
+            AgentTool(wireName: ContactToolCatalog.searchName) == .contactsRead)
+        check("note_read reads the note", AgentTool(wireName: NoteToolCatalog.readName) == .noteRead)
+        check(
+            "note_append adds to the note",
+            AgentTool(wireName: NoteToolCatalog.appendName) == .noteWrite)
+        check(
+            "clipboard_history reads the history",
+            AgentTool(wireName: ClipboardToolCatalog.historyName) == .clipboardRead)
+        for name in [
+            SnippetToolCatalog.listName, SnippetToolCatalog.readName, QuicklinkToolCatalog.listName
+        ] {
+            check("\(name) reads snippets and quicklinks", AgentTool(wireName: name) == .snippetsRead)
+        }
+        check(
+            "the context tools map to the context rows",
+            AgentTool(wireName: ContextToolCatalog.frontmostAppName) == .frontmostApp
+                && AgentTool(wireName: ContextToolCatalog.selectedTextName) == .selectedText
+                && AgentTool(wireName: ContextToolCatalog.clipboardName) == .currentClipboard)
+        check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
         check(
@@ -276,6 +293,13 @@ struct AgentPolicyTests {
             ReminderToolCatalog.completeName
         ] {
             check("\(name) writes", AgentTool(wireName: name) == .remindersWrite)
+        }
+        func personalNames(append: Bool) -> [String] {
+            (ContactToolCatalog.tools() + NoteToolCatalog.tools(read: true, append: append)
+                + ClipboardToolCatalog.tools() + SnippetToolCatalog.tools()
+                + QuicklinkToolCatalog.tools()
+                + ContextToolCatalog.tools(frontmostApp: true, selectedText: true, clipboard: true))
+                .map(\.name)
         }
         func catalogs(read: Bool, write: Bool) -> [String] {
             let now = Date()
@@ -292,12 +316,13 @@ struct AgentPolicyTests {
             + OpenToolCatalog.tools().map(\.name) + ShortcutToolCatalog.tools().map(\.name)
             + SystemActionToolCatalog.tools().map(\.name)
             + WindowLayoutToolCatalog.tools().map(\.name)
+            + personalNames(append: true)
             + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
             catalogNames.allSatisfy { AgentTool(builtInToolName: $0) != nil })
         let readOnlyNames =
-            catalogs(read: true, write: false)
+            catalogs(read: true, write: false) + personalNames(append: false)
             + FileToolCatalog.tools(read: true, write: false).map(\.name)
             + WebFetchToolCatalog.tools().map(\.name)
             + SessionToolCatalog.tools(read: true, archive: false).map(\.name)

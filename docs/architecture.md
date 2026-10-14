@@ -101,12 +101,12 @@ app: the stores (`AppIndex`, `ClipboardStore`, `SnippetsStore`, `QuicklinkStore`
 `CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`), the
 managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer` and
 `ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
-`HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `SnippetKeywordListener`), the shared state
-(`AppSettings`, `PaletteState`, `FileSearchSession`, `MenuSearchSession`, `UninstallSession`,
-`MeetingClock`), `NotesStore`, every feature's coordinator, the window controllers, and
-`AgentNotificationPresenter` — the app's one `UNUserNotificationCenter` delegate, made so in
-`start()` before any notification can be clicked, which routes a click on the agent's waiting
-notification back to `AIChatCoordinator`.
+`HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `ExternalAppMonitor`,
+`SnippetKeywordListener`), the shared state (`AppSettings`, `PaletteState`, `FileSearchSession`,
+`MenuSearchSession`, `UninstallSession`, `MeetingClock`), `NotesStore`, every feature's
+coordinator, the window controllers, and `AgentNotificationPresenter` — the app's one
+`UNUserNotificationCenter` delegate, made so in `start()` before any notification can be clicked,
+which routes a click on the agent's waiting notification back to `AIChatCoordinator`.
 
 `AppDelegate.applicationDidFinishLaunching` calls `AppCore.shared.start()` and nothing else. That is the
 one wiring point, and `start()` reads as the app's whole boot sequence in one screen.
@@ -221,7 +221,8 @@ Blitz/
                     Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
                     AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
-                    HealthTicker, Memo, ActivationPolicy, ProcessExit, Images/, Compression/
+                    HealthTicker, Memo, ActivationPolicy, ProcessExit, AccessibilityText,
+                    ExternalAppMonitor, PasteboardSensitivity, Images/, Compression/
   Resources/        RaycastRuntime.generated.js (the embedded extension runtime), EmojiKeywords/
   Palette/          the palette shell: PalettePanel, PaletteWindowController, RootPaletteView,
                     the PaletteScreen protocol, PaletteCoordinator, PaletteState, PaletteMode,

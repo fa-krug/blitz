@@ -107,8 +107,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   linked `[n]`: `ChatCitations` finds each link's sentence end in the drawn text and inserts after
   it, two sources in one sentence sharing it, so prose and chips always agree. The preamble asks the model to link a page it relies on inline, so a cited
   answer carries its sources without a second request.
-- **Every tool call answers to the agent's one rule table.** Shell, files, calendar, reminders, web
-  search and each MCP server are rows of `AgentRules`, decided by `AgentPolicy` and enforced by
+- **Every tool call answers to the agent's one rule table.** Shell, files, the Mac, calendar,
+  reminders, personal data, context, other chats, web search and each MCP server are rows of
+  `AgentRules`, decided by `AgentPolicy` and enforced by
   `AgentGateCoordinator`, which `AIChatCoordinator` owns: a denied tool is never offered, every call
   is decided when it arrives, and an Ask is Blitz's own dialog. The composer's tools menu — Use
   Tools and a switch per tool — and its mode pill — Manual, Auto or Plan — edit the chat's
@@ -160,6 +161,16 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   Deny, Plan never offers them and each run asks every time. A path is weighed as a read with its
   links resolved; a script, installer or link file, every other scheme and the system actions that
   end the session or lose something are refused outright. See [Agent](agent.md#mac-tools).
+- **A model can read the reader's own data and context, and add to the note, only as the rules
+  allow.** `contacts_search` (Read Contacts), `note_read` (Read the Note), `clipboard_history`
+  (Read Clipboard History), `snippets_list`, `snippets_read` and `quicklinks_list` (Read Snippets
+  and Quicklinks), and `context_frontmost_app`, `context_selected_text` and `context_clipboard`
+  (the three Context rows) only read; each asks by default, may be allowed for the chat and is
+  offered in Plan. `note_append` (Add to the Note) adds to the end of the open note, starts on
+  Deny and asks every time. Each runs through its feature's coordinator under that feature's
+  switch, never past its exclusions: no contact note or photo, no copy marked secret, nothing an
+  ignored app copied. The context rows read the app the reader was in before Blitz, never Blitz
+  itself. See [Agent](agent.md#personal-and-context-tools).
 - **A model can read one web page as text, and a local address always asks.** `web_fetch`
   (`WebFetchToolCatalog`, under Fetch Web Pages) goes to the same routes, fetches an `http` or
   `https` URL on its own cacheless, cookieless `.ephemeral` session (`WebFetchRunner`) — 30 s, 5 MB

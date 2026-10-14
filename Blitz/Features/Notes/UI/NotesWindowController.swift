@@ -70,6 +70,14 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         editor.format(action)
     }
 
+    /// One undoable edit at the end, kept off the caret; false unless the editor holds `source`.
+    func append(_ addition: String, to source: String) -> Bool {
+        guard let editor, editor.string == source else { return false }
+        let end = NSRange(location: (source as NSString).length, length: 0)
+        return editor.performEdit(
+            NoteEditPlan(range: end, replacement: addition, selection: editor.selectedRange()))
+    }
+
     func presentHeadingMenu(_ menu: NoteHeadingMenuWindowController) {
         guard let panel, panel.isVisible else { return }
         menu.show(above: panel)

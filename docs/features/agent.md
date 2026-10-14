@@ -2,8 +2,8 @@
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
 calls the tools one rule table allows: the shell, files, web fetch, the reader's other chats, Mac
-actions, the calendar, reminders, web search and each MCP server, with rows already in the table for
-the rest of the Phase 3 toolbox — personal data and context — whose runners have not landed. The
+actions, the calendar, reminders, contacts, the note, clipboard history, snippets and quicklinks,
+the app the reader is in, its selected text and the clipboard, web search and each MCP server. The
 table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell and path
 patterns for files; a session's mode — Manual, Auto or Plan — decides what an Ask does, and
 nothing a session holds lifts a Deny. Two more tools talk only to the chat and have no row:
@@ -11,8 +11,8 @@ nothing a session holds lifts a Deny. Two more tools talk only to the chat and h
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
-[File tools](#file-tools), [Web fetch](#web-fetch), [Session tools](#session-tools) and
-[Mac tools](#mac-tools) below,
+[File tools](#file-tools), [Web fetch](#web-fetch), [Session tools](#session-tools),
+[Mac tools](#mac-tools) and [Personal and context tools](#personal-and-context-tools) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -92,6 +92,12 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   all; `mac_open` refuses a file that would run or install something and every link scheme but
   `http`, `https` and `mailto`. Each Mac row runs through its feature's coordinator, which checks
   its feature's switch again after the dialog. See [Mac tools](#mac-tools).
+- **A personal read never reaches past its feature's own exclusions.** A contact comes back without
+  its note or photo, which are never fetched; clipboard history never held a copy marked secret and
+  leaves out whatever an app the history now ignores copied; the current clipboard refuses a copy
+  marked secret or transient before reading anything else off it; the selected text is read through
+  Accessibility only, never a borrowed ⌘C; and the note is only ever added to, at its end. See
+  [Personal and context tools](#personal-and-context-tools).
 - **The feature switches stay the ceiling.** Each row with a feature behind it needs that feature's
   switch (`AgentFeatureCeiling`), and a server needs MCP on and itself enabled.
   `AgentGateCoordinator.rules` reads a row as Deny while its ceiling is not met, and a server that
@@ -135,20 +141,20 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions.
 | | `.calendarWrite` | Add Calendar Events | `calendar_create_event` | no | Deny | Calendar on |
 | | `.remindersRead` | Read Reminders | `reminders_list` | yes | Ask | Reminders on |
 | | `.remindersWrite` | Change Reminders | `reminders_create`, `reminders_update`, `reminders_complete` | no | Deny | Reminders on |
-| Personal | `.contactsRead` | Read Contacts | (3f) | yes | Ask | Contacts on |
-| | `.noteRead` | Read the Note | the floating note (3f) | yes | Ask | Notes on |
-| | `.noteWrite` | Add to the Note | append (3f) | no | Deny | Notes on |
-| | `.clipboardRead` | Read Clipboard History | (3f) | yes | Ask | Clipboard on |
-| | `.snippetsRead` | Read Snippets and Quicklinks | (3f) | yes | Ask | Snippets or Quicklinks on |
-| Context | `.frontmostApp` | See the Frontmost App | (3f) | yes | Ask | — |
-| | `.selectedText` | Read Selected Text | (3f) | yes | Ask | Accessibility granted |
-| | `.currentClipboard` | Read the Clipboard | (3f) | yes | Ask | — |
+| Personal | `.contactsRead` | Read Contacts | `contacts_search` | yes | Ask | Contacts on |
+| | `.noteRead` | Read the Note | `note_read` | yes | Ask | Notes on |
+| | `.noteWrite` | Add to the Note | `note_append` | no | Deny | Notes on |
+| | `.clipboardRead` | Read Clipboard History | `clipboard_history` | yes | Ask | Clipboard on |
+| | `.snippetsRead` | Read Snippets and Quicklinks | `snippets_list`, `snippets_read`, `quicklinks_list` | yes | Ask | Snippets or Quicklinks on |
+| Context | `.frontmostApp` | See the Frontmost App | `context_frontmost_app` | yes | Ask | — |
+| | `.selectedText` | Read Selected Text | `context_selected_text` | yes | Ask | Accessibility granted |
+| | `.currentClipboard` | Read the Clipboard | `context_clipboard` | yes | Ask | — |
 | Sessions | `.sessionsRead` | Read Other Chats | `sessions_list`, `sessions_read` | yes | Ask | — |
 | | `.sessionsArchive` | Archive Chats | `sessions_archive`, `sessions_unarchive` | no | Deny | — |
 | — | `.mcp(slug)` | the server's title | every tool of that server | per tool | its trust, `.ask` | MCP and the server on |
 
-A step in parentheses names the Phase 3 step that brings the row's runner; until then the row is not
-hosted, so nothing offers it. Every read-only row but web search can be allowed for the chat.
+Every row but web search, which the provider runs, is hosted. Every read-only row but web search
+can be allowed for the chat.
 `AgentFeatureCeiling` is the one place that says each row's ceiling and the sentence Settings shows
 under a row held below it ("Turn on Contacts first."); Selected Text's is the Accessibility grant,
 read through `Permissions.isAccessibilityTrusted()` at each decision and polled once a second while
@@ -585,6 +591,96 @@ placed and apps opened, adding the launcher's own summary of what did not happen
 nothing is an error. There is no tool to move one window: while the agent runs, the frontmost window
 is usually the chat itself.
 
+## Personal and context tools
+
+Eight read rows and one write, each run through its feature's coordinator — or, for the context
+rows, which belong to no feature, `ContextToolRunner` (`Service/`) — with the catalog that reads
+the calls and words the answers in that feature's `Model/` (`ContextToolCatalog` in AI's),
+harness-pinned by `personal-tool-test`. Every read is offered in Plan and may be allowed for the
+chat; Add to the Note is Deny by default, never in Plan and asked every time.
+
+| Tool | Row | Arguments | What comes back |
+| --- | --- | --- | --- |
+| `contacts_search` | Read Contacts | `query` (name, email, phone or company), `limit` (default 10, at most 25) | JSON: the query, how many cards matched, how many are shown, and each card's name, company, labelled emails, phones and postal addresses, and birthday |
+| `note_read` | Read the Note | none | the note the Notes window shows, by its title, cut at 64 KB |
+| `note_append` | Add to the Note | `text`, at most 20 000 characters | how much was added, and to which note |
+| `clipboard_history` | Read Clipboard History | `query`, `limit` (default 10, at most 50) | a count, then each entry numbered, newest first, with when it was copied, the app it came from, pinned and its title; text cut at 2 000 characters, an image as "[image]" with its pixel size, a file as "[file]" and its path |
+| `snippets_list` | Read Snippets and Quicklinks | `query` | a count, then name, keyword and the first 80 characters of each enabled snippet |
+| `snippets_read` | Read Snippets and Quicklinks | `name` (or keyword) | the template as written, placeholders unfilled, cut at 64 KB |
+| `quicklinks_list` | Read Snippets and Quicklinks | `query` | a count, then name, link template and tags of each enabled quicklink |
+| `context_frontmost_app` | See the Frontmost App | none | the app's name and bundle ID, and its focused window's title — or that it has none, or that Accessibility is not granted |
+| `context_selected_text` | Read Selected Text | none | the selection in that app, cut at 64 KB |
+| `context_clipboard` | Read the Clipboard | none | the text on the pasteboard, cut at 64 KB; else copied files' paths; else what kind of content it is and its first five types |
+
+- **Order of a call** is the Mac tools': read the arguments (a malformed call is a sentence,
+  never a dialog); refuse on a Deny row before anything is looked up
+  (`AIChatCoordinator.runFeatureTool`); then the feature checks its switch and settles what needs
+  no dialog; asks through the gate with its `AgentPrompt`; checks its switch again, since it may
+  have gone off while the dialog was up; then reads.
+- **One row, two features.** Read Snippets and Quicklinks is available while either feature is
+  on, but `snippets_*` is offered only while Snippets is on and `quicklinks_list` only while
+  Quicklinks is (`SnippetCoordinator.chatTools`, `QuicklinkCoordinator.chatTools`), and each
+  refuses with the denied sentence while its own feature is off. A disabled snippet or quicklink
+  is offered nowhere, so neither lists it, and a snippet is never expanded: expanding would read
+  the clipboard and the date.
+
+### Contacts
+
+`ContactsCoordinator.runTool` reads nothing before the dialog. A search needs Contacts on, macOS's
+grant and the address book's first read finished (`ContactsStore.hasLoaded`), each checked before
+and after asking. It then matches with `ContactDirectory.matching` — the list's own search, every
+word in a name, an email address or the company, or a dialled number — and only the cards it
+returns are read again, off main, by `ContactsStore.toolCards`, which fetches the full-name keys
+plus `ContactToolCatalog.fetchedKeys`: company, phones, emails, postal addresses and birthday.
+`CNContactNoteKey` and the image keys are never asked for, so a note or a photo cannot come back;
+the harness pins that list. A birthday kept without its year comes back as `--MM-DD`.
+
+### The note
+
+`NotesCoordinator.runTool` acts on the active note — the one the Notes window shows, or would
+show — loading the collection first, as showing the window does, if nothing has yet; with no note
+at all it refuses. The dialog names the note, and if another note became active while it was up
+the call is refused. An addition goes on a line of its own at the end
+(`NoteToolCatalog.addition`): when the editor holds the note it lands as one undoable edit through
+`NoteTextView.performEdit`, leaving the caret where it was, so it reaches the draft, autosave and
+the formatting the way typing does; otherwise it is written into the draft. Either way the draft is
+flushed before the answer, and a save that fails is reported to the reader as any save is and
+refused to the model. Nothing already in the note is ever changed.
+
+### Clipboard history
+
+`ClipboardCoordinator.runTool` reads the history the palette holds — the newest 1000 entries and
+every pin (`ClipboardStore.items`) — never the full-text index or recognised text. What capture
+never stored stays out: copies marked `org.nspasteboard.ConcealedType`,
+`org.nspasteboard.TransientType` or `com.apple.is-sensitive` (`PasteboardSensitivity`, shared with
+`ClipboardManager`), and anything copied in an app on the clipboard's ignore list at the time. An
+entry whose source app was added to that list since is left out too
+(`ClipboardToolCatalog.entries`). The source app is named through Launch Services, and an image's
+pixel size is read off main with `ImageThumbnail.pixelSize`; its pixels never go.
+
+### Context
+
+The context rows read the reader's app, never Blitz. `ExternalAppMonitor` (`Platform/`, owned by
+`AppCore` and started in `start()`) records every app other than Blitz that becomes active
+(`NSWorkspace.didActivateApplicationNotification`); its `app` is the frontmost app when that is not
+Blitz — the palette is non-activating, so the app behind it stays frontmost — else the last other
+app to be, unless it has quit. So a chat in the AI Agent window reads the app the reader left to
+type in it.
+
+- **The frontmost app** is named in the dialog. Its focused window's title is read through
+  Accessibility (`AccessibilityText.windowTitle`, off main) only when the grant is there, and the
+  answer says when it is not.
+- **The selected text** is `AccessibilityText.read`, off main, as Quick Actions reads it, but
+  without the borrowed ⌘C fallback: posting a keystroke into the reader's app is not a read.
+  Accessibility is checked, never prompted for. No app, no focused text element and an empty
+  selection are each refused with a sentence before any dialog; the text read then is what goes
+  back once allowed.
+- **The clipboard** is read on the main actor. A copy carrying a `PasteboardSensitivity` marker is
+  refused before its text or files are read, and an empty clipboard is a sentence; neither asks.
+  Copied files win over the names Finder adds as text. The dialog names only the kind and size —
+  "text, 42 characters" — and a pasteboard whose `changeCount` moved while the dialog was up is
+  refused rather than read.
+
 ## The gate and its dialogs
 
 `AgentGateCoordinator`, owned by `AIChatCoordinator`, is the one gate. Every route reaches it:
@@ -644,6 +740,15 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | `shortcuts_run` | Let the agent run the shortcut "`<name>`"? — the input, clipped, and that its output goes to the provider | **Allow** ↵, Don't Allow |
 | `system_action_run` | Let the agent run "`<action>`"? | **Allow** ↵, Don't Allow |
 | `window_layout_apply` | Let the agent apply the window layout "`<name>`"? — what it arranges, and that it opens apps | **Allow** ↵, Don't Allow |
+| `contacts_search` | Let the agent search your contacts for "`<query>`"? — the fields it sees, never notes or photos, and the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `note_read` | Let the agent read your note? — the note's title and the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `note_append` | Let the agent add to your note? — the note's title and the text, clipped | **Allow** ↵, Don't Allow |
+| `clipboard_history` | Let the agent read your clipboard history? — how many entries, the query, and the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `snippets_list` / `snippets_read` | Let the agent list your snippets? / read the snippet "`<name>`"? | **Allow** ↵, Allow This Chat, Don't Allow |
+| `quicklinks_list` | Let the agent list your quicklinks? | **Allow** ↵, Allow This Chat, Don't Allow |
+| `context_frontmost_app` | Let the agent see that you are using `<app>`? — name, bundle ID and window title | **Allow** ↵, Allow This Chat, Don't Allow |
+| `context_selected_text` | Let the agent read the text selected in `<app>`? | **Allow** ↵, Allow This Chat, Don't Allow |
+| `context_clipboard` | Let the agent read the clipboard? — its kind and size, never its content | **Allow** ↵, Allow This Chat, Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -677,8 +782,8 @@ The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits wha
 
 - **Use Tools** — off offers nothing, Blitz's tools, `ask_user` and every server alike.
 - **Blitz** — one switch per hosted built-in row the table does not deny, on a route that reaches
-  Blitz's tools (`AIChatCoordinator.listedBuiltInTools`); web search, the provider's own, and the
-  toolbox rows with no runner yet are not among them.
+  Blitz's tools (`AIChatCoordinator.listedBuiltInTools`); web search, the provider's own, is not
+  among them.
 - **MCP Servers** — one switch per server the table does not deny.
 - **Agent Settings…** opens Settings → AI on the Agent section.
 
@@ -800,8 +905,7 @@ Settings → AI holds two sections, between Default model and Conversations:
   on Contacts first.", "Allow Blitz Accessibility access first.") while `AgentFeatureCeiling` holds
   it; then, under an MCP Servers header, a picker per server, written to its trust and disabled
   while MCP or the server is off; **Tool call rounds**; and **Notify when the agent is waiting**
-  ([Notifications](#notifications)). A toolbox row whose runner has not landed is listed and
-  editable like any other.
+  ([Notifications](#notifications)).
 - **Shell rules** (`ShellRulesSection`) — the ordered patterns, each with a pattern field, a
   decision, Move Up, Move Down and Remove, then **Add Shell Rule**, which adds an empty Allow
   pattern and focuses it. An empty pattern matches nothing.
@@ -884,7 +988,23 @@ Each route honours the mode where it decides what to offer:
   the plan instruction, and the context card's rows per mode; `web_fetch`'s wire name and row; the
   Sessions rows — their group and order, wire names, hosting, defaults, Plan offering the read and
   refusing the archive, tolerant decoding without them — and their three dialogs; the Mac rows'
-  wire names and hosting, and which rows weigh paths and take Read rules.
+  wire names and hosting, and which rows weigh paths and take Read rules; the personal and
+  context catalogs' wire names, every row but web search hosted, and each read catalog's names on
+  a read row.
+- `personal-tool-test` — the ten personal and context schemas, wire names and rows, each read
+  allowable for the chat and the addition never; call reading and its refusals (queries, limits
+  and their caps, a blank or oversized addition, arguments that are not an object); contact cards
+  as JSON, a birthday without its year, and `fetchedKeys` without the note or any image key; the
+  addition on its own line, the note and a selection cut at 64 KB between characters; clipboard
+  entries newest first without an ignored app's copies, matched by text or title, each line's time,
+  source, pin and title, images with and without a size, files, and a long entry cut; snippets
+  listed without disabled ones, previewed on one line, found by name or keyword, two of one name
+  told apart, near names, and a template read whole or cut; quicklinks with their templates and
+  tags; the frontmost answer with a title, none, or no Accessibility; each `PasteboardSensitivity`
+  marker refusing a fixture pasteboard, files before Finder's names, empty and non-text contents;
+  and every dialog's wording and choices.
+- `quicklink-coordinator-test` — `QuicklinkCoordinator.runTool` asks once before listing, answers
+  a decline with it, and with Quicklinks off refuses before asking and offers nothing.
 - `mac-tool-test` — the seven Mac schemas and wire names, the rows not read-only and never allowed
   for the chat, Deny by default and never offered in Plan; `mac_open`'s target reading (paths, apps,
   links, every refused scheme and credentials), app lookup (bundle id, case, `.app`, localised
@@ -955,9 +1075,22 @@ Each route honours the mode where it decides what to offer:
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal, Context and Sessions; switching Contacts off greys Read Contacts with "Turn on Contacts
-  first.", and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only
-  Read Files, Change Files, Fetch Web Pages, the four Mac rows, Read Other Chats and Archive Chats
-  appear in the composer's tools menu and the context card.
+  first.", and with Accessibility not granted Read Selected Text says so. Every row the table
+  does not deny but Web Search appears in the composer's tools menu and the context card.
+- With Read Contacts on Ask, ask a chat for a colleague's phone number: the dialog names the
+  query, and the answer carries numbers, addresses and the birthday, never the card's note. With
+  Contacts off, Read Contacts is greyed and the tool is not offered.
+- With Notes on and Add to the Note on Ask, ask a chat to add a to-do to your note while the Notes
+  window shows it: the dialog names the note and shows the text, Allow puts it on a new line at the
+  end, and ⌘Z in the note takes it back out. Reading the note asks with Allow This Chat.
+- Copy a password from a password manager, then ask a chat what is on the clipboard: it is refused
+  without a dialog. Copy ordinary text: the dialog says "text, N characters", and the text comes
+  back. Ask for clipboard history: a copy from an app on the clipboard's ignore list is not there.
+- Select text in Safari, switch to the AI Agent window and ask what is selected: the dialog names
+  Safari, and the text comes back; ask which app you are using and it names Safari and the page's
+  title. With nothing selected it says so without a dialog.
+- With Snippets off and Quicklinks on, the agent is offered `quicklinks_list` but not the snippet
+  tools; a disabled snippet or quicklink is never listed.
 - With Open Apps, Files and Links on Ask, ask a chat to open Calculator, `~/Downloads`, a PDF and
   `https://example.com`: each dialog names what opens, and Allow opens it. Asking for
   `~/.ssh/id_rsa`, a `.command` file or a `shortcuts://` link is refused without a dialog.

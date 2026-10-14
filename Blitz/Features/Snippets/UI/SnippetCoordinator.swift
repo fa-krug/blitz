@@ -114,6 +114,52 @@ final class SnippetCoordinator {
         applySnippetsLauncherPresence()
     }
 
+    // MARK: - Chat tools
+
+    /// Offered only while snippets are on, though the row also opens to quicklinks.
+    func chatTools(read: Bool) -> [AITool] {
+        read && settings.snippetsEnabled ? SnippetToolCatalog.tools() : []
+    }
+
+    /// Templates as written, never expanded: expanding would read the clipboard and the date.
+    func runTool(_ call: AIToolCall, authorize: AgentAuthorization) async -> AIToolResult {
+        let request: SnippetToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try SnippetToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let denied = AgentRefusal.denied.message(for: .snippetsRead)
+        guard settings.snippetsEnabled else { return .failure(call.id, denied) }
+        switch request {
+        case .list(let query):
+            if let refusal = await authorize(AgentPrompt.readSnippets(nil)) {
+                return .failure(call.id, refusal)
+            }
+            guard settings.snippetsEnabled else { return .failure(call.id, denied) }
+            let answer = SnippetToolCatalog.listing(store.snippets.map(\.snippet), query: query)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .read(let name):
+            let snippet: Snippet
+            do throws(AIToolArguments.Invalid) {
+                snippet = try SnippetToolCatalog.snippet(
+                    named: name, in: store.snippets.map(\.snippet))
+            } catch {
+                return .failure(call.id, error.message)
+            }
+            if let refusal = await authorize(AgentPrompt.readSnippets(snippet.name)) {
+                return .failure(call.id, refusal)
+            }
+            guard settings.snippetsEnabled else { return .failure(call.id, denied) }
+            let library = store.snippets.map(\.snippet)
+            guard let current = try? SnippetToolCatalog.snippet(named: name, in: library) else {
+                return .failure(call.id, SnippetToolCatalog.gone(snippet.name))
+            }
+            let answer = SnippetToolCatalog.answer(current)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+    }
+
     // MARK: - Browsing and editing
 
     /// The switch gates the browser, the way Search Files re-checks its own before opening.

@@ -368,6 +368,17 @@ path through `openWithPlatforms` when the field is a platform id. Invalid entrie
 entries merge into the existing library the same way **Import Quicklinks** does. Importing at least
 one turns the feature on — the switch grants no permission class.
 
+## Chat tools
+
+With Quicklinks on, a chat on an API connection or the Claude command is offered `quicklinks_list`
+while the agent's Read Snippets and Quicklinks row is not Deny; the row also opens to snippets, so
+`QuicklinkCoordinator.chatTools` checks this feature's own switch, and `runTool` refuses while it is
+off. The row and its dialog are [Agent](agent.md#personal-and-context-tools)'s.
+
+A listing names each enabled quicklink, its link template as stored — placeholders unfilled — and
+its tags, matched by name or tag as Search Quicklinks matches. Nothing is opened.
+`quicklink-coordinator-test` drives `runTool` against its stand-ins.
+
 ## Standalone harness
 
 ```sh

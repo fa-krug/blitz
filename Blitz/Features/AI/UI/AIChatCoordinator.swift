@@ -539,6 +539,9 @@ final class AIChatCoordinator {
             || WebFetchToolCatalog.handles(name) || SessionToolCatalog.handles(name)
             || OpenToolCatalog.handles(name) || ShortcutToolCatalog.handles(name)
             || SystemActionToolCatalog.handles(name) || WindowLayoutToolCatalog.handles(name)
+            || ContactToolCatalog.handles(name) || NoteToolCatalog.handles(name)
+            || ClipboardToolCatalog.handles(name) || SnippetToolCatalog.handles(name)
+            || QuicklinkToolCatalog.handles(name) || ContextToolCatalog.handles(name)
             || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
     }
 
@@ -555,18 +558,7 @@ final class AIChatCoordinator {
             if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
             if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
             if OpenToolCatalog.handles(call.name) { return await openItem(call, in: chat) }
-            if ShortcutToolCatalog.handles(call.name) {
-                return await runMacTool(
-                    call, row: .shortcuts, in: chat, run: core.appleShortcutCoordinator.runTool)
-            }
-            if SystemActionToolCatalog.handles(call.name) {
-                return await runMacTool(
-                    call, row: .systemActions, in: chat, run: core.systemActionCoordinator.runTool)
-            }
-            if WindowLayoutToolCatalog.handles(call.name) {
-                return await runMacTool(
-                    call, row: .windowLayouts, in: chat, run: core.windowLayoutCoordinator.runTool)
-            }
+            if let routed = await runFeatureTool(call, in: chat) { return routed }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -641,6 +633,15 @@ final class AIChatCoordinator {
             + (offered(.shortcuts) ? ShortcutToolCatalog.tools() : [])
             + (offered(.systemActions) ? SystemActionToolCatalog.tools() : [])
             + (offered(.windowLayouts) ? WindowLayoutToolCatalog.tools() : [])
+        let personal: [AITool] =
+            (offered(.contactsRead) ? ContactToolCatalog.tools() : [])
+            + NoteToolCatalog.tools(read: offered(.noteRead), append: offered(.noteWrite))
+            + (offered(.clipboardRead) ? ClipboardToolCatalog.tools() : [])
+            + core.snippetCoordinator.chatTools(read: offered(.snippetsRead))
+            + core.quicklinkCoordinator.chatTools(read: offered(.snippetsRead))
+            + ContextToolCatalog.tools(
+                frontmostApp: offered(.frontmostApp), selectedText: offered(.selectedText),
+                clipboard: offered(.currentClipboard))
         return core.calendarCoordinator.chatTools(
             read: offered(.calendarRead), write: offered(.calendarWrite), now: now)
             + core.remindersCoordinator.chatTools(
@@ -649,6 +650,7 @@ final class AIChatCoordinator {
             + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
             + (offered(.webFetch) ? WebFetchToolCatalog.tools() : [])
             + mac
+            + personal
             + SessionToolCatalog.tools(
                 read: offered(.sessionsRead), archive: offered(.sessionsArchive))
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
@@ -730,16 +732,34 @@ final class AIChatCoordinator {
         }
     }
 
-    /// A Mac row's feature reads and runs its call; a denied row refuses before any lookup.
-    private func runMacTool(
-        _ call: AIToolCall, row: AgentTool, in chat: AIChatState,
-        run: (AIToolCall, AgentAuthorization) async -> AIToolResult
-    ) async -> AIToolResult {
+    /// The Mac, personal and context tools; a denied row refuses before its feature looks it up.
+    private func runFeatureTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult? {
+        guard let row = AgentTool(builtInToolName: call.name),
+            let run = featureRunner(for: call.name)
+        else { return nil }
         let agentCall = AgentCall(tool: row)
         guard gate.decision(for: agentCall, in: chat) != .deny else {
             return .failure(call.id, AgentRefusal.denied.message(for: row))
         }
         return await run(call, gate.authorization(for: agentCall, in: chat))
+    }
+
+    private typealias FeatureRunner =
+        @MainActor (AIToolCall, AgentAuthorization) async -> AIToolResult
+
+    /// Each runner reads its call, checks its feature's switch and puts its own dialog to the gate.
+    private func featureRunner(for name: String) -> FeatureRunner? {
+        if ShortcutToolCatalog.handles(name) { return core.appleShortcutCoordinator.runTool }
+        if SystemActionToolCatalog.handles(name) { return core.systemActionCoordinator.runTool }
+        if WindowLayoutToolCatalog.handles(name) { return core.windowLayoutCoordinator.runTool }
+        if ContactToolCatalog.handles(name) { return core.contactsCoordinator.runTool }
+        if NoteToolCatalog.handles(name) { return core.notesCoordinator.runTool }
+        if ClipboardToolCatalog.handles(name) { return core.clipboardCoordinator.runTool }
+        if SnippetToolCatalog.handles(name) { return core.snippetCoordinator.runTool }
+        if QuicklinkToolCatalog.handles(name) { return core.quicklinkCoordinator.runTool }
+        guard ContextToolCatalog.handles(name) else { return nil }
+        let apps = core.externalApps
+        return { await ContextToolRunner.run($0, app: apps.app, authorize: $1) }
     }
 
     /// An app is named against the launcher's index; a path is weighed canonically, as files are.

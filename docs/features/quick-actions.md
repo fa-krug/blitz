@@ -233,6 +233,9 @@ pasteboard's existing contents there would transform whatever the reader last co
 over their selection. Movement is the only proof a copy happened — never comparing content, which
 false-positives when the same text was already on the clipboard.
 
+The agent's Read Selected Text uses the first tier only: posting ⌘C into the reader's app is an
+action, not a read. See [Agent](agent.md#context).
+
 Copying is the fallback and never the first try: it synthesises a keystroke into somebody else's app.
 When both tiers come back empty, only an Accessibility result of `.empty` justifies "nothing is
 selected"; otherwise the app told us nothing either way and says so.

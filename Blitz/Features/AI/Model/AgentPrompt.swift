@@ -70,6 +70,84 @@ struct AgentPrompt: Equatable, Sendable {
             defaultIndex: 0)
     }
 
+    /// A personal or context read, which Allow This Chat may answer; `detail` says what it sees.
+    static func read(_ tool: AgentTool, title: String, detail: String?) -> AgentPrompt {
+        let provider = "What it reads is sent to the model\u{2019}s provider."
+        return AgentPrompt(
+            title: title, message: detail.map { "\($0) \(provider)" } ?? provider,
+            symbol: tool.symbolName,
+            choices: [.allowOnce("Allow"), .allowThisChat, .refuse("Don't Allow")],
+            defaultIndex: 0)
+    }
+
+    static func searchContacts(_ query: String) -> AgentPrompt {
+        read(
+            .contactsRead,
+            title: "Let the agent search your contacts for \u{201C}\(query)\u{201D}?",
+            detail: "It sees each match\u{2019}s name, company, email addresses, phone numbers, "
+                + "postal addresses and birthday, never its notes or photo.")
+    }
+
+    static func readNote(_ title: String) -> AgentPrompt {
+        read(
+            .noteRead, title: "Let the agent read your note?",
+            detail: "It reads \u{201C}\(title)\u{201D}.")
+    }
+
+    /// The text is shown as sent, clipped, since it lands in the reader's own note.
+    static func appendToNote(_ title: String, text: String) -> AgentPrompt {
+        write(
+            title: "Let the agent add to your note?",
+            message: "It adds this on a new line at the end of \u{201C}\(title)\u{201D}:\n"
+                + AIToolJSON.clipped(text, to: 300),
+            symbol: AgentTool.noteWrite.symbolName)
+    }
+
+    static func readClipboardHistory(query: String?, limit: Int) -> AgentPrompt {
+        let matching = query.map { " that contain \u{201C}\($0)\u{201D}" } ?? ""
+        let copies = limit == 1 ? "your latest copy" : "up to \(limit) of your latest copies"
+        return read(
+            .clipboardRead, title: "Let the agent read your clipboard history?",
+            detail: "It sees \(copies)\(matching), with when and where each was copied; of an "
+                + "image, only its size.")
+    }
+
+    /// One snippet by name, or the list of them.
+    static func readSnippets(_ name: String?) -> AgentPrompt {
+        guard let name else {
+            return read(
+                .snippetsRead, title: "Let the agent list your snippets?",
+                detail: "It sees each snippet\u{2019}s name, keyword and the start of its text.")
+        }
+        return read(
+            .snippetsRead, title: "Let the agent read the snippet \u{201C}\(name)\u{201D}?",
+            detail: nil)
+    }
+
+    static func readQuicklinks() -> AgentPrompt {
+        read(
+            .snippetsRead, title: "Let the agent list your quicklinks?",
+            detail: "It sees each quicklink\u{2019}s name and link.")
+    }
+
+    static func seeFrontmostApp(_ app: String) -> AgentPrompt {
+        read(
+            .frontmostApp, title: "Let the agent see that you are using \(app)?",
+            detail: "It sees the app\u{2019}s name and bundle identifier, and the title of its "
+                + "front window.")
+    }
+
+    static func readSelectedText(in app: String) -> AgentPrompt {
+        read(.selectedText, title: "Let the agent read the text selected in \(app)?", detail: nil)
+    }
+
+    /// `summary` names what is on the clipboard, never its content.
+    static func readClipboard(_ summary: String) -> AgentPrompt {
+        read(
+            .currentClipboard, title: "Let the agent read the clipboard?",
+            detail: "It reads what you copied last: \(summary).")
+    }
+
     /// A file call: a read may be allowed for the chat, and either may allow its folder for good.
     static func files(
         _ tool: AgentTool, title: String, message: String?, pattern: String?

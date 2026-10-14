@@ -1,7 +1,7 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1, 1b, 2, 3a, 3b, 3c and 3d built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
-scope; it keeps MCP servers only.
+Status: Phases 1, 1b, 2 and 3 (3a–3f) built; phase 4 planned. Builds on PR #49 (web search on
+Claude routes, the shell tool). Codex is out of scope; it keeps MCP servers only.
 
 ## Concept
 
@@ -377,12 +377,36 @@ As built, in [`docs/features/agent.md`](../features/agent.md#session-tools) and
 - **Decided:** window layouts only — no single-window move, since the frontmost window is the chat.
   Accessibility is checked, never prompted for.
 
-### Remaining steps
+### 3f: personal data and context (built)
 
-1. **3f Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
-   `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
-   and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
-   turn by itself.
+As built, in [`docs/features/agent.md`](../features/agent.md#personal-and-context-tools):
+
+- **Ten tools over the eight rows.** `contacts_search` (Read Contacts), `note_read` (Read the
+  Note), `note_append` (Add to the Note), `clipboard_history` (Read Clipboard History),
+  `snippets_list`, `snippets_read` and `quicklinks_list` (Read Snippets and Quicklinks), and
+  `context_frontmost_app`, `context_selected_text` and `context_clipboard` (the Context rows). Each
+  catalog lives in its feature's `Model/` (`ContextToolCatalog` in AI's) and each run goes through
+  the feature's coordinator, or `ContextToolRunner` for the context rows; `personal-tool-test`
+  pins them. Every row is now hosted.
+- **Decided:** every read asks by default, may be allowed for the chat and is offered in Plan; Add
+  to the Note is Deny by default, asked every time and never in Plan. Each context row is a tool
+  under the same rules, never pushed into a turn by itself.
+- **Decided:** a contact search fetches only company, phones, emails, postal addresses and
+  birthday besides the name; the note and the image keys are never asked for. Clipboard history is
+  the resident 1000 entries and the pins, minus anything an app on the ignore list copied, even
+  before it was added; images come back as their pixel size only. The current clipboard refuses a
+  copy marked concealed, transient or sensitive before reading it, sharing
+  `PasteboardSensitivity` with capture, and refuses a clipboard that changed while asking.
+- **Decided:** the note tools act on the active note, and an addition goes on its own line at the
+  end, through the open editor as one undoable edit when there is one. Snippets are read as
+  templates, never expanded; a disabled snippet or quicklink is never listed; each half of the
+  shared row is offered only while its own feature is on.
+- **Decided:** "the frontmost app" is the reader's, never Blitz: `ExternalAppMonitor` keeps the
+  last app other than Blitz to become active, so a chat in the AI Agent window reads the app left
+  to type in it. The selection is read through Accessibility only, never a borrowed ⌘C, and
+  Accessibility is checked, never prompted for.
+
+Phase 3 is complete.
 
 ## Phase 4: memory
 

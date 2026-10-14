@@ -59,6 +59,21 @@
   Search Screenshots spawns the same helper through the same worker; see
   [screenshots.md](screenshots.md).
 
+## Chat tools
+
+With clipboard history on, a chat on an API connection or the Claude command is offered
+`clipboard_history` while the agent's Read Clipboard History row is not Deny. The row and its
+dialog are [Agent](agent.md#personal-and-context-tools)'s; `ClipboardCoordinator.runTool` reads the
+call, asks the gate, and only then reads.
+
+It reads `ClipboardStore.items` — the newest 1000 entries and every pin — newest first, never the
+full-text index or recognised text. A secret never reaches it, because capture never stored one:
+the markers are `PasteboardSensitivity`'s, which `ClipboardManager.sensitiveTypes` and the agent's
+current-clipboard read share. An entry whose source app is on `clipboardDisabledApps` now is left
+out, even if it was copied before the app was added. Each entry says when it was copied and from
+which app; text is cut at 2 000 characters, an image is "[image]" with its pixel size and a file
+"[file]" with its path. `ClipboardToolCatalog` is pure, and `personal-tool-test` pins it.
+
 ## Poll-based capture
 
 **A file URL is read before the text**, because that is the whole of the bug this ordering fixes:

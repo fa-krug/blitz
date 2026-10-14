@@ -19,19 +19,7 @@ enum AccessibilityText {
         // Per element and never inherited, so the focused element needs its own against a hang.
         AXUIElementSetMessagingTimeout(application, timeout)
         activateManualAccessibility(of: application)
-        var focusedValue: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                application,
-                kAXFocusedUIElementAttribute as CFString,
-                &focusedValue) == .success,
-            let focusedValue,
-            CFGetTypeID(focusedValue) == AXUIElementGetTypeID()
-        else { return nil }
-
-        let element = focusedValue as! AXUIElement
-        AXUIElementSetMessagingTimeout(element, timeout)
-        return element
+        return element(kAXFocusedUIElementAttribute, of: application)
     }
 
     static func read(in app: NSRunningApplication) -> Selection {
@@ -44,6 +32,32 @@ enum AccessibilityText {
         if status == .success, let text = value as? String, !text.isEmpty { return .text(text) }
         guard let web = webSelection(in: element), !web.isEmpty else { return .empty }
         return .text(web)
+    }
+
+    /// The title of the app's focused window, nil when it has none or will not say.
+    static func windowTitle(in app: NSRunningApplication) -> String? {
+        let application = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(application, timeout)
+        guard let window = element(kAXFocusedWindowAttribute, of: application) else { return nil }
+        var title: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title)
+                == .success
+        else { return nil }
+        return title as? String
+    }
+
+    /// An attribute that holds an element, timed out like its parent.
+    private static func element(_ attribute: String, of parent: AXUIElement) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(parent, attribute as CFString, &value) == .success,
+            let value,
+            CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        let element = value as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, timeout)
+        return element
     }
 
     /// A narrower question, for callers that can act on the text but not on why there is none.

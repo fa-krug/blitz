@@ -55,6 +55,7 @@ final class AppCore {
     let pinnedEmoji = PinnedEmojiStore()
     let emojiKeywords = EmojiKeywordStore()
     let runningApps = RunningAppsMonitor()
+    let externalApps = ExternalAppMonitor()
     let palette = PaletteState()
     let fileSearch = FileSearchSession()
     /// File Search's session over a different query: the captures Spotlight knows about.
@@ -376,6 +377,7 @@ final class AppCore {
             Task { await appIndex.refresh() }
             Task { await emojiIndex.load(languages: Locale.preferredLanguages) }
             currencyRates.start()
+            externalApps.start()
             updateChecker.onUpdateAvailable = { [weak self] release in
                 self?.updateCoordinator.presentIfAvailable(release) ?? true
             }
