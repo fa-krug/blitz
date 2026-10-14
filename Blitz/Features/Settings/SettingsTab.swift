@@ -1,8 +1,8 @@
 enum SettingsTab: CaseIterable, Identifiable {
     case general, appearance, hyperKey, applications, systemSettings, systemActions, commands,
         quicklinks, appleShortcuts, fallbacks, clipboard, snippets, fileSearch, windowManagement,
-        navigation, notes, calendar, reminders, contacts, emoji, ai, quickActions, extensions,
-        permissions, backup, about
+        navigation, notes, calendar, reminders, contacts, emoji, ai, agent, agentRules, agentMemory,
+        aiProviders, mcpServers, quickActions, extensions, permissions, backup, about
     /// The case, never an index: a selectable `List` flattens section and row IDs together.
     var id: Self { self }
 
@@ -19,6 +19,11 @@ enum SettingsTab: CaseIterable, Identifiable {
         case .appleShortcuts: return "Apple Shortcuts"
         case .fallbacks: return "Fallbacks"
         case .ai: return "AI"
+        case .agent: return "Agent"
+        case .agentRules: return "Rules"
+        case .agentMemory: return "Memory"
+        case .aiProviders: return "Providers"
+        case .mcpServers: return "MCP Servers"
         case .quickActions: return "Quick Actions"
         case .fileSearch: return "File Search"
         case .notes: return "Notes"
@@ -50,6 +55,11 @@ enum SettingsTab: CaseIterable, Identifiable {
         case .appleShortcuts: return "square.2.layers.3d"
         case .fallbacks: return "arrow.turn.down.right"
         case .ai: return "sparkles"
+        case .agent: return "hand.raised"
+        case .agentRules: return "list.number"
+        case .agentMemory: return "brain"
+        case .aiProviders: return "cpu"
+        case .mcpServers: return "wrench.and.screwdriver"
         case .quickActions: return "wand.and.sparkles"
         case .fileSearch: return "doc.text.magnifyingglass"
         case .notes: return "text.page"
@@ -71,7 +81,7 @@ enum SettingsTab: CaseIterable, Identifiable {
 
 /// Declaration order is display order; not `.Section`, which would shadow SwiftUI's `Section`.
 enum SettingsSection: CaseIterable, Identifiable {
-    case general, launcher, features, advanced
+    case general, launcher, features, ai, advanced
     /// See `SettingsTab.id`: distinct types keep the two namespaces from colliding.
     var id: Self { self }
 
@@ -80,6 +90,7 @@ enum SettingsSection: CaseIterable, Identifiable {
         case .general: return "General"
         case .launcher: return "Launcher"
         case .features: return "Features"
+        case .ai: return "AI"
         case .advanced: return "Advanced"
         }
     }
@@ -93,10 +104,14 @@ enum SettingsSection: CaseIterable, Identifiable {
                 .appleShortcuts, .fallbacks
             ]
         case .features:
-            // Everyday tools first; AI and extensions are opt-in extras.
+            // Everyday tools first; extensions are an opt-in extra.
             return [
                 .clipboard, .snippets, .fileSearch, .windowManagement, .navigation, .notes,
-                .calendar, .reminders, .contacts, .emoji, .ai, .quickActions, .extensions
+                .calendar, .reminders, .contacts, .emoji, .extensions
+            ]
+        case .ai:
+            return [
+                .ai, .agent, .agentRules, .agentMemory, .aiProviders, .mcpServers, .quickActions
             ]
         case .advanced: return [.backup, .about]
         }

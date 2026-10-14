@@ -185,9 +185,8 @@ extension View {
         modifier(SettingsEditorTextArea(height: height))
     }
 
-    /// `controlsOnGlass: false` draws the glass behind, so a control keeps its accent colour.
-    func settingsEditorPanelSurface(controlsOnGlass: Bool = true) -> some View {
-        modifier(SettingsEditorPanelSurface(controlsOnGlass: controlsOnGlass))
+    func settingsEditorPanelSurface() -> some View {
+        modifier(SettingsEditorPanelSurface())
     }
 
     /// The one place that says hiding a row from the launcher never unbinds its shortcut.
@@ -267,22 +266,13 @@ private struct SettingsEditorTextArea: ViewModifier {
 }
 
 private struct SettingsEditorPanelSurface: ViewModifier {
-    let controlsOnGlass: Bool
-
-    @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)
         // In front of the glass: a glass fill is hit-testable and would hide a handle behind it.
-        let draggable = content.background(WindowDragBackground())
-        if controlsOnGlass {
-            draggable
-                .background(Theme.Colors.panelScrim, in: shape)
-                .glassEffect(.regular, in: shape)
-        } else {
-            draggable.background {
-                shape.fill(Theme.Colors.panelScrim).glassEffect(.regular, in: shape)
-            }
-        }
+        content
+            .background(WindowDragBackground())
+            .background(Theme.Colors.panelScrim, in: shape)
+            .glassEffect(.regular, in: shape)
     }
 }
 

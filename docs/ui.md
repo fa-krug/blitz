@@ -169,10 +169,8 @@ sidebar of `aiChatSidebarMinimum 240`–`aiChatSidebarMaximum 340`, `aiChatDetai
 `chatContextGauge 14` for the composer's context ring, `chatContextCard 300` for the card it raises
 on hover, and `chatPlanEditor 280` for a plan's editor, past which its Markdown scrolls.
 
-The AI Providers panel adds `aiProvidersPanel 840×520` (the height is its two columns', stated so
-that selecting a longer provider never resizes the panel), `aiProvidersList 262`, `aiUsageBar 110`
-and `aiVariableName 170`. `segmentLabelInset 13` is what the system leaves either side of a
-segment's label once a segmented control has settled.
+AI › Providers adds `aiUsageBar 110` and `aiVariableName 170`. `segmentLabelInset 13` is what the
+system leaves either side of a segment's label once a segmented control has settled.
 
 `keyCap` sizes the palette's keycap chips; `recorderKeyCap` (both size and radius) is the intentionally-smaller Settings shortcut-recorder chip.
 
@@ -711,10 +709,9 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   opens tight around its labels and widens the first time its selection changes, under the pointer,
   and its own idea of its width shifts a few points with it. The wrapper pins each segment to its
   label plus `segmentLabelInset` and reports its size from those widths. A segmented `Picker` that is
-  redrawn right after it appears, like the Providers panel's page control, settles before it is seen.
+  redrawn right after it appears, like a Providers page's tab control, settles before it is seen.
 - **A control placed directly on an editor panel's glass loses its accent colour.** Inside a grouped
-  `Form` row it keeps it. A panel with such a control asks for
-  `settingsEditorPanelSurface(controlsOnGlass: false)`, which draws the same glass behind the content.
+  `Form` row it keeps it, so a panel's accent-coloured controls belong in its `Form`.
 - **A secret is a `RevealableSecureField`, never a bare `SecureField`.** One eye, one place, so an API
   key, a header value and a passphrase all offer the same way to check a pasted value before saving.
   It re-hides on its own once the field is cleared, and its eye is disabled while it is empty.
@@ -784,8 +781,9 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   ⌘F focuses the field, Escape clears it.
 - **A pane may have pages of its own.** `SettingsLocation` is a pane plus an optional `page` string
   only that pane interprets, and `SettingsHistory` records locations, so Back and Forward walk a page
-  as they walk a pane. Choosing a pane in the sidebar lands on its root. Extensions is the one pane
-  with pages: an extension's settings, keyed by its manifest name.
+  as they walk a pane. Choosing a pane in the sidebar lands on its root. Extensions (keyed by
+  manifest name), the launcher-item panes, Quicklinks, custom commands and AI › Providers (keyed
+  by route: `apple-intelligence`, `installed:<kind>`, `api:<uuid>`) have pages.
 - **`SettingsSearchCatalog` is hand-written, and that is the only option.** A `Form` cannot be asked
   what rows it holds, so a new row is searchable only once it is listed there — with its anchor, its
   title and the keywords the title doesn't contain ("caps lock" for Hyper Key).
@@ -835,7 +833,10 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   (`LauncherItemsList`, which Apple Shortcuts shares), Quicklinks and custom commands list read-only
   rows through `SettingsPageRows` (`Features/Settings/SettingsPages.swift`) — a `LazyVStack` in one
   Form row — and a row opens the item's own page, where its alias field, shortcut recorder and
-  switches live, as an extension's row does. `navigation.page` names the item by its entry ID, and
+  switches live, as an extension's row does. Quick Actions' short list and the agent's shell and
+  path rules (AI › Rules) draw the same read-only rows as native Form rows, since they never grow
+  long enough to need the lazy stack; a rule's row was a pattern field, two pop-ups and three
+  buttons, about 16 ms each to build. `navigation.page` names the item by its entry ID, and
   `SettingsPagedPane` shows the pane's list or that page and scrolls the list back to the row on
   Back; Configure Command opens the page directly (`AppEntry.settingsPage`). A row shows what its
   page sets as badges (`SettingsEntryBadges`): the alias as a chip, the shortcut as key caps, an
@@ -852,8 +853,12 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   application scope icons consistently across pages.
 - **A pane taller than a screenful may hold its lower sections back a frame.** General mounts
   Calculator and Search from a `.task` after `await Task.yield()` — a task body runs synchronously up
-  to its first suspension, so without the yield they land in the first frame anyway. A
-  pending search reveal into the pane mounts them at once, so the jump has its row to scroll to.
+  to its first suspension, so without the yield they land in the first frame anyway. AI does the
+  same below Default Model. Agent builds three tool groups with the pane, then one more per frame
+  through a `.task(id:)` keyed on the count, so each step waits for the last one's commit: its
+  Allow/Ask/Deny pop-ups stalled one frame for 100–150 ms, and staged no frame passes ~55. The MCP
+  servers' pickers, Tool call rounds and Notify come with the last group. A pending search reveal
+  into either pane mounts everything at once, so the jump has its row to scroll to.
 - **The sidebar's highlight moves before the pane builds.** `SettingsDetailView` keeps showing the
   previous pane until a `.task(id: navigation.tab)` past `Task.yield()` catches it up, so a click is
   answered in ~10 ms and the pane follows on the next frame, as in System Settings; a pane that

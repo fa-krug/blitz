@@ -279,11 +279,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   user's own config to do it. **Only Claude keeps the user's MCP servers out of the process**, through
   `--strict-mcp-config` — whether the config it names is empty or Blitz's own — and even that
   yields to an installed managed MCP policy, which makes the CLI reject both flags and leaves MCP
-  on that route the organization's decision; the Providers row says so.
+  on that route the organization's decision; its Providers page says so.
   Grok, OpenCode and Cursor load the global config either way,
   because their configs merge with no opt-out; what refuses the call is `--deny *` for Grok,
   `permission: deny` for OpenCode and withheld MCP approval for Cursor. Cursor's is the only one resting
-  on an approval prompt rather than an explicit deny, which is why its Providers row says so and the
+  on an approval prompt rather than an explicit deny, which is why its Providers page says so and the
   others do not. That is also why none of the three may be handed a server: there is no way to offer
   one without offering the reader's own. Only Claude searches the web, and only on a turn whose
   web-search toggle is on: `--tools WebSearch` hands it that one built-in, never WebFetch. Unarmed,
@@ -765,7 +765,7 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
 - Selecting a model updates the button immediately and the next message reaches that route.
 - Switching while a response streams does not stop or reroute that response; the new model applies to
   the following message.
-- With no available model, the menu offers Configure AI and opens the AI Settings pane.
+- With no available model, the menu offers Configure AI and opens Settings › AI › Providers.
 - With Apple Intelligence available and nothing else configured, opening chat or the AI pane leaves
   the selection reading **Apple Intelligence** without asking for anything.
 - With it switched off in System Settings, the pane says so and chat says so; neither moves the
@@ -1066,26 +1066,32 @@ width and clipped the search field well short of the button.
 
 ## Settings and backup boundary
 
-Settings → AI is a normal grouped `Form` inside Blitz's existing Settings window. Its top AI section
-owns the feature switch and the **Providers → Manage…** action, and **Default model** below it picks
-the app-wide route and its reasoning effort. A pick in Quick AI's header or the AI Agent window's
-composer sets that chat's model and moves this default with it, while Quick Actions keeps its own
-model selection. **Agent**, **Shell rules**, **Path rules** and **Memory** follow it
-([Agent](agent.md#settings-and-storage)), then **Conversations**, **System prompt** and **MCP
-Servers**.
+AI has its own Settings sidebar group: **AI**, **Agent**, **Rules**, **Memory**, **Providers**,
+**MCP Servers** and **Quick Actions**, each a normal grouped `Form` inside Blitz's existing Settings
+window. The AI pane's top section owns
+the feature switch and a **Providers** summary row that opens the Providers pane, and **Default
+model** below it picks the app-wide route and its reasoning effort. A pick in Quick AI's header or
+the AI Agent window's composer sets that chat's model and moves this default with it, while Quick
+Actions keeps its own model selection. **Conversations** and **System prompt** follow it. The
+agent's tool decisions, its shell and path rules and its memory are the Agent, Rules and Memory
+panes ([Agent](agent.md#settings-and-storage)); MCP servers have their own pane, described in
+[mcp.md](mcp.md#settings).
 
-Provider management opens as an editor panel laid out like Mail's Accounts: every route in a list on
-the left — **On This Mac**, **Installed**, **API Connections** — each with its mark and a one-line
-state, and the selected one's detail on the right. `+` under the list is a menu of the five
-connection presets and `−` removes the selected connection; an installed tool cannot be removed,
-only switched off, from the switch in its detail header. The detail has pages behind a segmented
-control (`AIProviderTab`), and the chosen page is kept from one provider to the next:
+The Providers pane (`AIProvidersSettingsView`) is a paged pane: a list of every route — **On This
+Mac**, **Installed**, **API Connections** — each a read-only row with its mark, a one-line state
+(dimmed and reading Off when switched off) and a chevron, and each opening that route's own page
+(`AIProviderPage`). The page string is the route's (`AIProviderRoute.page`): `apple-intelligence`,
+`installed:<kind>` or `api:<uuid>`; a page whose connection is gone falls back to the list. **Add…**
+under API Connections is a menu of the five connection presets; an installed tool cannot be
+removed, only switched off, from the switch in its page header, where a connection also has
+**Edit…** and **Remove…**. The page has tabs behind a segmented control (`AIProviderTab`), and the
+chosen tab is kept from one provider to the next:
 
 - **Overview** reports an installed tool as checking, ready, sign-in required, missing or failed,
-  with the account, Codex's usage windows and the command that ran. It never contains a credential
-  field: installation and sign-in happen in each command's own flow. For a connection it shows the
-  provider, base URL and whether a key is stored; **Edit…** in the header opens the connection
-  editor, which remains the explicit Keychain-backed path.
+  with the account, Codex's usage windows and the command that ran (`AIInstalledStatusRows`). It
+  never contains a credential field: installation and sign-in happen in each command's own flow. For
+  a connection it shows the provider, base URL and whether a key is stored; **Edit…** in the header
+  opens the connection editor panel, which remains the explicit Keychain-backed path.
 - **Models** is the checklist behind the second invariant above, with Show All, Hide All and a
   filter once a route offers more than eight. The rows are an `NSTableView` in one `Form` row
   (`AIModelChecklist`): a `Form` realizes every row it holds, and OpenCode offers over four hundred.
@@ -1093,10 +1099,7 @@ control (`AIProviderTab`), and the chosen page is kept from one provider to the 
   field is left. It stays while the tool is off, so a wrong path can be fixed before it is switched
   on. A name Blitz sets itself says its value is not used.
 
-An API connection has the first two pages, and the on-device model, with one, shows no control. The
-panel draws its Liquid Glass behind its content rather than around it
-(`settingsEditorPanelSurface(controlsOnGlass: false)`), because the page control sits directly on the
-surface and a segmented control drawn on glass loses its accent colour.
+An API connection has the first two tabs, and the on-device model, with one, shows no control.
 
 The signed-in Codex or Claude address is the one thing on the pane that names a person, and a Settings pane
 is what gets screenshotted into a bug report or left on screen in a recording, so `RedactedText`

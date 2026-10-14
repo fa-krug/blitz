@@ -110,7 +110,8 @@ enum SettingsSearchCatalog {
         general + appearance + hyperKey + applications + systemSettings + systemActions + commands
         + quicklinks + appleShortcuts + fallbacks + clipboard + snippets + fileSearch
         + windowManagement + navigation + notes + calendar + reminders + contacts + emoji + ai
-        + quickActions + extensions + permissions + backup + about
+        + agent + agentRules + agentMemory + aiProviders + mcpServers + quickActions + extensions
+        + permissions + backup + about
 
     private static let general: [SettingsSearchEntry] = [
         .init(pane: .general, keywords: ["preferences", "settings"]),
@@ -293,98 +294,10 @@ enum SettingsSearchCatalog {
     ]
 
     private static let ai: [SettingsSearchEntry] = [
-        .init(
-            pane: .ai, keywords: ["chat", "quick ai", "llm", "model", "openai", "anthropic"]),
+        .init(pane: .ai, keywords: ["chat", "quick ai", "llm", "model"]),
         .init(.aiAI, "Enable AI", keywords: ["chat", "llm"]),
-        .init(
-            .aiProviders, "Providers",
-            keywords: [
-                "sign in", "connect", "codex", "claude", "grok", "xai", "opencode", "cursor", "agent",
-                "api key", "connection", "base url", "openai", "anthropic", "ollama", "models",
-                "hide models"
-            ]),
         .init(.aiDefault, "Default model", keywords: ["llm", "gpt", "claude", "grok"]),
         .init(.aiDefault, "Reasoning effort", keywords: ["thinking", "effort", "deepseek"]),
-        .init(
-            group: .aiAgent, "Agent",
-            keywords: ["tools", "permissions", "allow", "ask", "deny", "rules", "privacy"]),
-        .init(
-            group: .aiAgent, "Run Commands",
-            keywords: ["shell", "terminal", "command line", "zsh", "bash", "tools", "execute"]),
-        .init(
-            group: .aiAgent, "Calendar access",
-            keywords: ["read calendar", "add calendar events", "events", "meetings", "tools"]),
-        .init(
-            group: .aiAgent, "Reminders access",
-            keywords: ["read reminders", "change reminders", "to-do", "todo", "tasks", "tools"]),
-        .init(
-            group: .aiAgent, "Web search",
-            keywords: ["browse", "internet", "search engine", "tools"]),
-        .init(
-            group: .aiAgent, "File access",
-            keywords: [
-                "read files", "change files", "write", "trash", "folders", "documents", "tools"
-            ]),
-        .init(
-            group: .aiAgent, "Fetch web pages",
-            keywords: ["url", "download", "internet", "website", "browse", "tools"]),
-        .init(
-            group: .aiAgent, "Mac actions",
-            keywords: [
-                "open apps", "open links", "apple shortcuts", "system actions", "window layouts",
-                "tools"
-            ]),
-        .init(
-            group: .aiAgent, "Personal data",
-            keywords: [
-                "contacts", "note", "clipboard history", "snippets", "quicklinks", "privacy",
-                "tools"
-            ]),
-        .init(
-            group: .aiAgent, "Context",
-            keywords: [
-                "frontmost app", "selected text", "selection", "clipboard", "accessibility",
-                "tools"
-            ]),
-        .init(
-            group: .aiAgent, "Sessions",
-            keywords: [
-                "other chats", "read chats", "archive chats", "history", "conversations", "tools"
-            ]),
-        .init(
-            group: .aiAgent, "Memory rules",
-            keywords: ["read memory", "change memory", "remember", "forget", "tools"]),
-        .init(
-            group: .aiAgent, "MCP server trust",
-            keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
-        .init(
-            .aiAgent, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "unlimited"]),
-        .init(
-            .aiAgent, "Notify when the agent is waiting",
-            keywords: ["notification", "alert", "banner", "approval", "question", "background"]),
-        .init(
-            group: .aiShellRules, "Shell rules",
-            keywords: ["shell", "terminal", "commands", "patterns", "allow", "deny", "glob"]),
-        .init(
-            .aiShellRules, "Add Shell Rule",
-            keywords: ["shell", "terminal", "command", "pattern", "always allow"]),
-        .init(
-            group: .aiPathRules, "Path rules",
-            keywords: ["files", "folders", "paths", "patterns", "allow", "deny", "glob"]),
-        .init(
-            .aiPathRules, "Add Path Rule",
-            keywords: ["files", "folder", "path", "pattern", "always allow"]),
-        .init(
-            group: .aiMemory, "Memory",
-            keywords: [
-                "remember", "forget", "preferences", "facts", "agent", "personal", "privacy"
-            ]),
-        .init(
-            .aiMemory, "Add Memory",
-            keywords: ["remember", "fact", "preference", "agent"]),
-        .init(
-            .aiMemory, "Forget All…",
-            keywords: ["memory", "clear", "delete", "remember", "privacy"]),
         .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),
@@ -398,14 +311,140 @@ enum SettingsSearchCatalog {
             .aiSystemPrompt, "Send a system prompt",
             keywords: ["instructions", "persona"]),
         .init(
-            .aiMCPServers, "Enable MCP servers",
-            keywords: ["tools", "model context protocol"]),
-        .init(
-            .aiMCPServers, "Add MCP Server",
-            keywords: ["tools", "model context protocol", "stdio"]),
-        .init(
             group: .aiCommands, "AI commands",
             keywords: ["shortcut", "launcher", "chat"])
+    ]
+
+    private static let agent: [SettingsSearchEntry] = [
+        .init(
+            pane: .agent,
+            keywords: [
+                "ai", "tools", "permissions", "allow", "ask", "deny", "privacy", "mcp trust"
+            ]),
+        .init(
+            group: .agentAgent, "Run Commands",
+            keywords: ["shell", "terminal", "command line", "zsh", "bash", "tools", "execute"]),
+        .init(
+            group: .agentAgent, "Calendar access",
+            keywords: ["read calendar", "add calendar events", "events", "meetings", "tools"]),
+        .init(
+            group: .agentAgent, "Reminders access",
+            keywords: ["read reminders", "change reminders", "to-do", "todo", "tasks", "tools"]),
+        .init(
+            group: .agentAgent, "Web search",
+            keywords: ["browse", "internet", "search engine", "tools"]),
+        .init(
+            group: .agentAgent, "File access",
+            keywords: [
+                "read files", "change files", "write", "trash", "folders", "documents", "tools"
+            ]),
+        .init(
+            group: .agentAgent, "Fetch web pages",
+            keywords: ["url", "download", "internet", "website", "browse", "tools"]),
+        .init(
+            group: .agentAgent, "Mac actions",
+            keywords: [
+                "open apps", "open links", "apple shortcuts", "system actions", "window layouts",
+                "tools"
+            ]),
+        .init(
+            group: .agentAgent, "Personal data",
+            keywords: [
+                "contacts", "note", "clipboard history", "snippets", "quicklinks", "privacy",
+                "tools"
+            ]),
+        .init(
+            group: .agentAgent, "Context",
+            keywords: [
+                "frontmost app", "selected text", "selection", "clipboard", "accessibility",
+                "tools"
+            ]),
+        .init(
+            group: .agentAgent, "Sessions",
+            keywords: [
+                "other chats", "read chats", "archive chats", "history", "conversations", "tools"
+            ]),
+        .init(
+            group: .agentAgent, "Memory rules",
+            keywords: ["read memory", "change memory", "remember", "forget", "tools"]),
+        .init(
+            group: .agentAgent, "MCP server trust",
+            keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
+        .init(
+            .agentAgent, "Tool call rounds",
+            keywords: ["mcp", "tools", "limit", "loop", "unlimited"]),
+        .init(
+            .agentAgent, "Notify when the agent is waiting",
+            keywords: ["notification", "alert", "banner", "approval", "question", "background"])
+    ]
+
+    private static let agentRules: [SettingsSearchEntry] = [
+        .init(
+            pane: .agentRules,
+            keywords: [
+                "ai", "agent", "shell", "path", "patterns", "allow", "deny", "glob", "commands",
+                "files", "folders"
+            ]),
+        .init(
+            group: .agentRulesShellRules, "Shell rules",
+            keywords: ["shell", "terminal", "commands", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .agentRulesShellRules, "Add Shell Rule",
+            keywords: ["shell", "terminal", "command", "pattern", "always allow"]),
+        .init(
+            group: .agentRulesPathRules, "Path rules",
+            keywords: ["files", "folders", "paths", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .agentRulesPathRules, "Add Path Rule",
+            keywords: ["files", "folder", "path", "pattern", "always allow"])
+    ]
+
+    private static let agentMemory: [SettingsSearchEntry] = [
+        .init(
+            pane: .agentMemory,
+            keywords: [
+                "ai", "agent", "remember", "forget", "preferences", "facts", "personal", "privacy"
+            ]),
+        .init(
+            .agentMemoryMemory, "Add Memory",
+            keywords: ["remember", "fact", "preference", "agent"]),
+        .init(
+            .agentMemoryMemory, "Forget All…",
+            keywords: ["memory", "clear", "delete", "remember", "privacy"])
+    ]
+
+    private static let aiProviders: [SettingsSearchEntry] = [
+        .init(
+            pane: .aiProviders,
+            keywords: [
+                "ai", "sign in", "connect", "codex", "claude", "grok", "xai", "opencode", "cursor",
+                "agent", "api key", "connection", "base url", "openai", "anthropic", "ollama",
+                "models", "hide models"
+            ]),
+        .init(
+            group: .aiProvidersOnThisMac, "Apple Intelligence",
+            keywords: ["on device", "local", "private", "foundation models"]),
+        .init(
+            group: .aiProvidersInstalled, "Installed AI tools",
+            keywords: ["codex", "claude", "grok", "opencode", "cursor", "command", "cli", "sign in"]),
+        .init(
+            .aiProvidersAPIConnections, "Add API Connection",
+            keywords: [
+                "api key", "base url", "openai", "anthropic", "gemini", "openrouter", "ollama",
+                "compatible", "endpoint"
+            ])
+    ]
+
+    private static let mcpServers: [SettingsSearchEntry] = [
+        .init(
+            pane: .mcpServers,
+            keywords: ["ai", "tools", "model context protocol", "server", "@slug"]),
+        .init(
+            .mcpServersMCPServers, "Enable MCP servers",
+            keywords: ["tools", "model context protocol"]),
+        .init(
+            .mcpServersMCPServers, "Add MCP Server",
+            keywords: ["tools", "model context protocol", "stdio", "oauth", "http"])
     ]
 
     private static let quickActions: [SettingsSearchEntry] = [

@@ -220,12 +220,15 @@ struct AppEntry: Identifiable, Hashable, Sendable {
 
     /// The page its pane opens for it, holding its alias, shortcut and switches; nil keeps a row.
     var settingsPage: String? {
-        guard settingsOwner == nil, settingsTarget != nil else { return nil }
+        guard settingsTarget != nil else { return nil }
         switch kind {
+        // Its owning pane pages the shipped four beside the custom ones.
+        case .quickAction:
+            return id
         case .application, .systemSettings, .systemAction, .command, .appleShortcut, .quicklink,
             .customCommand:
-            return id
-        case .quickAction, .snippet, .windowCommand, .windowLayout, .windowRoom, .extensionCommand,
+            return settingsOwner == nil ? id : nil
+        case .snippet, .windowCommand, .windowLayout, .windowRoom, .extensionCommand,
             .meeting, .contact:
             return nil
         }

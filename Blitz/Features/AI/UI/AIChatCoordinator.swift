@@ -1010,7 +1010,7 @@ final class AIChatCoordinator {
     private var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
 
     func showAgentSettings() {
-        settingsCoordinator.showSettings(tab: .ai, revealing: .section(.aiAgent))
+        settingsCoordinator.showSettings(tab: .agent)
     }
 
     /// The server a draft is addressed to, so the composer can show it as a chip while typing.
@@ -1373,8 +1373,17 @@ final class AIChatCoordinator {
     }
 
     func showSettings() {
+        openSettings(on: .ai)
+    }
+
+    /// For an empty model list, where what is missing is a provider rather than the switch.
+    func showProviderSettings() {
+        openSettings(on: .aiProviders)
+    }
+
+    private func openSettings(on tab: SettingsTab) {
         if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
-        settingsCoordinator.showSettings(tab: .ai)
+        settingsCoordinator.showSettings(tab: tab)
     }
 
     func availability(for chat: AIChatState) -> String? {

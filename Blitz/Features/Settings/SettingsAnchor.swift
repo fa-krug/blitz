@@ -38,16 +38,23 @@ extension SettingsAnchor {
     static let fallbacksWebSearch = Self(tab: .fallbacks, title: "Search the Web")
 
     static let aiAI = Self(tab: .ai, title: "AI")
-    static let aiProviders = Self(tab: .ai, title: "Providers")
     static let aiDefault = Self(tab: .ai, title: "Default")
-    static let aiAgent = Self(tab: .ai, title: "Agent")
-    static let aiShellRules = Self(tab: .ai, title: "Shell rules")
-    static let aiPathRules = Self(tab: .ai, title: "Path rules")
-    static let aiMemory = Self(tab: .ai, title: "Memory")
     static let aiConversations = Self(tab: .ai, title: "Conversations")
     static let aiSystemPrompt = Self(tab: .ai, title: "System prompt")
-    static let aiMCPServers = Self(tab: .ai, title: "MCP Servers")
     static let aiCommands = Self(tab: .ai, title: "Commands")
+
+    static let agentAgent = Self(tab: .agent, title: "Agent")
+
+    static let agentRulesShellRules = Self(tab: .agentRules, title: "Shell rules")
+    static let agentRulesPathRules = Self(tab: .agentRules, title: "Path rules")
+
+    static let agentMemoryMemory = Self(tab: .agentMemory, title: "Memory")
+
+    static let aiProvidersOnThisMac = Self(tab: .aiProviders, title: "On This Mac")
+    static let aiProvidersInstalled = Self(tab: .aiProviders, title: "Installed")
+    static let aiProvidersAPIConnections = Self(tab: .aiProviders, title: "API Connections")
+
+    static let mcpServersMCPServers = Self(tab: .mcpServers, title: "MCP Servers")
 
     static let quickActionsQuickActions = Self(tab: .quickActions, title: "Quick Actions")
     static let quickActionsActions = Self(tab: .quickActions, title: "Actions")
@@ -146,7 +153,8 @@ extension SettingsAnchor {
         case .contacts: return .contactsCommands
         case .extensions: return .extensionsCommands
         case .general, .appearance, .hyperKey, .applications, .systemSettings, .systemActions,
-            .commands, .appleShortcuts, .fallbacks, .permissions, .backup, .about:
+            .commands, .appleShortcuts, .fallbacks, .agent, .agentRules, .agentMemory, .aiProviders,
+            .mcpServers, .permissions, .backup, .about:
             return nil
         }
     }

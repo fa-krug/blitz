@@ -178,7 +178,7 @@ with no Ask stores one as Deny.
 `AgentFeatureCeiling` is the one place that says each row's ceiling and the sentence Settings shows
 under a row held below it ("Turn on Contacts first."); Selected Text's is the Accessibility grant,
 read through `Permissions.isAccessibilityTrusted()` at each decision and polled once a second while
-Settings shows the Agent section.
+Settings shows the Agent pane.
 
 `AgentTool(wireName:)` maps a model's call onto its row — the built-in names first, then
 `MCPToolName.parse` — and `AgentCall(toolCall:)` adds the command a shell call would run. A name
@@ -780,9 +780,9 @@ memory was edited meanwhile; then act. A write that fails is a sentence, and not
 
 ### Settings
 
-**Settings → AI → Memory** (`AgentMemorySection`) follows Path rules: every memory newest first, as
-its text over its id and date, with **Edit** and **Forget** buttons. Edit turns that one row into a
-field — one at a time, so a hundred memories still list as plain text, as
+**Settings → AI → Memory** (`AgentMemorySettingsView` around `AgentMemorySection`), its own pane
+after Rules, lists every memory newest first, as its text over its id and date, with **Edit** and
+**Forget** buttons. Edit turns that one row into a field — one at a time, so a hundred memories still list as plain text, as
 [UI](../ui.md#settings) asks of a long list — where Return saves and Escape cancels; leaving the
 field saves too. A refused edit stays open on Return and is dropped on leaving, the HUD saying why
 (a duplicate, full). **Add Memory** opens the same field above the list. **Forget All…** asks
@@ -904,7 +904,7 @@ the chat may call:
 - **MCP Servers** — one switch per server the table does not deny.
 - **Memory** — **Use Memory**, while Read Memory is Allow. Off keeps this chat's turns from
   carrying the memories; on by default, and Use Tools leaves it alone, since memory is no tool.
-- **Agent Settings…** opens Settings → AI on the Agent section.
+- **Agent Settings…** opens Settings → AI → Agent.
 
 Its badge counts what is on, "`n` of `m`". A route that cannot call tools has no Tools row, and
 with nothing the table allows the submenu says so. The menu lists the table's reach in
@@ -1018,22 +1018,27 @@ it stays out of backups with the rest of the AI setup (`SettingsBackupCoverage.d
 
 ## Settings and storage
 
-Settings → AI holds two sections, between Default model and Conversations:
+The agent has three panes of its own in Settings' AI group, after AI and before Providers, each
+dimmed with "Turn on AI first." (`AITurnedOffNotice`) above it while AI is off:
 
-- **Agent** (`AgentSettingsSection`) — the built-in rows under a small header per
-  `AgentTool.Group`, in `builtIn` order, each a picker disabled with its ceiling's sentence ("Turn
-  on Contacts first.", "Allow Blitz Accessibility access first.") while `AgentFeatureCeiling` holds
-  it; then, under an MCP Servers header, a picker per server, written to its trust and disabled
-  while MCP or the server is off; **Tool call rounds**; and **Notify when the agent is waiting**
-  ([Notifications](#notifications)).
-- **Shell rules** (`ShellRulesSection`) — the ordered patterns, each with a pattern field, a
-  decision, Move Up, Move Down and Remove, then **Add Shell Rule**, which adds an empty Allow
-  pattern and focuses it. An empty pattern matches nothing.
-- **Path rules** (`PathRulesSection`) — the same, with an Applies to picker (Read & Write, Read,
-  Write) beside each decision, then **Add Path Rule**; the footer explains `~`, `*` and `**`, that
-  a Deny always wins, and that paths are checked once symlinks resolve, ignoring case. Both lists
-  draw their rows with `AgentRuleRow`.
-- **Memory** (`AgentMemorySection`) — what the agent was asked to remember; see
+- **Agent** (`AgentSettingsView` around `AgentSettingsSection`) — the built-in rows under a small
+  header per `AgentTool.Group`, in `builtIn` order, each a picker disabled with its ceiling's
+  sentence ("Turn on Contacts first.", "Allow Blitz Accessibility access first.") while
+  `AgentFeatureCeiling` holds it; then, under an MCP Servers header, a picker per server, written to
+  its trust and disabled while MCP or the server is off; **Tool call rounds**; and **Notify when the
+  agent is waiting** ([Notifications](#notifications)). Three groups build with the pane and the
+  rest follow one per frame, at once for a search result into the pane ([UI](../ui.md#settings)).
+- **Rules** (`AgentRulesSettingsView`) — **Shell rules** and **Path rules**, each a list of
+  read-only `AgentRuleRow`s: the rule's place (the first match wins), its pattern in code type
+  ("Empty pattern" when blank), a badge for its access on a path rule and its decision, and a
+  chevron. A row opens the rule's page (`AgentRulePage`, page string `shell:<uuid>` or
+  `path:<uuid>`, `AgentRuleRoute`) with its pattern field, a Decision picker, an Applies to picker
+  (Read & Write, Read, Write) for a path rule, Move Up and Move Down, and **Delete…**, which asks
+  first; a page whose rule is gone falls back to the list. **Add Shell Rule** and **Add Path Rule**
+  add an empty Allow pattern and open its page with the field focused. An empty pattern matches
+  nothing. Each footer — on the list and the page — explains matching: for paths `~`, `*` and
+  `**`, that a Deny always wins, and that paths are checked once symlinks resolve, ignoring case.
+- **Memory** (`AgentMemorySettingsView`) — what the agent was asked to remember; see
   [Memory](#memory).
 
 `AISettingsStore.agentRules` is the table, encoded as JSON under `AppSettingsKey.aiAgentRules`.
@@ -1194,7 +1199,7 @@ Each route honours the mode where it decides what to offer:
 ## Manual sweep
 
 - With the shell row on Ask, a chat that runs `ls` asks; `Always Allow "ls *"` adds the rule to
-  Settings → AI → Shell rules, and the next `ls -la` runs straight away.
+  Settings → AI → Rules under Shell rules, and the next `ls -la` runs straight away.
 - On the same row, `rm x` under a `rm *` Deny pattern is refused without a dialog, even with a `*`
   Allow pattern above it, and `ls $(pwd)` asks even with `ls *` allowed.
 - With a `git push * → Ask` rule, `Always Allow "git *"` on `git push origin` lands above it, and
@@ -1206,7 +1211,7 @@ Each route honours the mode where it decides what to offer:
   of a server whose tools carry `readOnlyHint`, only those are offered — on the Claude command too,
   where a call to one of its other tools is refused without a dialog.
 - Switching a chat in Plan to a Codex model hides the pill, and the context card shows no Mode row.
-- Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
+- Switching Calendar off greys its rows in the Agent pane and removes them from the tools menu.
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal, Context and Sessions; switching Contacts off greys Read Contacts with "Turn on Contacts
   first.", and with Accessibility not granted Read Selected Text says so. Every row the table
@@ -1250,9 +1255,12 @@ Each route honours the mode where it decides what to offer:
   to archive an old chat: the dialog names it, and the chat moves under Archived; asking it to
   archive the chat open in the window, a pinned one or one still answering is refused without a
   dialog. In Plan, `sessions_archive` is not offered whatever its row says.
-- Settings → AI → Path rules starts with the Deny seeds; a rule edited, moved or removed there is
-  still so after a relaunch.
-- A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model
+- Settings → AI → Rules lists the Deny seeds under Path rules, numbered; a rule's row opens its
+  page, where an edit, a move or a Delete… (which asks first) shows on the list on Back and is
+  still so after a relaunch. Add Path Rule opens a new rule's page with its pattern field focused.
+- The Agent pane opens without a stall: the Commands to Web groups paint first, the rest a group
+  per frame; a search for Tool call rounds still lands on that row.
+- A server set to Never Allow from the Agent pane reads Never Allow in its editor, and the model
   is not offered it.
 - Leave a chat that asks: with the shell row on Ask, send a request that runs a command, then switch
   to another app before the model calls it. No dialog comes up; the sidebar row shows the raised
