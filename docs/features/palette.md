@@ -176,6 +176,12 @@ still there to be cleared by the next press. A bare backspace in an empty field 
 is the step Escape would have taken had that screen been reached by typing its name. ⌘⎋ skips the
 whole stack for that same root search from any depth.
 
+**The compact bar's ↓ and "…" expansion is a rung of its own.** `PaletteState.forceExpanded` holds
+the launcher open with an empty field; Escape and a bare backspace fold it back into the bar before
+either would hide or step back, and it never outlives the summon — `hidePalette` clears it, so a
+re-summon inside the Pop to Root window still opens compact. Typing a search hands the expansion over
+to the query, so clearing the field afterwards collapses the bar like any search would.
+
 `EscapeKeyBehavior` (General settings) can trade the walk for a close: under
 `closeAndPopToRoot` an empty field closes the window and resets it immediately, whatever Pop to Root
 Search says. Clearing the query is still the first press either way.
