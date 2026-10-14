@@ -447,9 +447,13 @@ final class AIChatCoordinator {
         }
     }
 
-    /// The composer's switch, offered only where the route searches and the rules allow it.
+    /// The ⌘K menu's switch, offered only where the route searches and the rules allow it.
     func offersWebSearch(in chat: AIChatState) -> Bool {
         capabilities(for: chat).webSearch && gate.rules.decision(for: .webSearch) == .allow
+    }
+
+    func toggleWebSearch() {
+        core.aiSettings.webSearchEnabled.toggle()
     }
 
     private func webSearch(for chat: AIChatState) -> Bool {

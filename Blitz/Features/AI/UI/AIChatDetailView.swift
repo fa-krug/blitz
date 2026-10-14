@@ -42,9 +42,7 @@ struct AIChatDetailView: View {
                     ChatSuggestionChips(choices: suggestions) { coordinator.send($0, in: chat) }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                AIChatComposer(
-                    chat: chat, coordinator: coordinator, settings: coordinator.aiSettings,
-                    showsContext: $showsContext)
+                AIChatComposer(chat: chat, coordinator: coordinator, showsContext: $showsContext)
             }
             .frame(maxWidth: Theme.Size.aiChatReadingWidth)
             .padding(.horizontal, Theme.Spacing.xxl)
@@ -114,11 +112,10 @@ struct AIChatDetailView: View {
     }
 }
 
-/// Staged files, the text, then the chat's options and Send, on one pane of Liquid Glass.
+/// Staged files, the text, then model, mode and Send; the rest of the chat's options sit in ⌘K.
 private struct AIChatComposer: View {
     let chat: AIChatState
     let coordinator: AIChatCoordinator
-    let settings: AISettingsStore
     @Binding var showsContext: Bool
 
     private var canSend: Bool {
@@ -181,13 +178,8 @@ private struct AIChatComposer: View {
                 coordinator.chooseFiles(for: chat)
             }
             AIModelPicker(chat: chat, selected: coordinator.model(for: chat), coordinator: coordinator)
-            AIReasoningPicker(chat: chat, coordinator: coordinator)
-            AIToolsPicker(chat: chat, coordinator: coordinator)
             if coordinator.offersModes(in: chat) {
                 AIModePicker(chat: chat, coordinator: coordinator)
-            }
-            if coordinator.offersWebSearch(in: chat) {
-                WebSearchToggle(settings: settings)
             }
             Spacer(minLength: 0)
             ContextGauge(
@@ -308,111 +300,6 @@ private struct AIModelPicker: View {
     }
 }
 
-private struct AIReasoningPicker: View {
-    let chat: AIChatState
-    let coordinator: AIChatCoordinator
-
-    /// Shown even when the model has no efforts, so the row never changes shape under the reader.
-    var body: some View {
-        let efforts = coordinator.reasoningEfforts(for: chat)
-        let selected = coordinator.model(for: chat)?.effort
-        Menu {
-            ForEach(efforts, id: \.id) { effort in
-                Toggle(
-                    effort.title,
-                    isOn: Binding(
-                        get: { selected == effort.id },
-                        set: { if $0 { coordinator.selectReasoningEffort(effort, in: chat) } }))
-            }
-        } label: {
-            Label(
-                efforts.isEmpty ? "Reasoning" : coordinator.selectedReasoningTitle(for: chat),
-                systemImage: "brain"
-            )
-            .labelStyle(.titleAndIcon)
-        }
-        .composerPill()
-        .disabled(efforts.isEmpty)
-        .help(efforts.isEmpty ? "This model has no reasoning setting" : "Change reasoning effort")
-    }
-}
-
-/// This chat's session scope: which tools it may call.
-private struct AIToolsPicker: View {
-    let chat: AIChatState
-    let coordinator: AIChatCoordinator
-
-    var body: some View {
-        let builtIn = coordinator.listedBuiltInTools(for: chat)
-        let servers = coordinator.listedServers(for: chat)
-        let scope = chat.agentScope
-        let takesTools = coordinator.capabilities(for: chat).tools
-        let total = builtIn.count + servers.count
-        let active =
-            builtIn.count(where: scope.allows) + servers.count { scope.allows(.mcp($0.slug)) }
-        Menu {
-            if total == 0 {
-                Text("The agent's rules allow no tools")
-            } else {
-                Toggle(
-                    "Use Tools",
-                    isOn: Binding(
-                        get: { scope.isEnabled },
-                        set: { coordinator.setToolsEnabled($0, in: chat) }))
-                if !builtIn.isEmpty {
-                    Section("Blitz") {
-                        ForEach(builtIn, id: \.self) { tool in
-                            toggle(tool.title, for: tool, in: scope)
-                        }
-                    }
-                }
-                if !servers.isEmpty {
-                    Section("MCP Servers") {
-                        ForEach(servers) { server in
-                            toggle(server.title, for: .mcp(server.slug), in: scope)
-                        }
-                    }
-                }
-            }
-            if coordinator.offersMemorySwitch {
-                Section("Memory") {
-                    Toggle(
-                        "Use Memory",
-                        isOn: Binding(
-                            get: { scope.usesMemory },
-                            set: { coordinator.setUsesMemory($0, in: chat) }))
-                }
-            }
-            Divider()
-            Button("Agent Settings…", action: coordinator.showAgentSettings)
-        } label: {
-            Label(
-                total == 0 || !scope.isEnabled ? "Tools" : "\(active) of \(total)",
-                systemImage: "wrench.and.screwdriver"
-            )
-            .labelStyle(.titleAndIcon)
-        }
-        .composerPill()
-        .disabled(!takesTools)
-        .help(
-            takesTools
-                ? "Choose the tools this chat may call"
-                : "This model can't call tools")
-    }
-
-    private func toggle(
-        _ title: String, for tool: AgentTool, in scope: AgentSessionScope
-    ) -> some View {
-        Toggle(
-            title,
-            isOn: Binding(
-                get: { scope.allows(tool) },
-                set: { _ in coordinator.toggleTool(tool, in: chat) })
-        )
-        .disabled(!scope.isEnabled)
-    }
-}
-
 /// This chat's mode; Auto is tinted, since its calls run without anyone being asked.
 private struct AIModePicker: View {
     let chat: AIChatState
@@ -477,22 +364,6 @@ private struct FindCounter: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.sm)
         .glassEffect(.regular, in: Capsule())
-    }
-}
-
-/// Offered where the rules allow web search; a prompt reaches a search engine only once it is on.
-private struct WebSearchToggle: View {
-    let settings: AISettingsStore
-
-    var body: some View {
-        @Bindable var settings = settings
-        Toggle(isOn: $settings.webSearchEnabled) {
-            Image(systemName: "globe")
-        }
-        .toggleStyle(.button)
-        .buttonStyle(.borderless)
-        .help(settings.webSearchEnabled ? "Web search is on" : "Web search is off")
-        .accessibilityLabel("Web search")
     }
 }
 

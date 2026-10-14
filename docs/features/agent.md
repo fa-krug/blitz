@@ -72,7 +72,7 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   whenever no turn runs, so a badge can never outlive its turn.
 - **A row with no runner is never offered.** `AgentTool.isHosted` is true only for a row some
   catalog's wire name maps to (`builtInToolNames`), so a toolbox row added to the table ahead of its
-  runner shows in Settings and nowhere else: the composer's menu and the context card list
+  runner shows in Settings and nowhere else: the ⌘K Tools menu and the context card list
   `builtIn.filter(\.isHosted)`, and the model's own offer list is built from the catalogs. Adding
   a group's wire names is what makes its rows offerable.
 - **The stored table decodes field by field.** A row, `shellRules` or `pathRules` missing from
@@ -111,7 +111,7 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   the server editor cannot disagree.
 - **Web search has no Ask.** The provider runs the search, so Blitz never sees a call it could stop.
   `AgentRules` stores an Ask on that row as Deny, no mode makes it ask, and Allow only means the
-  composer offers its globe.
+  ⌘K menu offers its Web Search switch.
 - **Memory is read into every turn, never called.** Read Memory has no Ask and no wire name, so it
   is not hosted: on Allow every turn's instructions carry the memories, on every route, Use Tools
   off and Plan included, unless the chat's Use Memory is off (`AgentPolicy.readsMemory`); on Deny
@@ -136,7 +136,7 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
 `AgentRules` is one decision per built-in row plus `shellRules` and `pathRules`; an MCP server's row
 is its own trust. `AgentDecision` orders `deny < ask < allow`, so `min` is the narrower of two.
 `AgentRules.defaultDecision(for:)` is the whole default rule: a read-only row asks, every row that
-writes or acts is denied, and web search is Allow, its composer globe being the opt-in. Memory is
+writes or acts is denied, and web search is Allow, its ⌘K switch being the opt-in. Memory is
 the exception both ways: Read Memory is Allow, since every memory in it was the reader's own word
 or a dialog's, and Change Memory is Ask.
 
@@ -894,7 +894,8 @@ one, or deleting the open one starts it fresh. It holds `isEnabled`, the `exclud
 `mode`, `usesMemory` and the `granted` tools, so a chat grant ends exactly when the scope does. A server added
 later arrives switched on.
 
-The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits what the chat may call:
+The AI Agent window's ⌘K menu has a Tools submenu (`AIChatActionsMenu.toolsItem`) that edits what
+the chat may call:
 
 - **Use Tools** — off offers nothing, Blitz's tools, `ask_user` and every server alike.
 - **Blitz** — one switch per hosted built-in row the table does not deny, on a route that reaches
@@ -905,11 +906,11 @@ The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits wha
   carrying the memories; on by default, and Use Tools leaves it alone, since memory is no tool.
 - **Agent Settings…** opens Settings → AI on the Agent section.
 
-The label counts what is on, "`n` of `m`". A route that cannot call tools shows the menu disabled
-and says why, and with nothing the table allows it says so. The menu lists the table's reach in
+Its badge counts what is on, "`n` of `m`". A route that cannot call tools has no Tools row, and
+with nothing the table allows the submenu says so. The menu lists the table's reach in
 Manual whatever the mode, so a switch never vanishes when Plan would refuse its tool.
 
-The mode pill (`AIModePicker`) follows the tools menu, only where `AIChatCoordinator.offersModes`:
+The composer's mode pill (`AIModePicker`) follows the model menu, only where `AIChatCoordinator.offersModes`:
 a route that calls tools and reaches Blitz's — an API connection or the Claude command, never
 Codex, which reaches no `write_plan` to plan with. Each entry is the mode's title, `summary` and
 glyph, and the pill shows the current one. Auto's pill is filled and tinted with the warning
@@ -920,7 +921,7 @@ never applies.
 Quick AI has neither menu nor pill, so its scope stays open and Manual: the same gate and rules,
 every tool the table offers, `ask_user` included.
 
-The composer's web-search globe appears only where the route searches and the Web Search row is
+The ⌘K menu's Web Search switch appears only where the route searches and the Web Search row is
 Allow (`AIChatCoordinator.offersWebSearch`). It flips `aiWebSearch`, off by default, and a turn
 searches only with both. The context card's **Tools** section opens on a **Mode** row where the
 route offers modes, then lists each tool the next turn is offered with the decision a bare call to
@@ -1209,7 +1210,7 @@ Each route honours the mode where it decides what to offer:
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal, Context and Sessions; switching Contacts off greys Read Contacts with "Turn on Contacts
   first.", and with Accessibility not granted Read Selected Text says so. Every row the table
-  does not deny but Web Search appears in the composer's tools menu and the context card.
+  does not deny but Web Search appears in the ⌘K Tools menu and the context card.
 - With Read Contacts on Ask, ask a chat for a colleague's phone number: the dialog names the
   query, and the answer carries numbers, addresses and the birthday, never the card's note. With
   Contacts off, Read Contacts is greyed and the tool is not offered.

@@ -243,6 +243,7 @@ enum AIChatActionsMenu {
                     coordinator.regenerate(in: chat)
                 })
         }
+        addOptions(for: chat, coordinator: coordinator, to: menu)
         menu.addItem(.separator())
         if chat.lastAssistantText != nil {
             menu.addItem(
@@ -293,6 +294,103 @@ enum AIChatActionsMenu {
             })
         return menu
     }
+
+    /// What the composer leaves out: the chat's reasoning effort, its tools and web search.
+    private static func addOptions(
+        for chat: AIChatState, coordinator: AIChatCoordinator, to menu: NSMenu
+    ) {
+        let efforts = coordinator.reasoningEfforts(for: chat)
+        let takesTools = coordinator.capabilities(for: chat).tools
+        let searches = coordinator.offersWebSearch(in: chat)
+        guard !efforts.isEmpty || takesTools || searches else { return }
+        menu.addItem(.separator())
+        if !efforts.isEmpty {
+            let selected = coordinator.model(for: chat)?.effort
+            let item = submenu("Reasoning", symbol: "brain") { submenu in
+                for effort in efforts {
+                    let row = ClosureMenuItem(effort.title) {
+                        coordinator.selectReasoningEffort(effort, in: chat)
+                    }
+                    row.state = selected == effort.id ? .on : .off
+                    submenu.addItem(row)
+                }
+            }
+            item.badge = NSMenuItemBadge(string: coordinator.selectedReasoningTitle(for: chat))
+            menu.addItem(item)
+        }
+        if takesTools { menu.addItem(toolsItem(for: chat, coordinator: coordinator)) }
+        if searches {
+            let item = ClosureMenuItem("Web Search", symbol: "globe", coordinator.toggleWebSearch)
+            item.state = coordinator.aiSettings.webSearchEnabled ? .on : .off
+            menu.addItem(item)
+        }
+    }
+
+    private static func toolsItem(
+        for chat: AIChatState, coordinator: AIChatCoordinator
+    ) -> NSMenuItem {
+        let builtIn = coordinator.listedBuiltInTools(for: chat)
+        let servers = coordinator.listedServers(for: chat)
+        let scope = chat.agentScope
+        let total = builtIn.count + servers.count
+        let item = submenu("Tools", symbol: "wrench.and.screwdriver") { submenu in
+            if total == 0 {
+                let empty = NSMenuItem(
+                    title: "The agent's rules allow no tools", action: nil, keyEquivalent: "")
+                empty.isEnabled = false
+                submenu.addItem(empty)
+            } else {
+                let use = ClosureMenuItem("Use Tools") {
+                    coordinator.setToolsEnabled(!scope.isEnabled, in: chat)
+                }
+                use.state = scope.isEnabled ? .on : .off
+                submenu.addItem(use)
+                let toggle = { (title: String, tool: AgentTool) in
+                    let row = ClosureMenuItem(title) { coordinator.toggleTool(tool, in: chat) }
+                    row.state = scope.allows(tool) ? .on : .off
+                    row.isEnabled = scope.isEnabled
+                    submenu.addItem(row)
+                }
+                if !builtIn.isEmpty {
+                    submenu.addItem(.sectionHeader(title: "Blitz"))
+                    for tool in builtIn { toggle(tool.title, tool) }
+                }
+                if !servers.isEmpty {
+                    submenu.addItem(.sectionHeader(title: "MCP Servers"))
+                    for server in servers { toggle(server.title, .mcp(server.slug)) }
+                }
+            }
+            if coordinator.offersMemorySwitch {
+                submenu.addItem(.sectionHeader(title: "Memory"))
+                let memory = ClosureMenuItem("Use Memory") {
+                    coordinator.setUsesMemory(!scope.usesMemory, in: chat)
+                }
+                memory.state = scope.usesMemory ? .on : .off
+                submenu.addItem(memory)
+            }
+            submenu.addItem(.separator())
+            submenu.addItem(ClosureMenuItem("Agent Settings…", coordinator.showAgentSettings))
+        }
+        if total > 0, scope.isEnabled {
+            let active =
+                builtIn.count(where: scope.allows) + servers.count { scope.allows(.mcp($0.slug)) }
+            item.badge = NSMenuItemBadge(string: "\(active) of \(total)")
+        }
+        return item
+    }
+
+    private static func submenu(
+        _ title: String, symbol: String, build: (NSMenu) -> Void
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        let submenu = NSMenu(title: title)
+        // A tool switched off by Use Tools stays listed, greyed, rather than vanishing.
+        submenu.autoenablesItems = false
+        build(submenu)
+        item.submenu = submenu
+        return item
+    }
 }
 
 /// An `NSMenuItem` that runs a closure, so a menu built per open needs no selector per row.
@@ -300,14 +398,14 @@ private final class ClosureMenuItem: NSMenuItem {
     private let run: () -> Void
 
     init(
-        _ title: String, symbol: String, key: String = "",
+        _ title: String, symbol: String? = nil, key: String = "",
         modifiers: NSEvent.ModifierFlags = .command, _ run: @escaping () -> Void
     ) {
         self.run = run
         super.init(title: title, action: #selector(runAction), keyEquivalent: key)
         keyEquivalentModifierMask = modifiers
         target = self
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
     }
 
     @available(*, unavailable)

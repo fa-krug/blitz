@@ -330,7 +330,7 @@ AI Agent is a titled window built the way Settings is, not a palette sibling lik
 `NSSplitViewController` whose sidebar item takes the system sidebar material, a unified toolbar with
 an inline title, and native `List`, `Menu` and context menus. Nothing about it scales with Interface
 Size. The composer is untinted Liquid Glass at `Radius.dialog`, stacked under the transcript so
-nothing scrolls behind it, with `.glass` capsules for its model, reasoning, tools and mode menus,
+nothing scrolls behind it, with `.glass` capsules for its model and mode menus,
 and its glass on a background layer rather than the box. The mode pill alone changes shape with its
 value: in Auto, `modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.warning`, since its
 calls run with no dialog. The title bar keeps the system's own toolbar band, as any document
