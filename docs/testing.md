@@ -837,6 +837,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Quick Actions are off out of the box; enabling asks with Blitz's dialog, then Accessibility
 - Fix Grammar on a selection in another app replaces it, with the `Fixing Grammar…` pill while the
   model works; the full list is in [quick-actions.md](features/quick-actions.md#manual-sweep)
+- Settings → Quick Actions lists read-only rows; one opens the action's page with its alias,
+  shortcut, Replace / Preview and Show in launcher, and Back returns to the row
 
 ### MCP
 
@@ -862,8 +864,17 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Closing and reopening Settings lands on the pane it was on, with Back disabled and the sidebar
   search empty;
   an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)
-  shows the new state; General's Calculator and Search sections appear a frame later, and
-  a search result into one of them still scrolls to and lights its row
+  shows the new state; General's Calculator and Search sections, AI's sections from
+  Conversations down appear a frame later and Agent's groups from Mac down one per frame, and a
+  search result into one of them still scrolls to and lights its row
+- Settings › AI › Providers: each row opens its route's page and Back returns to the list on that
+  row; the Overview / Models / Advanced tab stays put from one provider to the next; adding a
+  connection opens its page, and removing it from there confirms, then lands on the list. The AI
+  pane's Providers row opens the pane, and AI Chat's MCP Settings… opens MCP Servers
+- Settings › AI › Rules: each rule's row opens its page and Back returns to the list on that row;
+  Move Up and Move Down renumber the list, Delete… asks first and then lands on the list, and Add
+  Shell Rule opens a new rule's page with its pattern field focused. The AI Agent window's Agent
+  Settings… opens Settings › AI › Agent
 - A feature switch takes effect in the launcher immediately; every setting survives relaunch
 - Export produces a `.blitz`; import applies it and reports a per-category summary
 - Untick a category on export, and the import picker greys that row out rather than offering it

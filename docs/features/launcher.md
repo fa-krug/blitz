@@ -827,7 +827,7 @@ passes none. Copy Deeplink hands out the bare link, since the row has no values 
 
 **Configure Command** (⇧⌘,) closes the palette and opens Settings on the entry's own page, which
 holds its alias, shortcut and launcher switch (`AppEntry.settingsPage`), for every kind a pane lists
-as read-only rows. Any other entry lands on its row instead, scrolled into view and pulsed the way a
+as read-only rows — quick actions too, the four Quick Actions owns among them. Any other entry lands on its row instead, scrolled into view and pulsed the way a
 Settings search result is. `AppEntry.settingsTarget` is the whole mapping: a pane-owned command lands in that pane's
 command section (`SettingsAnchor.commands(ownedBy:)`, exhaustive over `SettingsTab`), every other
 kind in its category's list, and window commands in their catalog group's section. An extension

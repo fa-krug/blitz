@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Settings → AI's MCP half: the switch, the servers, and what each one is doing right now.
-struct MCPSettingsSection: View {
+/// Settings › AI › MCP Servers: the switch, the servers, and what each one is doing right now.
+struct MCPSettingsView: View {
     @Environment(AppCore.self) private var core
     @Environment(MCPCoordinator.self) private var coordinator
     @Environment(AppSettings.self) private var appSettings
@@ -9,10 +9,24 @@ struct MCPSettingsSection: View {
     @State private var editor: MCPServerEditorTarget?
 
     var body: some View {
+        Form {
+            section
+                // Chat is MCP's only consumer, so with AI off the servers have nothing to serve.
+                .settingsEnabled(appSettings.aiEnabled)
+        }
+        .formStyle(.grouped)
+        .settingsScrollTarget(.mcpServers)
+        .settingsEditorPanel(item: $editor) { target in
+            MCPServerEditor(target: target, onSave: save, onCancel: { editor = nil })
+        }
+    }
+
+    private var section: some View {
         @Bindable var appSettings = appSettings
-        Section {
+        return Section {
             Toggle(isOn: $appSettings.mcpEnabled) {
-                SettingsRowTitle(.aiMCPServers, "Enable MCP servers")
+                SettingsRowTitle(.mcpServersMCPServers, "Enable MCP servers")
+                if !appSettings.aiEnabled { Text("Turn on AI first.") }
             }
             Group {
                 if store.servers.isEmpty {
@@ -30,7 +44,7 @@ struct MCPSettingsSection: View {
                     editor = MCPServerEditorTarget(server: MCPServer(), isNew: true)
                 } label: {
                     Label {
-                        SettingsRowTitle(.aiMCPServers, "Add MCP Server")
+                        SettingsRowTitle(.mcpServersMCPServers, "Add MCP Server")
                     } icon: {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
@@ -39,14 +53,11 @@ struct MCPSettingsSection: View {
             }
             .settingsEnabled(appSettings.mcpEnabled)
         } header: {
-            SettingsSectionHeader(.aiMCPServers)
+            SettingsSectionHeader(.mcpServersMCPServers)
         } footer: {
             Text("Type @slug to address one server. A chat asks before its first tool call.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .settingsEditorPanel(item: $editor) { target in
-            MCPServerEditor(target: target, onSave: save, onCancel: { editor = nil })
         }
     }
 

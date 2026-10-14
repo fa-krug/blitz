@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings → AI → Memory: what the agent was asked to remember, newest first, edited in place.
+/// Settings › AI › Memory: what the agent was asked to remember, newest first, edited in place.
 struct AgentMemorySection: View {
     @Environment(AppCore.self) private var core
     /// One row at a time holds a field, so a hundred memories still list as plain text.
@@ -35,7 +35,7 @@ struct AgentMemorySection: View {
                 begin(.new, with: "")
             } label: {
                 Label {
-                    SettingsRowTitle(.aiMemory, "Add Memory")
+                    SettingsRowTitle(.agentMemoryMemory, "Add Memory")
                 } icon: {
                     Image(systemName: "plus")
                         .foregroundStyle(.primary)
@@ -45,7 +45,7 @@ struct AgentMemorySection: View {
                 Task { await memory.forgetAll() }
             } label: {
                 Label {
-                    SettingsRowTitle(.aiMemory, "Forget All…")
+                    SettingsRowTitle(.agentMemoryMemory, "Forget All…")
                 } icon: {
                     Image(systemName: "trash")
                         .foregroundStyle(.primary)
@@ -53,7 +53,7 @@ struct AgentMemorySection: View {
             }
             .settingsEnabled(!memories.isEmpty)
         } header: {
-            SettingsSectionHeader(.aiMemory)
+            SettingsSectionHeader(.agentMemoryMemory)
         } footer: {
             Text(
                 "While Read Memory is Allow, every memory is sent to the model's provider with "

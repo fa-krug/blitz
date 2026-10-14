@@ -71,10 +71,11 @@ selectable Markdown renderer with AI Agent.
 - **A custom prompt cannot drop that boundary.** An override on a shipped action may replace
   `boundary`, because the sheet shows the whole prompt. A custom action *is* the prompt, so `boundary`
   is prepended and no control removes it.
-- **Each model action owns its instructions and its route.** The pencil on Fix Grammar, Rewrite and
-  Summarize opens a sheet prefilled with the exact built-in prompt and the action's model. Saving
-  replaces both for only that action; Use Default restores the prompt. Translate has no editor because no model handles translation. The same
-  pencil on a custom action opens its editor, which owns the name and glyph too.
+- **Each model action owns its instructions and its route.** Customize… on the page of Fix Grammar,
+  Rewrite or Summarize opens a sheet prefilled with the exact built-in prompt and the action's model.
+  Saving replaces both for only that action; Use Default restores the prompt. Translate has no editor
+  because no model handles translation. Edit… on a custom action's page opens its editor, which owns
+  the name and glyph too.
 - **A custom action never travels in a backup.** Neither the record, its shortcut nor its route, for
   the reason `quickActionInstructions` already doesn't: an import must never change what a shortcut
   does to somebody's documents. Its JSON sits outside `UserDefaults`, so no settings key can sweep it
@@ -100,7 +101,7 @@ started.
 | Summarize | provider | panel, always | no |
 | a custom action | provider | panel | no |
 
-A custom action previews by default, switchable to Replace per row: Blitz cannot know whether an
+A custom action previews by default, switchable to Replace on its page: Blitz cannot know whether an
 arbitrary prompt transforms the text or answers a question about it, and only the second destroys what
 it replaces. No diff, for the same reason.
 
@@ -124,8 +125,8 @@ takes the choice with it.
 `HotKeyAction.quickAction(id:)` under `hotkey.quickAction.<uuid>`, indexed in `boundQuickActionIDs` so
 `HotKeyManager.start` can prune a binding whose action was deleted while Blitz was off.
 
-**The pane draws its own `AliasField`.** The four are named in `SettingsTab.ownedCommands`, so
-Settings → Commands does not draw theirs. Without it, `deleteCustomQuickAction` would be clearing an
+**The pane draws its own `AliasField`, on each action's page.** The four are named in
+`SettingsTab.ownedCommands`, so Settings → Commands does not draw theirs. Without it, `deleteCustomQuickAction` would be clearing an
 alias no surface could set.
 
 **Nothing is saved until it is on disk.** `commit` persists before it moves `actions`, and a write
@@ -139,11 +140,30 @@ delete must never leave a kept record stripped of its shortcut.
 
 Only Fix Grammar applies unseen: it changes what was wrong, where a rewrite changes the voice.
 Summarize can never be told to replace text unseen — it answers a question *about* the text, so
-replacing the text with the answer has to be a choice made in the panel. Every other default is a
-**Replace / Preview** popup in the pane — a popup rather than a second checkbox, because the trailing
-checkbox column means "show in the launcher" in every pane the app has. `QuickActionSettings` stores
+replacing the text with the answer has to be a choice made in the panel, and its page greys the
+choice out. Every other default is a **Replace / Preview** popup on the action's page, apart from its
+Show in launcher switch, and the row says Preview when that is the choice. `QuickActionSettings` stores
 only what the reader actually changed, so a new action arrives with its own default rather than
 whatever a missing key would have meant.
+
+## Settings
+
+**Settings → Quick Actions lists read-only rows, and each opens the action's own page**, as Commands
+and Quicklinks do ([ui.md](../ui.md#settings)). A row holds no AppKit control — icon, title, the
+always-preview or model-override subtitle, then badges: Preview, the eye-slash when hidden from the
+launcher (with a dimmed label), and `SettingsEntryBadges`' alias chip, key caps and chevron. Five
+controls a row once made the pane build in one ~140 ms frame. The list is the four plus a few custom
+ones, so its rows are native `Form` rows rather than `SettingsPageRows`' lazy stack, and a search
+result for Actions lands on them directly.
+
+`QuickActionSettingsItem` pairs an action with its launcher entry, and the entry's id is the page
+string: the `CommandCatalog` entry for a shipped one, `quick-action:<uuid>` for a custom one.
+`QuickActionPage` (`QuickActionPage.swift`) holds Show in launcher, the alias, the shortcut and
+Replace / Preview, with Customize… or Edit… and Delete… in its header. Delete goes through
+`QuickActionCoordinator.deleteCustomQuickAction`, which asks first; once the record is gone the page
+string names nothing, so `SettingsPagedPane` falls back to the list. Configure Command (⇧⌘,) on a
+quick action opens its page: `AppEntry.settingsPage` pages `.quickAction` entries even though the
+four carry `settingsOwner`.
 
 ## Translation
 
@@ -276,13 +296,18 @@ failure handler, so automatic expansion stays silent.
   spinner while the model works, and the result message takes its place.
 - Run one from the launcher (⌘Space → "Fix Grammar") with text selected behind it: the palette
   closes and the selection in the displaced app is what gets acted on, not Blitz's own field.
-- Uncheck an action's launcher checkbox: the row leaves ⌘Space, and its shortcut still works.
+- Settings → Quick Actions shows read-only rows; clicking one opens its page, and Back returns to
+  the list at that row. Configure Command (⇧⌘,) on a quick action in ⌘Space opens the same page.
+- Turn off an action's Show in launcher on its page: the row dims with the eye-slash badge, the
+  action leaves ⌘Space, and its shortcut still works.
 - Add a custom action, bind a shortcut, run it from the shortcut and from ⌘Space, then rename it and
-  confirm the shortcut, the Replace choice and the checkbox all survived.
-- Delete a custom action with a shortcut bound: the dialog asks first, the row leaves both Settings
-  and ⌘Space, and the chord is free for something else to take.
+  confirm the shortcut, the Replace choice and Show in launcher all survived.
+- Delete a custom action with a shortcut bound from its page: the dialog asks first, the pane falls
+  back to the list, the row leaves both Settings and ⌘Space, and the chord is free for something
+  else to take.
 - Type "quick actions" in ⌘Space: the section lists the shipped four beside the custom ones.
-- Give Fix Grammar and a custom action an alias in the pane, then type each alias in ⌘Space.
+- Give Fix Grammar and a custom action an alias on their pages: each row shows the chip, and each
+  alias finds its action in ⌘Space.
 - Press a shortcut with Blitz's own Settings window frontmost: refused, with a HUD.
 - Press one in a password field: refused.
 - Summarize a long selection: the panel streams, grows without the title drifting, and scrolls past

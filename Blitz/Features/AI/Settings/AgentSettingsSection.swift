@@ -1,7 +1,10 @@
 import SwiftUI
 
-/// Settings → AI → Agent: Allow, Ask or Deny per tool, with each MCP server read from its trust.
+/// Settings › AI › Agent: Allow, Ask or Deny per tool, with each MCP server read from its trust.
 struct AgentSettingsSection: View {
+    /// How many tool groups are built; the pane raises it a frame at a time.
+    let groupCount: Int
+
     @Environment(AISettingsStore.self) private var settings
     @Environment(AppSettings.self) private var appSettings
     @Environment(MCPCoordinator.self) private var mcpCoordinator
@@ -16,7 +19,7 @@ struct AgentSettingsSection: View {
         let ceiling = AgentFeatureCeiling(
             settings: appSettings, visibility: visibility, isAccessibilityTrusted: { isTrusted })
         Section {
-            ForEach(AgentTool.Group.allCases, id: \.self) { group in
+            ForEach(shownGroups, id: \.self) { group in
                 AgentToolGroupHeader(title: group.title)
                 ForEach(group.tools, id: \.self) { tool in
                     AgentDecisionPicker(
@@ -28,31 +31,33 @@ struct AgentSettingsSection: View {
                     .settingsEnabled(ceiling.isAvailable(tool))
                 }
             }
-            if !mcpStore.servers.isEmpty {
-                AgentToolGroupHeader(title: "MCP Servers")
-            }
-            ForEach(mcpStore.servers) { server in
-                AgentDecisionPicker(
-                    title: server.title, subtitle: subtitle(for: server),
-                    choices: AgentDecisionPicker.choices(canAsk: true),
-                    selection: trust(of: server)
-                )
-                .settingsEnabled(appSettings.mcpEnabled && server.isEnabled)
-            }
-            Picker(selection: $settings.toolRounds) {
-                ForEach(AIToolRounds.allCases) { Text($0.title).tag($0) }
-            } label: {
-                SettingsRowTitle(.aiAgent, "Tool call rounds")
-                Text(
-                    "A reply stops after this many; Unlimited runs until Stop. "
-                        + "API connections, Codex and Claude.")
-            }
-            Toggle(isOn: $settings.notifiesWhenWaiting) {
-                SettingsRowTitle(.aiAgent, "Notify when the agent is waiting")
-                Text("When a chat you left needs an approval or an answer.")
+            if groupCount >= AgentTool.Group.allCases.count {
+                if !mcpStore.servers.isEmpty {
+                    AgentToolGroupHeader(title: "MCP Servers")
+                }
+                ForEach(mcpStore.servers) { server in
+                    AgentDecisionPicker(
+                        title: server.title, subtitle: subtitle(for: server),
+                        choices: AgentDecisionPicker.choices(canAsk: true),
+                        selection: trust(of: server)
+                    )
+                    .settingsEnabled(appSettings.mcpEnabled && server.isEnabled)
+                }
+                Picker(selection: $settings.toolRounds) {
+                    ForEach(AIToolRounds.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    SettingsRowTitle(.agentAgent, "Tool call rounds")
+                    Text(
+                        "A reply stops after this many; Unlimited runs until Stop. "
+                            + "API connections, Codex and Claude.")
+                }
+                Toggle(isOn: $settings.notifiesWhenWaiting) {
+                    SettingsRowTitle(.agentAgent, "Notify when the agent is waiting")
+                    Text("When a chat you left needs an approval or an answer.")
+                }
             }
         } header: {
-            SettingsSectionHeader(.aiAgent)
+            SettingsSectionHeader(.agentAgent)
         } footer: {
             Text(
                 "Ask confirms each call, and Deny never offers the tool. What a tool reads goes "
@@ -68,17 +73,21 @@ struct AgentSettingsSection: View {
         }
     }
 
+    private var shownGroups: [AgentTool.Group] {
+        Array(AgentTool.Group.allCases.prefix(groupCount))
+    }
+
     /// Shown only while the row's feature is on; a row held below its ceiling says why instead.
     private func subtitle(for tool: AgentTool) -> String? {
         switch tool {
         case .shell: "Runs in your login shell, as you."
-        case .filesRead, .filesWrite: "Within the path rules below."
+        case .filesRead, .filesWrite: "Within the path rules under Rules."
         case .webSearch: "The provider runs the search, so Blitz cannot stop it to ask."
         case .calendarRead: "The calendars switched on in Calendar."
         case .remindersRead: "The lists switched on in Reminders."
         case .selectedText: "In the app in front, through Accessibility."
         case .memoryRead: "Sent with every turn, on every model."
-        case .memoryWrite: "Remembering and forgetting, listed under Memory below."
+        case .memoryWrite: "Remembering and forgetting, listed under Memory."
         default: nil
         }
     }

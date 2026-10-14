@@ -24,7 +24,7 @@ enum AIModelMenu {
         guard !items.isEmpty else {
             return PopoverMenuContent(items: [
                 PopoverMenuItem(title: "Configure AI", systemImage: "slider.horizontal.3") {
-                    coordinator.showSettings()
+                    coordinator.showProviderSettings()
                 }
             ])
         }

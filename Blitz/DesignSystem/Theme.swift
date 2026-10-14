@@ -246,9 +246,6 @@ enum Theme {
         static let layoutPositionStroke: CGFloat = 1.5
         /// A position cell's clickable row; the glyph floats inside it, so the whole cell hits.
         static let layoutPositionCell: CGFloat = 34
-        /// AI Providers: Mail's Accounts shape, a provider list beside the selected one's detail.
-        static let aiProvidersPanel = CGSize(width: 840, height: 520)
-        static let aiProvidersList: CGFloat = 262
         /// What the system leaves either side of a segment's label once the control has settled.
         static let segmentLabelInset: CGFloat = 13
         static let aiVariableName: CGFloat = 170

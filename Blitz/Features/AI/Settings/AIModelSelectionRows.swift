@@ -13,6 +13,7 @@ struct AIModelSelectionRows<ModelLabel: View, EffortLabel: View>: View {
     @ViewBuilder let effortLabel: () -> EffortLabel
 
     var body: some View {
+        let modelGroups = modelGroups
         if modelGroups.isEmpty {
             Label("No AI provider configured", systemImage: "sparkles")
                 .foregroundStyle(.secondary)

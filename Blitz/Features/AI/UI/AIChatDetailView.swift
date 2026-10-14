@@ -285,7 +285,7 @@ private struct AIModelPicker: View {
                 }
             }
             if groups.isEmpty, !coordinator.isModelCatalogLoading {
-                Button("Configure AI…", action: coordinator.showSettings)
+                Button("Configure AI…", action: coordinator.showProviderSettings)
             }
         } label: {
             Label {

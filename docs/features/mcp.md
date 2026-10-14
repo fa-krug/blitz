@@ -118,8 +118,8 @@ nothing about MCP. `AIChatCoordinator.send` is the one place the two meet.
   A reader's server already named `blitz-<handle>` for an armed handle refuses the launch rather
   than merge. The boundary fails closed: a listing that exits non-zero or is not a JSON array of
   named servers refuses the launch, since reading it as empty would start every one of them, and
-  so does a name with a dot or `=`, which `-c` splits and so cannot switch off. The Providers row
-  and the failed turn both say why. Claude's `--strict-mcp-config` does it in one flag. Without
+  so does a name with a dot or `=`, which `-c` splits and so cannot switch off. Codex's Providers
+  page and the failed turn both say why. Claude's `--strict-mcp-config` does it in one flag. Without
   it, every server in `~/.codex/config.toml` would start inside a Blitz thread.
 - **Every Codex tool call asks Blitz, read-only ones included.** Left alone, the app-server runs
   a tool its server annotates `readOnlyHint: true` without raising an elicitation, even under
@@ -336,8 +336,9 @@ Stopped.
 
 ## Settings
 
-`MCPSettingsSection` is a section inside Settings → AI, the way `FeatureCommandsSection(owner: .ai, …)`
-is. Each row leads
+`MCPSettingsView` is Settings › AI › MCP Servers, its own pane in the AI sidebar group; the AI Chat
+window's **MCP Settings…** opens it through `AIChatCoordinator.showMCPSettings()`. The pane dims
+while AI is off, since chat is MCP's only consumer. Each row leads
 with the handle, because that is the half a reader has to type, then the live status and the
 transport. `MCPServerEditor` reaches `MCPCoordinator` through its environment. The editor holds name,
 HTTP or command, Header or OAuth authentication, optional client ID/secret, one Sign In / Cancel / Sign Out button and live

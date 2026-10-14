@@ -6,8 +6,10 @@ struct AISettingsView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(CodexSubscriptionManager.self) private var subscription
     @Environment(InstalledAIManager.self) private var installedAI
+    @Environment(SettingsNavigationState.self) private var navigation
 
-    @State private var providersPresented = false
+    /// Below the fold, held back a frame; a search result revealing one mounts them at once.
+    @State private var mountsLowerSections = false
 
     var body: some View {
         @Bindable var appSettings = appSettings
@@ -19,11 +21,7 @@ struct AISettingsView: View {
                         anchor: .aiAI, title: "Enable AI",
                         subtitle: "Nothing is loaded or sent while it is off.")
                 }
-                SettingsRow(
-                    title: "Providers", subtitle: providerSummary, anchor: .aiProviders
-                ) {
-                    Button("Manage…") { providersPresented = true }
-                }
+                providersRow
             } header: {
                 SettingsSectionHeader(.aiAI)
             }
@@ -31,22 +29,23 @@ struct AISettingsView: View {
             FeatureCommandsSection(owner: .ai, anchor: .aiCommands)
                 .settingsEnabled(appSettings.aiEnabled)
 
-            Group {
-                defaultModelSection
-                AgentSettingsSection()
-                ShellRulesSection()
-                PathRulesSection()
-                AgentMemorySection()
-                conversationsSection
-                systemPromptSection
-                MCPSettingsSection()
+            defaultModelSection
+                .settingsEnabled(appSettings.aiEnabled)
+
+            if mountsLowerSections || navigation.scrollRequest?.target.tab == .ai {
+                Group {
+                    conversationsSection
+                    systemPromptSection
+                }
+                .settingsEnabled(appSettings.aiEnabled)
             }
-            .settingsEnabled(appSettings.aiEnabled)
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.ai)
-        .settingsEditorPanel(isPresented: $providersPresented) {
-            AIProvidersPanel(onDone: { providersPresented = false })
+        // Past the task's first suspension, so the sections above the fold paint a frame first.
+        .task {
+            await Task.yield()
+            mountsLowerSections = true
         }
         .onAppear {
             core.applyInstalledAILifecycle()
@@ -60,6 +59,21 @@ struct AISettingsView: View {
         .onChange(of: subscription.models) { syncSelection() }
         .onChange(of: subscription.phase) { syncSelection() }
         .onChange(of: installedAI.statuses) { syncSelection() }
+    }
+
+    private var providersRow: some View {
+        Button {
+            navigation.select(.aiProviders)
+        } label: {
+            SettingsRow(title: "Providers", subtitle: providerSummary) {
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Providers")
     }
 
     private var defaultModelSection: some View {

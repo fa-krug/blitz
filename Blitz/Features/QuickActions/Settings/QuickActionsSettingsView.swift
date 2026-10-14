@@ -7,7 +7,7 @@ struct QuickActionsSettingsView: View {
     @Environment(QuickActionSettingsStore.self) private var store
     @Environment(CustomQuickActionStore.self) private var customActions
     @Environment(AISettingsStore.self) private var aiSettings
-    @Environment(VisibilityStore.self) private var visibility
+    @Environment(SettingsNavigationState.self) private var navigation
 
     /// Polled like the Permissions pane: the grant lands in System Settings, which sends nothing.
     @State private var isTrusted = Permissions.isAccessibilityTrusted()
@@ -15,43 +15,18 @@ struct QuickActionsSettingsView: View {
     @State private var customEditing: CustomQuickActionEditRequest?
 
     var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: enabledBinding) {
-                    SettingsFeatureToggleLabel(
-                        anchor: .quickActionsQuickActions, title: "Enable Quick Actions",
-                        subtitle: "Act on selected text. Nothing is read until you press a shortcut.")
-                }
-                if appSettings.quickActionsEnabled, !isTrusted {
-                    // Every shortcut fails without it; better said here than found one press later.
-                    HStack(alignment: .center, spacing: Theme.Spacing.lg) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .frame(width: Theme.Size.settingsRowIcon)
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                            Text("Accessibility permission required")
-                                .foregroundStyle(.orange)
-                            Text("Needed to read your selection.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: Theme.Spacing.lg)
-                        Button("Open System Settings") { Permissions.openAccessibilitySettings() }
-                    }
-                }
-            } header: {
-                SettingsSectionHeader(.quickActionsQuickActions)
+        // Once per render: each access would look the four up in the catalog again.
+        let items = QuickActionSettingsItem.all(custom: customActions.actions)
+        let shown = items.first { $0.id == navigation.page }
+        SettingsPagedPane(showsPage: shown != nil) {
+            if let shown {
+                QuickActionPage(
+                    item: shown, subtitle: subtitle(for: shown.action),
+                    onEdit: { edit(shown.action) })
             }
-
-            Group {
-                actionsSection
-                modelSection
-                languageSection
-            }
-            .settingsEnabled(appSettings.quickActionsEnabled)
+        } library: {
+            library(items)
         }
-        .formStyle(.grouped)
-        .settingsScrollTarget(.quickActions)
         .task {
             while !Task.isCancelled {
                 isTrusted = Permissions.isAccessibilityTrusted()
@@ -91,25 +66,59 @@ struct QuickActionsSettingsView: View {
         .onChange(of: core.installedAI.statuses) { repairInstalledModel() }
     }
 
-    private var actionsSection: some View {
-        Section {
-            ForEach(BuiltInQuickAction.allCases, content: builtInRow)
-            ForEach(customActions.actions) { action in
-                SettingsRow(
-                    title: action.name, subtitle: subtitle(for: .custom(action)),
-                    anchor: .quickActionsActions
-                ) {
-                    SymbolImage(name: action.symbol, size: Theme.Size.quickActionHeaderIcon)
-                        .frame(width: Theme.Size.settingsRowIcon)
-                } trailing: {
-                    editButton(title: action.name) {
-                        customEditing = CustomQuickActionEditRequest(action: action)
-                    }
-                    AliasField(key: action.entryID, name: action.name)
-                    ShortcutRecorder(action: .quickAction(id: action.id), isQuiet: true)
-                    resultPicker(title: action.name, selection: previewBinding(action))
-                    launcherToggle(title: action.name, entry: AppEntry(action))
+    private func library(_ items: [QuickActionSettingsItem]) -> some View {
+        Form {
+            Section {
+                Toggle(isOn: enabledBinding) {
+                    SettingsFeatureToggleLabel(
+                        anchor: .quickActionsQuickActions, title: "Enable Quick Actions",
+                        subtitle: "Act on selected text. Nothing is read until you press a shortcut.")
                 }
+                if appSettings.quickActionsEnabled, !isTrusted {
+                    // Every shortcut fails without it; better said here than found one press later.
+                    HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .frame(width: Theme.Size.settingsRowIcon)
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                            Text("Accessibility permission required")
+                                .foregroundStyle(.orange)
+                            Text("Needed to read your selection.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.Spacing.lg)
+                        Button("Open System Settings") { Permissions.openAccessibilitySettings() }
+                    }
+                }
+            } header: {
+                SettingsSectionHeader(.quickActionsQuickActions)
+            }
+
+            Group {
+                actionsSection(items)
+                modelSection
+                languageSection
+            }
+            .settingsEnabled(appSettings.quickActionsEnabled)
+        }
+        .formStyle(.grouped)
+        .settingsScrollTarget(.quickActions)
+    }
+
+    /// Native rows rather than `SettingsPageRows`: the list is short, and none holds a control.
+    private func actionsSection(_ items: [QuickActionSettingsItem]) -> some View {
+        Section {
+            ForEach(items) { item in
+                Button {
+                    navigation.select(navigation.tab, page: item.id)
+                } label: {
+                    QuickActionRow(item: item, subtitle: subtitle(for: item.action))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Configure \(item.action.title)")
+                .id(item.id)
             }
             Button {
                 customEditing = CustomQuickActionEditRequest(action: nil)
@@ -118,58 +127,14 @@ struct QuickActionsSettingsView: View {
             }
         } header: {
             SettingsSectionHeader(.quickActionsActions)
-        } footer: {
-            Text("Replace writes into your document, and undo restores it. Preview shows a panel first.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
-    private func builtInRow(_ action: BuiltInQuickAction) -> some View {
-        let entry = CommandCatalog.entry(for: CommandID(action))
-        return SettingsRow(
-            title: action.title, subtitle: subtitle(for: .builtIn(action)), anchor: .quickActionsActions
-        ) {
-            Image(systemName: action.symbol)
-                .frame(width: Theme.Size.settingsRowIcon)
-        } trailing: {
-            if !action.usesTranslationFramework {
-                editButton(title: action.title) { editingAction = action }
-            }
-            // The four left the Commands pane with their kind, and its alias field with it.
-            if let entry { AliasField(entry: entry) }
-            ShortcutRecorder(action: .command(CommandID(action)), isQuiet: true)
-            resultPicker(title: action.title, selection: previewBinding(action))
-                .disabled(action.alwaysPreviews)
-            if let entry { launcherToggle(title: action.title, entry: entry) }
+    private func edit(_ action: QuickAction) {
+        switch action {
+        case .builtIn(let builtIn): editingAction = builtIn
+        case .custom(let custom): customEditing = CustomQuickActionEditRequest(action: custom)
         }
-    }
-
-    private func editButton(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            SymbolImage(name: "pencil", size: Theme.Size.quickActionHeaderIcon)
-        }
-        .buttonStyle(.plain)
-        .help("Edit \(title)")
-        .accessibilityLabel("Edit \(title)")
-    }
-
-    private func resultPicker(title: String, selection: Binding<Bool>) -> some View {
-        Picker("", selection: selection) {
-            Text("Replace").tag(false)
-            Text("Preview").tag(true)
-        }
-        .labelsHidden()
-        .fixedSize()
-        .accessibilityLabel("What \(title) does with its result")
-    }
-
-    private func launcherToggle(title: String, entry: AppEntry) -> some View {
-        Toggle("", isOn: launcherBinding(entry))
-            .labelsHidden()
-            .toggleStyle(.checkbox)
-            .launcherVisibilityHelp()
-            .accessibilityLabel("Show \(title) in launcher")
     }
 
     private var modelSection: some View {
@@ -231,24 +196,6 @@ struct QuickActionsSettingsView: View {
         Binding(
             get: { appSettings.quickActionsEnabled },
             set: { core.quickActionCoordinator.setEnabled($0) })
-    }
-
-    private func previewBinding(_ action: BuiltInQuickAction) -> Binding<Bool> {
-        Binding(
-            get: { store.settings.previewsResult(action) },
-            set: { store.settings.setPreviewsResult($0, for: action) })
-    }
-
-    private func previewBinding(_ action: CustomQuickAction) -> Binding<Bool> {
-        Binding(
-            get: { action.previewsResult },
-            set: { core.quickActionCoordinator.setPreviewsResult($0, id: action.id) })
-    }
-
-    private func launcherBinding(_ entry: AppEntry) -> Binding<Bool> {
-        Binding(
-            get: { visibility.isItemVisible(entry) },
-            set: { visibility.setItemVisible($0, for: entry) })
     }
 
     private var languageBinding: Binding<String> {

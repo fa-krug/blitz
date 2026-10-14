@@ -7,7 +7,9 @@ belongs to its feature's own doc; the opt-in `settings.json` mirror is
 
 ## Invariants
 
-- **`SettingsTab` is the list of panes, and `SettingsSection.tabs` is their order.** The sidebar,
+- **`SettingsTab` is the list of panes, and `SettingsSection.tabs` is their order.** The sidebar's
+  groups are General, Launcher, Features, AI (AI, Agent, Rules, Memory, Providers, MCP Servers,
+  Quick Actions) and Advanced. The sidebar,
   the detail switch, the search catalog and `settings-history-test`'s coverage check all read it,
   so a pane added to the enum and missed anywhere else fails to compile or fails the harness.
 - **`SettingsTab.ownedCommands` is the only place that says which pane lists a command.**
@@ -51,14 +53,16 @@ the pane's title in the toolbar.
 ## Navigation
 
 `SettingsLocation` is a pane plus an optional `page` string that only that pane interprets — an
-extension's manifest name, a launcher entry's id, a quicklink's UUID. `SettingsHistory` keeps
+extension's manifest name, a launcher entry's id, a quicklink's UUID, an AI provider route
+(`installed:codex`, `api:<uuid>`), an agent rule (`shell:<uuid>`, `path:<uuid>`). `SettingsHistory` keeps
 browser semantics over locations: selecting truncates what was ahead, re-selecting the current
 location is no move, and Back and Forward clamp at both ends. Choosing a pane in the sidebar lands
 on its root.
 
 A pane with pages wraps itself in `SettingsPagedPane` (`SettingsPages.swift`), which shows the list
 or the page and scrolls the list back to the row it left on Back. Long lists draw read-only rows
-through `SettingsPageRows`, each showing what its page sets as `SettingsEntryBadges`. Configure
+through `SettingsPageRows`, each showing what its page sets as `SettingsEntryBadges`; a short one —
+Extensions, AI › Providers, AI › Rules — draws each row as a plain button with a chevron. Configure
 Command in the launcher's ⌘K menu opens a row's page directly, through `AppEntry.settingsPage`.
 
 ## Search

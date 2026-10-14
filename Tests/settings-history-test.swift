@@ -197,7 +197,13 @@ struct SettingsHistoryTests {
             ("paste history", .clipboard),
             ("window manage", .windowManagement),
             ("skin tone", .emoji),
-            ("mcp", .ai)
+            ("mcp", .mcpServers),
+            ("ollama", .aiProviders),
+            ("providers", .aiProviders),
+            ("path rules", .agentRules),
+            ("add shell rule", .agentRules),
+            ("memory", .agentMemory),
+            ("tool call rounds", .agent)
         ]
         for (query, tab) in cases {
             let found = SettingsSearchCatalog.results(for: query).first
