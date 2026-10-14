@@ -221,6 +221,8 @@ enum Theme {
         static let chatSourceTitle: CGFloat = 200
         /// The context card's width: a label column and a value one, with room for a model name.
         static let chatContextCard: CGFloat = 300
+        /// A plan being edited in its card; past this the Markdown scrolls inside the editor.
+        static let chatPlanEditor: CGFloat = 280
         /// A grouped `Form` row's control height.
         static let settingsControlHeight: CGFloat = 28
         static let emojiSkinToneGlyph: CGFloat = 13

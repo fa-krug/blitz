@@ -78,7 +78,7 @@ palette returns to the launcher *and* chat starts a new conversation, at once or
 unfinished chat is a thing being done, exactly like a typed query, so the screen and the conversation
 are reset together rather than the screen alone. A reply still streaming is the one exception — it was
 asked for, and resetting would throw the answer away. Nothing is lost either way: a conversation is
-written to Chat History, and the AI Chat window's sidebar, as soon as it has a message.
+written to Chat History, and the AI Agent window's sidebar, as soon as it has a message.
 
 Each `PaletteMode` maps to one type conforming to `PaletteScreen`, and the protocol is what keeps the
 selection invariant honest: a screen exposes `rows` as its single source of visible order, and the

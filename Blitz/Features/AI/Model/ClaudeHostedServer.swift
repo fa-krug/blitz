@@ -5,6 +5,8 @@ enum ClaudeHostedServer {
     /// `MCPSlug` never yields `_`, so no server the reader adds can take this name.
     static let handle = "blitz_data"
     static let protocolVersion = "2025-06-18"
+    /// A call may wait on the reader; this outranks a short `MCP_TOOL_TIMEOUT` they set themselves.
+    static let callTimeoutMilliseconds = 24 * 60 * 60 * 1000
 
     /// One JSON-RPC message the CLI addressed to this server, held open until Blitz answers.
     struct Message: Equatable, Sendable {

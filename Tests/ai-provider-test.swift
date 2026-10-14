@@ -104,8 +104,13 @@ struct AIProviderTests {
         subscriptionSelectionsReconcile()
         onDeviceSelectionsRoundTripAndLead()
         conversationSettingsPersistAndDecide()
+        agentRulesMigrateOnceThenPersist()
+        aBrokenAgentTableFallsBackToTheDefaults()
+        shellRulesKeepTheirOrder()
+        pathRulesKeepTheirOrder()
         toolCatalogsAndTurnsEncodePerProvider()
         toolArgumentsSurviveArrivingInFragments()
+        anthropicSearchesOnItsOwnServer()
         toolCapabilitiesFollowTheRoute()
         codexLaunchNamesServersAndKeepsSecretsOffArgv()
         codexLaunchHandsAServerItsOwnVariableNames()
@@ -117,6 +122,162 @@ struct AIProviderTests {
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
+    }
+
+    /// Anthropic runs the search itself, so its blocks become search rows and never tool calls.
+    static func anthropicSearchesOnItsOwnServer() {
+        let connection = AIConnection(provider: .anthropic, models: ["claude-sonnet-5-5"])
+        expect(
+            connection.capabilities(for: "claude-sonnet-5-5").webSearch,
+            "the Anthropic API offers web search")
+
+        let tool = AITool(
+            name: "fs__read", description: "Reads a file.",
+            parameters: .object(["type": .string("object")]), origin: "Files")
+        func tools(model: String, webSearch: Bool) -> [[String: Any]] {
+            let body = AIRequestBody.make(
+                AIRequest(
+                    messages: [AIMessage(role: .user, text: "news?")], webSearch: webSearch,
+                    tools: [tool]),
+                configuration: AIHTTPConfiguration(
+                    provider: .anthropic, baseURL: URL(string: "https://api.anthropic.com")!,
+                    model: model))
+            return body["tools"] as? [[String: Any]] ?? []
+        }
+        expect(
+            tools(model: "claude-sonnet-5-5", webSearch: false).map { $0["name"] as? String }
+                == ["fs__read"],
+            "without the switch only the client tools are sent")
+        let searching = tools(model: "claude-sonnet-5-5", webSearch: true)
+        expect(
+            searching.map { $0["name"] as? String } == ["fs__read", "web_search"]
+                && searching.first?["input_schema"] != nil,
+            "the server tool joins the client tools, which keep their shape")
+        expect(
+            searching.last?["type"] as? String == "web_search_20260209"
+                && searching.last?["max_uses"] as? Int == 5,
+            "a current Sonnet gets the dynamic-filtering tool, capped at five searches")
+        expect(
+            tools(model: "claude-haiku-4-5", webSearch: true).last?["type"] as? String
+                == "web_search_20250305",
+            "Haiku gets the basic tool")
+        let versions: [(String, String)] = [
+            ("claude-opus-4-6", "web_search_20260209"),
+            ("claude-opus-4-8-20260801", "web_search_20260209"),
+            ("claude-opus-5-5", "web_search_20260209"),
+            ("claude-sonnet-5", "web_search_20260209"),
+            ("claude-sonnet-4-6", "web_search_20260209"),
+            ("claude-sonnet-4-5-20250929", "web_search_20250305"),
+            ("claude-opus-4-20250514", "web_search_20250305"),
+            ("claude-opus-4-1-20250805", "web_search_20250305"),
+            ("claude-3-5-sonnet-20241022", "web_search_20250305"),
+            ("claude-3-opus-20240229", "web_search_20250305"),
+            ("something-else", "web_search_20250305")
+        ]
+        for (model, version) in versions {
+            expect(
+                AIRequestBody.anthropicWebSearchTool(for: model) == version,
+                "\(model) searches with \(version)")
+        }
+
+        var decoder = AIStreamDecoder(shape: .anthropic)
+        let stream = Data(
+            """
+            data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}
+
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1",\
+            "name":"web_search","input":{}}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta",\
+            "partial_json":"{\\"query\\": \\"swift"}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":" 6\\"}"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result",\
+            "tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"Swift","url":"https://swift.org",\
+            "encrypted_content":"abc","page_age":null}]}}
+
+            data: {"type":"content_block_stop","index":1}
+
+            data: {"type":"content_block_start","index":2,"content_block":{"type":"server_tool_use","id":"srvtoolu_2",\
+            "name":"code_execution","input":{}}}
+
+            data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta",\
+            "partial_json":"{\\"code\\": \\"1\\"}"}}
+
+            data: {"type":"content_block_stop","index":2}
+
+            data: {"type":"content_block_start","index":3,"content_block":{"type":"code_execution_tool_result",\
+            "tool_use_id":"srvtoolu_2","content":{"type":"code_execution_result","stdout":"1"}}}
+
+            data: {"type":"content_block_stop","index":3}
+
+            data: {"type":"content_block_start","index":4,"content_block":{"type":"text","text":""}}
+
+            data: {"type":"content_block_delta","index":4,"delta":{"type":"text_delta","text":"Swift 6 is out."}}
+
+            data: {"type":"content_block_delta","index":4,"delta":{"type":"citations_delta",\
+            "citation":{"type":"web_search_result_location","url":"https://swift.org","cited_text":"x"}}}
+
+            data: {"type":"content_block_stop","index":4}
+
+            data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}
+
+            data: {"type":"message_stop"}
+
+            """.utf8)
+        var events = (try? decoder.feed(stream)) ?? []
+        events += (try? decoder.finish()) ?? []
+        let searchRows = events.filter {
+            switch $0 {
+            case .searching, .searched: true
+            default: false
+            }
+        }
+        expect(
+            searchRows == [.searching("swift 6"), .searched("swift 6")],
+            "a split query is reassembled and the result block completes its row")
+        expect(
+            !events.contains {
+                if case .toolCallRequested = $0 { return true } else { return false }
+            },
+            "a server tool never reaches Blitz's own tool loop")
+        expect(answerText(events) == "Swift 6 is out.", "the answer text arrives untouched")
+        expect(events.last == .finished, "a searched turn still finishes")
+
+        var failing = AIStreamDecoder(shape: .anthropic)
+        let failed = Data(
+            """
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1",\
+            "name":"web_search","input":{}}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"qu"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result",\
+            "tool_use_id":"srvtoolu_1","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}}
+
+            data: {"type":"content_block_stop","index":1}
+
+            data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":2}}
+
+            data: {"type":"message_stop"}
+
+            """.utf8)
+        let failedEvents: [AIStreamEvent]
+        do {
+            failedEvents = try failing.feed(failed) + failing.finish()
+        } catch {
+            failedEvents = []
+            expect(false, "an error-shaped search result must not throw: \(error)")
+        }
+        expect(
+            failedEvents.contains(.searching(nil)) && failedEvents.contains(.searched(nil)),
+            "an unparsable query and an error result still open and close a row")
+        expect(failedEvents.last == .finished, "a pause_turn turn finishes like any other")
     }
 
     /// Both providers stream a call's arguments in pieces; a half-parsed call would be uncallable.
@@ -974,12 +1135,15 @@ struct AIProviderTests {
         expect(fresh.opensTo == .recent, "chat reopens on the recent conversation by default")
         expect(fresh.newChatAfter == .fiveMinutes, "the idle window defaults to five minutes")
         expect(fresh.toolRounds == .twentyFive, "a reply's tool rounds default to 25")
+        expect(fresh.notifiesWhenWaiting, "a waiting agent notifies by default")
 
         fresh.retention = .week
         fresh.opensTo = .newConversation
         fresh.newChatAfter = .never
         fresh.toolRounds = .fifty
+        fresh.notifiesWhenWaiting = false
         let reopened = AISettingsStore(defaults: defaults)
+        expect(!reopened.notifiesWhenWaiting, "switching the notification off persists")
         expect(reopened.toolRounds == .fifty, "the tool round cap persists")
         reopened.toolRounds = .unlimited
         expect(
@@ -1051,6 +1215,155 @@ struct AIProviderTests {
         expect(
             without.defaultModel == .appleIntelligence,
             "an unavailable model does not silently reroute a stored on-device selection")
+    }
+
+    /// The old access pickers and shell switch are read exactly once, then never again.
+    static func agentRulesMigrateOnceThenPersist() {
+        let suite = "AIProviderTests.agentMigration"
+        let oldKeys = [
+            AppSettingsKey.aiCalendarAccess.rawValue, AppSettingsKey.aiRemindersAccess.rawValue,
+            AppSettingsKey.aiShellCommands.rawValue
+        ]
+        for calendar in AIDataAccess.allCases {
+            for reminders in AIDataAccess.allCases {
+                for shell in [false, true] {
+                    let defaults = isolatedDefaults(suite)
+                    defaults.set(calendar.rawValue, forKey: oldKeys[0])
+                    defaults.set(reminders.rawValue, forKey: oldKeys[1])
+                    defaults.set(shell, forKey: oldKeys[2])
+                    let expected = AgentRules.migrated(
+                        calendarAccess: calendar, remindersAccess: reminders,
+                        shellCommandsEnabled: shell)
+                    let combination = "\(calendar.title) / \(reminders.title) / shell \(shell)"
+                    expect(
+                        AISettingsStore(defaults: defaults).agentRules == expected,
+                        "\(combination) migrates into the agent table")
+                    expect(
+                        oldKeys.allSatisfy { defaults.object(forKey: $0) == nil },
+                        "\(combination) leaves none of the old keys behind")
+                    let stored = defaults.data(forKey: AppSettingsKey.aiAgentRules.rawValue)
+                        .flatMap { try? JSONDecoder().decode(AgentRules.self, from: $0) }
+                    expect(stored == expected, "\(combination) is written under the new key")
+                    discardSuite(suite, defaults)
+                }
+            }
+        }
+
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == .defaults,
+            "a fresh install, with no old key to read, starts on the built-in defaults")
+
+        let store = AISettingsStore(defaults: defaults)
+        store.agentRules.set(.allow, for: .shell)
+        store.agentRules.set(.ask, for: .calendarWrite)
+        let kept = store.agentRules
+        defaults.set(AIDataAccess.readWrite.rawValue, forKey: oldKeys[0])
+        defaults.set(false, forKey: oldKeys[2])
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == kept,
+            "a stored table is kept, and an old key reappearing never migrates over it")
+    }
+
+    static func aBrokenAgentTableFallsBackToTheDefaults() {
+        let suite = "AIProviderTests.agentCorrupt"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        defaults.set(true, forKey: AppSettingsKey.aiShellCommands.rawValue)
+        defaults.set(Data("not a table".utf8), forKey: AppSettingsKey.aiAgentRules.rawValue)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules == .defaults,
+            "an unreadable table reads as the defaults, not as a migration of what is left")
+        expect(
+            defaults.object(forKey: AppSettingsKey.aiShellCommands.rawValue) != nil,
+            "and touches no old key, since no migration ran")
+
+        defaults.set(
+            Data(#"{"shell":"allow","calendarRead":"deny","shellRules":[]}"#.utf8),
+            forKey: AppSettingsKey.aiAgentRules.rawValue)
+        let older = AISettingsStore(defaults: defaults).agentRules
+        expect(
+            older.decision(for: .shell) == .allow && older.decision(for: .calendarRead) == .deny,
+            "a table stored before later rows keeps every row it has")
+        expect(
+            older.decision(for: .filesRead) == AgentRules.defaultDecision(for: .filesRead)
+                && older.decision(for: .remindersRead) == .ask
+                && older.pathRules == PathRule.seeds,
+            "and fills each row it lacks with that row's default, and the path seeds")
+    }
+
+    static func shellRulesKeepTheirOrder() {
+        let suite = "AIProviderTests.shellRules"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let store = AISettingsStore(defaults: defaults)
+        let git = ShellRule(pattern: "git *", decision: .allow)
+        let push = ShellRule(pattern: "git push*", decision: .deny)
+        let list = ShellRule(pattern: "ls", decision: .allow)
+        for rule in [git, push, list] { store.addShellRule(rule) }
+        store.moveShellRule(id: push.id, by: -1)
+        expect(
+            store.agentRules.shellRules.map(\.id) == [push.id, git.id, list.id],
+            "a rule moves up past the one above it")
+        store.moveShellRule(id: push.id, by: -1)
+        store.moveShellRule(id: list.id, by: 1)
+        expect(
+            store.agentRules.shellRules.map(\.id) == [push.id, git.id, list.id],
+            "and a rule moved past either end stays put")
+        var edited = git
+        edited.pattern = "git status*"
+        store.updateShellRule(edited)
+        store.removeShellRule(id: list.id)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.shellRules == [push, edited],
+            "edits, removals and order persist")
+        store.allowShellPattern("ls *", for: "ls -la")
+        store.allowShellPattern("git status*", for: "git status")
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.shellRules.map(\.pattern)
+                == ["git push*", "git status*", "ls *"],
+            "Always Allow persists its pattern once, without duplicating one already there")
+    }
+
+    static func pathRulesKeepTheirOrder() {
+        let suite = "AIProviderTests.pathRules"
+        let defaults = isolatedDefaults(suite)
+        defer { discardSuite(suite, defaults) }
+        let store = AISettingsStore(defaults: defaults)
+        let seeds = store.agentRules.pathRules
+        expect(!seeds.isEmpty, "a fresh table starts on the path seeds")
+        let projects = PathRule(pattern: "~/Projects/**", decision: .allow)
+        let downloads = PathRule(pattern: "~/Downloads/*", access: .read, decision: .ask)
+        store.addPathRule(projects)
+        store.addPathRule(downloads)
+        store.movePathRule(id: downloads.id, by: -1)
+        expect(
+            store.agentRules.pathRules.suffix(2).map(\.id) == [downloads.id, projects.id],
+            "a path rule moves up past the one above it")
+        store.movePathRule(id: projects.id, by: 1)
+        expect(
+            store.agentRules.pathRules.last?.id == projects.id,
+            "and one moved past the end stays put")
+        var edited = projects
+        edited.access = .write
+        store.updatePathRule(edited)
+        store.removePathRule(id: seeds[0].id)
+        expect(
+            AISettingsStore(defaults: defaults).agentRules.pathRules
+                == Array(seeds.dropFirst()) + [downloads, edited],
+            "edits, removals, order and access persist, a removed seed included")
+        let read = AgentCall.files(
+            .filesRead, paths: ["/Users/me/Projects/app/a"], homeDirectory: "/Users/me")
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        store.allowPathPattern("~/Projects/app/**", for: read)
+        let persisted = AISettingsStore(defaults: defaults).agentRules.pathRules
+        expect(
+            persisted.filter { $0.pattern == "~/Projects/app/**" }.map(\.access) == [.read],
+            "Always Allow persists a read-only pattern once")
+        expect(
+            persisted.last?.pattern == "~/Projects/app/**",
+            "placed last, since the write-only rule there never decided the read")
     }
 
     static func settingsPersistAndRepairSelections() {

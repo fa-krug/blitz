@@ -9,7 +9,9 @@ Actions**.
 ## Invariants
 
 - **`SystemActionCoordinator.runSystemAction(id:)` is the one execution funnel**, shared by palette
-  activation and a global hotkey, so no confirmation or permission gate can be bypassed. It hides the
+  activation and a global hotkey, so no confirmation or permission gate can be bypassed. The agent's
+  `runTool` is the only other, and it never reaches an action that confirms: every one is excluded
+  from the agent (see [Chat tools](#chat-tools)). It hides the
   palette (`restoreFocus: false`) before any confirmation or value dialog.
 - **The target is the app the palette covered.** With the palette closed it is the frontmost app,
   so Hide Others and Quit All act on the same window a palette launch would have.
@@ -103,6 +105,20 @@ no mute fallback: parking input gain at zero would be the one change it promises
 - **Dismiss Notifications** matches Accessibility subroles and custom actions rather than English
   labels, so it works in any UI language.
 
+## Chat tools
+
+With the System Actions category on, a chat on an API connection or the Claude command is offered
+`system_actions_list` and `system_action_run` while the agent's Run System Actions row is not Deny.
+The row, its dialog and who gets offered what are [Agent](agent.md#system-actions)'s.
+`SystemActionToolCatalog` names what the agent may never run — Restart, Shut Down, Log Out, Empty
+Trash, Quit All Applications, Eject All Disks, Toggle Bluetooth, Dismiss Notifications and Set
+Volume… — each with its reason, so neither a confirmation nor the volume slider is ever needed on
+this path. `SystemActionCoordinator.runTool` lists without a dialog, puts the action to the gate,
+then runs it through `SystemActionRunner.run` against `PaletteCoordinator.targetApp` without hiding
+the palette. Volume and mute still show the HUD and answer the level; any other feedback is
+answered in its pill's words rather than shown, and a failure goes to the model, not to a dialog.
+The microphone's pending guard applies here too.
+
 ## The launcher and the pane
 
 Each action is an `AppEntry` of kind `.systemAction` in its own launcher section, so search,
@@ -126,7 +142,9 @@ shortcut recorder (see [hotkeys.md](hotkeys.md)) and alias.
 ## Testing
 
 `Tests/system-action-test.swift` pins the catalog: every ID once, unique non-empty names and
-symbols, stable entry IDs, and which actions confirm. `Tests/volume-test.swift` pins `VolumeLevel`'s
+symbols, stable entry IDs, and which actions confirm. `Tests/mac-tool-test.swift` pins what the
+agent may run: the exclusions, every confirming action among them, refusal by id and by name, the
+listing, the schema and the answers. `Tests/volume-test.swift` pins `VolumeLevel`'s
 stepping, clamping and symbols. `Tests/microphone-mute-test.swift` compiles `MicrophoneMuteRunner`
 against module-local stand-ins for the four CoreAudio calls, so no real device is touched: mute and
 unmute, a delayed apply, a default-input switch mid-toggle, and every failure path. The runner's

@@ -8,16 +8,19 @@ struct AITool: Equatable, Sendable {
     /// What the transcript row says the tool belongs to, and what it calls the tool.
     let origin: String
     let title: String
+    /// False for a call the transcript draws its own way, as a question's card.
+    let showsCallRow: Bool
 
     init(
         name: String, description: String, parameters: JSONValue, origin: String,
-        title: String? = nil
+        title: String? = nil, showsCallRow: Bool = true
     ) {
         self.name = name
         self.description = description
         self.parameters = parameters
         self.origin = origin
         self.title = title ?? name
+        self.showsCallRow = showsCallRow
     }
 }
 

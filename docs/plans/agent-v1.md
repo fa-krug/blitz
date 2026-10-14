@@ -1,0 +1,450 @@
+# Blitz Agent — v1 plan
+
+Status: Phases 1–4 built (1, 1b, 2, 3a–3f and 4). Builds on PR #49 (web search on
+Claude routes, the shell tool). Codex is out of scope; it keeps MCP servers only.
+
+## Concept
+
+- **There is one agent.** Every conversation is a session of it, Quick AI included. It answers
+  directly, or calls the tools its rules allow. There are no profiles, so there is no `agent_id` and no
+  chat-history migration: today's chats are sessions as they are.
+- **Work happens only while a turn is processing.** A running turn already survives a closed window
+  (`AIChatSurfacesState`: "leaving never cancels it"). Once a turn is answered, nothing runs.
+- **One rule table decides every tool call**: Allow, Ask or Deny per tool, plus ordered command
+  patterns for the shell. The table replaces this PR's scattered switches: Calendar access, Reminders
+  access, the shell master switch, and the per-chat Confirm/Auto-run toggle.
+- **A session can only narrow.** The composer can switch tools off for the session or turn every
+  Allow into Ask. It can never widen past the table, and the narrowing is not stored. (Phase 1b's
+  modes replace the Ask toggle: Auto answers every Ask, Plan narrows to reads, and neither lifts a
+  Deny.)
+- **Asks are answered in Blitz, never from a notification.** A turn that waits shows a badge in the
+  sidebar and posts a notification with no actions (phase 2).
+- **Routes:** API connections run through `AIToolLoopProvider`, and the Claude command runs through
+  `ClaudeHostedServer`. Both reach the same tool runtime and the same rules. Codex keeps MCP servers
+  only. Apple Intelligence answers only.
+
+## Invariants to hold (as built, in [`docs/features/agent.md`](../features/agent.md))
+
+- **`AgentPolicy` is the whole rule, and it is pure** (Model/, harness-pinned): `(call, table,
+  session scope) → .allow | .ask | .deny`. Nothing else decides.
+- **A denied tool is never offered.** The model never sees a tool it may not call. This is today's
+  Read Only rule, generalized.
+- **Every call re-reads the table**, since Settings can change mid-reply. The decision is read again
+  after an Ask dialog closes, the way the shell tool does today.
+- **The shell matcher fails toward Ask.**
+  - A command is split on `;`, `&&`, `||`, `|`, `&` and newlines. A segment any Deny pattern matches
+    is Deny; otherwise it takes its first matching pattern, or the row's own decision when none
+    matches, and the narrowest segment decides:
+    on an Ask row every segment must match an Allow pattern, and any Deny segment denies the whole.
+  - Command substitution (`$(`, backticks, `<(`, `>(`), unbalanced quotes, heredocs, or anything the
+    splitter cannot read with confidence means Ask, never Allow.
+  - Patterns are globs over a whole segment (`git *`, `ls`, `brew list*`).
+  - A Deny row is final; within a segment a matching Deny pattern wins, and otherwise the first
+    matching pattern does, so order is the user's; the session's mode applies last and never lifts a
+    Deny. Deny patterns are a backstop, not a sandbox.
+- **The table is a capability grant.** It is excluded from backups (`SettingsBackupCoverage.
+  deliberatelyExcluded`) and has no `settings.json` key, like `aiCalendarAccess` today.
+- **The feature switches stay the ceiling.** Calendar and Reminders still need their own feature
+  switch (the macOS consent), and an MCP server still needs to be enabled. The table can never reach
+  past them.
+- **MCP trust is not copied.** The table's MCP rows read and write `MCPServer.trust` itself
+  (`.always` ↔ Allow, `.ask` ↔ Ask, `.never` ↔ Deny). "Allow This Chat" is a session grant held on
+  the chat's session scope, offered for MCP servers and for the calendar and reminders reads.
+- **Web search has no Ask.** The search runs on the provider's side, so Blitz never sees an
+  individual call. Its row is Allow or Deny, and Allow means the composer toggle is offered.
+
+## Phase 1: the rule engine (this plan's scope)
+
+### Model (pure, `Blitz/Features/AI/Model/`)
+
+| File | Holds |
+| --- | --- |
+| `AgentTool.swift` | `AgentTool`: `.shell`, `.calendarRead`, `.calendarWrite`, `.remindersRead`, `.remindersWrite`, `.webSearch`, `.mcp(slug)`. Title, glyph, and whether Ask is possible (not for `.webSearch`). The catalog's tool names map onto it. |
+| `AgentDecision.swift` | `.allow`, `.ask`, `.deny`, ordered for narrowing (`min`). |
+| `AgentRules.swift` | `Codable` table: a default per built-in tool, plus `[ShellRule]` (pattern + decision, ordered). Defaults: everything Deny except Calendar/Reminders read = Ask once their feature is on, and web search = Allow (its composer toggle stays the opt-in). Encodes to one JSON blob. |
+| `ShellCommandSegments.swift` | The conservative splitter: `segments(of:) -> [String]?`, where nil means "cannot read, Ask". |
+| `AgentPolicy.swift` | `decision(for: AgentCall, rules:, scope:) -> AgentDecision`. `AgentCall` is the tool plus its arguments (the command, for the shell). Also `offered(_ tools:, rules:, scope:)` for the offer list, and `suggestedPattern(for command:)`, the first word + ` *` that "Always Allow" proposes. |
+| `AgentSessionScope.swift` | Replaces `ChatToolScope` and `ShellCommandApproval`: `isEnabled`, `excluded: Set<AgentTool>` (MCP slugs included), `asksForEverything` (Phase 1b's `mode` replaces it). |
+
+### Service / settings
+
+- `AISettingsStore`: replace `calendarAccess`, `remindersAccess` and `shellCommandsEnabled` with
+  `agentRules: AgentRules`, stored as JSON under one new `AppSettingsKey.aiAgentRules`.
+- **One migration (explicitly requested):** when `aiAgentRules` is absent, the table is derived once
+  from the old keys, and the old keys are then removed:
+
+  | Old value | Read row | Write row |
+  | --- | --- | --- |
+  | Calendar Off / Reminders Off | Deny | Deny |
+  | Calendar Read Only / Reminders Read Only | Allow | Deny |
+  | Calendar Read & Write | Allow | Ask (it always confirmed) |
+  | Reminders Read & Write | Allow | Allow (it wrote straight away) |
+  | `aiShellCommands` on / off | shell Ask / Deny | |
+
+  This is the codebase's second migration; AGENTS.md's "carries one migration" line is updated.
+- `SettingsBackupCoverage`: exclude `aiAgentRules`; the three old keys stay listed as excluded until
+  the migration that reads them is deleted. `SettingsFileSchema`:
+  no key.
+
+### Wiring (`AIChatCoordinator`, the tool runners)
+
+- Every offer list comes from `AgentPolicy.offered`: `blitzTools()`, and the MCP tools in
+  `tools(for:scopedTo:)` and `toolServers(for:scopedTo:)`. The calendar and reminders coordinators'
+  `chatTools(now:)` stop reading `AIDataAccess`; they take the allowed tool set instead.
+- One gate, built as `AgentGateCoordinator` (owned by `AIChatCoordinator`), called by every Blitz
+  tool runner before it acts and by every MCP consent. It reads the policy. On `.ask` it queues the
+  request on the shared `AIConsentQueue` and shows Blitz's dialog, worded by `AgentPrompt`:
+  - Shell: **Run**, **Always Allow `<pattern>`** (an Allow `ShellRule`, placed so it decides that command), **Don't Run**.
+  - Calendar/Reminders reads: **Allow**, **Allow This Chat**, **Don't Allow**.
+  - Calendar/Reminders writes: **Allow** / **Don't Allow**, with the event or reminder summary.
+  - MCP: the three-way dialog, reached through the same gate.
+- `calendarCoordinator.runTool` and `remindersCoordinator.runTool` lose their own confirm and
+  access checks; the gate replaces both. Every reminder write, completion included, runs straight
+  away on Allow and asks on Ask.
+- Web search: `webSearch(for:)` also requires `rules.webSearch == .allow`. The global `aiWebSearch`
+  toggle stays as the composer's on/off memory.
+
+### UI
+
+- **Settings → AI → Agent** replaces "Personal data", "Shell" and "Chat" (its web-search switch
+  became the Web Search row; the on/off memory is the composer's globe):
+  - One row per tool with an Allow/Ask/Deny picker (`.popover` is fine in Settings).
+  - Rows whose feature is off are disabled, and the footnote says why ("Turn on Calendar first").
+  - MCP servers are listed beneath, bound to their trust.
+  - A **Shell rules** list: pattern field, decision picker, reorder, delete, add.
+  - The round cap moves here from Chat.
+- **Composer:** the tools menu becomes the session scope.
+  - Per-tool on/off for the session, MCP servers included.
+  - An **Ask for everything** toggle, which replaces the terminal Confirm/Auto-run glyph; Phase 1b's
+    mode pill replaces it in turn.
+  - The context card lists the effective decision per tool.
+- **Settings search catalog and anchors** are updated for the moved rows.
+
+### Tests
+
+- New `agent-policy-test` (registered in `Scripts/run-tests.sh`):
+  - splitter cases: operators, quotes, substitution, heredoc, empty input
+  - precedence: Deny > Allow > default, plus scope narrowing
+  - web search can never be Ask
+  - offer filtering, MCP trust mapping, and the suggested pattern
+- `shell-tool-test` and `ai-chat-test` are adjusted for the removed approval enum.
+- `settings-backup-test` and `settings-file-test` cover the new key and the removed old ones.
+- The full suite, Debug build without new warnings, lint and the Model import grep, as in AGENTS.md.
+
+### Docs
+
+- New `docs/features/agent.md` (invariants first).
+- `ai.md`: the calendar/reminders/shell bullets point at it; composer and context-card text.
+- `calendar.md` and `reminders.md` "Chat tools": access is now an agent rule.
+- `mcp.md`: trust is edited from the agent table too.
+
+### Execution (subagent-driven, in order; parallel only where the files don't overlap)
+
+1. **Model:** the six pure files plus `agent-policy-test`. No app wiring yet. *(one agent)*
+2. **Settings storage and the Agent pane:** `AISettingsStore`, keys, backup coverage, the Settings
+   UI, search catalog, and the settings harnesses. *(one agent, after 1)*
+3. **Wiring and composer:** the coordinator gate, offer lists, the calendar/reminders/shell runners,
+   the composer scope menu, the context card, and `ai-chat-test`/`shell-tool-test`. *(one agent,
+   after 1; it shares no files with 2, so it may run beside 2)*
+4. **Docs and verification:** docs, the full suite, build, lint, and a real run in the Dev build
+   (`ls` → Ask → Always Allow `ls *` → the next `ls` runs straight away). *(the parent)*
+
+## Phase 1b: modes, questions and plans (built)
+
+### Modes
+
+`AgentMode` is per session, on `AgentSessionScope`: never stored, and every new or reopened chat
+starts in Manual, as does one switched to a route with no mode picker. The composer's mode picker
+replaces the "Ask for Everything" toggle, which goes. Only a route that reaches Blitz's tools — an
+API connection or the Claude command — has the picker; Codex has none and stays in Manual.
+
+| Mode | What it does |
+| --- | --- |
+| **Manual** (default) | The rule table as written: Allow runs, Ask asks, Deny refuses. |
+| **Auto** | Every Ask is confirmed without a dialog. Deny still refuses and a denied tool is still not offered: the table stays the ceiling. |
+| **Plan** | Read-only. Offered: calendar and reminders read, web search, MCP tools whose server marks them `annotations.readOnlyHint: true`, the shell (every command asks, whatever the rules say), `ask_user`, `write_plan`. Never offered: calendar and reminders writes, other MCP tools. Each still needs its table row past Deny. |
+
+Plan mode adds an instruction for that turn: investigate read-only, ask with `ask_user` where the
+answer changes the plan, and finish by calling `write_plan`. A plan never changes anything by itself.
+
+### `ask_user`
+
+- A Blitz tool on every route that reaches Blitz's tools, in every mode, while Use Tools is on and
+  outside an `@server` turn. It has no rule row: asking the reader is never a capability.
+- Arguments: `question`, `options` (2–6 short strings), `multiSelect` (default false). A free-text
+  answer is always possible.
+- The turn pauses. The transcript shows the question with its options as chips. A chip, or text
+  typed in the composer while a question is pending, is the answer; it does not start a new turn.
+- The answer is the tool result. The question and answer are stored with the message, the way
+  searches and tool calls are, so a reopened chat shows both.
+- Stop, or deleting the chat, answers "The user did not answer." and the turn ends as stopped
+  does. As built, leaving the chat does not: the turn is parked, as any reply is, and its question
+  keeps waiting until the chat is reopened and answered.
+- As built, a second question while one waits is refused with a sentence asking the model for one
+  at a time, rather than queued.
+
+### `write_plan`
+
+- Offered only in Plan mode. Arguments: `title`, `markdown`. A second call replaces the chat's live
+  plan; as built, the earlier card stays in the transcript, folded and marked "Replaced".
+- The plan is a card in the transcript, rendered Markdown, stored with the conversation, and
+  editable from the card — the live plan only, and never while a turn runs.
+- The card offers **Execute** (switches the chat to Manual) and **Execute in Auto**. Either one sends
+  a message that carries the plan's current text and asks the agent to carry it out.
+
+### Steps (subagents, in order)
+
+1. **Model:** `AgentMode` and its policy (replacing `asksForEverything`, with a read-only MCP input),
+   the `ask_user` and `write_plan` catalogs (schemas, argument reading, results), the plan-mode
+   instruction, harness coverage.
+2. **Questions:** the pending-question state, the transcript card and the composer routing, storage,
+   Stop and leave handling, on both routes.
+3. **Modes and plans:** the composer mode picker, the plan card with editing and Execute, plan
+   storage, MCP `readOnlyHint` plumbing, the per-turn instruction.
+4. **Docs and verification:** `agent.md`, `ai.md`, the full suite, build, lint.
+
+### Known limits
+
+- On the Claude command a server is handed over in Plan only once Blitz has its tool list. One Blitz
+  has never listed is missing from the context card's Tools rows in Plan until a Plan turn lists it.
+- A server that lists no tools is listed again on every Plan turn, since an empty list reads as
+  never listed.
+
+## Phase 2: turns you can leave (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#waiting-off-screen):
+
+- **A derived wait, not a stored flag.** `AIChatState.awaiting: AgentWait?` is `.approval` while
+  an Ask request is open, `.answer` while an `ask_user` question waits, and nil whenever no turn
+  runs, so it covers questions as well as approvals.
+- **The sidebar and the menu bar.** A waiting chat's row shows a raised hand or a question bubble in
+  place of the spinner, and the menu bar icon a dot while any chat waits.
+- **Held until on screen.** An Ask dialog comes up only while its chat is on screen
+  (`AIChatCoordinator.isOnScreen`, over `ChatPresence`): the window in front on that chat with Blitz
+  active, or the palette up on Quick AI's. Otherwise the request is held on the chat, outside the
+  shared dialog queue, and released when the chat comes on screen.
+- **A notification** (`AgentNotificationPresenter`, `UNUserNotificationCenter`; macOS asks on first
+  use) for a wait that starts off screen: "Blitz is waiting for approval" or "Blitz has a question",
+  over the chat's title. It has no actions. Clicking it opens the AI Agent window on that chat, and
+  the dialog comes up. It is withdrawn when the wait ends. Settings → AI → Agent → **Notify when the
+  agent is waiting** turns it off; `aiNotifyWhenWaiting` stays out of backups and has the
+  `settings.json` key `ai.notifyWhenWaiting`.
+- **Stop and the round cap are unchanged.** Stop, deleting or clearing the chat, AI going off and the
+  turn ending any other way decline whatever still waits, exactly once.
+- **"Agent" where it reads better.** The window and its launcher command are **AI Agent** (found by
+  `chat` and `agent`), and Quick AI's menus offer **Continue in AI Agent**. Command IDs and type
+  names stay as they are.
+
+Known limits:
+
+- A wait that started on screen and was then left posts no notification; the badge and the dot
+  still show.
+- Neither an API connection nor the Claude command gives up on a held request within a day: the
+  loop holds no request open while a tool waits, and the Claude CLI (2.1.285) awaits a
+  `can_use_tool` answer with no deadline, until it is answered, the turn is interrupted or stdin
+  closes; its 5-minute dialog deadline (CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS) is for its other
+  dialogs, not permission requests. A request held inside one of Blitz's own tools rides that
+  call's MCP timeout, which Blitz sets to 24 h (`ClaudeHostedServer.callTimeoutMilliseconds`); past
+  it the CLI fails that call, while the request stays open in Blitz until answered or the turn
+  ends. Blitz's Codex client puts no timeout on an elicitation it answers and keeps the app-server
+  up while a turn runs; the app-server itself was not available to check, so whether it ever
+  abandons an elicitation is unverified. Nothing needs doing in Blitz for now.
+
+## Phase 3: toolbox (one tool group per step, each with its catalog, runner and harness)
+
+### 3a: the foundation (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#the-rule-table): every toolbox row is in
+the table now, so each later step adds only a catalog, a runner, its wire names and its dialogs.
+
+- **Rows.** `AgentTool` gained `.filesRead`, `.filesWrite`, `.webFetch`, `.openItems`,
+  `.shortcuts`, `.systemActions`, `.windowLayouts`, `.contactsRead`, `.noteRead`, `.noteWrite`,
+  `.clipboardRead`, `.snippetsRead`, `.frontmostApp`, `.selectedText` and `.currentClipboard`, each
+  with a title, glyph, `isReadOnly`, a stable storage key and an `AgentTool.Group` (Commands, Files,
+  Web, Mac, Calendar & Reminders, Personal, Context); `builtIn` is that order. Reads default to Ask,
+  everything that acts to Deny (`AgentRules.defaultDecision`).
+- **Not offered until it exists.** `AgentTool.isHosted` is true only for a row a catalog's wire name
+  maps to, and the composer's menu and context card list only hosted rows; the model's offer list
+  was already built from the catalogs. A step makes its rows offerable by adding their wire names.
+- **Tolerant decode.** `AgentRules` keeps its decisions keyed by row and decodes each row,
+  `shellRules` and `pathRules` with `decodeIfPresent ?? default`, so a stored table missing later
+  rows keeps the rest — evolution, not a migration.
+- **Ceilings.** `AgentFeatureCeiling` maps each row to its feature switch — Contacts, Notes,
+  Clipboard, Snippets or Quicklinks, Apple Shortcuts, System Actions, Window Management — and Read
+  Selected Text to the Accessibility grant; the gate and Settings both read it.
+- **Path rules.** `PathRule` (pattern, access, decision) with `~`, `*` and `**` over canonical,
+  symlink-resolved paths, matched ignoring case; Deny wins, else the first match, else the row; a
+  call with several paths takes the narrowest. `AgentCall.files(_:paths:homeDirectory:)`, Deny seeds
+  for secrets, Blitz's own folder and preferences, and `/System` writes;
+  `AgentPolicy.suggestedPathPattern` and `AgentRules.allowPath` for Always Allow. A rule's access
+  (Read & Write, Read, Write) is beyond the original sketch: `/System/**` is denied for writes only,
+  and Always Allow on a read must not allow writes there.
+- **Settings.** The Agent section groups its rows; a **Path rules** section lists and edits the
+  patterns; `AISettingsStore` adds, updates, removes, moves and Always-Allows them.
+
+### 3b: files (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#file-tools):
+
+- **Five tools.** `FileToolCatalog`: `files_list` and `files_read` under Read Files, `files_write`,
+  `files_move` and `files_trash` under Change Files; their wire names make both rows hosted. No
+  delete tool: the Trash is as far as a model can take a file.
+- **Caps.** A listing at most 500 items, recursion three levels deep; a read text only (UTF-8 or
+  UTF-16), from the first 8 MB, at most 64 KB back, with `offset` and `limit` in lines; a write at
+  most 1 MB, `create` never replacing; a move never replacing. Home, the root and a folder holding
+  home are never moved or trashed.
+- **Canonical paths.** `FileToolRunner` resolves every path with `resolvingSymlinksInPath()` —
+  for a path not there yet its deepest existing folder, for a move or the Trash the folder only, so
+  a link is moved rather than followed — before `AgentCall.files` is built, and again just before
+  acting, refusing a path that now resolves elsewhere.
+- **Dialogs.** Read: **Allow**, **Allow This Chat**, **Always Allow "`<folder>/**`"**, **Don't
+  Allow**; write, move and the Trash: the same without This Chat. Always Allow is a Read or Write
+  rule through `AISettingsStore.allowPathPattern`, offered only when every path of the call
+  proposes the same folder; for a listing, the folder itself (`suggestedPathPattern`'s `isFolder`).
+- **Decided:** a write no Allow pattern matches keeps the row's decision rather than being capped
+  at Ask. Change Files starts on Deny, and Allow on it is the reader's own word.
+
+### 3c: web fetch (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#web-fetch):
+
+- **One tool.** `WebFetchToolCatalog`: `web_fetch` under Fetch Web Pages, `url` and an optional
+  `maxCharacters` (20 000 by default, capped at 100 000); its wire name makes the row hosted, and
+  as a read Plan offers it. `http` and `https` only, no credentials in the URL, a host required.
+- **The session.** `WebFetchRunner`: a private `.ephemeral` session with `urlCache = nil`, no
+  cookies or credentials, a User-Agent naming Blitz; 15 s per request and 30 s in all, the body
+  streamed to 5 MB at most, at most five redirects, each re-checked by
+  `WebFetchToolCatalog.redirectTarget` because the session declines them all.
+- **Readable text.** `HTMLTextEngine`: scripts, styles, `noscript`, `svg`, `template`, `math`, the
+  head and comments dropped, the title kept, blocks as line breaks, list items as "- ", links as
+  "text (absolute URL)", entities decoded, whitespace collapsed. Other text types pass through;
+  everything else is refused naming the type. Charset from the header, then `<meta>`, then UTF-8
+  with a lossy fallback. The answer starts with the final URL, the status and the title.
+- **The local network always asks.** `LocalNetworkPolicy` classifies the host by its spelling;
+  `AgentCall.webFetch(isLocalNetwork:)` is held at `min(decision, Ask)` after the mode, so an Allow
+  row, a chat grant and Auto all still ask, and its dialog has no Allow This Chat.
+- **Decided:** a redirect into the local network is refused with a sentence rather than asked
+  again, except on the host the user allowed; the model may fetch that URL itself, which asks.
+  DNS is not resolved to catch a public name pointing at a private address — a known limit, since
+  resolving first would not hold against rebinding either. No domain rules or Always Allow yet;
+  they can come later.
+
+### 3d: sessions & archive (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#session-tools) and
+[`docs/features/ai.md`](../features/ai.md#ai-agent):
+
+- **Archive, for the reader.** `chat_archive` beside `conversations`, `CREATE TABLE IF NOT EXISTS`
+  with `ON DELETE CASCADE`, so no migration. The sidebar, ⌃⇥, Quick AI's Chat History and its open
+  policy leave archived chats out; an **Archived** row with the count at the foot of the window's
+  sidebar opens them, with the same search, Unarchive and Delete. Archive is in the sidebar's
+  context menu and the ⌘K menu; archiving the open chat starts a new one, as Delete does.
+- **Decided:** a pinned chat cannot be archived (unpin first), so archiving never quietly exposes
+  a kept chat to retention, which still prunes archived chats. A chat whose reply is still
+  arriving cannot be archived rather than being stopped first: archive never cuts a reply short.
+  Opening an archived chat, or any new turn in it, unarchives it, so an archived chat is never
+  live on a surface. Delete All Chats keeps archived chats, as it keeps pinned ones.
+- **Two rows, group Sessions.** `.sessionsRead` (Read Other Chats: `sessions_list`,
+  `sessions_read`), read-only, Ask by default, allowable for the chat and offered in Plan;
+  `.sessionsArchive` (Archive Chats: `sessions_archive`, `sessions_unarchive`), Deny by default,
+  asked each time, never in Plan. No ceiling beyond AI itself.
+- **Never this chat**, never a chat answering, open on a surface or pinned for archiving; each
+  refused with a sentence and no dialog, as is an unknown id. A transcript comes back 64 KB at a
+  time, one line per search, tool call, question and plan, with "Read on with fromMessage N".
+- **Off-main where it can be.** `ChatHistoryStore` is `@MainActor`, so the chat is loaded there,
+  as opening it does; the listing and the transcript are written in `Task.detached`.
+
+### 3e: Mac actions (built)
+
+- **Seven tools over the four Mac rows.** `mac_open` (Open Apps, Files and Links): an app by name
+  or bundle id from the launcher's index, a path, or an `http`, `https` or `mailto` link;
+  `shortcuts_list` and `shortcuts_run` (Run Shortcuts), with optional text input and the output read
+  back; `system_actions_list` and `system_action_run` (Run System Actions);
+  `window_layouts_list` and `window_layout_apply` (Apply Window Layouts). Each catalog lives in its
+  feature's `Model/` (`OpenToolCatalog` in AI's) and each run goes through the feature's
+  coordinator; `mac-tool-test` pins them. See [Agent](../features/agent.md#mac-tools).
+- **Decided:** every Mac row is Deny by default, never read-only, never allowed for the chat; a
+  listing answers without a dialog whenever its row is not Deny, since it changes nothing; only
+  running asks.
+- **Decided:** an open's path is weighed as a read with every link resolved, so the Deny seeds
+  apply, but path rules only narrow it: an Allow written for reading never lifts an open. Scripts,
+  installers, link files and extensionless programs are refused, and every scheme but `http`,
+  `https` and `mailto`. There is no app-listing tool.
+- **Decided:** the agent never runs Restart, Shut Down, Log Out, Empty Trash, Quit All
+  Applications, Eject All Disks, Toggle Bluetooth, Dismiss Notifications or Set Volume…, which end
+  the session, lose something, cannot be undone from the Mac, or need a dialog of their own. Every
+  action that confirms in the launcher is among them.
+- **Decided:** window layouts only — no single-window move, since the frontmost window is the chat.
+  Accessibility is checked, never prompted for.
+
+### 3f: personal data and context (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#personal-and-context-tools):
+
+- **Ten tools over the eight rows.** `contacts_search` (Read Contacts), `note_read` (Read the
+  Note), `note_append` (Add to the Note), `clipboard_history` (Read Clipboard History),
+  `snippets_list`, `snippets_read` and `quicklinks_list` (Read Snippets and Quicklinks), and
+  `context_frontmost_app`, `context_selected_text` and `context_clipboard` (the Context rows). Each
+  catalog lives in its feature's `Model/` (`ContextToolCatalog` in AI's) and each run goes through
+  the feature's coordinator, or `ContextToolRunner` for the context rows; `personal-tool-test`
+  pins them. Every row is now hosted.
+- **Decided:** every read asks by default, may be allowed for the chat and is offered in Plan; Add
+  to the Note is Deny by default, asked every time and never in Plan. Each context row is a tool
+  under the same rules, never pushed into a turn by itself.
+- **Decided:** a contact search fetches only company, phones, emails, postal addresses and
+  birthday besides the name; the note and the image keys are never asked for. Clipboard history is
+  the resident 1000 entries and the pins, minus anything an app on the ignore list copied, even
+  before it was added; images come back as their pixel size only. The current clipboard refuses a
+  copy marked concealed, transient or sensitive before reading it, sharing
+  `PasteboardSensitivity` with capture, and refuses a clipboard that changed while asking.
+- **Decided:** the note tools act on the active note, and an addition goes on its own line at the
+  end, through the open editor as one undoable edit when there is one. Snippets are read as
+  templates, never expanded; a disabled snippet or quicklink is never listed; each half of the
+  shared row is offered only while its own feature is on.
+- **Decided:** "the frontmost app" is the reader's, never Blitz: `ExternalAppMonitor` keeps the
+  last app other than Blitz to become active, so a chat in the AI Agent window reads the app left
+  to type in it. The selection is read through Accessibility only, never a borrowed ⌘C, and
+  Accessibility is checked, never prompted for.
+
+Phase 3 is complete.
+
+## Phase 4: memory (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#memory):
+
+- **Two rows in a Memory group.** Read Memory (`.memoryRead`) is Allow or Deny only — it has no
+  call to stop, so no Ask and no wire name — and starts on Allow; Change Memory (`.memoryWrite`)
+  covers `memory_remember` and `memory_forget`, starts on Ask, and is not read-only, so Plan never
+  offers it. Tolerant decoding gives a stored table both defaults.
+- **Decided: no Allow This Chat for Change Memory.** Remembering is small, but one remembered
+  sentence rides every later chat, so a page read in one chat must not be able to plant several
+  behind a single answer. Each call asks, as every other write does; the row on Allow, or Auto, is
+  the way to skip the dialog.
+- **Decided: a dedicated store, not a table in the history database.** `AgentMemoryStore` keeps
+  `agent-memory.json` beside `ai-chats.sqlite3`. `ChatHistoryStore`'s lifecycle — Delete All
+  Chats, retention's prune and `VACUUM`, the handle closed with AI off — is the transcripts', and a
+  memory outlives every chat; a second owner on one SQLite file would split that, and 12 KB needs
+  no SQL. Ids are integers from a counter that only grows (`m3`), so one the model saw never names
+  a later memory. `sourceConversation` is informational. At most 100 memories, 500 characters
+  each and 12 KB in all; past that `memory_remember` is refused, asking for something to be
+  forgotten first, and an identical memory, case and whitespace aside, is answered as already
+  remembered without a dialog.
+- **Decided: the instructions are the read path; there is no `memory_list`.** While Read Memory is
+  Allow and something is remembered, every turn's instructions carry the memories, oldest first,
+  each with its id, after the preamble and prompt and before a mode's instruction — on every
+  route, with Use Tools off and in Plan too. Apple Intelligence carries the newest that fit 1 500
+  bytes. Codex starts a new thread when the instructions change, accepted.
+- **Decided: a per-chat Use Memory.** The tools menu holds it, on by default and never stored,
+  while Read Memory is Allow; it costs one switch on the scope (`usesMemory`). A route that cannot
+  call tools shows that menu disabled, so there the Settings row is the only switch.
+- **Settings → AI → Memory** lists the memories newest first with inline edit and Forget, Add
+  Memory and Forget All… through Blitz's confirmation; the context card counts the memories a turn
+  carries. Neither a backup nor `settings.json` carries any of it; the two rows live in the rule
+  table, already excluded. `memory-test` and `agent-policy-test` pin it.
+
+## Decided
+
+1. Calendar and Reminders access are migrated, as in the table above.
+2. Built-in defaults: everything Deny; calendar/reminders read = Ask once their feature is on; web
+   search = Allow, since its composer toggle is the opt-in.
+3. "Always Allow" never proposes a pattern for `rm`, `sudo`, `curl` and the rest of the built-in list.

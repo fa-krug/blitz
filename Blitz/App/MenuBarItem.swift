@@ -1,13 +1,43 @@
 import SwiftUI
 
-/// Blitz's own menu-bar item. It carries no feature state, so no feature can hide or reshape it.
+/// Blitz's own menu-bar item. A waiting agent's dot is the one thing a feature may add to it.
 struct MenuBarLabel: View {
     let appName: String
 
     var body: some View {
-        Image("MenuBarIcon")
-            .accessibilityLabel(appName)
+        // Read through Observation, so the dot comes and goes as a chat starts and stops waiting.
+        if AppCore.shared.aiChats.isAnyWaiting {
+            Image(nsImage: MenuBarIcon.waiting)
+                .accessibilityLabel("\(appName), the agent is waiting")
+        } else {
+            Image("MenuBarIcon")
+                .accessibilityLabel(appName)
+        }
     }
+}
+
+/// The bolt with a dot cut into its corner; still a template, so the bar tints both alike.
+@MainActor
+private enum MenuBarIcon {
+    private nonisolated static let dotDiameter: CGFloat = 5
+    private nonisolated static let dotGap: CGFloat = 1.5
+
+    static let waiting: NSImage = {
+        let size = NSImage(named: "MenuBarIcon")?.size ?? NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSImage(named: "MenuBarIcon")?.draw(in: rect)
+            let dot = NSRect(
+                x: rect.maxX - dotDiameter, y: rect.maxY - dotDiameter,
+                width: dotDiameter, height: dotDiameter)
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: dot.insetBy(dx: -dotGap, dy: -dotGap)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
 }
 
 struct MenuBarMenu: View {

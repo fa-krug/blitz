@@ -59,7 +59,7 @@ enum CommandID: String, CaseIterable, Sendable {
     var name: String {
         switch self {
         case .quickAI: return "Quick AI"
-        case .aiChat: return "AI Chat"
+        case .aiChat: return "AI Agent"
         case .fixGrammar: return BuiltInQuickAction.fixGrammar.title
         case .rewrite: return BuiltInQuickAction.rewrite.title
         case .translate: return BuiltInQuickAction.translate.title
@@ -196,7 +196,7 @@ enum CommandID: String, CaseIterable, Sendable {
     var boostedTerms: Set<String> {
         switch self {
         case .quickAI: ["ai"]
-        case .aiChat: ["chat"]
+        case .aiChat: ["chat", "agent"]
         default: []
         }
     }

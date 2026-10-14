@@ -12,6 +12,9 @@ final class AIChatSurfacesState {
     /// Window conversations left mid-reply; each saves itself when its reply ends.
     private var answeringElsewhere: [UUID: AIChatState] = [:]
 
+    /// Each live chat's wait as `AIChatCoordinator` last read it, written only when one changes.
+    var waits: [UUID: AgentWait] = [:]
+
     private let history: ChatHistoryStore
 
     /// Handed to every state, so a chat that finishes its first answer can be named wherever it is.
@@ -35,6 +38,8 @@ final class AIChatSurfacesState {
         return state
     }
 
+    var isAnyWaiting: Bool { !waits.isEmpty }
+
     /// Conversations with a reply still arriving, wherever they are shown.
     var answeringIDs: Set<UUID> {
         Set(live.filter(\.isStreaming).map(\.session.id))
@@ -43,6 +48,13 @@ final class AIChatSurfacesState {
     /// Whoever holds `id` right now, so a second surface never edits the same transcript.
     func holder(of id: UUID) -> AIChatState? {
         live.first { $0.holds(id) }
+    }
+
+    /// Nil for a chat left answering while another took the window: no surface shows it.
+    func surface(of chat: AIChatState) -> ChatPresence.Surface? {
+        if chat === window { return .window }
+        if chat === quickAI { return .quickAI }
+        return nil
     }
 
     // MARK: - The window
@@ -112,9 +124,21 @@ final class AIChatSurfacesState {
         answeringElsewhere[id] = nil
     }
 
+    /// Never a reply still arriving; whoever shows the chat starts a new one, as a delete does.
+    @discardableResult
+    func archive(id: UUID) -> Bool {
+        let holder = holder(of: id)
+        guard holder?.isStreaming != true, history.archive(id) else { return false }
+        holder?.startNewChat()
+        return true
+    }
+
     /// Every doomed reply is cancelled before the clear: a cancel saves, which would bring it back.
     func deleteAll() {
-        let doomed = live.filter { history.conversation(id: $0.session.id)?.isPinned != true }
+        let doomed = live.filter { state in
+            let kept = history.conversation(id: state.session.id)
+            return kept?.isPinned != true && kept?.isArchived != true
+        }
         for state in doomed { state.cancel() }
         history.clearAll()
         for state in doomed { state.startNewChat() }

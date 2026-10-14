@@ -388,6 +388,9 @@ and every shortcut stays editable afterwards.
   the entry `AppIndex` publishes, and dimmed while that entry is hidden from the launcher. Window
   commands deliberately get **no** launcher-category pane of their own — they are managed inside
   Settings › Window Management, the same call already made for snippets.
+- **The agent** applies saved layouts only ([Window Layouts](window-layouts.md#chat-tools)), under
+  this switch. No window command or custom size is a chat tool: they act on the frontmost window,
+  which while the agent runs is usually the chat itself.
 
 ## Testing
 

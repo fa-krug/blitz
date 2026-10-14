@@ -12,8 +12,8 @@ final class AIChatState {
     private(set) var pendingAttachments: [ChatAttachment] = []
     /// The window's unsent text; Quick AI's lives in the palette query instead.
     var draft = ""
-    /// This chat's tools menu; a new chat starts with every connected server on.
-    var toolScope = ChatToolScope()
+    /// The composer's tools menu, read as each call arrives; a new or reopened chat starts open.
+    var agentScope = AgentSessionScope()
 
     /// Every path that consumes or drops the staged images moves this on, so a late decode knows
     @ObservationIgnored private(set) var stagingGeneration = 0
@@ -30,6 +30,20 @@ final class AIChatState {
     @ObservationIgnored var onReplyFinished: (@MainActor (AIChatState) -> Void)?
     @ObservationIgnored private var flushTask: Task<Void, Never>?
     @ObservationIgnored private var lastFlush = ContinuousClock().now
+    /// The `ask_user` call the turn is paused on; whoever ends the wait resumes it, exactly once.
+    @ObservationIgnored private var questionWaiter: QuestionWaiter?
+
+    /// The turn's Ask requests; a held one resumes true once on screen, false once its turn ends.
+    @ObservationIgnored private var approvalWaiters = AgentApprovals<ApprovalWaiter>()
+    /// How many Ask requests are open, kept beside the waiters so only the count is observed.
+    private var pendingApprovals = 0
+
+    private typealias ApprovalWaiter = CheckedContinuation<Bool, Never>
+
+    private struct QuestionWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<ChatQuestion.Answer, Never>
+    }
 
     private static let flushInterval: Duration = .milliseconds(40)
 
@@ -155,6 +169,8 @@ final class AIChatState {
     }
 
     func cancel() {
+        resolveQuestion(with: .none)
+        endApprovals()
         replyGeneration += 1
         replyTask?.cancel()
         replyTask = nil
@@ -170,6 +186,7 @@ final class AIChatState {
         session = ChatSession()
         notice = nil
         clearStaging()
+        agentScope = AgentSessionScope()
     }
 
     /// Staged images belong to the conversation they were picked in; leaving it drops them.
@@ -181,6 +198,7 @@ final class AIChatState {
         session = loaded
         notice = nil
         clearStaging()
+        agentScope = AgentSessionScope()
         return true
     }
 
@@ -190,8 +208,158 @@ final class AIChatState {
             session = ChatSession()
             notice = nil
             clearStaging()
+            agentScope = AgentSessionScope()
         }
         history.remove(id: id)
+    }
+
+    // MARK: - Questions
+
+    /// The question this chat's turn is paused on; the card and the composer both answer it.
+    var pendingQuestion: ChatQuestion? {
+        guard isStreaming, let last = session.messages.last, last.role == .assistant else {
+            return nil
+        }
+        return last.pendingQuestion
+    }
+
+    /// Nil refuses a second question while one is waiting; a turn already over answers `.none`.
+    func ask(_ question: AskUserToolCatalog.Question) async -> ChatQuestion.Answer? {
+        let unanswered = ChatQuestion.Answer.none
+        guard isStreaming, !Task.isCancelled else { return unanswered }
+        guard questionWaiter == nil else { return nil }
+        flushPendingText()
+        guard var message = session.messages.last, message.role == .assistant else {
+            return unanswered
+        }
+        isThinking = false
+        message.questions.append(
+            ChatQuestion(
+                question: question, textOffset: message.text.count,
+                sequence: message.nextSequence))
+        session.replaceLast(with: message)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                questionWaiter = QuestionWaiter(id: question.id, continuation: continuation)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resolveQuestion(with: .none, id: question.id) }
+        }
+    }
+
+    func toggleQuestionOption(_ option: Int) {
+        guard pendingQuestion != nil, var message = session.messages.last,
+            let index = message.questions.lastIndex(where: \.isPending)
+        else { return }
+        message.questions[index].toggle(option)
+        session.replaceLast(with: message)
+    }
+
+    /// False when there is nothing to answer, or nothing yet to answer it with.
+    @discardableResult
+    func answerQuestion(_ answer: ChatQuestion.Answer?) -> Bool {
+        guard let answer, questionWaiter != nil else { return false }
+        resolveQuestion(with: answer)
+        return true
+    }
+
+    /// The one way a wait ends, whoever ends it; a later answer finds nothing left to resume.
+    private func resolveQuestion(with answer: ChatQuestion.Answer, id: UUID? = nil) {
+        guard let waiter = questionWaiter, id == nil || id == waiter.id else { return }
+        questionWaiter = nil
+        if var message = session.messages.last,
+            let index = message.questions.lastIndex(where: { $0.question.id == waiter.id })
+        {
+            message.questions[index].answer = answer
+            message.questions[index].picked = []
+            session.replaceLast(with: message)
+        }
+        waiter.continuation.resume(returning: answer)
+    }
+
+    // MARK: - Approvals
+
+    /// What the running turn waits on the reader for; derived, so it can never outlive the turn.
+    var awaiting: AgentWait? {
+        AgentWait.of(
+            isStreaming: isStreaming, pendingApprovals: pendingApprovals,
+            hasQuestion: pendingQuestion != nil)
+    }
+
+    var hasHeldApprovals: Bool { approvalWaiters.hasHeld }
+
+    func beginApproval() -> UUID {
+        defer { pendingApprovals = approvalWaiters.count }
+        return approvalWaiters.begin()
+    }
+
+    func isApprovalPending(_ id: UUID) -> Bool {
+        approvalWaiters.isPending(id)
+    }
+
+    func endApproval(_ id: UUID) {
+        approvalWaiters.end(id)?.resume(returning: false)
+        pendingApprovals = approvalWaiters.count
+    }
+
+    /// True once the chat is on screen to ask in; false when the request ended while it waited.
+    func holdApproval(_ id: UUID) async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if !approvalWaiters.hold(id, continuation) { continuation.resume(returning: false) }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.approvalWaiters.unhold(id)?.resume(returning: false)
+            }
+        }
+    }
+
+    /// The chat came on screen: each held request goes on to its dialog, oldest first.
+    func releaseApprovals() {
+        for waiter in approvalWaiters.release() { waiter.resume(returning: true) }
+    }
+
+    /// Stop, delete, clear or a turn ending: whatever was still asking is declined.
+    private func endApprovals() {
+        let held = approvalWaiters.endAll()
+        pendingApprovals = 0
+        for waiter in held { waiter.resume(returning: false) }
+    }
+
+    // MARK: - Plans
+
+    /// Pinned where the reply wrote it; false once the turn is over and nobody reads the result.
+    @discardableResult
+    func writePlan(_ plan: ChatPlan) -> Bool {
+        guard isStreaming else { return false }
+        flushPendingText()
+        guard var message = session.messages.last, message.role == .assistant else { return false }
+        isThinking = false
+        message.plans.append(
+            ChatWrittenPlan(
+                plan: plan, textOffset: message.text.count, sequence: message.nextSequence))
+        session.replaceLast(with: message)
+        return true
+    }
+
+    enum PlanEdit: Equatable {
+        case refused
+        case saved
+        /// The store took nothing, so the chat keeps the plan it had rather than one never saved.
+        case unsaved
+    }
+
+    /// Never mid-turn: the turn may still be writing the plan this edit would land on.
+    @discardableResult
+    func editPlan(markdown: String, now: Date = Date()) -> PlanEdit {
+        let markdown = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isStreaming, !markdown.isEmpty,
+            let edited = session.editedLivePlan(markdown: markdown, at: now)
+        else { return .refused }
+        guard history.savePlan(edited.written, messageID: edited.messageID) else { return .unsaved }
+        session.replacePlan(edited.written, in: edited.messageID)
+        return .saved
     }
 
     /// The latest reply's report, so a reopened chat still knows what its last turn cost.
@@ -260,6 +428,9 @@ final class AIChatState {
             session.replaceLast(with: message)
         case .toolCallRequested:
             break
+        case .barrier(let barrier):
+            flushPendingText()
+            barrier.pass()
         case .usage(let usage):
             guard var message = session.messages.last, message.role == .assistant else { return }
             message.usage = usage
@@ -315,12 +486,15 @@ final class AIChatState {
     }
 
     private func finishLast(state: ChatMessage.State, fallback: String) {
+        // However the turn ended, nobody is left to read an answer given after it.
+        resolveQuestion(with: .none)
+        endApprovals()
         flushPendingText()
         discardPendingText()
         guard var message = session.messages.last, message.role == .assistant else { return }
         if state == .failed, !message.text.isEmpty {
             message.text += "\n\n\(fallback)"
-        } else if message.text.isEmpty {
+        } else if message.text.isEmpty, state != .complete || message.plans.isEmpty {
             message.text = fallback
         }
         message.state = state

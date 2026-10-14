@@ -41,8 +41,8 @@ enum ReminderToolCatalog {
         [listName, createName, updateName, completeName].contains(name)
     }
 
-    /// Writing is offered only where the reader allowed it, so a read-only model never sees it.
-    static func tools(canWrite: Bool, now: Date, calendar: Calendar) -> [AITool] {
+    /// Each half is offered only where the agent's rules allow it, so a model never sees the rest.
+    static func tools(canRead: Bool, canWrite: Bool, now: Date, calendar: Calendar) -> [AITool] {
         let now = AIToolDate.describeNow(now, calendar: calendar)
         let list = AITool(
             name: listName,
@@ -52,7 +52,8 @@ enum ReminderToolCatalog {
                 "query": AIToolJSON.string("Optional text to find in the title, notes or list name.")
             ]),
             origin: origin, title: "List Reminders")
-        guard canWrite else { return [list] }
+        let reads = canRead ? [list] : []
+        guard canWrite else { return reads }
         let create = AITool(
             name: createName,
             description: "Add a reminder to the user's default list, in the user's local time. "
@@ -85,11 +86,11 @@ enum ReminderToolCatalog {
         let complete = AITool(
             name: completeName,
             description: "Mark one open reminder as completed, by the id \(listName) gave it. "
-                + "The user confirms first.",
+                + "The user may be asked to confirm, and may decline.",
             parameters: AIToolJSON.object(
                 properties: ["id": AIToolJSON.string("The reminder's id.")], required: ["id"]),
             origin: origin, title: "Complete Reminder")
-        return [list, create, update, complete]
+        return reads + [create, update, complete]
     }
 
     static func request(
@@ -171,6 +172,15 @@ enum ReminderToolCatalog {
             record["notes"] = .string(AIToolJSON.clipped(notes, to: maxNotesLength))
         }
         return AIToolJSON.text(.object(["saved": .object(record)]))
+    }
+
+    // MARK: - Confirmation
+
+    /// The dialog's line under the title: when it is due, then the notes, clipped as for the model.
+    static func summary(of draft: ReminderDraft, now: Date, calendar: Calendar) -> String {
+        let due = draft.due.map { "Due \($0.title(now: now, calendar: calendar))" } ?? "No due date"
+        guard let notes = draft.trimmedNotes else { return due }
+        return "\(due)\n\(AIToolJSON.clipped(notes, to: maxNotesLength))"
     }
 }
 

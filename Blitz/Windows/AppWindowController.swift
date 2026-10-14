@@ -101,6 +101,12 @@ final class AppWindowController: NSObject, NSWindowDelegate {
     /// Nil while closed, kept or not; what a sibling window cascades from.
     var frame: NSRect? { isShown ? window?.frame : nil }
 
+    /// Open, not minimized, and not wholly covered or on another Space.
+    var isOnScreen: Bool {
+        guard let window, isShown, !window.isMiniaturized else { return false }
+        return window.isVisible && window.occlusionState.contains(.visible)
+    }
+
     /// The title bar sits inside the frame but outside the layout area, so it is added back.
     func fitContent(width: CGFloat, height: CGFloat) {
         guard let window else { return }

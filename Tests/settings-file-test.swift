@@ -56,12 +56,17 @@ struct SettingsFileTest {
             "snippets.enabled", "extensions.enabled", "calendar.enabled",
             "calendar.autoJoinMeetings", "calendar.cameraPreview", "quickActions.enabled",
             "ai.mcpEnabled", "mcp.enabled", "clipboard.textSearchEnabled", "ai.calendarAccess",
-            "ai.remindersAccess", "fileSearch.screenshotTextSearch",
+            "ai.remindersAccess", "ai.shellCommands", "ai.shellCommandsEnabled", "ai.agentRules",
+            "ai.agent", "agent.rules",
+            "fileSearch.screenshotTextSearch",
             "fileSearch.screenshotTextSearchEnabled"
         ]
         check(
             "no capability grant has a settings.json key",
             grantPaths.allSatisfy { SettingsFileKey(rawValue: $0) == nil })
+        check(
+            "the waiting notification is an ordinary preference, so the file carries it",
+            SettingsFileKey(rawValue: "ai.notifyWhenWaiting") == .aiNotifyWhenWaiting)
     }
 
     // MARK: - Values

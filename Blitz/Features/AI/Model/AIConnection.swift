@@ -98,7 +98,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
             images: provider != .openRouter || visionModels.contains(model),
             // Only the two shapes whose bodies Blitz writes; a gateway bills the upload first.
             documents: provider == .openAI || provider == .anthropic,
-            webSearch: provider == .openRouter, tools: true)
+            webSearch: provider == .openRouter || provider == .anthropic, tools: true)
     }
 }
 
@@ -117,7 +117,7 @@ struct AIModelCapabilities: Equatable, Sendable {
         images: true, documents: false, webSearch: true, tools: true)
     /// Pictures ride in its stream-json input; its own client runs Blitz's MCP servers.
     static let claudeCommand = AIModelCapabilities(
-        images: true, documents: false, webSearch: false, tools: true)
+        images: true, documents: false, webSearch: true, tools: true)
     /// The on-device model is text-only and reaches nothing, so it offers none of the three.
     static let appleIntelligence = AIModelCapabilities.none
 }

@@ -95,17 +95,17 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
 | the palette shell and shared views | `palette-*`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
-| clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test` |
+| clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
 | navigation | `menu-search-test`, `window-switch-test` |
-| window management, layouts and rooms | `window-*`, `space-gesture-test` |
-| calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test` |
+| window management, layouts and rooms | `window-*`, `space-gesture-test`, `mac-tool-test` |
+| calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test`, `personal-tool-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
 | hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
-| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test` |
-| notes and snippets | `notes-*`, `snippets-test` |
-| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `custom-command-test`, `uninstall-test` |
-| AI, Quick Actions and MCP | `ai-*`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
+| system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
+| notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-test` |
+| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
 | updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
@@ -403,6 +403,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   or double-pressing it fast never pastes one entry twice
 - A text, link, image and file row each drag into another app; a click still selects, a double
   click still pastes, and a right click still opens ⌘K
+- With Read Clipboard History on Ask, a chat asking what you copied lists text, images by size and
+  files by path, newest first; nothing copied in an app on the ignore list appears
 
 ### Launcher and icons
 
@@ -472,6 +474,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Browser Tab** fills it from whichever browser window is frontmost
 - Tags show as chips, match in the search field, and ⌘P filters by one; the ⌘K Open With section
   opens once in the chosen app without changing the saved one
+- With Read Snippets and Quicklinks on Ask, a chat listing your quicklinks shows each template with
+  its placeholders unfilled and opens nothing; with Quicklinks off it is not offered
 
 ### Apple Shortcuts
 
@@ -482,6 +486,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Unchecking a row hides it from search, and its hotkey still fires
 - Deleting a shortcut in Shortcuts frees its alias and hotkey on the next launcher open
 - A shortcut that fails shows Blitz's dialog with the tool's error
+- With Run Shortcuts on Ask, a chat running a shortcut with text asks, showing the input, and reads
+  back what it returned; Stop while it runs ends the `shortcuts` tool
 
 ### File Search
 
@@ -558,6 +564,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Pasting a URL over selected text makes a link; pasting anything else is plain text
 - Copy from a rendered line pastes raw Markdown into another app; a snippet keyword expands inside a
   rendered note and is styled at once
+- With Add to the Note on Ask, a chat adding a line to the open note asks with the text, lands it
+  on a new line at the end with the caret left alone, and ⌘Z takes it back out
 - The derived title of an Untitled note shows no Markdown markers
 - A narrow window wraps list items under their text, not under the marker
 - A bullet, task or numbered item whose first word is wider than the window keeps a whole marker on
@@ -626,6 +634,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
   expands to nothing
 - `{calculator expression="2 * 21"}` expands to `42`, in the calculator's number format
+- With Read Snippets and Quicklinks on Ask, a chat reading a snippet gets its template with
+  `{clipboard}` unfilled; a disabled snippet is never listed
 
 ### Calculator and currency
 
@@ -760,6 +770,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Contacts and ⌘↵ calls; Remove from Launcher Search, or its checkbox in Settings ▸ Contacts, takes
   it out again
 - Export with Contacts on, import onto a clean profile: it comes back **off**, with nothing marked
+- With Read Contacts on Ask, a chat searching for a name asks with the query, and the answer has
+  the card's numbers, addresses and birthday but never its note
 
 ### Navigation
 
@@ -791,6 +803,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Microphone Muted / Unmuted, silences and restores captured input, and leaves input gain and output
   untouched; switch the default input and repeat
 - Holding a bound hotkey does **not** stack dialogs
+- A chat asked to empty the Trash, restart or turn Bluetooth off says it cannot, with no dialog;
+  with Run System Actions on Ask, Lock Screen asks first and locks, and Quick AI's palette stays up
+  for a volume change
 - Lock Screen locks from a global hotkey with the palette closed, including a Hyper-key binding
 - Window commands move the window you were last in; cycle-on-repeat steps ½ → ⅓ → ⅔
 - "Top Half" lands flush with the top of the visible frame, on a secondary display too
@@ -810,10 +825,15 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 ### Quick AI and Quick Actions
 
-- With AI off, Quick AI and AI Chat are absent and Tab rings past Quick AI; with it on, Tab from a
+- With AI off, Quick AI and AI Agent are absent and Tab rings past Quick AI; with it on, Tab from a
   typed query asks it and the answer streams in place
-- ⌘J hands the conversation to the AI Chat window with its reply intact, and Quick AI then starts
+- ⌘J hands the conversation to the AI Agent window with its reply intact, and Quick AI then starts
   fresh
+- A chat left waiting on an Ask shows no dialog; its sidebar row shows the raised hand, the menu bar
+  icon a dot, and clicking the notification brings the window up on it with the dialog; the full
+  list is in [agent.md](features/agent.md#manual-sweep)
+- A sentence the agent was allowed to remember is in Settings → AI → Memory and in the next chat's
+  context card; Forget All… asks first
 - Quick Actions are off out of the box; enabling asks with Blitz's dialog, then Accessibility
 - Fix Grammar on a selection in another app replaces it, with the `Fixing Grammar…` pill while the
   model works; the full list is in [quick-actions.md](features/quick-actions.md#manual-sweep)

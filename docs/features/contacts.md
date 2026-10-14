@@ -16,9 +16,10 @@ email or open in Contacts; the same list is a **fallback** for any launcher quer
   once, because access revoked in System Settings announces nothing. A sync posts changes in bursts,
   so a change that lands while a read is in flight queues **one** more read rather than starting
   another.
-- **The read is the only thing off main.** The whole book is enumerated in a `nonisolated static`
+- **Reads are the only thing off main.** The whole book is enumerated in a `nonisolated static`
   function driven by `Task.detached`, on a `CNContactStore` of its own, and flattened to `ContactItem`
-  there; nothing Contacts-shaped leaves `ContactsStore`. Writes stay on the main actor, like
+  there — as a chat search's few cards are to `ContactToolCatalog.Card` — so nothing Contacts-shaped
+  leaves `ContactsStore`. Writes stay on the main actor, like
   `RemindersStore`'s.
 - **`ContactDirectory` is the one place that orders, buckets and searches.** The screen's `rows` and
   the drawn list both come from it — `matching` keeps the store's sorted order and `grouping` cuts
@@ -42,6 +43,8 @@ email or open in Contacts; the same list is a **fallback** for any launcher quer
   search: every word must hit a name, the company or an address, and a query that reads as a number
   matches phone digits with formatting and a trunk `0` ignored, so `0151 234` finds `+49 151 234…`.
 - **`ContactLink`** — the `tel:` and `mailto:` URLs; a stored value never reaches a handler raw.
+- **`ContactToolCatalog`** — the chat's `contacts_search`: its schema, the reading of a call, the
+  keys a search may fetch, and the JSON answer. See [Chat tools](#chat-tools).
 
 ## Search Contacts
 
@@ -84,6 +87,22 @@ the list already narrowed to `greg`. See [launcher.md](launcher.md#fallbacks).
 | Command | Does | Bindable |
 | --- | --- | --- |
 | Search Contacts | Opens the `.contacts` palette mode. | yes |
+
+## Chat tools
+
+With Contacts on, a chat on an API connection or the Claude command is offered `contacts_search`
+while the agent's Read Contacts row is not Deny. The row, its dialog and who gets offered what are
+[Agent](agent.md#personal-and-context-tools)'s; `ContactsCoordinator.runTool` reads the call, asks
+the gate, and only then searches.
+
+A search is `ContactDirectory.matching` over the store's snapshot — the same words, numbers and
+fields Search Contacts matches — and the first `limit` matches (10 by default, at most 25) are read
+again, off main, by `ContactsStore.toolCards`: the formatted name, company, labelled emails and
+phones, postal addresses on one line each, and the birthday. `ContactToolCatalog.fetchedKeys` is
+every key it asks for besides the name, and the note and image keys are not among them, so neither
+can reach a model; `contacts-test` and `personal-tool-test` compile the catalog. The answer is
+JSON, with how many cards matched in all. Without macOS's grant, or before the first read lands,
+the call is refused with a sentence.
 
 ## The prompt
 

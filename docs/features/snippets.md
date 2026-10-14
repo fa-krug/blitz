@@ -15,7 +15,8 @@ another app.
   gesture, never from startup, callbacks, watchers or health checks.
 - **All of `Model/` and `Service/` compiles into `snippets-test`** (it globs both), so the model, Markdown
   serializer, template engine, repository and keyword policies stay Foundation-only, and the AppKit files
-  there keep their dependencies to what the harness can stub.
+  there keep their dependencies to what the harness can stub. `SnippetToolCatalog` adds only the AI
+  layer's tool shapes and `AgentNameMatch`, which the harness compiles beside them.
 - **Expansion goes where the caret is, which is not the frontmost application.** Our panels are
   non-activating, so a key window of ours receives the keystrokes while `frontmostApplication` still
   names the app behind it. `InjectionTarget.current()` resolves the destination from
@@ -425,6 +426,19 @@ between revalidation and mutation, so Blitz does not claim that impossible guara
 
 An editor open over a file that changed underneath it does not reconcile silently: the save is
 rejected with the conflict above, and reopening the snippet shows what is now on disk.
+
+## Chat tools
+
+With Snippets on, a chat on an API connection or the Claude command is offered `snippets_list` and
+`snippets_read` while the agent's Read Snippets and Quicklinks row is not Deny; the row also opens
+to quicklinks, so `SnippetCoordinator.chatTools` checks this feature's own switch, and `runTool`
+refuses while it is off. The row and its dialogs are [Agent](agent.md#personal-and-context-tools)'s.
+
+A listing names each enabled snippet, its keyword and the first 80 characters of its text on one
+line; a read finds one by name or keyword (`AgentNameMatch`, so two of one name are told apart by
+keyword) and returns the template as written, cut at 64 KB. Nothing is ever expanded: an expansion
+reads the clipboard, the selection and the date. `SnippetToolCatalog` is in `Model/`, so
+`snippets-test` compiles it with the AI layer's tool shapes.
 
 ## Standalone harness
 

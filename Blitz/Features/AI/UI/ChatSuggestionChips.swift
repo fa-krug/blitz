@@ -9,29 +9,42 @@ struct ChatSuggestionChips: View {
     var body: some View {
         ChatFlowLayout(spacing: metrics.spacing.sm) {
             ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
-                Button {
+                ChatChoiceChip(title: choice, symbol: "arrow.turn.down.right") {
                     onChoose(choice)
-                } label: {
-                    HStack(spacing: metrics.spacing.sm) {
-                        Image(systemName: "arrow.turn.down.right")
-                            .font(metrics.typography.keyCap)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                        Text(choice)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    .font(metrics.typography.rowTrailing)
-                    .padding(.horizontal, metrics.spacing.xs)
-                    .padding(.vertical, metrics.spacing.xxs)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
                 .help("Reply “\(choice)”")
                 .accessibilityLabel("Reply: \(choice)")
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Suggested replies")
+    }
+}
+
+/// One glass capsule, a glyph then its option: a reply's choices and a question's both draw it.
+struct ChatChoiceChip: View {
+    @Environment(\.metrics) private var metrics
+    let title: String
+    let symbol: String
+    var isOn = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: metrics.spacing.sm) {
+                Image(systemName: symbol)
+                    .font(metrics.typography.keyCap)
+                    .foregroundStyle(isOn ? Theme.Colors.primaryAction : Theme.Colors.textTertiary)
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(metrics.typography.rowTrailing)
+            .padding(.horizontal, metrics.spacing.xs)
+            .padding(.vertical, metrics.spacing.xxs)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
     }
 }
 

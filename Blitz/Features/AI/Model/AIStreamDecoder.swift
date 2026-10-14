@@ -61,6 +61,9 @@ struct AIStreamDecoder: Sendable {
     private var thinkTags = AIThinkTagDecoder()
     private var usage = AIUsage()
     private var partialToolCalls: [Int: PartialToolCall] = [:]
+    /// Anthropic's server-run searches, kept apart so one can never reach Blitz's tool loop.
+    private var partialSearches: [Int: PartialToolCall] = [:]
+    private var searchQueries: [String: String] = [:]
     private(set) var isTerminal = false
 
     init(shape: AIHTTPConfiguration.APIShape) {
@@ -162,17 +165,34 @@ struct AIStreamDecoder: Sendable {
 
         switch event.type {
         case "content_block_start":
-            guard event.contentBlock?.type == "tool_use" else { return [] }
-            partialToolCalls[event.index ?? 0] = PartialToolCall(
-                id: event.contentBlock?.id ?? "", name: event.contentBlock?.name ?? "",
-                arguments: "")
+            let block = event.contentBlock
+            let call = PartialToolCall(id: block?.id ?? "", name: block?.name ?? "")
+            switch block?.type {
+            case "tool_use": partialToolCalls[event.index ?? 0] = call
+            case "server_tool_use" where call.name == "web_search":
+                partialSearches[event.index ?? 0] = call
+            case "web_search_tool_result":
+                return [.searched(block?.toolUseID.flatMap { searchQueries[$0] })]
+            default: break
+            }
             return []
+        case "content_block_stop":
+            guard let search = partialSearches.removeValue(forKey: event.index ?? 0) else {
+                return []
+            }
+            let query = try? JSONDecoder().decode(
+                AnthropicSearchInput.self, from: Data(search.arguments.utf8)
+            ).query
+            searchQueries[search.id] = query
+            return [.searching(query)]
         case "content_block_delta":
             if event.delta?.type == "text_delta", let text = event.delta?.text, !text.isEmpty {
                 return [.text(text)]
             }
             if event.delta?.type == "input_json_delta" {
-                partialToolCalls[event.index ?? 0]?.arguments += event.delta?.partialJSON ?? ""
+                let fragment = event.delta?.partialJSON ?? ""
+                partialSearches[event.index ?? 0]?.arguments += fragment
+                partialToolCalls[event.index ?? 0]?.arguments += fragment
                 return []
             }
             guard event.delta?.type == "thinking_delta" else { return [] }
@@ -302,10 +322,17 @@ private struct AnthropicEvent: Decodable {
         }
     }
 
+    /// A result block's `content` is a list or an error object, so it is never decoded at all.
     struct ContentBlock: Decodable {
         let type: String?
         let id: String?
         let name: String?
+        let toolUseID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type, id, name
+            case toolUseID = "tool_use_id"
+        }
     }
 
     struct Usage: Decodable {
@@ -338,3 +365,5 @@ private struct AnthropicEvent: Decodable {
         case contentBlock = "content_block"
     }
 }
+
+private struct AnthropicSearchInput: Decodable { let query: String? }

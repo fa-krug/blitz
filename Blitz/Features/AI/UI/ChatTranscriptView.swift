@@ -25,6 +25,10 @@ struct ChatTranscriptView: View {
     var onRegenerate: (() -> Void)?
     /// Answers with one of the last reply's choices; nil leaves them unshown.
     var onChoose: ((String) -> Void)?
+    /// Answers the question the last reply is waiting on; a card without it is only a record.
+    var onQuestion: ((ChatQuestionInput) -> Void)?
+    /// Edits or carries out the chat's live plan; nil leaves every plan card a record.
+    var onPlan: ((ChatPlanInput) -> Void)?
     var find: ChatFindHighlight?
     /// Cleared when the reader scrolls up, so a streaming reply stops dragging them back down.
     @State private var followsTail = true
@@ -43,6 +47,7 @@ struct ChatTranscriptView: View {
             ScrollView {
                 // Not lazy: every anchored jump and the end test measure an estimated height
                 VStack(spacing: metrics.spacing.xl) {
+                    let livePlan = livePlan
                     ForEach(messages) { message in
                         let isLast = message.id == messages.last?.id
                         ChatMessageView(
@@ -51,7 +56,10 @@ struct ChatTranscriptView: View {
                             onRegenerate: isLast && message.role == .assistant
                                 ? onRegenerate : nil,
                             // Only the latest reply's choices still answer anything.
-                            onChoose: isLast && message.state == .complete ? onChoose : nil
+                            onChoose: isLast && message.state == .complete ? onChoose : nil,
+                            onQuestion: isLast && message.pendingQuestion != nil ? onQuestion : nil,
+                            livePlan: livePlan?.messageID == message.id ? livePlan?.plan : nil,
+                            onPlan: onPlan
                         )
                         .equatable()
                         .environment(\.chatTextHighlight, highlight(for: message.id))
@@ -122,6 +130,15 @@ struct ChatTranscriptView: View {
         }
     }
 
+    /// A later `write_plan` replaces the chat's plan, so only the last one written still acts.
+    private var livePlan: (messageID: UUID, plan: ChatLivePlan)? {
+        guard let message = messages.last(where: { !$0.plans.isEmpty }),
+            let written = message.plans.last
+        else { return nil }
+        let isEnabled = messages.last?.state != .streaming
+        return (message.id, ChatLivePlan(sequence: written.sequence, isEnabled: isEnabled))
+    }
+
     private func highlight(for id: UUID) -> ChatTextHighlight? {
         guard let find, find.matches.contains(id) else { return nil }
         return ChatTextHighlight(
@@ -174,6 +191,9 @@ private struct ChatMessageView: View, @MainActor Equatable {
     let status: String?
     let onRegenerate: (() -> Void)?
     let onChoose: ((String) -> Void)?
+    let onQuestion: ((ChatQuestionInput) -> Void)?
+    let livePlan: ChatLivePlan?
+    let onPlan: ((ChatPlanInput) -> Void)?
     @Environment(\.chatTextHighlight) private var highlight
 
     @State private var hovered = false
@@ -231,7 +251,8 @@ private struct ChatMessageView: View, @MainActor Equatable {
 
     @ViewBuilder private var content: some View {
         if message.text.isEmpty, message.searches.isEmpty, message.toolUses.isEmpty,
-            message.reasoning.isEmpty, message.state == .streaming
+            message.questions.isEmpty, message.plans.isEmpty, message.reasoning.isEmpty,
+            message.state == .streaming
         {
             HStack(spacing: metrics.spacing.sm) {
                 ProgressView().controlSize(.small)
@@ -271,6 +292,7 @@ private struct ChatMessageView: View, @MainActor Equatable {
                 }
             }
             if !message.text.isEmpty || !message.searches.isEmpty || !message.toolUses.isEmpty
+                || !message.questions.isEmpty || !message.plans.isEmpty
                 || !message.reasoning.isEmpty
             {
                 rendered
@@ -297,6 +319,13 @@ private struct ChatMessageView: View, @MainActor Equatable {
                             ChatSearchRow(search: search)
                         case .tools(let uses):
                             ChatToolRun(uses: uses)
+                        case .question(let question):
+                            ChatQuestionCard(
+                                question: question, onInput: question.isPending ? onQuestion : nil)
+                        case .plan(let written):
+                            ChatPlanCard(
+                                written: written, isLive: livePlan?.sequence == written.sequence,
+                                isEnabled: livePlan?.isEnabled == true, onInput: onPlan)
                         case .reasoning(let block):
                             ChatReasoningBlock(
                                 block: block,
@@ -323,6 +352,8 @@ extension ChatMessageView {
         lhs.message == rhs.message && lhs.status == rhs.status
             && (lhs.onRegenerate == nil) == (rhs.onRegenerate == nil)
             && (lhs.onChoose == nil) == (rhs.onChoose == nil)
+            && (lhs.onQuestion == nil) == (rhs.onQuestion == nil)
+            && lhs.livePlan == rhs.livePlan && (lhs.onPlan == nil) == (rhs.onPlan == nil)
     }
 }
 

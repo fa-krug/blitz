@@ -311,6 +311,21 @@ the debounce fires. Open Notes Folder (⌘O) invites exactly that, and this is t
 feature whose whole job is one local editor. Every other external change is picked up, because showing
 the window re-lists the folder before it presents anything.
 
+## Chat tools
+
+With Notes on, a chat on an API connection or the Claude command is offered `note_read` while the
+agent's Read the Note row is not Deny, and `note_append` while Add to the Note is not — each half
+on its own. The rows and their dialogs are [Agent](agent.md#personal-and-context-tools)'s;
+`NotesCoordinator.runTool` reads the call, asks the gate, and acts on the note it named.
+
+Both act on the active note, loading the collection first, as showing the window does, when nothing
+has. A read hands back the live draft, cut at 64 KB. An addition (`NoteToolCatalog`, at most 20 000
+characters) goes on a line of its own at the end. While the editor holds the note it lands through
+`NotesWindowController.append` as one `NoteTextView.performEdit` — one undo step, the caret left
+where it was, autosave and restyling as for typing — and otherwise it is written into the draft;
+either way the draft is flushed before the model is answered, and a failed save is reported as any
+save is. If another note became active while the dialog was up, nothing is done.
+
 ## Verification
 
 `Tests/notes-test.swift` compiles the shipped Notes model and service sources with the real fuzzy

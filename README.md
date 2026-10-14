@@ -85,7 +85,7 @@ use**, rendered as native SwiftUI.
 
 ### AI
 
-- **Quick AI and AI Chat** — ask from the palette, or keep longer conversations in their own window
+- **Quick AI and AI Agent** — ask from the palette, or keep longer conversations in their own window
   with a searchable, pinnable history. Use Apple Intelligence, your own API key, or an AI CLI you
   already have installed — Claude, Codex, Grok, OpenCode or Cursor.
 - **Tools** — let chat read your calendar and reminders, or change them after you confirm, and

@@ -39,38 +39,47 @@ struct AIToolServerSession: Sendable {
     let rounds: Int?
     /// Only Claude can host these; Codex is handed servers alone.
     let hosted: AIHostedTools
+    /// A Plan turn: the tools may only look, so the CLI's boundary must not call every use allowed.
+    let readsOnly: Bool
 
     init(
         rounds: Int?,
         hosted: AIHostedTools = .none,
+        readsOnly: Bool = false,
         servers: @escaping @Sendable () async -> [AIToolServer],
         consent: @escaping @Sendable (AIToolServerCall) async -> Bool
     ) {
         self.rounds = rounds
         self.hosted = hosted
+        self.readsOnly = readsOnly
         self.servers = servers
-        let queue = ConsentQueue()
-        self.consent = { @MainActor call in await queue.ask { await consent(call) } }
-    }
-
-    /// One question at a time: a second would find the dialog busy, and must see the first's grant.
-    @MainActor
-    private final class ConsentQueue {
-        private var isAsking = false
-        private var waiting: [CheckedContinuation<Void, Never>] = []
-
-        func ask(_ question: @Sendable () async -> Bool) async -> Bool {
-            if isAsking {
-                await withCheckedContinuation { waiting.append($0) }
-            } else {
-                isAsking = true
-            }
-            defer {
-                if waiting.isEmpty { isAsking = false } else { waiting.removeFirst().resume() }
-            }
-            guard !Task.isCancelled else { return false }
-            return await question()
+        let queue = AIConsentQueue()
+        self.consent = { @MainActor call in
+            await queue.ask(cancelled: false) { await consent(call) }
         }
+    }
+}
+
+/// One question at a time: a second would find the dialog busy, and must see the first's grant.
+@MainActor
+final class AIConsentQueue {
+    private var isAsking = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    /// `cancelled` answers for a question whose task ended while it waited its turn.
+    func ask<Answer: Sendable>(
+        cancelled: Answer, _ question: @Sendable () async -> Answer
+    ) async -> Answer {
+        if isAsking {
+            await withCheckedContinuation { waiting.append($0) }
+        } else {
+            isAsking = true
+        }
+        defer {
+            if waiting.isEmpty { isAsking = false } else { waiting.removeFirst().resume() }
+        }
+        guard !Task.isCancelled else { return cancelled }
+        return await question()
     }
 }
 

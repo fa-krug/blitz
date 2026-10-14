@@ -33,8 +33,10 @@ struct AISettingsView: View {
 
             Group {
                 defaultModelSection
-                chatSection
-                personalDataSection
+                AgentSettingsSection()
+                ShellRulesSection()
+                PathRulesSection()
+                AgentMemorySection()
                 conversationsSection
                 systemPromptSection
                 MCPSettingsSection()
@@ -116,61 +118,6 @@ struct AISettingsView: View {
 
     private func syncSelection() {
         settings.reconcile(subscription: subscription, installedAI: installedAI)
-    }
-
-    private var chatSection: some View {
-        @Bindable var settings = settings
-        return Section {
-            Toggle(isOn: $settings.webSearchEnabled) {
-                SettingsRowTitle(.aiChat, "Web search")
-                Text("Codex and OpenRouter only. Prompts go to a search engine.")
-            }
-            Picker(selection: $settings.toolRounds) {
-                ForEach(AIToolRounds.allCases) { Text($0.title).tag($0) }
-            } label: {
-                SettingsRowTitle(.aiChat, "Tool call rounds")
-                Text(
-                    "A reply stops after this many; Unlimited runs until Stop. "
-                        + "API connections, Codex and Claude.")
-            }
-        } header: {
-            SettingsSectionHeader(.aiChat)
-        }
-    }
-
-    /// Each store also needs its own feature on, which is where macOS was asked for access.
-    private var personalDataSection: some View {
-        @Bindable var settings = settings
-        return Section {
-            Picker(selection: $settings.calendarAccess) {
-                ForEach(AIDataAccess.allCases) { Text($0.title).tag($0) }
-            } label: {
-                SettingsRowTitle(.aiPersonalData, "Calendar access")
-                Text(
-                    appSettings.calendarEnabled
-                        ? "Events on the calendars switched on in Calendar."
-                        : "Turn on Calendar first.")
-            }
-            .settingsEnabled(appSettings.calendarEnabled)
-            Picker(selection: $settings.remindersAccess) {
-                ForEach(AIDataAccess.allCases) { Text($0.title).tag($0) }
-            } label: {
-                SettingsRowTitle(.aiPersonalData, "Reminders access")
-                Text(
-                    appSettings.remindersEnabled
-                        ? "Open reminders on the lists switched on in Reminders."
-                        : "Turn on Reminders first.")
-            }
-            .settingsEnabled(appSettings.remindersEnabled)
-        } header: {
-            SettingsSectionHeader(.aiPersonalData)
-        } footer: {
-            Text(
-                "API connections and the Claude command. What a model reads goes to its "
-                    + "provider, and you confirm every change before it is saved.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
     }
 
     private var conversationsSection: some View {

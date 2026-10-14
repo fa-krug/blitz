@@ -35,6 +35,7 @@ struct RemindersTests {
         chatToolOffer()
         chatToolRequests()
         chatToolAnswers()
+        confirmationSummary()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -287,11 +288,21 @@ struct RemindersTests {
     }
 
     static func chatToolOffer() {
-        let readOnly = ReminderToolCatalog.tools(canWrite: false, now: now, calendar: calendar)
+        func offer(read: Bool, write: Bool) -> [AITool] {
+            ReminderToolCatalog.tools(canRead: read, canWrite: write, now: now, calendar: calendar)
+        }
+        let readOnly = offer(read: true, write: false)
         expect(
             readOnly.map(\.name) == [ReminderToolCatalog.listName],
             "read-only access offers no tool that writes")
-        let both = ReminderToolCatalog.tools(canWrite: true, now: now, calendar: calendar)
+        expect(
+            offer(read: false, write: true).map(\.name) == [
+                ReminderToolCatalog.createName, ReminderToolCatalog.updateName,
+                ReminderToolCatalog.completeName
+            ],
+            "writes the rules allow are offered without the read they deny")
+        expect(offer(read: false, write: false).isEmpty, "nothing allowed offers nothing")
+        let both = offer(read: true, write: true)
         expect(
             both.map(\.name) == [
                 ReminderToolCatalog.listName, ReminderToolCatalog.createName,
@@ -393,6 +404,23 @@ struct RemindersTests {
     }
 
     // MARK: - Helpers
+
+    static func confirmationSummary() {
+        var draft = ReminderDraft()
+        draft.title = "Call Bea"
+        expect(
+            ReminderToolCatalog.summary(of: draft, now: now, calendar: calendar) == "No due date",
+            "a reminder with nothing else says it has no due date")
+        draft.due = ReminderDue(year: 2026, month: 10, day: 4, time: nil)
+        draft.notes = "  about the lease  "
+        expect(
+            ReminderToolCatalog.summary(of: draft, now: now, calendar: calendar)
+                == "Due Tomorrow\nabout the lease",
+            "the due day reads as the list reads it, then the trimmed notes")
+        draft.notes = String(repeating: "x", count: ReminderToolCatalog.maxNotesLength + 10)
+        let clipped = ReminderToolCatalog.summary(of: draft, now: now, calendar: calendar)
+        expect(clipped.hasSuffix("\u{2026}"), "long notes are clipped as the model's copy is")
+    }
 
     static func item(
         _ id: String, title: String? = nil, notes: String? = nil, due: ReminderDue? = nil,

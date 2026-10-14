@@ -305,14 +305,86 @@ enum SettingsSearchCatalog {
             ]),
         .init(.aiDefault, "Default model", keywords: ["llm", "gpt", "claude", "grok"]),
         .init(.aiDefault, "Reasoning effort", keywords: ["thinking", "effort", "deepseek"]),
-        .init(.aiChat, "Web search", keywords: ["browse", "internet"]),
-        .init(.aiChat, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "agent", "unlimited"]),
         .init(
-            .aiPersonalData, "Calendar access",
-            keywords: ["events", "schedule", "meetings", "tools", "privacy"]),
+            group: .aiAgent, "Agent",
+            keywords: ["tools", "permissions", "allow", "ask", "deny", "rules", "privacy"]),
         .init(
-            .aiPersonalData, "Reminders access",
-            keywords: ["to-do", "todo", "tasks", "tools", "privacy"]),
+            group: .aiAgent, "Run Commands",
+            keywords: ["shell", "terminal", "command line", "zsh", "bash", "tools", "execute"]),
+        .init(
+            group: .aiAgent, "Calendar access",
+            keywords: ["read calendar", "add calendar events", "events", "meetings", "tools"]),
+        .init(
+            group: .aiAgent, "Reminders access",
+            keywords: ["read reminders", "change reminders", "to-do", "todo", "tasks", "tools"]),
+        .init(
+            group: .aiAgent, "Web search",
+            keywords: ["browse", "internet", "search engine", "tools"]),
+        .init(
+            group: .aiAgent, "File access",
+            keywords: [
+                "read files", "change files", "write", "trash", "folders", "documents", "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Fetch web pages",
+            keywords: ["url", "download", "internet", "website", "browse", "tools"]),
+        .init(
+            group: .aiAgent, "Mac actions",
+            keywords: [
+                "open apps", "open links", "apple shortcuts", "system actions", "window layouts",
+                "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Personal data",
+            keywords: [
+                "contacts", "note", "clipboard history", "snippets", "quicklinks", "privacy",
+                "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Context",
+            keywords: [
+                "frontmost app", "selected text", "selection", "clipboard", "accessibility",
+                "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Sessions",
+            keywords: [
+                "other chats", "read chats", "archive chats", "history", "conversations", "tools"
+            ]),
+        .init(
+            group: .aiAgent, "Memory rules",
+            keywords: ["read memory", "change memory", "remember", "forget", "tools"]),
+        .init(
+            group: .aiAgent, "MCP server trust",
+            keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
+        .init(
+            .aiAgent, "Tool call rounds", keywords: ["mcp", "tools", "limit", "loop", "unlimited"]),
+        .init(
+            .aiAgent, "Notify when the agent is waiting",
+            keywords: ["notification", "alert", "banner", "approval", "question", "background"]),
+        .init(
+            group: .aiShellRules, "Shell rules",
+            keywords: ["shell", "terminal", "commands", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .aiShellRules, "Add Shell Rule",
+            keywords: ["shell", "terminal", "command", "pattern", "always allow"]),
+        .init(
+            group: .aiPathRules, "Path rules",
+            keywords: ["files", "folders", "paths", "patterns", "allow", "deny", "glob"]),
+        .init(
+            .aiPathRules, "Add Path Rule",
+            keywords: ["files", "folder", "path", "pattern", "always allow"]),
+        .init(
+            group: .aiMemory, "Memory",
+            keywords: [
+                "remember", "forget", "preferences", "facts", "agent", "personal", "privacy"
+            ]),
+        .init(
+            .aiMemory, "Add Memory",
+            keywords: ["remember", "fact", "preference", "agent"]),
+        .init(
+            .aiMemory, "Forget All…",
+            keywords: ["memory", "clear", "delete", "remember", "privacy"]),
         .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),

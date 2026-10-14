@@ -14,6 +14,11 @@ final class AIChatCoordinator {
     private let window: AppWindowController
     /// Chats with a title request in flight, so a quick second reply never asks twice.
     @ObservationIgnored private var naming: [UUID: Task<Void, Never>] = [:]
+    /// Every tool call on either surface is decided, and asked about, here.
+    @ObservationIgnored private lazy var gate = AgentGateCoordinator(
+        core: core, isOnScreen: { [unowned self] chat in isOnScreen(chat) })
+    /// What can bring a chat on screen without anything in the chats changing.
+    @ObservationIgnored private var presenceObservers: [NotificationToken] = []
 
     init(
         chats: AIChatSurfacesState, settings: AppSettings, appIndex: AppIndex,
@@ -27,7 +32,7 @@ final class AIChatCoordinator {
         self.settingsCoordinator = settingsCoordinator
         self.core = core
         window = AppWindowController(
-            title: "AI Chat", contentSize: Theme.Size.aiChatWindow,
+            title: "AI Agent", contentSize: Theme.Size.aiChatWindow,
             minimumSize: Theme.Size.aiChatWindowMinimum, resizable: true,
             autosaveName: "AIChatWindow", activation: core.activationPolicy, closesOnEscape: true)
         chats.onReplyFinished = { [weak self] chat in self?.nameIfNeeded(chat) }
@@ -47,9 +52,11 @@ final class AIChatCoordinator {
             return
         }
         core.applyInstalledAILifecycle()
+        watchWaits()
         // Deferred off the launch path like the clipboard's own read; history fills in behind it.
         Task {
             core.chatHistory.load()
+            core.agentMemoryCoordinator.load()
             // Inside the enabled branch only: off means the file is untouched, however old it gets.
             applyRetention()
         }
@@ -151,6 +158,31 @@ final class AIChatCoordinator {
         core.chatHistory.setPinned(!conversation.isPinned, id: id)
     }
 
+    /// A pinned chat stays in view and a reply still arriving stays live, so neither is archived.
+    func canArchive(id: UUID) -> Bool {
+        guard let conversation = core.chatHistory.conversation(id: id) else { return false }
+        return !conversation.isPinned && !conversation.isArchived
+            && !chats.answeringIDs.contains(id)
+    }
+
+    /// The open chat makes way for a new one, as a delete does; nothing of it is lost.
+    func archiveChat(id: UUID) {
+        guard canArchive(id: id), chats.archive(id: id) else {
+            core.showMessage("That chat could not be archived.", tone: .danger)
+            return
+        }
+    }
+
+    func unarchiveChat(id: UUID) {
+        core.chatHistory.unarchive(id)
+    }
+
+    /// Opening an archived chat brings it back: it is a chat in use again.
+    func openArchivedChat(id: UUID) {
+        unarchiveChat(id: id)
+        openChat(id: id)
+    }
+
     func rename(id: UUID, to title: String) {
         core.chatHistory.rename(id: id, to: title)
     }
@@ -209,14 +241,109 @@ final class AIChatCoordinator {
         guard
             await core.confirm(
                 title: "Delete all chats?",
-                message: "Every saved conversation except pinned ones will be removed. "
-                    + "This can't be undone.",
+                message: "Every chat in the sidebar except pinned ones will be removed; "
+                    + "archived chats are kept. This can't be undone.",
                 symbol: "trash", confirmTitle: "Delete All")
         else { return }
         for conversation in core.chatHistory.conversations where !conversation.isPinned {
             core.codexSubscription.turns.discardConversation(id: conversation.id)
         }
         chats.deleteAll()
+    }
+
+    // MARK: - Waiting
+
+    /// The one definition of on screen: the window in front on this chat, or Quick AI's screen up.
+    func isOnScreen(_ chat: AIChatState) -> Bool {
+        ChatPresence(
+            windowVisible: window.isOnScreen, appActive: NSApp.isActive,
+            paletteVisible: core.palette.isVisible, paletteOnQuickAI: core.palette.mode == .ai
+        ).shows(chats.surface(of: chat))
+    }
+
+    func isOnScreen(chatID id: UUID) -> Bool {
+        chats.holder(of: id).map(isOnScreen) ?? false
+    }
+
+    /// A notification's click: the window on that chat, where its dialog or question comes up.
+    func openWaitingChat(id: UUID) {
+        guard settings.aiEnabled else { return }
+        if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
+        openChat(id: id)
+        showWindow()
+    }
+
+    /// Idempotent; started with the feature and left running, since nothing waits while it is off.
+    private func watchWaits() {
+        guard presenceObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        presenceObservers = [
+            NSApplication.didBecomeActiveNotification, NSWindow.didChangeOcclusionStateNotification
+        ].map { name in
+            NotificationToken(
+                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    // Delivered on the main queue, which `queue: .main` guarantees.
+                    MainActor.assumeIsolated { self?.releaseShownApprovals() }
+                },
+                center: center)
+        }
+        trackPresence()
+        trackWaits()
+    }
+
+    /// Which chat each surface holds and whether the palette is on Quick AI; never a reply's text.
+    private func trackPresence() {
+        withObservationTracking {
+            _ = chats.window
+            _ = chats.quickAI
+            _ = core.palette.isVisible
+            _ = core.palette.mode
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.trackPresence()
+                self?.releaseShownApprovals()
+            }
+        }
+    }
+
+    private func releaseShownApprovals() {
+        for chat in chats.live where chat.hasHeldApprovals && isOnScreen(chat) {
+            chat.releaseApprovals()
+        }
+    }
+
+    /// Re-read on every streaming flush, so only a wait that starts or ends reaches anything.
+    private func trackWaits() {
+        let current = withObservationTracking {
+            liveWaits
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackWaits() }
+        }
+        guard current != chats.waits else { return }
+        let changes = AgentWaitEpisodes.changes(from: chats.waits, to: current)
+        chats.waits = current
+        for id in changes.ended { core.agentNotifications.withdraw(chatID: id) }
+        for (id, wait) in changes.started { notifyIfAway(id, wait) }
+    }
+
+    private var liveWaits: [UUID: AgentWait] {
+        var current: [UUID: AgentWait] = [:]
+        for chat in chats.live {
+            if let wait = chat.awaiting { current[chat.session.id] = wait }
+        }
+        return current
+    }
+
+    /// Posted only for a chat off screen, so a dialog already in front is never announced too.
+    private func notifyIfAway(_ id: UUID, _ wait: AgentWait) {
+        guard core.aiSettings.notifiesWhenWaiting, let chat = chats.holder(of: id),
+            !isOnScreen(chat)
+        else { return }
+        core.agentNotifications.post(
+            AgentWaitNotice(
+                wait: wait, chatID: id, chatTitle: title(of: chat),
+                question: chat.pendingQuestion?.question.question,
+                appName: Bundle.main.appDisplayName))
     }
 
     // MARK: - Titles
@@ -283,15 +410,19 @@ final class AIChatCoordinator {
 
     // MARK: - Either surface
 
+    /// While the turn waits on a question, what was typed answers it rather than starting a turn.
     @discardableResult
     func send(_ input: String, in chat: AIChatState) -> Bool {
         guard settings.aiEnabled else { return false }
+        if let question = chat.pendingQuestion {
+            return chat.answerQuestion(question.answer(typing: input))
+        }
         do {
             let address = MCPComposerAddress.parse(input, slugs: core.mcpCoordinator.slugs)
             let sent = chat.send(
                 address.rest, using: try provider(for: chat, scopedTo: address.slug),
                 model: model(for: chat), webSearch: webSearch(for: chat),
-                instructions: instructions, contextBudget: contextBudget(for: chat),
+                instructions: instructions(for: chat), contextBudget: contextBudget(for: chat),
                 toolScope: address.slug)
             // Named while the answer streams, so the sidebar has a title before the reply ends.
             if sent { nameIfNeeded(chat) }
@@ -310,20 +441,47 @@ final class AIChatCoordinator {
             chat.regenerate(
                 using: try provider(for: chat, scopedTo: scope),
                 model: model(for: chat), webSearch: webSearch(for: chat),
-                instructions: instructions, contextBudget: contextBudget(for: chat))
+                instructions: instructions(for: chat), contextBudget: contextBudget(for: chat))
         } catch {
             chat.report(error.localizedDescription)
         }
     }
 
-    private func webSearch(for chat: AIChatState) -> Bool {
-        core.aiSettings.webSearchEnabled && capabilities(for: chat).webSearch
+    /// The composer's switch, offered only where the route searches and the rules allow it.
+    func offersWebSearch(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).webSearch && gate.rules.decision(for: .webSearch) == .allow
     }
 
-    private var instructions: String? {
-        AIInstructions.compose(
+    private func webSearch(for chat: AIChatState) -> Bool {
+        core.aiSettings.webSearchEnabled && offersWebSearch(in: chat)
+    }
+
+    /// The system prompt switch withholds neither memory nor the mode: each has its own switch.
+    private func instructions(for chat: AIChatState) -> String? {
+        let prompt = AIInstructions.compose(
             userPrompt: core.aiSettings.systemPrompt,
             isEnabled: core.aiSettings.systemPromptEnabled)
+        let memory = readsMemory(in: chat)
+            ? core.agentMemoryCoordinator.instructions(
+                canForget: offersMemoryTools(in: chat), budget: memoryBudget(for: chat))
+            : nil
+        return AgentModeInstructions.appending(
+            to: AgentMemoryInstructions.appending(memory, to: prompt), for: chat.agentScope.mode)
+    }
+
+    /// Read Memory on Allow and the chat's Use Memory on; it is no tool, so every route reads it.
+    private func readsMemory(in chat: AIChatState) -> Bool {
+        AgentPolicy.readsMemory(rules: gate.rules, scope: chat.agentScope)
+    }
+
+    /// Whether this turn can call `memory_forget`, so the memory block mentions it only then.
+    private func offersMemoryTools(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).tools && model(for: chat)?.reachesBlitzTools == true
+            && gate.isOffered(.memoryWrite, in: chat)
+    }
+
+    private func memoryBudget(for chat: AIChatState) -> Int? {
+        model(for: chat)?.isOnDevice == true ? AgentMemoryInstructions.onDeviceBudget : nil
     }
 
     /// A turn's route and its tools: a CLI with its own client is handed servers, others the loop.
@@ -336,17 +494,26 @@ final class AIChatCoordinator {
 
     /// The same narrowing as `tools(for:scopedTo:)`, for a client that starts its own servers.
     private func toolServers(for chat: AIChatState, scopedTo slug: String?) -> AIToolServerSession? {
-        guard capabilities(for: chat).tools, chat.toolScope.isEnabled else { return nil }
-        let excluded = chat.toolScope.excluded
-        let chatID = chat.session.id
+        guard capabilities(for: chat).tools, chat.agentScope.isEnabled else { return nil }
         let mcp = core.mcpCoordinator
         return AIToolServerSession(
             rounds: core.aiSettings.toolRounds.limit,
-            hosted: slug == nil ? personalHostedTools : .none
-        ) {
-            await mcp.toolServers(scopedTo: slug).filter { !excluded.contains($0.handle) }
-        } consent: { call in
-            await mcp.permit(call, in: chatID)
+            hosted: slug == nil ? blitzHostedTools(for: chat) : .none,
+            readsOnly: chat.agentScope.mode == .plan
+        ) { @MainActor [weak self, weak chat] in
+            guard let self, let chat else { return [] }
+            return await mcp.toolServers(scopedTo: slug) { server in
+                // A read-only call is Plan's ceiling, so a server refused even that is never listed.
+                guard self.gate.isOffered(.mcp(server.slug, readOnly: true), in: chat) else {
+                    return false
+                }
+                guard chat.agentScope.mode == .plan else { return true }
+                let listed = await mcp.listTools(of: server)
+                return self.gate.isOffered(.server(server.slug, listed: listed), in: chat)
+            }
+        } consent: { @MainActor [weak self, weak chat] call in
+            guard let self, let chat else { return false }
+            return await gate.authorize(call, in: chat) == nil
         }
     }
 
@@ -356,75 +523,490 @@ final class AIChatCoordinator {
     ) -> any AIProvider {
         let tools = tools(for: chat, scopedTo: slug)
         guard capabilities(for: chat).tools, !tools.isEmpty else { return provider }
-        let chatID = chat.session.id
-        let personal = personalHostedTools.run
+        let blitz = blitzHostedTools(for: chat).run
+        // An `@server` turn sits Blitz's own tools out, and the chat's own have no gate to refuse.
+        let asks = tools.contains { AskUserToolCatalog.handles($0.name) }
+        let plans = tools.contains { PlanToolCatalog.handles($0.name) }
         return AIToolLoopProvider(
             base: provider, tools: tools, maxRounds: core.aiSettings.toolRounds.limit
-        ) { [mcp = core.mcpCoordinator] call in
-            if Self.isPersonal(call.name) { return await personal(call) }
-            return await mcp.invoke(call, in: chatID)
+        ) { @MainActor [weak self, weak chat] call in
+            if AskUserToolCatalog.handles(call.name), !asks {
+                return .failure(call.id, AskUserToolCatalog.notOffered)
+            }
+            if PlanToolCatalog.handles(call.name), !plans {
+                return .failure(call.id, PlanToolCatalog.notOffered)
+            }
+            if Self.isBlitzTool(call.name) { return await blitz(call) }
+            guard let self, let chat else { return .failure(call.id, "The chat was closed.") }
+            return await runServerTool(call, in: chat)
         }
     }
 
-    nonisolated private static func isPersonal(_ name: String) -> Bool {
+    /// An MCP call on the loop route: the gate first, then the server Blitz holds open.
+    private func runServerTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        guard let route = MCPToolName.parse(call.name) else {
+            return .failure(call.id, "That tool is no longer connected.")
+        }
+        let request = AIToolServerCall(handle: route.slug, tool: route.tool)
+        if let refusal = await gate.authorize(request, in: chat) {
+            return .failure(call.id, refusal.message(for: .mcp(route.slug)))
+        }
+        return await core.mcpCoordinator.invoke(call)
+    }
+
+    nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
+            || ShellToolCatalog.handles(name) || FileToolCatalog.handles(name)
+            || WebFetchToolCatalog.handles(name) || SessionToolCatalog.handles(name)
+            || OpenToolCatalog.handles(name) || ShortcutToolCatalog.handles(name)
+            || SystemActionToolCatalog.handles(name) || WindowLayoutToolCatalog.handles(name)
+            || ContactToolCatalog.handles(name) || NoteToolCatalog.handles(name)
+            || ClipboardToolCatalog.handles(name) || SnippetToolCatalog.handles(name)
+            || QuicklinkToolCatalog.handles(name) || ContextToolCatalog.handles(name)
+            || MemoryToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
+            || PlanToolCatalog.handles(name)
     }
 
-    /// The calendar and reminders for a client that hosts them, read again each turn it starts.
-    private var personalHostedTools: AIHostedTools {
-        AIHostedTools { [weak self] in
-            await self?.personalTools() ?? []
-        } run: { [calendar = core.calendarCoordinator, reminders = core.remindersCoordinator] call in
-            if CalendarToolCatalog.handles(call.name) { return await calendar.runTool(call) }
-            if ReminderToolCatalog.handles(call.name) { return await reminders.runTool(call) }
-            return await AIHostedTools.none.run(call)
+    /// Blitz's own tools for a client that hosts them, read again each turn it starts.
+    private func blitzHostedTools(for chat: AIChatState) -> AIHostedTools {
+        AIHostedTools { @MainActor [weak self, weak chat] in
+            guard let self, let chat else { return [] }
+            return blitzTools(for: chat)
+        } run: { @MainActor [weak self, weak chat] call in
+            guard let self, let chat else { return await AIHostedTools.none.run(call) }
+            if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
+            if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
+            if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
+            if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
+            if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
+            if OpenToolCatalog.handles(call.name) { return await openItem(call, in: chat) }
+            if let routed = await runFeatureTool(call, in: chat) { return routed }
+            guard let agentCall = AgentCall(toolCall: call) else {
+                return await AIHostedTools.none.run(call)
+            }
+            return await runBlitzTool(call, authorize: gate.authorization(for: agentCall, in: chat))
         }
+    }
+
+    /// Never past the gate: asking the reader is no capability, so it has no rule row to consult.
+    private func askUser(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        guard AgentPolicy.isOffered(.askUser, scope: chat.agentScope) else {
+            return .failure(call.id, AskUserToolCatalog.notOffered)
+        }
+        let question: AskUserToolCatalog.Question
+        do throws(AIToolArguments.Invalid) {
+            question = try AskUserToolCatalog.question(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard let answer = await chat.ask(question) else {
+            return .failure(call.id, AskUserToolCatalog.oneAtATime)
+        }
+        return AskUserToolCatalog.result(answer, to: question, callID: call.id)
+    }
+
+    /// Never past the gate either: a plan changes nothing until the reader carries it out.
+    private func writePlan(_ call: AIToolCall, in chat: AIChatState) -> AIToolResult {
+        guard AgentPolicy.isOffered(.writePlan, scope: chat.agentScope) else {
+            return .failure(call.id, PlanToolCatalog.notOffered)
+        }
+        let plan: ChatPlan
+        do throws(AIToolArguments.Invalid) {
+            plan = try PlanToolCatalog.plan(arguments: call.arguments, now: Date())
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        guard chat.writePlan(plan) else { return .failure(call.id, PlanToolCatalog.turnEnded) }
+        return PlanToolCatalog.result(callID: call.id)
+    }
+
+    /// Each runner reads its call, then puts its own dialog to the gate before it acts.
+    private func runBlitzTool(
+        _ call: AIToolCall, authorize: AgentAuthorization
+    ) async -> AIToolResult {
+        if CalendarToolCatalog.handles(call.name) {
+            return await core.calendarCoordinator.runTool(call, authorize: authorize)
+        }
+        if ReminderToolCatalog.handles(call.name) {
+            return await core.remindersCoordinator.runTool(call, authorize: authorize)
+        }
+        if ShellToolCatalog.handles(call.name) {
+            return await runShellCommand(call, authorize: authorize)
+        }
+        return await AIHostedTools.none.run(call)
     }
 
     /// `@server` narrows a turn further, but never past what the chat's tools menu switched off.
     private func tools(for chat: AIChatState, scopedTo slug: String?) -> [AITool] {
-        guard chat.toolScope.isEnabled else { return [] }
-        let excluded = chat.toolScope.excluded
-        let servers = core.mcpCoordinator.tools(scopedTo: slug).filter { tool in
-            guard let route = MCPToolName.parse(tool.name) else { return true }
-            return !excluded.contains(route.slug)
-        }
-        // `@server` addresses one server, so the calendar and reminders sit that turn out.
-        return slug == nil ? personalTools() + servers : servers
+        guard chat.agentScope.isEnabled else { return [] }
+        let servers = core.mcpCoordinator.tools(scopedTo: slug)
+            .filter { gate.isOffered(AgentCall($0), in: chat) }
+            .map(\.aiTool)
+        // `@server` addresses one server, so Blitz's own tools sit that turn out.
+        return slug == nil ? blitzTools(for: chat) + servers : servers
     }
 
-    /// The calendar and reminders, as far as Settings → AI lets a model reach them.
-    private func personalTools() -> [AITool] {
+    /// Exactly the rows the policy offers this chat; a denied tool is never shown to the model.
+    private func blitzTools(for chat: AIChatState) -> [AITool] {
+        let offered = { (tool: AgentTool) in self.gate.isOffered(tool, in: chat) }
         let now = Date()
-        return core.calendarCoordinator.chatTools(now: now)
-            + core.remindersCoordinator.chatTools(now: now)
+        let mac: [AITool] =
+            (offered(.openItems) ? OpenToolCatalog.tools() : [])
+            + (offered(.shortcuts) ? ShortcutToolCatalog.tools() : [])
+            + (offered(.systemActions) ? SystemActionToolCatalog.tools() : [])
+            + (offered(.windowLayouts) ? WindowLayoutToolCatalog.tools() : [])
+        let personal: [AITool] =
+            (offered(.contactsRead) ? ContactToolCatalog.tools() : [])
+            + NoteToolCatalog.tools(read: offered(.noteRead), append: offered(.noteWrite))
+            + (offered(.clipboardRead) ? ClipboardToolCatalog.tools() : [])
+            + core.snippetCoordinator.chatTools(read: offered(.snippetsRead))
+            + core.quicklinkCoordinator.chatTools(read: offered(.snippetsRead))
+            + ContextToolCatalog.tools(
+                frontmostApp: offered(.frontmostApp), selectedText: offered(.selectedText),
+                clipboard: offered(.currentClipboard))
+        return core.calendarCoordinator.chatTools(
+            read: offered(.calendarRead), write: offered(.calendarWrite), now: now)
+            + core.remindersCoordinator.chatTools(
+                read: offered(.remindersRead), write: offered(.remindersWrite), now: now)
+            + (offered(.shell) ? ShellToolCatalog.tools() : [])
+            + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
+            + (offered(.webFetch) ? WebFetchToolCatalog.tools() : [])
+            + mac
+            + personal
+            + SessionToolCatalog.tools(
+                read: offered(.sessionsRead), archive: offered(.sessionsArchive))
+            + (offered(.memoryWrite) ? MemoryToolCatalog.tools() : [])
+            + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
+                ? AskUserToolCatalog.tools() : [])
+            + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
+                ? PlanToolCatalog.tools() : [])
     }
 
-    /// What the context card names: the stores a turn on this route may reach through Blitz.
-    private func personalData(for chat: AIChatState) -> [String] {
-        guard capabilities(for: chat).tools, model(for: chat)?.reachesBlitzTools == true,
-            chat.toolScope.isEnabled
-        else { return [] }
-        var origins: [String] = []
-        for tool in personalTools() where !origins.contains(tool.origin) {
-            origins.append(tool.origin)
+    private func runShellCommand(
+        _ call: AIToolCall, authorize: AgentAuthorization
+    ) async -> AIToolResult {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let request: ShellToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try ShellToolCatalog.request(arguments: call.arguments, homeDirectory: home)
+        } catch {
+            return .failure(call.id, error.message)
         }
-        return origins
+        let prompt = AgentPrompt.shell(
+            command: request.command,
+            summary: ShellToolCatalog.summary(of: request, homeDirectory: home))
+        if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
+        return ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
     }
 
-    /// The servers a chat's tools menu offers; empty when MCP is off or nothing is set up.
-    var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
+    /// The gate weighs canonical paths, and the runner re-resolves them before it acts.
+    private func runFileTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let (name, arguments) = (call.name, call.arguments)
+        let prepared: FileToolRunner.Prepared
+        switch await Task.detached(operation: {
+            FileToolRunner.prepare(name: name, arguments: arguments)
+        }).value {
+        case .success(let ready): prepared = ready
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
+        let tool = prepared.request.tool
+        let agentCall = AgentCall.files(
+            tool, paths: prepared.resolved.paths, homeDirectory: prepared.homeDirectory)
+        // Before the disk is asked anything, so a denied path's existence is never told.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: tool))
+        }
+        if let failure = await Task.detached(operation: { FileToolRunner.preflight(prepared) })
+            .value
+        {
+            return .failure(call.id, failure.message)
+        }
+        let prompt = FileToolCatalog.prompt(
+            for: prepared.resolved, homeDirectory: prepared.homeDirectory)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        let denied = gate.rules.pathRules.filter { $0.decision == .deny && $0.applies(to: tool) }
+        switch await Task.detached(operation: {
+            FileToolRunner.run(prepared, deniedRules: denied)
+        }).value {
+        case .success(let answer):
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
+    }
+
+    /// The gate weighs whether the URL is on the local network; the runner checks each redirect.
+    private func fetchWebPage(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let request: WebFetchToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try WebFetchToolCatalog.request(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let prompt = WebFetchToolCatalog.prompt(for: request)
+        if let refusal = await gate.authorization(for: request.agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        switch await Task.detached(operation: { await WebFetchRunner.run(request) }).value {
+        case .success(let answer):
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
+    }
+
+    /// The Mac, personal, context and memory tools; a denied row refuses before anything is read.
+    private func runFeatureTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult? {
+        guard let row = AgentTool(builtInToolName: call.name),
+            let run = featureRunner(for: call.name, in: chat)
+        else { return nil }
+        let agentCall = AgentCall(tool: row)
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: row))
+        }
+        return await run(call, gate.authorization(for: agentCall, in: chat))
+    }
+
+    private typealias FeatureRunner =
+        @MainActor (AIToolCall, AgentAuthorization) async -> AIToolResult
+
+    /// Each runner reads its call, checks its feature's switch and puts its own dialog to the gate.
+    private func featureRunner(for name: String, in chat: AIChatState) -> FeatureRunner? {
+        if ShortcutToolCatalog.handles(name) { return core.appleShortcutCoordinator.runTool }
+        if SystemActionToolCatalog.handles(name) { return core.systemActionCoordinator.runTool }
+        if WindowLayoutToolCatalog.handles(name) { return core.windowLayoutCoordinator.runTool }
+        if ContactToolCatalog.handles(name) { return core.contactsCoordinator.runTool }
+        if NoteToolCatalog.handles(name) { return core.notesCoordinator.runTool }
+        if ClipboardToolCatalog.handles(name) { return core.clipboardCoordinator.runTool }
+        if SnippetToolCatalog.handles(name) { return core.snippetCoordinator.runTool }
+        if QuicklinkToolCatalog.handles(name) { return core.quicklinkCoordinator.runTool }
+        if MemoryToolCatalog.handles(name) {
+            let (memory, conversation) = (core.agentMemoryCoordinator, chat.session.id)
+            return { await memory.runTool($0, conversation: conversation, authorize: $1) }
+        }
+        guard ContextToolCatalog.handles(name) else { return nil }
+        let apps = core.externalApps
+        return { await ContextToolRunner.run($0, app: apps.app, authorize: $1) }
+    }
+
+    /// An app is named against the launcher's index; a path is weighed canonically, as files are.
+    private func openItem(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let home = FileToolRunner.homeDirectory()
+        let target: OpenToolCatalog.Target
+        do throws(AIToolArguments.Invalid) {
+            target = try OpenToolCatalog.target(arguments: call.arguments, homeDirectory: home)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let bare = AgentCall(tool: .openItems)
+        switch target {
+        case .path(let path):
+            return await openPath(path, homeDirectory: home, callID: call.id, in: chat)
+        case .url(let url):
+            let prompt = OpenToolCatalog.prompt(forURL: url)
+            if let refusal = await gate.authorization(for: bare, in: chat)(prompt) {
+                return .failure(call.id, refusal)
+            }
+            if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: false) {
+                let subject = url.absoluteString
+                return .failure(call.id, OpenToolCatalog.notOpened(subject, reason: reason))
+            }
+            let answer = OpenToolCatalog.opened(url: url)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .app(let name):
+            // Before the index is asked, so a denied row never tells which apps are installed.
+            guard gate.decision(for: bare, in: chat) != .deny else {
+                return .failure(call.id, AgentRefusal.denied.message(for: .openItems))
+            }
+            let app: OpenToolCatalog.App
+            do throws(AIToolArguments.Invalid) {
+                app = try OpenToolCatalog.app(
+                    named: name, in: core.launcherCoordinator.openToolApps())
+            } catch {
+                return .failure(call.id, error.message)
+            }
+            let prompt = OpenToolCatalog.prompt(forApp: app)
+            if let refusal = await gate.authorization(for: bare, in: chat)(prompt) {
+                return .failure(call.id, refusal)
+            }
+            let url = URL(fileURLWithPath: app.path)
+            if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: true) {
+                return .failure(call.id, OpenToolCatalog.notOpened(app.name, reason: reason))
+            }
+            let answer = OpenToolCatalog.opened(app: app.name)
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        }
+    }
+
+    /// The gate weighs the path with its links resolved, and it is resolved again after asking.
+    private func openPath(
+        _ path: String, homeDirectory home: String, callID: String, in chat: AIChatState
+    ) async -> AIToolResult {
+        let resolved: String
+        switch await Task.detached(operation: {
+            OpenToolRunner.resolved(path, homeDirectory: home)
+        }).value {
+        case .success(let real): resolved = real
+        case .failure(let failure): return .failure(callID, failure.message)
+        }
+        let agentCall = AgentCall.files(.openItems, paths: [resolved], homeDirectory: home)
+        // Before the disk is asked anything else, so a denied path's existence is never told.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(callID, AgentRefusal.denied.message(for: .openItems))
+        }
+        let kind: OpenToolCatalog.ItemKind
+        switch await Task.detached(operation: {
+            OpenToolRunner.inspect(resolved, homeDirectory: home)
+        }).value {
+        case .success(let found): kind = found
+        case .failure(let failure): return .failure(callID, failure.message)
+        }
+        let prompt = OpenToolCatalog.prompt(forPath: resolved, kind: kind, homeDirectory: home)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(callID, refusal)
+        }
+        if let failure = await Task.detached(operation: {
+            OpenToolRunner.recheck(path, as: resolved, kind: kind, homeDirectory: home)
+        }).value {
+            return .failure(callID, failure.message)
+        }
+        let url = URL(fileURLWithPath: resolved)
+        if let reason = await core.launcherCoordinator.openForAgent(url, isApplication: kind == .app) {
+            let shown = FileToolCatalog.shown(resolved, homeDirectory: home)
+            return .failure(callID, OpenToolCatalog.notOpened(shown, reason: reason))
+        }
+        let answer = OpenToolCatalog.opened(path: resolved, homeDirectory: home)
+        return AIToolResult(callID: callID, content: answer, isError: false)
+    }
+
+    /// An id is looked up before asking, so a dialog never names a chat that is not there.
+    private func runSessionTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let request: SessionToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try SessionToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let agentCall = AgentCall(tool: request.tool)
+        // Before any id is looked up, so a denied row never tells which chats exist.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: request.tool))
+        }
+        let current = chat.session.id
+        if let settled = settled(request, excluding: current) {
+            return AIToolResult(callID: call.id, content: settled.message, isError: settled.isError)
+        }
+        let title = request.id.flatMap { history.conversation(id: $0)?.displayTitle }
+        let prompt = SessionToolCatalog.prompt(for: request, title: title)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        // Again after the dialog: the chat may have been deleted, opened or pinned meanwhile.
+        if let settled = settled(request, excluding: current) {
+            return AIToolResult(callID: call.id, content: settled.message, isError: settled.isError)
+        }
+        return await answer(request, callID: call.id, excluding: current)
+    }
+
+    private func settled(
+        _ request: SessionToolCatalog.Request, excluding current: UUID
+    ) -> SessionToolEngine.Settled? {
+        guard let id = request.id else { return nil }
+        return SessionToolEngine.settled(
+            request, conversation: history.conversation(id: id), current: current,
+            isAnswering: chats.answeringIDs.contains(id), isOpen: chats.holder(of: id) != nil)
+    }
+
+    private func answer(
+        _ request: SessionToolCatalog.Request, callID: String, excluding current: UUID
+    ) async -> AIToolResult {
+        let done = { (text: String) in AIToolResult(callID: callID, content: text, isError: false) }
+        switch request {
+        case .list(let scope, let query, let limit):
+            let pool: [ChatConversation] =
+                switch scope {
+                case .recent: history.conversations
+                case .archived: history.archived
+                case .all: history.saved
+                }
+            return done(
+                await Task.detached {
+                    SessionToolEngine.listing(
+                        pool, scope: scope, query: query, limit: limit, excluding: current)
+                }.value)
+        case .read(let id, let fromMessage, let limit):
+            guard let conversation = history.conversation(id: id),
+                let session = chats.holder(of: id)?.session ?? history.session(id: id)
+            else { return .failure(callID, SessionToolCatalog.unknown(id)) }
+            let (title, isArchived) = (conversation.displayTitle, conversation.isArchived)
+            let transcript = await Task.detached {
+                SessionToolEngine.transcript(
+                    of: session, title: title, isArchived: isArchived, fromMessage: fromMessage,
+                    limit: limit)
+            }.value
+            guard let transcript else {
+                return .failure(
+                    callID, SessionToolEngine.pastTheEnd(title, count: session.messages.count))
+            }
+            return done(transcript)
+        case .archive(let id):
+            let title = history.conversation(id: id)?.displayTitle ?? ""
+            return chats.archive(id: id)
+                ? done(SessionToolCatalog.archived(title))
+                : .failure(callID, SessionToolCatalog.notSaved(title))
+        case .unarchive(let id):
+            let title = history.conversation(id: id)?.displayTitle ?? ""
+            return history.unarchive(id)
+                ? done(SessionToolCatalog.unarchived(title))
+                : .failure(callID, SessionToolCatalog.notSaved(title))
+        }
+    }
+
+    // MARK: - The session scope
+
+    /// Built-in rows the composer's menu lists: only where this route carries Blitz's own tools.
+    func listedBuiltInTools(for chat: AIChatState) -> [AgentTool] {
+        guard model(for: chat)?.reachesBlitzTools == true else { return [] }
+        return gate.listed(AgentTool.builtIn.filter(\.isHosted))
+    }
+
+    /// The servers the composer's menu lists; one the table denies is left out, like the model.
+    func listedServers(for chat: AIChatState) -> [MCPServer] {
+        let listed = Set(gate.listed(mcpServers.map { .mcp($0.slug) }))
+        return mcpServers.filter { listed.contains(.mcp($0.slug)) }
+    }
+
+    /// Modes weigh Blitz's own tools and the plan they write, so a route without them has none.
+    func offersModes(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).tools && model(for: chat)?.reachesBlitzTools == true
+    }
+
+    func setMode(_ mode: AgentMode, in chat: AIChatState) {
+        chat.agentScope.mode = offersModes(in: chat) ? mode : .manual
+    }
 
     func setToolsEnabled(_ enabled: Bool, in chat: AIChatState) {
-        chat.toolScope.isEnabled = enabled
+        chat.agentScope.isEnabled = enabled
     }
 
-    func toggleToolServer(_ slug: String, in chat: AIChatState) {
-        chat.toolScope.toggle(slug)
+    /// The tools menu's Use Memory, listed only while the table lets turns read memory at all.
+    var offersMemorySwitch: Bool {
+        gate.rules.decision(for: .memoryRead) == .allow
     }
 
-    func showMCPSettings() {
-        settingsCoordinator.showSettings(tab: .ai)
+    func setUsesMemory(_ uses: Bool, in chat: AIChatState) {
+        chat.agentScope.usesMemory = uses
+    }
+
+    func toggleTool(_ tool: AgentTool, in chat: AIChatState) {
+        chat.agentScope.toggle(tool)
+    }
+
+    /// Every enabled server, before the agent's rules have their say.
+    private var mcpServers: [MCPServer] { core.mcpCoordinator.servers }
+
+    func showAgentSettings() {
+        settingsCoordinator.showSettings(tab: .ai, revealing: .section(.aiAgent))
     }
 
     /// The server a draft is addressed to, so the composer can show it as a chip while typing.
@@ -435,6 +1017,31 @@ final class AIChatCoordinator {
 
     func stopResponse(in chat: AIChatState) {
         chat.cancel()
+    }
+
+    /// A click on a waiting question's card: a single choice answers, a multi-select one toggles.
+    func respond(_ input: ChatQuestionInput, in chat: AIChatState) {
+        guard let question = chat.pendingQuestion else { return }
+        switch input {
+        case .choose(let option): chat.answerQuestion(question.answer(choosing: option))
+        case .toggle(let option): chat.toggleQuestionOption(option)
+        case .send: chat.answerQuestion(question.answer(typing: ""))
+        }
+    }
+
+    /// The live plan's card: an edit is saved where the plan was written, and Execute leaves Plan.
+    func respond(_ input: ChatPlanInput, in chat: AIChatState) {
+        guard !chat.isStreaming else { return }
+        switch input {
+        case .save(let markdown):
+            if chat.editPlan(markdown: markdown) == .unsaved {
+                core.showMessage("The plan edit could not be saved.", tone: .danger)
+            }
+        case .execute(let mode):
+            guard let live = chat.session.livePlan else { return }
+            setMode(mode, in: chat)
+            send(AgentModeInstructions.execute(live.written.plan), in: chat)
+        }
     }
 
     func copyLastResponse(in chat: AIChatState) {
@@ -468,8 +1075,6 @@ final class AIChatCoordinator {
     func contextReport(for chat: AIChatState, detailed: Bool = true) -> ChatContextReport {
         let session = chat.session
         let budget = contextBudget(for: chat)
-        let can = capabilities(for: chat)
-        let scope = chat.toolScope
         return ChatContextReport(
             modelTitle: detailed ? selectedModelTitle(for: chat) : "",
             historyBytes: session.historyBytes, budget: budget,
@@ -479,10 +1084,35 @@ final class AIChatCoordinator {
             stagedBytes: chat.pendingAttachments.reduce(0) { $0 + $1.payload.byteCount },
             usage: chat.usage,
             systemPrompt: core.aiSettings.systemPromptEnabled,
-            webSearch: core.aiSettings.webSearchEnabled && can.webSearch,
-            toolServers: can.tools && scope.isEnabled
-                ? mcpServers.count { scope.allows($0.slug) } : 0,
-            personalData: detailed ? personalData(for: chat) : [])
+            webSearch: webSearch(for: chat),
+            memories: detailed ? carriedMemories(for: chat) : nil,
+            mode: offersModes(in: chat) ? chat.agentScope.mode : nil,
+            tools: detailed ? toolRows(for: chat) : [])
+    }
+
+    /// Nil while the turn carries no memory at all.
+    private func carriedMemories(for chat: AIChatState) -> Int? {
+        guard readsMemory(in: chat) else { return nil }
+        return core.agentMemoryCoordinator.carried(
+            canForget: offersMemoryTools(in: chat), budget: memoryBudget(for: chat)
+        ).count
+    }
+
+    /// What a call to each tool the next turn is offered would do, in the menu's order.
+    private func toolRows(for chat: AIChatState) -> [ChatContextReport.ToolRow] {
+        guard capabilities(for: chat).tools else { return [] }
+        let servers = mcpServers
+        let mcp = core.mcpCoordinator
+        let calls =
+            listedBuiltInTools(for: chat).map { AgentCall(tool: $0) }
+            + servers.map { AgentCall.server($0.slug, listed: mcp.listedTools(slug: $0.slug)) }
+        return gate.decisions(for: calls, in: chat).map { row in
+            guard case .mcp(let slug) = row.tool else {
+                return ChatContextReport.ToolRow(title: row.tool.title, decision: row.decision)
+            }
+            let title = servers.first { $0.slug == slug }?.title ?? slug
+            return ChatContextReport.ToolRow(title: title, decision: row.decision)
+        }
     }
 
     // MARK: - Attachments
@@ -710,6 +1340,8 @@ final class AIChatCoordinator {
             subscription: core.codexSubscription, installedAI: core.installedAI)
         chat.setModel(selection)
         core.aiSettings.select(selection)
+        // The picker leaves with the route, and a mode nobody can see must not keep applying.
+        if !offersModes(in: chat) { chat.agentScope.mode = .manual }
     }
 
     func reasoningEfforts(for chat: AIChatState) -> [ChatGPTSubscription.Effort] {
@@ -763,9 +1395,17 @@ struct ChatContextReport: Equatable {
     let usage: AIUsage?
     let systemPrompt: Bool
     let webSearch: Bool
-    let toolServers: Int
-    /// The Mac's own stores in reach, such as the calendar; left empty for the gauge alone.
-    let personalData: [String]
+    /// How many memories the next turn carries; nil when it carries none, as with Read Memory off.
+    let memories: Int?
+    /// Nil where the route reaches none of Blitz's tools, so it has no mode to be in.
+    let mode: AgentMode?
+    /// Each tool the next turn is offered; left empty for the gauge alone.
+    let tools: [ToolRow]
+
+    struct ToolRow: Equatable {
+        let title: String
+        let decision: AgentDecision
+    }
 
     /// The model's own window when the route reported one; otherwise Blitz's history budget.
     var fill: Double {

@@ -61,15 +61,34 @@ enum AIRequestBody {
             "stream": true
         ]
         if !systemParts.isEmpty { body["system"] = systemParts.joined(separator: "\n\n") }
-        if !input.tools.isEmpty {
-            body["tools"] = input.tools.map {
-                [
-                    "name": $0.name, "description": $0.description,
-                    "input_schema": $0.parameters.jsonObject
-                ]
-            }
+        var tools: [[String: Any]] = input.tools.map {
+            [
+                "name": $0.name, "description": $0.description,
+                "input_schema": $0.parameters.jsonObject
+            ]
         }
+        if input.webSearch {
+            tools.append([
+                "type": anthropicWebSearchTool(for: configuration.model),
+                "name": "web_search", "max_uses": 5
+            ])
+        }
+        if !tools.isEmpty { body["tools"] = tools }
         return body
+    }
+
+    /// Dynamic filtering exists from Opus and Sonnet 4.6 on; an unknown id gets the basic tool.
+    static func anthropicWebSearchTool(for model: String) -> String {
+        let parts = model.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        guard let family = parts.firstIndex(where: { $0 == "opus" || $0 == "sonnet" })
+        else { return "web_search_20250305" }
+        // A date suffix is all digits too, so only a one- or two-digit part is a version number.
+        let version = parts[(family + 1)...]
+            .prefix { $0.count <= 2 && $0.allSatisfy(\.isNumber) }
+            .compactMap { Int($0) }
+        guard let major = version.first else { return "web_search_20250305" }
+        let minor = version.dropFirst().first ?? 0
+        return (major, minor) >= (4, 6) ? "web_search_20260209" : "web_search_20250305"
     }
 
     /// Plain text stays a string; only a message with images takes the content-part array.

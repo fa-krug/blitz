@@ -9,11 +9,8 @@ final class ClipboardManager {
     static let maxTextLength = 32_000
 
     /// Markers put on secret copies by password managers, browsers and the OS.
-    static let sensitiveTypes: Set<NSPasteboard.PasteboardType> = [
-        .init("org.nspasteboard.ConcealedType"),
-        .init("org.nspasteboard.TransientType"),
-        .init("com.apple.is-sensitive")
-    ]
+    static let sensitiveTypes = Set(
+        PasteboardSensitivity.markerTypes.map { NSPasteboard.PasteboardType($0) })
 
     private let store: ClipboardStore
     private let settings: AppSettings

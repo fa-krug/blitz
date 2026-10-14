@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// An attached picture, already encoded for the wire; every provider takes it as a data URL.
 struct AIImage: Equatable, Hashable, Sendable {
@@ -153,8 +154,50 @@ enum AIStreamEvent: Equatable, Sendable {
     /// What the loop emits in its place, already carrying what a row has to show.
     case toolCall(id: String, origin: String, title: String)
     case toolResult(id: String, isError: Bool)
+    /// Before a call with no row runs: its card pins where the reply stands once this is passed.
+    case barrier(AIStreamBarrier)
     case usage(AIUsage)
     case finished
+}
+
+/// A point in a stream its producer waits at until the consumer has applied everything before it.
+final class AIStreamBarrier: Sendable {
+    private enum State {
+        case pending
+        case waiting(CheckedContinuation<Void, Never>)
+        case passed
+    }
+
+    private let state = Mutex(State.pending)
+
+    func pass() {
+        let waiter: CheckedContinuation<Void, Never>? = state.withLock { state in
+            defer { state = .passed }
+            guard case .waiting(let waiter) = state else { return nil }
+            return waiter
+        }
+        waiter?.resume()
+    }
+
+    /// Cancellation passes it too, so a turn that ends while it waits never strands the producer.
+    func wait() async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let passed = state.withLock { state in
+                    guard case .pending = state else { return true }
+                    state = .waiting(continuation)
+                    return false
+                }
+                if passed { continuation.resume() }
+            }
+        } onCancel: {
+            pass()
+        }
+    }
+}
+
+extension AIStreamBarrier: Equatable {
+    static func == (lhs: AIStreamBarrier, rhs: AIStreamBarrier) -> Bool { lhs === rhs }
 }
 
 enum AIProviderError: LocalizedError, Equatable, Sendable {

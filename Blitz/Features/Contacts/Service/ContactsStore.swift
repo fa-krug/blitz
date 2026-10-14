@@ -184,6 +184,60 @@ final class ContactsStore {
         byID[id]
     }
 
+    /// A chat search's cards, read fresh off main in `ids` order; nil without access.
+    func toolCards(ids: [ContactItem.ID]) async -> [ContactToolCatalog.Card]? {
+        refreshAccess()
+        guard access == .granted else { return nil }
+        guard !ids.isEmpty else { return [] }
+        return await Task.detached(priority: .userInitiated) { Self.fetchCards(ids) }.value
+    }
+
+    nonisolated private static func fetchCards(_ ids: [String]) -> [ContactToolCatalog.Card]? {
+        let keys: [any CNKeyDescriptor] =
+            [CNContactFormatter.descriptorForRequiredKeys(for: .fullName)]
+            + ContactToolCatalog.fetchedKeys.map { $0 as NSString }
+        let predicate = CNContact.predicateForContacts(withIdentifiers: ids)
+        let store = CNContactStore()
+        guard let found = try? store.unifiedContacts(matching: predicate, keysToFetch: keys) else {
+            return nil
+        }
+        let formatter = CNContactFormatter()
+        let cards = Dictionary(
+            found.map { ($0.identifier, card(from: $0, formatter: formatter)) },
+            uniquingKeysWith: { first, _ in first })
+        return ids.compactMap { cards[$0] }
+    }
+
+    nonisolated private static func card(
+        from contact: CNContact, formatter: CNContactFormatter
+    ) -> ContactToolCatalog.Card {
+        typealias Field = ContactToolCatalog.Card.Field
+        let name = formatter.string(from: contact) ?? ""
+        return ContactToolCatalog.Card(
+            name: name.isEmpty ? contact.organizationName : name,
+            organization: contact.organizationName,
+            emails: contact.emailAddresses.map {
+                Field(label: label($0.label), value: $0.value as String)
+            },
+            phones: contact.phoneNumbers.map {
+                Field(label: label($0.label), value: $0.value.stringValue)
+            },
+            addresses: contact.postalAddresses.map {
+                let lines = CNPostalAddressFormatter.string(from: $0.value, style: .mailingAddress)
+                    .split(whereSeparator: \.isNewline)
+                return Field(label: label($0.label), value: lines.joined(separator: ", "))
+            },
+            birthday: contact.birthday.flatMap(birthday))
+    }
+
+    nonisolated private static func birthday(
+        _ components: DateComponents
+    ) -> ContactToolCatalog.Card.Birthday? {
+        guard let month = components.month, let day = components.day else { return nil }
+        let year = components.year.flatMap { $0 == NSDateComponentUndefined ? nil : $0 }
+        return ContactToolCatalog.Card.Birthday(year: year, month: month, day: day)
+    }
+
     // MARK: - Writing
 
     /// False when the card is gone or will not save; anything the prompt does not show is kept.

@@ -48,10 +48,11 @@ whose **Open** shows it in Reminders.
 - **Per-list switches live on `RemindersStore`, not `AppSettings`.** List identifiers are
   machine-specific, so they stay out of the backup, as the calendar's do. They store exclusions, so a
   list added later defaults to on.
-- **A chat writes what it was asked, and edits rather than duplicates.** Read & Write is the consent:
-  a create or update lands straight away and the transcript shows the call, while a completion is
-  still confirmed first. An update changes the reminder in place by id, so moving a due date never
-  leaves a second copy behind. See [Chat tools](#chat-tools).
+- **A chat writes what it was asked, and edits rather than duplicates.** The agent's Change Reminders
+  row is the consent for a create, an update and a completion alike: at Allow each lands straight
+  away and the transcript shows the call, at Ask each is shown in Blitz's dialog first. An update
+  changes the reminder in place by id, so moving a due date never leaves a second copy behind. See
+  [Chat tools](#chat-tools).
 
 ## The pure layer
 
@@ -126,11 +127,12 @@ fixed there at all, so it re-runs `setRemindersEnabled`'s consent path instead.
 
 ## Chat tools
 
-With Reminders on and Settings → AI → Personal data → Reminders access set past Off, a chat on an
-API connection or the Claude command is offered `reminders_list`, and with Read & Write
-`reminders_create`, `reminders_update` and `reminders_complete` — see [AI](ai.md) for who gets
-offered what.
-`RemindersCoordinator.chatTools` decides the list and `runTool` answers a call.
+With Reminders on, a chat on an API connection or the Claude command is offered `reminders_list`
+while the agent's Read Reminders row is not Deny, and `reminders_create`, `reminders_update` and
+`reminders_complete` while Change Reminders is not — each half on its own. The rows, the dialogs
+and who gets offered what are [Agent](agent.md)'s. `RemindersCoordinator.chatTools` builds the list
+from the halves the gate offers, and `runTool` reads a call, then puts its dialog to the gate before
+it acts.
 
 A listing is the store's own snapshot, so it covers exactly the lists switched on here, open
 reminders only; a call that arrives before the first fetch lands waits for it rather than answering
@@ -138,14 +140,16 @@ empty. It answers JSON in `ReminderAgenda` order, at most `maxReminders`, each w
 completion names, its list, its due date in the `YYYY-MM-DD[THH:MM]` spelling the calls use, and
 `overdue` where it is.
 
-A create call writes to the default list with no prompt, and the answer is what was saved with its
-id. An update names a reminder by that id and only the fields that change — `due` set to `none`
+A create call writes to the default list, and the answer is what was saved with its id. At Ask,
+each write's dialog says what it does: the title, then the due day and the notes clipped as the
+model's copy is (`ReminderToolCatalog.summary`), with a rename leading an update's. An update names a reminder by that id and only the fields that change — `due` set to `none`
 clears the date — and the create tool's description tells the model to update rather than add a
 second. A due date the model wrote and Blitz cannot read is refused back to it, unlike Smart
 Reminder's, which drops it: here the model can simply try again. Updating and completing look the
 id up in EventKit through `RemindersStore.openReminder`, not the snapshot, so a reminder created a
 moment ago is found before the reload lands; one that is completed or on a list switched off cannot
-be reached. Completing asks before it ticks it off on every device.
+be reached, and an id that finds nothing is a sentence before any dialog. Completing ticks it off on
+every device, which its dialog says.
 
 ## The prompt
 
