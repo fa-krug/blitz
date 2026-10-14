@@ -211,8 +211,8 @@ struct AgentPolicyTests {
         check(
             "only the rows a catalog serves are hosted; web search is the provider's",
             AgentTool.builtIn.filter(\.isHosted) == [
-                .shell, .filesRead, .filesWrite, .calendarRead, .calendarWrite, .remindersRead,
-                .remindersWrite
+                .shell, .filesRead, .filesWrite, .webFetch, .calendarRead, .calendarWrite,
+                .remindersRead, .remindersWrite
             ] && !AgentTool.mcp("x").isHosted)
         check(
             "only the file rows weigh paths",
@@ -236,6 +236,9 @@ struct AgentPolicyTests {
         for name in [FileToolCatalog.writeName, FileToolCatalog.moveName, FileToolCatalog.trashName] {
             check("\(name) changes files", AgentTool(wireName: name) == .filesWrite)
         }
+        check(
+            "web_fetch fetches pages",
+            AgentTool(wireName: WebFetchToolCatalog.fetchName) == .webFetch)
         check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
@@ -261,6 +264,7 @@ struct AgentPolicyTests {
         let catalogNames =
             ShellToolCatalog.tools().map(\.name)
             + FileToolCatalog.tools(read: true, write: true).map(\.name)
+            + WebFetchToolCatalog.tools().map(\.name)
             + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
@@ -268,6 +272,7 @@ struct AgentPolicyTests {
         let readOnlyNames =
             catalogs(read: true, write: false)
             + FileToolCatalog.tools(read: true, write: false).map(\.name)
+            + WebFetchToolCatalog.tools().map(\.name)
         check(
             "what a read-only catalog offers maps to a read row",
             readOnlyNames.allSatisfy { name in

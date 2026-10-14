@@ -304,13 +304,36 @@ As built, in [`docs/features/agent.md`](../features/agent.md#file-tools):
 - **Decided:** a write no Allow pattern matches keeps the row's decision rather than being capped
   at Ask. Change Files starts on Deny, and Allow on it is the reader's own word.
 
+### 3c: web fetch (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#web-fetch):
+
+- **One tool.** `WebFetchToolCatalog`: `web_fetch` under Fetch Web Pages, `url` and an optional
+  `maxCharacters` (20 000 by default, capped at 100 000); its wire name makes the row hosted, and
+  as a read Plan offers it. `http` and `https` only, no credentials in the URL, a host required.
+- **The session.** `WebFetchRunner`: a private `.ephemeral` session with `urlCache = nil`, no
+  cookies or credentials, a User-Agent naming Blitz; 15 s per request and 30 s in all, the body
+  streamed to 5 MB at most, at most five redirects, each re-checked by
+  `WebFetchToolCatalog.redirectTarget` because the session declines them all.
+- **Readable text.** `HTMLTextEngine`: scripts, styles, `noscript`, `svg`, `template`, `math`, the
+  head and comments dropped, the title kept, blocks as line breaks, list items as "- ", links as
+  "text (absolute URL)", entities decoded, whitespace collapsed. Other text types pass through;
+  everything else is refused naming the type. Charset from the header, then `<meta>`, then UTF-8
+  with a lossy fallback. The answer starts with the final URL, the status and the title.
+- **The local network always asks.** `LocalNetworkPolicy` classifies the host by its spelling;
+  `AgentCall.webFetch(isLocalNetwork:)` is held at `min(decision, Ask)` after the mode, so an Allow
+  row, a chat grant and Auto all still ask, and its dialog has no Allow This Chat.
+- **Decided:** a redirect into the local network is refused with a sentence rather than asked
+  again, except on the host the user allowed; the model may fetch that URL itself, which asks.
+  DNS is not resolved to catch a public name pointing at a private address — a known limit, since
+  resolving first would not hold against rebinding either. No domain rules or Always Allow yet;
+  they can come later.
+
 ### Remaining steps
 
-1. **3c Web fetch** — `.webFetch`: a URL as readable text, on a private `.ephemeral`,
-   `urlCache = nil` session (`CurrencyRateStore` shape), with a size and time cap.
-2. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
+1. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
    `.systemActions` (Blitz's system actions), `.windowLayouts` (a window layout).
-3. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
+2. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
    `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
    and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
    turn by itself.

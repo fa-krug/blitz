@@ -82,6 +82,17 @@ struct AgentPrompt: Equatable, Sendable {
             defaultIndex: 0)
     }
 
+    /// A page to fetch; one on the local network is asked each time, never for the whole chat.
+    static func webFetch(host: String, url: String, isLocalNetwork: Bool) -> AgentPrompt {
+        let local = isLocalNetwork ? " This address is on this Mac or its local network." : ""
+        let chat: [Choice] = isLocalNetwork ? [] : [.allowThisChat]
+        return AgentPrompt(
+            title: "Let the agent open \(host)?",
+            message: "\(url)\n\nWhat it reads is sent to the model\u{2019}s provider.\(local)",
+            symbol: AgentTool.webFetch.symbolName,
+            choices: [.allowOnce("Allow")] + chat + [.refuse("Don't Allow")], defaultIndex: 0)
+    }
+
     /// The server's own three-way question; only Settings can withhold a server for good.
     static func mcp(serverTitle: String, tool: String) -> AgentPrompt {
         AgentPrompt(

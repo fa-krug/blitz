@@ -27,7 +27,7 @@ enum AgentMode: String, CaseIterable, Identifiable, Sendable {
     var summary: String {
         switch self {
         case .manual: "Asks before anything the agent's rules say to ask about."
-        case .auto: "Runs what the rules would ask about; what they deny stays denied."
+        case .auto: "Runs what the rules would ask about, except local-network pages; denials stay."
         case .plan: "Looks without changing anything, then writes a plan for you to approve."
         }
     }

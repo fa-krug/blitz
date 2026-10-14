@@ -10,6 +10,8 @@ struct AgentCall: Equatable, Sendable {
     let homeDirectory: String
     /// Only an MCP call sets it, from its server's `readOnlyHint` for the tool, never the model's.
     private let isReadOnlyServerTool: Bool
+    /// Only a web fetch sets it: then an Allow row, a chat grant or Auto still asks; Deny denies.
+    let isLocalNetwork: Bool
 
     init(tool: AgentTool, command: String? = nil) {
         self.init(
@@ -19,13 +21,14 @@ struct AgentCall: Equatable, Sendable {
 
     private init(
         tool: AgentTool, command: String?, paths: [String], homeDirectory: String,
-        isReadOnlyServerTool: Bool
+        isReadOnlyServerTool: Bool, isLocalNetwork: Bool = false
     ) {
         self.tool = tool
         self.command = command
         self.paths = paths
         self.homeDirectory = homeDirectory
         self.isReadOnlyServerTool = isReadOnlyServerTool
+        self.isLocalNetwork = isLocalNetwork
     }
 
     static func shell(_ command: String) -> AgentCall {
@@ -37,6 +40,13 @@ struct AgentCall: Equatable, Sendable {
         AgentCall(
             tool: tool, command: nil, paths: paths, homeDirectory: homeDirectory,
             isReadOnlyServerTool: false)
+    }
+
+    /// `isLocalNetwork` is `LocalNetworkPolicy`'s word on the URL, never the model's.
+    static func webFetch(isLocalNetwork: Bool) -> AgentCall {
+        AgentCall(
+            tool: .webFetch, command: nil, paths: [], homeDirectory: "",
+            isReadOnlyServerTool: false, isLocalNetwork: isLocalNetwork)
     }
 
     /// One tool of a server; a call without the hint is never read-only, so Plan refuses it.

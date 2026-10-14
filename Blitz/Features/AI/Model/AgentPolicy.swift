@@ -33,7 +33,8 @@ enum AgentPolicy {
         } else if call.tool.usesPathRules, !call.paths.isEmpty {
             decision = pathDecision(for: call, base: base, rules: rules.pathRules)
         }
-        return applying(scope.mode, to: decision, for: call)
+        let decided = applying(scope.mode, to: decision, for: call)
+        return call.isLocalNetwork ? min(decided, .ask) : decided
     }
 
     /// A call whose bare decision is Deny is never shown to the model, whatever its patterns say.

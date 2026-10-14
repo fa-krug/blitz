@@ -511,7 +511,8 @@ final class AIChatCoordinator {
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
             || ShellToolCatalog.handles(name) || FileToolCatalog.handles(name)
-            || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
+            || WebFetchToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
+            || PlanToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -524,6 +525,7 @@ final class AIChatCoordinator {
             if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
             if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
             if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
+            if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -599,6 +601,7 @@ final class AIChatCoordinator {
                 read: offered(.remindersRead), write: offered(.remindersWrite), now: now)
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
             + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
+            + (offered(.webFetch) ? WebFetchToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
                 ? AskUserToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
@@ -653,6 +656,25 @@ final class AIChatCoordinator {
         switch await Task.detached(operation: {
             FileToolRunner.run(prepared, deniedRules: denied)
         }).value {
+        case .success(let answer):
+            return AIToolResult(callID: call.id, content: answer, isError: false)
+        case .failure(let failure): return .failure(call.id, failure.message)
+        }
+    }
+
+    /// The gate weighs whether the URL is on the local network; the runner checks each redirect.
+    private func fetchWebPage(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let request: WebFetchToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try WebFetchToolCatalog.request(arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let prompt = WebFetchToolCatalog.prompt(for: request)
+        if let refusal = await gate.authorization(for: request.agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        switch await Task.detached(operation: { await WebFetchRunner.run(request) }).value {
         case .success(let answer):
             return AIToolResult(callID: call.id, content: answer, isError: false)
         case .failure(let failure): return .failure(call.id, failure.message)

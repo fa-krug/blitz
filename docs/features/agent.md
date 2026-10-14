@@ -1,8 +1,8 @@
 # Agent
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
-calls the tools one rule table allows: the shell, files, the calendar, reminders, web search and
-each MCP server, with rows already in the table for the rest of the Phase 3 toolbox — web fetch,
+calls the tools one rule table allows: the shell, files, web fetch, the calendar, reminders, web
+search and each MCP server, with rows already in the table for the rest of the Phase 3 toolbox —
 Mac actions, personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
 tool, plus ordered command patterns for the shell and path patterns for files; a
 session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
@@ -10,7 +10,7 @@ a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
-[File tools](#file-tools) below,
+[File tools](#file-tools) and [Web fetch](#web-fetch) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -24,13 +24,18 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   decision for a bare call to the tool. A shell row on Deny hides the tool whatever its patterns
   say, and calendar and reminders offer their read and write halves independently.
 - **Nothing a session holds lifts a Deny.** The tools menu switches tools off, "Allow This Chat"
-  answers one row's Ask ahead of time, Auto answers every Ask, and Plan narrows to what only looks;
-  a row or pattern on Deny refuses under all of them, and a denied tool is still not offered. All
-  of it lives on the session scope, so it ends with the scope and is never stored.
+  answers one row's Ask ahead of time, Auto answers every Ask but a local-network fetch's, and Plan
+  narrows to what only looks; a row or pattern on Deny refuses under all of them, and a denied tool
+  is still not offered. All of it lives on the session scope, so it ends with the scope and is
+  never stored.
 - **The mode is the session's.** `AgentSessionScope.mode` is an `AgentMode`, never stored: a new
   chat, a reopened one or deleting the open one starts in Manual, and picking a route with no mode
-  picker puts the chat back there. Auto never shows a dialog, and Plan lets through only calls that look, plus commands it
-  asks about one by one. See [Modes](#modes).
+  picker puts the chat back there. Auto shows no dialog but a local-network fetch's, and Plan lets
+  through only calls that look, plus commands it asks about one by one. See [Modes](#modes).
+- **A local-network fetch always asks.** `AgentCall.webFetch(isLocalNetwork:)` carries
+  `LocalNetworkPolicy`'s word on the URL, and `AgentPolicy.decision` holds such a call at
+  `min(decision, Ask)` after everything else: an Allow row, a chat grant and Auto all still ask,
+  its dialog never offers Allow This Chat, and a Deny row still denies. See [Web fetch](#web-fetch).
 - **Read-only is the row's or the server's word, never the model's.** `AgentTool.isReadOnly` is true
   for every row that only looks — the calendar, reminders, contacts, note, clipboard history and
   snippets reads, Read Files, both web rows and the three context rows. An MCP tool is read-only only when its server
@@ -114,7 +119,7 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context.
 | Files | `.filesRead` | Read Files | `files_list`, `files_read` | yes | Ask | — |
 | | `.filesWrite` | Change Files | `files_write`, `files_move`, `files_trash` | no | Deny | — |
 | Web | `.webSearch` | Web Search | the route's own search | yes | Allow (no Ask) | — |
-| | `.webFetch` | Fetch Web Pages | a URL as text (3c) | yes | Ask | — |
+| | `.webFetch` | Fetch Web Pages | `web_fetch` | yes | Ask | — |
 | Mac | `.openItems` | Open Apps, Files and Links | (3d) | no | Deny | — |
 | | `.shortcuts` | Run Shortcuts | an Apple Shortcut (3d) | no | Deny | Apple Shortcuts on |
 | | `.systemActions` | Run System Actions | Blitz's system actions (3d) | no | Deny | System Actions on (`VisibilityStore`) |
@@ -147,7 +152,7 @@ neither Blitz nor a server spells has no row.
 `AgentPolicy.decision` applies, in order: a tool the session switched off is Deny; the row's own
 decision, with Deny final; a chat grant turning that row's Ask into Allow; for the shell, the
 patterns below, and for a file call, the path rules; then the session's mode, which never touches a
-Deny.
+Deny; and last, a local-network fetch held at Ask.
 
 ## Modes
 
@@ -156,7 +161,7 @@ Deny.
 | Mode | Glyph | An Ask | Otherwise |
 | --- | --- | --- | --- |
 | Manual (default) | `hand.raised` | Blitz's dialog | the table as written |
-| Auto | `bolt` | runs, with no dialog | Allow and Deny as written, so it offers exactly what Manual does |
+| Auto | `bolt` | runs, with no dialog — but a local-network fetch asks | Allow and Deny as written, so it offers exactly what Manual does |
 | Plan | `list.bullet.clipboard` | Blitz's dialog | only read-only calls keep their decision; every command asks; everything else is Deny |
 
 Plan's read-only set is `AgentCall.isReadOnly`: every read-only row — Read Files, both web rows,
@@ -346,6 +351,80 @@ folder for the same reason.
    This narrows the window between check and act rather than closing it; `create`'s
    `.withoutOverwriting` is the one step that holds even inside it.
 
+## Web fetch
+
+`WebFetchToolCatalog` (`Model/`) spells one tool, `web_fetch`, under Fetch Web Pages;
+`WebFetchRunner` (`Service/`) fetches, `HTMLTextEngine` (`Model/`) reads the HTML, and
+`LocalNetworkPolicy` (`Model/`) says whether a URL is local. Its wire name is what makes the row
+hosted. It is read-only, so Plan offers it and a public page may be allowed for the chat.
+
+| Argument | Meaning |
+| --- | --- |
+| `url` | required: `http` or `https`, with a host and no user name or password; anything else is refused with a sentence the model can correct, and one with no scheme is refused with its `https://` spelling suggested |
+| `maxCharacters` | text returned at most, default 20 000 (`defaultCharacters`); more is capped at 100 000 (`characterLimit`), less than 1 refused |
+
+The session is `WebFetchRunner.session`, built as `CurrencyRateStore`'s is and narrower: a private
+`.ephemeral` configuration with `urlCache = nil`, no cookie storage, `httpShouldSetCookies` false,
+no credential storage, and a User-Agent naming Blitz and its version. The caps:
+
+- **Time.** 15 s of silence per request (`requestTimeout`), and 30 s for the whole fetch,
+  redirects included (`totalTimeout`), raced against it so a slow page is cancelled.
+- **Size.** The body is streamed and reading stops at 5 MB (`byteLimit`); the answer says only
+  the start was read.
+- **Redirects.** The session declines every redirect (`RedirectRefusal`), so `follow` sees each
+  3xx and checks its target with `WebFetchToolCatalog.redirectTarget` — `http` or `https`, no
+  credentials, a host — before taking it; a sixth is refused. A 3xx without a `Location` is the
+  answer.
+- **Types.** Decided from the headers, before the body is read: HTML (`text/html`,
+  `application/xhtml+xml`) is read as text, other `text/*`, JSON, XML, YAML and Markdown pass
+  through as sent, and everything else — images, PDFs, archives — is refused naming the type. A
+  page with no type, or `application/octet-stream`, is refused if its first 8 KB hold a NUL,
+  else read as HTML when it looks like it and as text otherwise.
+- **Charset.** A byte-order mark, then the header's `charset`, then a `<meta charset>` or
+  `http-equiv` one in the first 8 KB; Latin-1 and ASCII labels mean Windows-1252, as browsers
+  read them. Anything else, or bytes the named charset rejects, is UTF-8 with bad bytes replaced.
+
+The answer opens with `URL:` (the final one), `Redirected from:` when it moved, `Status:` (the
+code and a fixed English reason, so a 404's text comes back too), `Type:` and `Title:`, then a blank
+line and the text, cut at `maxCharacters` with a note saying how many characters were left out. A
+network failure is a sentence from the `URLError` code, never `localizedDescription`.
+
+`HTMLTextEngine.page` walks the UTF-8 bytes once: comments, doctypes, `<script>` and `<style>`
+(skipped to their end tag as raw text) and everything in `<noscript>`, `<svg>`, `<template>`,
+`<math>` and `<head>` are dropped, except the first `<title>`, which is the answer's title; a start
+tag that cannot sit in `<head>` ends it, as in a browser. Block elements break the line,
+paragraph-like ones leave a blank line, `<br>` breaks once, list items start with "- ", table
+cells are joined with " | ", and `<pre>` keeps its whitespace; elsewhere runs of whitespace are one
+space. A link becomes "text (URL)", resolved against the final URL or a `<base href>`, for `http`,
+`https` and `mailto` only, and not when its text already is the URL; an in-page `#…` link keeps
+its text alone. Named and numeric entities are decoded, 128–159 as Windows-1252.
+
+### The local network
+
+`LocalNetworkPolicy.isLocal` reads the URL's host and never resolves it. Local is `localhost` and
+anything under `.localhost`, `.local`, `.home.arpa` or `.internal`; an IPv4 literal in any spelling
+the resolver takes (`127.1`, `0x7f.0.0.1`, `2130706433`) in `0/8`, `10/8`, `127/8`,
+`169.254/16`, `172.16/12`, `192.168/16` or the shared `100.64/10`; an IPv6 literal that is
+unspecified, loopback, `fc00::/7`, `fe80::/10` or the old site-local `fec0::/10`, or that carries
+such an IPv4 address (mapped, compatible or NAT64's `64:ff9b::/96`); and an empty host.
+
+A local-network fetch always asks, as [Invariants](#invariants) says, and its dialog adds that the
+address is on this Mac or its local network. A redirect into the local network is refused with a
+sentence, not asked: the user approved one URL, so a public page that bounces to `127.0.0.1` or a
+router's address is never followed, and the model is told to fetch that URL itself, which asks. A
+local page may still redirect on its own host — `http://192.168.1.5/` to its `/login` — since that
+is the host the user allowed.
+
+Known limits:
+
+- **DNS is not checked.** A public name that resolves to a private address, such as a
+  `*.nip.io` name or a rebinding domain, is weighed by its spelling and so as public. Resolving
+  first would not close it either, since the address can change between the check and the fetch.
+- **App Transport Security.** Blitz declares no ATS exception, so plain `http` to a public name
+  fails; the answer suggests the `https` address. Local names and IP literals are exempt from ATS.
+- **No domain rules yet.** There is no Always Allow for a site and no per-domain pattern; a row on
+  Allow fetches every public page, and Ask asks per call or per chat.
+
 ## The gate and its dialogs
 
 `AgentGateCoordinator`, owned by `AIChatCoordinator`, is the one gate. Every route reaches it:
@@ -394,6 +473,8 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | `files_write` | Let the agent write to "`<file>`"? — create, replace or add to the end, with the size | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
 | `files_move` | Let the agent move "`<from>`"? — To "`<to>`" | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
 | `files_trash` | Let the agent move "`<path>`" to the Trash? — It can be put back from the Trash. | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
+| `web_fetch` | Let the agent open `<host>`? — the full URL, and that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `web_fetch`, local network | Let the agent open `<host>`? — the URL, the provider, and that the address is local | **Allow** ↵, Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -410,9 +491,11 @@ refusal of that one call; only Settings withholds a tool for good.
 - **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — every read-only row but
   web search, and MCP servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
   `AgentSessionScope.granted`, and only while that chat still shows the conversation that asked;
-  `AgentPolicy` turns that row's Ask into Allow from it, in Plan too. It never lifts a Deny.
+  `AgentPolicy` turns that row's Ask into Allow from it, in Plan too. It never lifts a Deny, and
+  never answers a local-network fetch, whose dialog does not offer it.
 
-Auto raises no dialog at all: every Ask is Allow before the gate would ask.
+Auto raises no dialog but one: every Ask is Allow before the gate would ask, except a
+local-network fetch, which the policy holds at Ask.
 
 ## The session scope and the composer
 
@@ -629,7 +712,7 @@ Each route honours the mode where it decides what to offer:
   each mode's decisions and offers, the new reads offered in Plan and the new writes refused, MCP
   tools weighed one at a time and servers handed to a CLI in
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
-  the plan instruction, and the context card's rows per mode.
+  the plan instruction, and the context card's rows per mode; `web_fetch`'s wire name and row.
 - `file-tool-test` — the five schemas and wire names, call reading and its refusals, each dialog's
   wording and choices (no Always Allow for home, the root or a seed, nor for a move between
   folders), the answers' wording and caps, text decoding, canonical resolution against links in a
@@ -637,6 +720,13 @@ Each route honours the mode where it decides what to offer:
   runner there: list, read with offset and limit, the three write modes and `createFolders`, a move
   that refuses an existing target, the Trash (a scratch folder stands in, so the user's Trash is
   never touched) and a folder swapped for a link after asking.
+- `web-fetch-test` — the schema and wire name, call reading and its refusals (schemes,
+  credentials, an empty host, the length cap), the local-network classifier over hosts, IPv4 in
+  every spelling and IPv6 literals, the policy (an Allow row, Auto, a chat grant and Plan each still
+  asking for a local URL), both dialogs, the HTML reader on fixtures, content types, clipping,
+  charsets, redirect targets, and the fetcher against a `URLProtocol` stub on its own session —
+  redirects and their cap, a scheme or local-network hop refused, the byte cap, refused types,
+  charsets, the status, a cookie never sent back and the total timeout. Nothing reaches a network.
 - `agent-wait-test` — `AgentWait.of`'s precedence and wording, `AgentApprovals` holding each request
   once and handing every waiter back once, `ChatPresence` per surface, `AgentWaitEpisodes` with a
   wait that changes kind, and each `AgentWaitNotice`: its wording, one identifier per chat, the
@@ -676,13 +766,18 @@ Each route honours the mode where it decides what to offer:
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
   Personal and Context; switching Contacts off greys Read Contacts with "Turn on Contacts first.",
-  and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only Read Files
-  and Change Files appear in the composer's tools menu and the context card.
+  and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only Read Files,
+  Change Files and Fetch Web Pages appear in the composer's tools menu and the context card.
 - With Read Files on Ask, ask a chat to read a file in `~/Projects/app`: the dialog names it, and
   **Always Allow "~/Projects/app/**"** adds a Read rule to Path rules, after which the next read
   there runs straight away; a write there still asks, or is refused while Change Files is Deny.
 - Make `~/Documents/key` a link to `~/.ssh/id_ed25519` and ask for it to be read: it is refused
   without a dialog. In Plan, `files_write` is not offered whatever Change Files says.
+- With Fetch Web Pages on Ask, ask a chat to read `https://example.com`: the dialog names the host
+  and the URL, and Allow This Chat lets a second page through without asking. Ask for
+  `http://localhost:8080` or a router's `192.168.…` address: it asks, without Allow This Chat,
+  even with the row on Allow, after the chat grant, and in Auto. A PDF link is refused naming
+  `application/pdf`.
 - Settings → AI → Path rules starts with the Deny seeds; a rule edited, moved or removed there is
   still so after a relaunch.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model

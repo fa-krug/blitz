@@ -146,6 +146,13 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   (Change Files), from `FileToolCatalog`, go to the same routes as the shell. Every path is weighed
   with its symlinks resolved, resolved again just before the runner acts, and nothing is ever
   deleted for good — the Trash is the furthest it goes. See [Agent](agent.md#file-tools).
+- **A model can read one web page as text, and a local address always asks.** `web_fetch`
+  (`WebFetchToolCatalog`, under Fetch Web Pages) goes to the same routes, fetches an `http` or
+  `https` URL on its own cacheless, cookieless `.ephemeral` session (`WebFetchRunner`) — 30 s, 5 MB
+  and five redirects at most, each redirect checked again — and answers with the final URL, the
+  status, the title and the page's readable text (`HTMLTextEngine`), cut at `maxCharacters`. Images,
+  PDFs and other files are refused naming their type. A URL on this Mac or its local network asks
+  whatever the row, a chat grant or Auto say. See [Agent](agent.md#web-fetch).
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's

@@ -63,6 +63,7 @@ enum AgentTool: Hashable, Sendable {
         "files_write": .filesWrite,
         "files_move": .filesWrite,
         "files_trash": .filesWrite,
+        "web_fetch": .webFetch,
         "calendar_list_events": .calendarRead,
         "calendar_create_event": .calendarWrite,
         "reminders_list": .remindersRead,
