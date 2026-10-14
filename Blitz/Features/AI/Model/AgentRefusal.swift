@@ -39,6 +39,8 @@ enum AgentRefusal: Equatable, Sendable {
         case .currentClipboard: "read the clipboard"
         case .sessionsRead: "read the user's other chats"
         case .sessionsArchive: "archive or unarchive this chat"
+        case .memoryRead: "read its memory"
+        case .memoryWrite: "change its memory"
         case .mcp: "call this server's tools"
         }
     }

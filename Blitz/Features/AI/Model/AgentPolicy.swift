@@ -63,6 +63,11 @@ enum AgentPolicy {
         }
     }
 
+    /// Whether a turn carries the memories: Read Memory has no Ask, so only Allow sends them.
+    static func readsMemory(rules: AgentRules, scope: AgentSessionScope) -> Bool {
+        scope.usesMemory && rules.decision(for: .memoryRead) == .allow
+    }
+
     static func offered(
         _ tools: [AgentTool], rules: AgentRules, mcpTrust: (String) -> AgentDecision,
         scope: AgentSessionScope

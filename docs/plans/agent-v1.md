@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1, 1b, 2 and 3 (3a–3f) built; phase 4 planned. Builds on PR #49 (web search on
+Status: Phases 1–4 built (1, 1b, 2, 3a–3f and 4). Builds on PR #49 (web search on
 Claude routes, the shell tool). Codex is out of scope; it keeps MCP servers only.
 
 ## Concept
@@ -408,11 +408,39 @@ As built, in [`docs/features/agent.md`](../features/agent.md#personal-and-contex
 
 Phase 3 is complete.
 
-## Phase 4: memory
+## Phase 4: memory (built)
 
-- **Memory:** a small store the agent reads at each session start and appends to through a
-  `remember` tool, which has its own rule (Ask by default). It is editable and clearable in Settings,
-  excluded from backups, and stays on this Mac.
+As built, in [`docs/features/agent.md`](../features/agent.md#memory):
+
+- **Two rows in a Memory group.** Read Memory (`.memoryRead`) is Allow or Deny only — it has no
+  call to stop, so no Ask and no wire name — and starts on Allow; Change Memory (`.memoryWrite`)
+  covers `memory_remember` and `memory_forget`, starts on Ask, and is not read-only, so Plan never
+  offers it. Tolerant decoding gives a stored table both defaults.
+- **Decided: no Allow This Chat for Change Memory.** Remembering is small, but one remembered
+  sentence rides every later chat, so a page read in one chat must not be able to plant several
+  behind a single answer. Each call asks, as every other write does; the row on Allow, or Auto, is
+  the way to skip the dialog.
+- **Decided: a dedicated store, not a table in the history database.** `AgentMemoryStore` keeps
+  `agent-memory.json` beside `ai-chats.sqlite3`. `ChatHistoryStore`'s lifecycle — Delete All
+  Chats, retention's prune and `VACUUM`, the handle closed with AI off — is the transcripts', and a
+  memory outlives every chat; a second owner on one SQLite file would split that, and 12 KB needs
+  no SQL. Ids are integers from a counter that only grows (`m3`), so one the model saw never names
+  a later memory. `sourceConversation` is informational. At most 100 memories, 500 characters
+  each and 12 KB in all; past that `memory_remember` is refused, asking for something to be
+  forgotten first, and an identical memory, case and whitespace aside, is answered as already
+  remembered without a dialog.
+- **Decided: the instructions are the read path; there is no `memory_list`.** While Read Memory is
+  Allow and something is remembered, every turn's instructions carry the memories, oldest first,
+  each with its id, after the preamble and prompt and before a mode's instruction — on every
+  route, with Use Tools off and in Plan too. Apple Intelligence carries the newest that fit 1 500
+  bytes. Codex starts a new thread when the instructions change, accepted.
+- **Decided: a per-chat Use Memory.** The tools menu holds it, on by default and never stored,
+  while Read Memory is Allow; it costs one switch on the scope (`usesMemory`). A route that cannot
+  call tools shows that menu disabled, so there the Settings row is the only switch.
+- **Settings → AI → Memory** lists the memories newest first with inline edit and Forget, Add
+  Memory and Forget All… through Blitz's confirmation; the context card counts the memories a turn
+  carries. Neither a backup nor `settings.json` carries any of it; the two rows live in the rule
+  table, already excluded. `memory-test` and `agent-policy-test` pin it.
 
 ## Decided
 

@@ -209,6 +209,7 @@ run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRul
                            $A/LocalNetworkPolicy.swift $A/SessionToolCatalog.swift $A/AITool.swift \
                            $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
                            $A/OpenToolCatalog.swift $A/AgentNameMatch.swift $F $P \
+                           $A/AgentMemory.swift $A/MemoryToolCatalog.swift \
                            $A/AIToolJSON.swift $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
                            Blitz/Features/Reminders/Model/*.swift \
                            Blitz/Features/MCP/Model/MCPServer.swift \
@@ -230,6 +231,13 @@ run personal-tool-test     $P $T $A/AgentNameMatch.swift $A/AgentTool.swift $A/A
                            $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
                            $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
                            $A/AgentChatTool.swift
+run memory-test            $A/AgentMemory.swift $A/MemoryToolCatalog.swift \
+                           $A/AgentMemoryInstructions.swift $T $A/AgentTool.swift \
+                           $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
+                           $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
+                           $A/AgentSessionScope.swift $A/AgentPolicy.swift $A/AIDataAccess.swift \
+                           $A/AgentPrompt.swift $A/AgentRefusal.swift $A/AgentMode.swift \
+                           $A/AgentChatTool.swift Blitz/Features/AI/Service/AgentMemoryStore.swift
 run agent-wait-test        $A/AgentWait.swift $A/AgentApprovals.swift $A/AgentWaitEpisodes.swift \
                            $A/AgentWaitNotice.swift $A/ChatPresence.swift
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.

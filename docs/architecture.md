@@ -98,7 +98,8 @@ the shared primitives and system shims every feature draws on. Neither may depen
 app: the stores (`AppIndex`, `ClipboardStore`, `SnippetsStore`, `QuicklinkStore`, `CustomCommandStore`,
 `FavoritesStore`, `VisibilityStore`, `AliasStore`, `LauncherRankingStore`, `LauncherQueryHistoryStore`,
 `CalculatorHistoryStore`,
-`CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`), the
+`CurrencyRateStore`, `FrequentEmojiStore`, `CalendarStore`, `RemindersStore`, `ContactsStore`,
+`AgentMemoryStore`), the
 managers, monitors and clocks (`ClipboardManager`, the opt-in `ClipboardTextIndexer` and
 `ScreenshotIndexer`, the opt-in `SettingsFileRepository`,
 `HotKeyManager`, `HyperKeyTap`, `RunningAppsMonitor`, `ExternalAppMonitor`,

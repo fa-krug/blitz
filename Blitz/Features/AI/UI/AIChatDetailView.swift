@@ -374,6 +374,15 @@ private struct AIToolsPicker: View {
                     }
                 }
             }
+            if coordinator.offersMemorySwitch {
+                Section("Memory") {
+                    Toggle(
+                        "Use Memory",
+                        isOn: Binding(
+                            get: { scope.usesMemory },
+                            set: { coordinator.setUsesMemory($0, in: chat) }))
+                }
+            }
             Divider()
             Button("Agent Settings…", action: coordinator.showAgentSettings)
         } label: {
@@ -573,6 +582,7 @@ private struct ContextCard: View {
                 }
                 row("System prompt", report.systemPrompt ? "On" : "Off")
                 row("Web search", report.webSearch ? "On" : "Off")
+                row("Memory", memory)
                 section("Tools")
                 if let mode = report.mode {
                     row("Mode", mode.title)
@@ -592,6 +602,15 @@ private struct ContextCard: View {
         // Solid under the glass: the transcript's text must not show through the card.
         .background { shape.fill(Theme.Colors.windowSurface) }
         .shadow(color: Theme.Colors.tooltipShadow, radius: Theme.Spacing.xl, y: Theme.Spacing.xs)
+    }
+
+    private var memory: String {
+        switch report.memories {
+        case nil: "Off"
+        case 0?: "None"
+        case 1?: "1 memory"
+        case let count?: "\(count) memories"
+        }
     }
 
     private func section(_ title: String) -> some View {

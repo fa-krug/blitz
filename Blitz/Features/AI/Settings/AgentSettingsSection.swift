@@ -77,6 +77,8 @@ struct AgentSettingsSection: View {
         case .calendarRead: "The calendars switched on in Calendar."
         case .remindersRead: "The lists switched on in Reminders."
         case .selectedText: "In the app in front, through Accessibility."
+        case .memoryRead: "Sent with every turn, on every model."
+        case .memoryWrite: "Remembering and forgetting, listed under Memory below."
         default: nil
         }
     }

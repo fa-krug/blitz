@@ -56,6 +56,7 @@ final class AIChatCoordinator {
         // Deferred off the launch path like the clipboard's own read; history fills in behind it.
         Task {
             core.chatHistory.load()
+            core.agentMemoryCoordinator.load()
             // Inside the enabled branch only: off means the file is untouched, however old it gets.
             applyRetention()
         }
@@ -455,12 +456,32 @@ final class AIChatCoordinator {
         core.aiSettings.webSearchEnabled && offersWebSearch(in: chat)
     }
 
+    /// The system prompt switch withholds neither memory nor the mode: each has its own switch.
     private func instructions(for chat: AIChatState) -> String? {
-        AgentModeInstructions.appending(
-            to: AIInstructions.compose(
-                userPrompt: core.aiSettings.systemPrompt,
-                isEnabled: core.aiSettings.systemPromptEnabled),
-            for: chat.agentScope.mode)
+        let prompt = AIInstructions.compose(
+            userPrompt: core.aiSettings.systemPrompt,
+            isEnabled: core.aiSettings.systemPromptEnabled)
+        let memory = readsMemory(in: chat)
+            ? core.agentMemoryCoordinator.instructions(
+                canForget: offersMemoryTools(in: chat), budget: memoryBudget(for: chat))
+            : nil
+        return AgentModeInstructions.appending(
+            to: AgentMemoryInstructions.appending(memory, to: prompt), for: chat.agentScope.mode)
+    }
+
+    /// Read Memory on Allow and the chat's Use Memory on; it is no tool, so every route reads it.
+    private func readsMemory(in chat: AIChatState) -> Bool {
+        AgentPolicy.readsMemory(rules: gate.rules, scope: chat.agentScope)
+    }
+
+    /// Whether this turn can call `memory_forget`, so the memory block mentions it only then.
+    private func offersMemoryTools(in chat: AIChatState) -> Bool {
+        capabilities(for: chat).tools && model(for: chat)?.reachesBlitzTools == true
+            && gate.isOffered(.memoryWrite, in: chat)
+    }
+
+    private func memoryBudget(for chat: AIChatState) -> Int? {
+        model(for: chat)?.isOnDevice == true ? AgentMemoryInstructions.onDeviceBudget : nil
     }
 
     /// A turn's route and its tools: a CLI with its own client is handed servers, others the loop.
@@ -542,7 +563,8 @@ final class AIChatCoordinator {
             || ContactToolCatalog.handles(name) || NoteToolCatalog.handles(name)
             || ClipboardToolCatalog.handles(name) || SnippetToolCatalog.handles(name)
             || QuicklinkToolCatalog.handles(name) || ContextToolCatalog.handles(name)
-            || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
+            || MemoryToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
+            || PlanToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -653,6 +675,7 @@ final class AIChatCoordinator {
             + personal
             + SessionToolCatalog.tools(
                 read: offered(.sessionsRead), archive: offered(.sessionsArchive))
+            + (offered(.memoryWrite) ? MemoryToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
                 ? AskUserToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
@@ -732,10 +755,10 @@ final class AIChatCoordinator {
         }
     }
 
-    /// The Mac, personal and context tools; a denied row refuses before its feature looks it up.
+    /// The Mac, personal, context and memory tools; a denied row refuses before anything is read.
     private func runFeatureTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult? {
         guard let row = AgentTool(builtInToolName: call.name),
-            let run = featureRunner(for: call.name)
+            let run = featureRunner(for: call.name, in: chat)
         else { return nil }
         let agentCall = AgentCall(tool: row)
         guard gate.decision(for: agentCall, in: chat) != .deny else {
@@ -748,7 +771,7 @@ final class AIChatCoordinator {
         @MainActor (AIToolCall, AgentAuthorization) async -> AIToolResult
 
     /// Each runner reads its call, checks its feature's switch and puts its own dialog to the gate.
-    private func featureRunner(for name: String) -> FeatureRunner? {
+    private func featureRunner(for name: String, in chat: AIChatState) -> FeatureRunner? {
         if ShortcutToolCatalog.handles(name) { return core.appleShortcutCoordinator.runTool }
         if SystemActionToolCatalog.handles(name) { return core.systemActionCoordinator.runTool }
         if WindowLayoutToolCatalog.handles(name) { return core.windowLayoutCoordinator.runTool }
@@ -757,6 +780,10 @@ final class AIChatCoordinator {
         if ClipboardToolCatalog.handles(name) { return core.clipboardCoordinator.runTool }
         if SnippetToolCatalog.handles(name) { return core.snippetCoordinator.runTool }
         if QuicklinkToolCatalog.handles(name) { return core.quicklinkCoordinator.runTool }
+        if MemoryToolCatalog.handles(name) {
+            let (memory, conversation) = (core.agentMemoryCoordinator, chat.session.id)
+            return { await memory.runTool($0, conversation: conversation, authorize: $1) }
+        }
         guard ContextToolCatalog.handles(name) else { return nil }
         let apps = core.externalApps
         return { await ContextToolRunner.run($0, app: apps.app, authorize: $1) }
@@ -962,6 +989,15 @@ final class AIChatCoordinator {
         chat.agentScope.isEnabled = enabled
     }
 
+    /// The tools menu's Use Memory, listed only while the table lets turns read memory at all.
+    var offersMemorySwitch: Bool {
+        gate.rules.decision(for: .memoryRead) == .allow
+    }
+
+    func setUsesMemory(_ uses: Bool, in chat: AIChatState) {
+        chat.agentScope.usesMemory = uses
+    }
+
     func toggleTool(_ tool: AgentTool, in chat: AIChatState) {
         chat.agentScope.toggle(tool)
     }
@@ -1049,8 +1085,17 @@ final class AIChatCoordinator {
             usage: chat.usage,
             systemPrompt: core.aiSettings.systemPromptEnabled,
             webSearch: webSearch(for: chat),
+            memories: detailed ? carriedMemories(for: chat) : nil,
             mode: offersModes(in: chat) ? chat.agentScope.mode : nil,
             tools: detailed ? toolRows(for: chat) : [])
+    }
+
+    /// Nil while the turn carries no memory at all.
+    private func carriedMemories(for chat: AIChatState) -> Int? {
+        guard readsMemory(in: chat) else { return nil }
+        return core.agentMemoryCoordinator.carried(
+            canForget: offersMemoryTools(in: chat), budget: memoryBudget(for: chat)
+        ).count
     }
 
     /// What a call to each tool the next turn is offered would do, in the menu's order.
@@ -1350,6 +1395,8 @@ struct ChatContextReport: Equatable {
     let usage: AIUsage?
     let systemPrompt: Bool
     let webSearch: Bool
+    /// How many memories the next turn carries; nil when it carries none, as with Read Memory off.
+    let memories: Int?
     /// Nil where the route reaches none of Blitz's tools, so it has no mode to be in.
     let mode: AgentMode?
     /// Each tool the next turn is offered; left empty for the gauge alone.

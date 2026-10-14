@@ -231,6 +231,21 @@ struct AgentPrompt: Equatable, Sendable {
             symbol: AgentTool.windowLayouts.symbolName)
     }
 
+    /// Shown as it will be stored, since it rides in every later turn; asked each time.
+    static func remember(_ text: String) -> AgentPrompt {
+        write(
+            title: "Let the agent remember this?",
+            message: "\u{201C}\(text)\u{201D}\n\nIt is sent to the model\u{2019}s provider with "
+                + "every chat from now on. Settings \u{2192} AI \u{2192} Memory can forget it.",
+            symbol: AgentTool.memoryWrite.symbolName)
+    }
+
+    static func forget(_ text: String) -> AgentPrompt {
+        write(
+            title: "Let the agent forget \u{201C}\(AIToolJSON.clipped(text, to: 120))\u{201D}?",
+            message: nil, symbol: AgentTool.memoryWrite.symbolName)
+    }
+
     /// The server's own three-way question; only Settings can withhold a server for good.
     static func mcp(serverTitle: String, tool: String) -> AgentPrompt {
         AgentPrompt(

@@ -352,6 +352,9 @@ enum SettingsSearchCatalog {
                 "other chats", "read chats", "archive chats", "history", "conversations", "tools"
             ]),
         .init(
+            group: .aiAgent, "Memory rules",
+            keywords: ["read memory", "change memory", "remember", "forget", "tools"]),
+        .init(
             group: .aiAgent, "MCP server trust",
             keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
         .init(
@@ -371,6 +374,17 @@ enum SettingsSearchCatalog {
         .init(
             .aiPathRules, "Add Path Rule",
             keywords: ["files", "folder", "path", "pattern", "always allow"]),
+        .init(
+            group: .aiMemory, "Memory",
+            keywords: [
+                "remember", "forget", "preferences", "facts", "agent", "personal", "privacy"
+            ]),
+        .init(
+            .aiMemory, "Add Memory",
+            keywords: ["remember", "fact", "preference", "agent"]),
+        .init(
+            .aiMemory, "Forget All…",
+            keywords: ["memory", "clear", "delete", "remember", "privacy"]),
         .init(
             .aiConversations, "Quick AI opens to",
             keywords: ["new chat", "last", "summon", "resume"]),

@@ -6,6 +6,8 @@ struct AgentSessionScope: Equatable, Sendable {
     /// Switched off for this session; an MCP server added later arrives switched on.
     var excluded: Set<AgentTool> = []
     var mode = AgentMode.manual
+    /// The tools menu's Use Memory: memory is no tool, so Use Tools off leaves it as it is.
+    var usesMemory = true
     /// "Allow This Chat" answers, so they end exactly when the session's scope does.
     private(set) var granted: Set<AgentTool> = []
 

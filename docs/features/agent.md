@@ -3,16 +3,19 @@
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
 calls the tools one rule table allows: the shell, files, web fetch, the reader's other chats, Mac
 actions, the calendar, reminders, contacts, the note, clipboard history, snippets and quicklinks,
-the app the reader is in, its selected text and the clipboard, web search and each MCP server. The
+the app the reader is in, its selected text and the clipboard, its own memory, web search and each
+MCP server. The
 table says Allow, Ask or Deny per tool, plus ordered command patterns for the shell and path
 patterns for files; a session's mode — Manual, Auto or Plan — decides what an Ask does, and
 nothing a session holds lifts a Deny. Two more tools talk only to the chat and have no row:
-`ask_user` and, in Plan, `write_plan`.
+`ask_user` and, in Plan, `write_plan`. What the reader asked it to remember rides in every turn's
+instructions ([Memory](#memory)).
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
 [File tools](#file-tools), [Web fetch](#web-fetch), [Session tools](#session-tools),
-[Mac tools](#mac-tools) and [Personal and context tools](#personal-and-context-tools) below,
+[Mac tools](#mac-tools), [Personal and context tools](#personal-and-context-tools) and
+[Memory](#memory) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -40,7 +43,8 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   its dialog never offers Allow This Chat, and a Deny row still denies. See [Web fetch](#web-fetch).
 - **Read-only is the row's or the server's word, never the model's.** `AgentTool.isReadOnly` is true
   for every row that only looks — the calendar, reminders, contacts, note, clipboard history and
-  snippets reads, Read Files, both web rows, the three context rows and Read Other Chats. An MCP
+  snippets reads, Read Files, both web rows, the three context rows, Read Other Chats and Read
+  Memory. An MCP
   tool is read-only only when its server listed it with `annotations.readOnlyHint` set to `true` (`MCPTool.isReadOnly`); a missing,
   `false` or non-boolean hint, or a tool Blitz never saw listed, changes things. A server's bare row
   says nothing for all its tools, so Plan weighs them one at a time.
@@ -108,6 +112,17 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
 - **Web search has no Ask.** The provider runs the search, so Blitz never sees a call it could stop.
   `AgentRules` stores an Ask on that row as Deny, no mode makes it ask, and Allow only means the
   composer offers its globe.
+- **Memory is read into every turn, never called.** Read Memory has no Ask and no wire name, so it
+  is not hosted: on Allow every turn's instructions carry the memories, on every route, Use Tools
+  off and Plan included, unless the chat's Use Memory is off (`AgentPolicy.readsMemory`); on Deny
+  no turn carries any. See [Memory](#memory).
+- **A memory is added only by the reader or through a dialog.** Change Memory starts on Ask, is
+  never allowed for the chat and never offered in Plan, since one remembered sentence rides every
+  later chat: a page the agent read cannot plant one unasked. Only the row on Allow, or Auto,
+  lets `memory_remember` through without a dialog.
+- **Memory stays on this Mac.** `AgentMemoryStore` keeps it in `agent-memory.json` in Blitz's own
+  Application Support folder, which the path rules' seed denies; no backup category and no
+  `settings.json` key carries it, and a file that will not decode is refused rather than replaced.
 - **The table is a capability grant.** `aiAgentRules` is in
   `SettingsBackupCoverage.deliberatelyExcluded` and has no `SettingsFileKey`, so neither a backup
   nor `settings.json` can arm a tool.
@@ -121,10 +136,12 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
 `AgentRules` is one decision per built-in row plus `shellRules` and `pathRules`; an MCP server's row
 is its own trust. `AgentDecision` orders `deny < ask < allow`, so `min` is the narrower of two.
 `AgentRules.defaultDecision(for:)` is the whole default rule: a read-only row asks, every row that
-writes or acts is denied, and web search is Allow, its composer globe being the opt-in.
+writes or acts is denied, and web search is Allow, its composer globe being the opt-in. Memory is
+the exception both ways: Read Memory is Allow, since every memory in it was the reader's own word
+or a dialog's, and Change Memory is Ask.
 
 `AgentTool.builtIn` is Settings order, and runs group by group (`AgentTool.Group`): Commands,
-Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions.
+Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions, Memory.
 
 | Group | Row (`AgentTool`) | Settings title | Covers | Read-only | Default | Ceiling |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -151,10 +168,13 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions.
 | | `.currentClipboard` | Read the Clipboard | `context_clipboard` | yes | Ask | — |
 | Sessions | `.sessionsRead` | Read Other Chats | `sessions_list`, `sessions_read` | yes | Ask | — |
 | | `.sessionsArchive` | Archive Chats | `sessions_archive`, `sessions_unarchive` | no | Deny | — |
+| Memory | `.memoryRead` | Read Memory | every turn's instructions, no tool | yes | Allow (no Ask) | — |
+| | `.memoryWrite` | Change Memory | `memory_remember`, `memory_forget` | no | Ask | — |
 | — | `.mcp(slug)` | the server's title | every tool of that server | per tool | its trust, `.ask` | MCP and the server on |
 
-Every row but web search, which the provider runs, is hosted. Every read-only row but web search
-can be allowed for the chat.
+Every row is hosted but web search, which the provider runs, and Read Memory, which is read into
+the turn rather than called. Every read-only row but those two can be allowed for the chat; a row
+with no Ask stores one as Deny.
 `AgentFeatureCeiling` is the one place that says each row's ceiling and the sentence Settings shows
 under a row held below it ("Turn on Contacts first."); Selected Text's is the Accessibility grant,
 read through `Permissions.isAccessibilityTrusted()` at each decision and polled once a second while
@@ -186,7 +206,8 @@ marked read-only, each still at its own decision, path rules and grants included
 is offered while its row is not Deny, and every command asks, under any Allow pattern — Always
 Allow's included, so the new pattern takes effect once the chat leaves Plan — while a Deny pattern
 still refuses. Every row that writes or acts — Change Files, the Mac rows, the calendar,
-reminders and note writes, Archive Chats — and every other MCP tool are Deny. `ask_user` and
+reminders and note writes, Archive Chats, Change Memory — and every other MCP tool are Deny. A
+Plan turn still carries the memories, which no call reads. `ask_user` and
 `write_plan` are offered besides, and `AgentModeInstructions.plan` rides each Plan turn: look
 without changing anything, ask where the answer changes the plan, finish with `write_plan`, and
 never start carrying it out. [AI](ai.md#plans) has the plan card that carries it out.
@@ -681,6 +702,99 @@ type in it.
   "text, 42 characters" — and a pasteboard whose `changeCount` moved while the dialog was up is
   refused rather than read.
 
+## Memory
+
+The agent keeps what the reader asked it to remember: short facts and preferences, one sentence
+each, that every later chat should know. Two rows govern it — Read Memory, whether turns carry the
+memories, and Change Memory, the two tools that add and take out — and the reader edits the list
+in Settings.
+
+### Storage
+
+`AgentMemoryStore` (`Service/`, owned by `AppCore` as `agentMemory`) holds `[AgentMemory]`, oldest
+first, in `agent-memory.json` under the bundle's Application Support folder — a dedicated file, not
+a table in `ai-chats.sqlite3`. `ChatHistoryStore` owns transcripts and their lifecycle: Delete All
+Chats, retention's prune and `VACUUM`, and closing the handle when AI goes off. A memory outlives
+every chat, so it has no place in that lifecycle, and a second owner on one SQLite file would split
+it; 12 KB of text needs no SQL either. Each memory is:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | an integer from a counter stored beside the list that only grows, so `m3` never names a later memory, even after Forget All |
+| `text` | at most 500 characters (`textLimit`), on one line: runs of whitespace collapse to one space |
+| `createdAt` | when it was added; an edit keeps it, and the id |
+| `sourceConversation` | the chat that remembered it, nil from Settings; informational, so deleting that chat keeps the memory |
+
+- **Limits.** At most 100 memories (`countLimit`) and 12 KB of UTF-8 across them (`byteLimit`),
+  since every one rides in every turn. `AgentMemory.admission` is the one rule, for the tool and
+  Settings alike: blank is empty, over 500 characters is too long, identical once case and
+  whitespace are set aside is a duplicate, and past either limit is full. An edit is weighed
+  without its own old text.
+- **Loading.** `load()` runs once, from `AIChatCoordinator.applyEnabled` with AI on and from the
+  Settings section; nothing is read with AI off, and nothing is written until something is kept. A
+  missing file is an empty memory. One that will not decode leaves the store unavailable: the file
+  is the reader's own words, so it is never replaced, and every change is refused.
+- **Writes** are atomic, the whole file each time.
+
+### What a turn carries
+
+`AIChatCoordinator.instructions(for:)` appends `AgentMemoryInstructions.block` after the preamble
+and the reader's prompt and before a mode's instruction, whenever `AgentPolicy.readsMemory` — Read
+Memory on Allow and the chat's `usesMemory` on — and something is remembered:
+
+```
+The user asked you to remember these, oldest first. Use them where they help. To forget one, call memory_forget with its id.
+- m1: Prefers metric units
+- m3: Lives in Berlin
+```
+
+The forget sentence is there only while the turn can call `memory_forget`: the route reaches
+Blitz's tools and Change Memory is offered to the chat. Every route carries the block, Apple
+Intelligence, Codex and the CLIs included, and so does a turn with Use Tools off or in Plan, since
+no call reads it. On Apple Intelligence it is held to `AgentMemoryInstructions.onDeviceBudget`,
+1 500 bytes: the newest memories that fit, still oldest first, then "(N older ones left out.)".
+Codex starts a new thread when the instructions change, so remembering something there costs the
+retained context of the conversation, as a system prompt edit does.
+
+There is no tool to list memories: the block is the read path, already in the model's
+instructions with the ids it needs.
+
+### The tools
+
+`MemoryToolCatalog` (`Model/`) spells both, under Change Memory; `AgentMemoryCoordinator.runTool`
+runs them, reached through `AIChatCoordinator.runFeatureTool`, which refuses a Deny row before
+anything remembered is looked up.
+
+| Tool | Arguments | What comes back |
+| --- | --- | --- |
+| `memory_remember` | `text`, required, at most 500 characters | "Remembered as m4.", and that it is in every chat's instructions from now on |
+| `memory_forget` | `id` (`m3`, `M3` or `3`) or, without one, the exact `text` | "Forgot m3: “…”." |
+
+**Order of a call.** Read the arguments (a malformed call is a sentence, never a dialog); refuse on
+a Deny row; settle what needs no dialog (`MemoryToolCatalog.settled`) — a duplicate answers "That
+is already remembered as m3; nothing was added." without being an error, a full memory refuses
+asking the model to have the reader forget something first, and a memory to forget that is not
+there is refused; ask through the gate with `AgentPrompt.remember` or `.forget`; settle again,
+since Settings may have changed the memories while the dialog was up, and refuse a forget whose
+memory was edited meanwhile; then act. A write that fails is a sentence, and nothing changes.
+
+### Settings
+
+**Settings → AI → Memory** (`AgentMemorySection`) follows Path rules: every memory newest first, as
+its text over its id and date, with **Edit** and **Forget** buttons. Edit turns that one row into a
+field — one at a time, so a hundred memories still list as plain text, as
+[UI](../ui.md#settings) asks of a long list — where Return saves and Escape cancels; leaving the
+field saves too. A refused edit stays open on Return and is dropped on leaving, the HUD saying why
+(a duplicate, full). **Add Memory** opens the same field above the list. **Forget All…** asks
+through Blitz's own confirmation (`AgentMemoryCoordinator.forgetAll`). The footer says that while
+Read Memory is Allow every memory goes to the model's provider with every turn, and that memories
+stay on this Mac and are never in a backup. Every change goes through `AgentMemoryCoordinator`.
+
+The tools menu's **Use Memory** is the per-chat opt-out, offered while Read Memory is Allow. It
+lives in the menu a route that cannot call tools shows disabled, so on Apple Intelligence the
+Settings row is the only switch. Quick AI has no menu: its turns always carry the memories while
+the row allows them.
+
 ## The gate and its dialogs
 
 `AgentGateCoordinator`, owned by `AIChatCoordinator`, is the one gate. Every route reaches it:
@@ -749,6 +863,8 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | `context_frontmost_app` | Let the agent see that you are using `<app>`? — name, bundle ID and window title | **Allow** ↵, Allow This Chat, Don't Allow |
 | `context_selected_text` | Let the agent read the text selected in `<app>`? | **Allow** ↵, Allow This Chat, Don't Allow |
 | `context_clipboard` | Let the agent read the clipboard? — its kind and size, never its content | **Allow** ↵, Allow This Chat, Don't Allow |
+| `memory_remember` | Let the agent remember this? — the text as stored, that it goes to the provider with every chat, and where to forget it | **Allow** ↵, Don't Allow |
+| `memory_forget` | Let the agent forget "`<text>`"? | **Allow** ↵, Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -763,7 +879,7 @@ refusal of that one call; only Settings withholds a tool for good.
   home, at the root or under a seed offers none.
 - **Always Allow** on a server sets its trust to `.always` through `MCPCoordinator.setTrust`.
 - **Allow This Chat** is offered only where `AgentTool.canAllowForSession` — every read-only row but
-  web search, and MCP servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
+  web search and Read Memory, and MCP servers; a write or a command is asked each time. The gate writes the grant onto the asking chat's
   `AgentSessionScope.granted`, and only while that chat still shows the conversation that asked;
   `AgentPolicy` turns that row's Ask into Allow from it, in Plan too. It never lifts a Deny, and
   never answers a local-network fetch, whose dialog does not offer it.
@@ -775,7 +891,7 @@ local-network fetch, which the policy holds at Ask.
 
 `AgentSessionScope` lives on `AIChatState.agentScope` and is never stored: a new chat, a reopened
 one, or deleting the open one starts it fresh. It holds `isEnabled`, the `excluded` tools, the
-`mode` and the `granted` tools, so a chat grant ends exactly when the scope does. A server added
+`mode`, `usesMemory` and the `granted` tools, so a chat grant ends exactly when the scope does. A server added
 later arrives switched on.
 
 The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits what the chat may call:
@@ -785,6 +901,8 @@ The AI Agent window's composer has a tools menu (`AIToolsPicker`) that edits wha
   Blitz's tools (`AIChatCoordinator.listedBuiltInTools`); web search, the provider's own, is not
   among them.
 - **MCP Servers** — one switch per server the table does not deny.
+- **Memory** — **Use Memory**, while Read Memory is Allow. Off keeps this chat's turns from
+  carrying the memories; on by default, and Use Tools leaves it alone, since memory is no tool.
 - **Agent Settings…** opens Settings → AI on the Agent section.
 
 The label counts what is on, "`n` of `m`". A route that cannot call tools shows the menu disabled
@@ -807,7 +925,8 @@ Allow (`AIChatCoordinator.offersWebSearch`). It flips `aiWebSearch`, off by defa
 searches only with both. The context card's **Tools** section opens on a **Mode** row where the
 route offers modes, then lists each tool the next turn is offered with the decision a bare call to
 it would get, grants, scope and mode included, or one "Offered: None" row; its **Web search** row
-says whether the next turn searches. A server's row is `AgentCall.server(_:listed:)` over
+says whether the next turn searches, and its **Memory** row how many memories it carries — the
+newest that fit on Apple Intelligence — "None", or "Off". A server's row is `AgentCall.server(_:listed:)` over
 `MCPCoordinator.listedTools(slug:)`, so in Plan it shows while any listed tool is read-only, and a
 CLI route's server Blitz has never listed is missing until a Plan turn lists it.
 
@@ -913,6 +1032,8 @@ Settings → AI holds two sections, between Default model and Conversations:
   Write) beside each decision, then **Add Path Rule**; the footer explains `~`, `*` and `**`, that
   a Deny always wins, and that paths are checked once symlinks resolve, ignoring case. Both lists
   draw their rows with `AgentRuleRow`.
+- **Memory** (`AgentMemorySection`) — what the agent was asked to remember; see
+  [Memory](#memory).
 
 `AISettingsStore.agentRules` is the table, encoded as JSON under `AppSettingsKey.aiAgentRules`.
 Loading it:
@@ -989,8 +1110,10 @@ Each route honours the mode where it decides what to offer:
   Sessions rows — their group and order, wire names, hosting, defaults, Plan offering the read and
   refusing the archive, tolerant decoding without them — and their three dialogs; the Mac rows'
   wire names and hosting, and which rows weigh paths and take Read rules; the personal and
-  context catalogs' wire names, every row but web search hosted, and each read catalog's names on
-  a read row.
+  context catalogs' wire names, and each read catalog's names on a read row; the Memory rows —
+  their group, wire names, Read Memory unhosted with no Ask and Allow by default, Change Memory on
+  Ask, never for the chat and never in Plan, tolerant decoding without them — and
+  `AgentPolicy.readsMemory` under Use Memory, Use Tools off and each mode.
 - `personal-tool-test` — the ten personal and context schemas, wire names and rows, each read
   allowable for the chat and the addition never; call reading and its refusals (queries, limits
   and their caps, a blank or oversized addition, arguments that are not an object); contact cards
@@ -1003,6 +1126,16 @@ Each route honours the mode where it decides what to offer:
   tags; the frontmost answer with a title, none, or no Accessibility; each `PasteboardSensitivity`
   marker refusing a fixture pasteboard, files before Finder's names, empty and non-text contents;
   and every dialog's wording and choices.
+- `memory-test` — `AgentMemory`: cleaning, the key, ids read from a handle, and admission (empty,
+  500 characters and 501, a duplicate ignoring case and spacing, an edit never its own twin, the
+  101st memory, the byte budget in UTF-8); both schemas and wire names, call reading and its
+  refusals, what settles without a dialog (a duplicate as no error, full, an unknown id or text,
+  nothing remembered), both dialogs' wording and choices, the answers and both refusals; the block
+  a turn carries — format, ids, oldest first, the forget sentence only when offered, clipping to a
+  budget from the oldest with its note, nothing for no memories — and where it is appended; and
+  `AgentMemoryStore` in a scratch folder — nothing written before a load or until something is
+  kept, a reload, an edit keeping id and date, removal, ids never reused across Forget All and a
+  reload, and a file that will not decode refused and left as it was.
 - `quicklink-coordinator-test` — `QuicklinkCoordinator.runTool` asks once before listing, answers
   a decline with it, and with Quicklinks off refuses before asking and offers nothing.
 - `mac-tool-test` — the seven Mac schemas and wire names, the rows not read-only and never allowed
@@ -1133,3 +1266,14 @@ Each route honours the mode where it decides what to offer:
   and the notification go.
 - Switch Notify when the agent is waiting off: a chat left waiting posts nothing, and its badge and
   the dot still show.
+- With Change Memory on Ask, tell a chat "remember that I prefer metric units": the dialog shows
+  the sentence, and Allow adds it to Settings → AI → Memory as m1. A new chat asked for a
+  distance answers in kilometres; its context card's Memory row reads "1 memory". Asking again to
+  remember the same sentence in other capitals answers that it is already remembered, with no
+  dialog. Asking it to forget that preference names it in a dialog, and Allow removes it.
+- Switch Use Memory off in a chat's tools menu: its next turn carries no memory, and the context
+  card says Off; a new chat has it on again. With Read Memory on Deny no chat carries any, and the
+  menu has no Use Memory.
+- In Settings → AI → Memory, edit a memory and press Return: the list shows the new text with the
+  same id. Add one that duplicates another: the HUD says it is already remembered. Forget All…
+  asks first, then empties the list; the next memory the agent keeps is not m1.

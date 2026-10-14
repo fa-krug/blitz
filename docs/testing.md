@@ -105,7 +105,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-test` |
-| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
+| AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
 | updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
@@ -830,6 +830,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A chat left waiting on an Ask shows no dialog; its sidebar row shows the raised hand, the menu bar
   icon a dot, and clicking the notification brings the window up on it with the dialog; the full
   list is in [agent.md](features/agent.md#manual-sweep)
+- A sentence the agent was allowed to remember is in Settings → AI → Memory and in the next chat's
+  context card; Forget All… asks first
 - Quick Actions are off out of the box; enabling asks with Blitz's dialog, then Accessibility
 - Fix Grammar on a selection in another app replaces it, with the `Fixing Grammar…` pill while the
   model works; the full list is in [quick-actions.md](features/quick-actions.md#manual-sweep)

@@ -25,11 +25,13 @@ enum AgentTool: Hashable, Sendable {
     case currentClipboard
     case sessionsRead
     case sessionsArchive
+    case memoryRead
+    case memoryWrite
     case mcp(String)
 
     /// Where Settings lists a built-in row, in Settings order.
     enum Group: CaseIterable, Sendable {
-        case commands, files, web, mac, calendarAndReminders, personal, context, sessions
+        case commands, files, web, mac, calendarAndReminders, personal, context, sessions, memory
 
         var title: String {
             switch self {
@@ -41,6 +43,7 @@ enum AgentTool: Hashable, Sendable {
             case .personal: "Personal"
             case .context: "Context"
             case .sessions: "Sessions"
+            case .memory: "Memory"
             }
         }
 
@@ -56,7 +59,8 @@ enum AgentTool: Hashable, Sendable {
         .calendarRead, .calendarWrite, .remindersRead, .remindersWrite,
         .contactsRead, .noteRead, .noteWrite, .clipboardRead, .snippetsRead,
         .frontmostApp, .selectedText, .currentClipboard,
-        .sessionsRead, .sessionsArchive
+        .sessionsRead, .sessionsArchive,
+        .memoryRead, .memoryWrite
     ]
 
     /// Keyed by the catalogs' wire names, which this layer cannot import; the harness pins them.
@@ -89,6 +93,8 @@ enum AgentTool: Hashable, Sendable {
         "sessions_read": .sessionsRead,
         "sessions_archive": .sessionsArchive,
         "sessions_unarchive": .sessionsArchive,
+        "memory_remember": .memoryWrite,
+        "memory_forget": .memoryWrite,
         "calendar_list_events": .calendarRead,
         "calendar_create_event": .calendarWrite,
         "reminders_list": .remindersRead,
@@ -118,6 +124,7 @@ enum AgentTool: Hashable, Sendable {
         case .contactsRead, .noteRead, .noteWrite, .clipboardRead, .snippetsRead: .personal
         case .frontmostApp, .selectedText, .currentClipboard: .context
         case .sessionsRead, .sessionsArchive: .sessions
+        case .memoryRead, .memoryWrite: .memory
         case .mcp: nil
         }
     }
@@ -147,6 +154,8 @@ enum AgentTool: Hashable, Sendable {
         case .currentClipboard: "Read the Clipboard"
         case .sessionsRead: "Read Other Chats"
         case .sessionsArchive: "Archive Chats"
+        case .memoryRead: "Read Memory"
+        case .memoryWrite: "Change Memory"
         case .mcp(let slug): slug
         }
     }
@@ -176,22 +185,24 @@ enum AgentTool: Hashable, Sendable {
         case .currentClipboard: "clipboard"
         case .sessionsRead: "text.bubble"
         case .sessionsArchive: "archivebox"
+        case .memoryRead: "brain"
+        case .memoryWrite: "brain.head.profile"
         case .mcp: "wrench.and.screwdriver"
         }
     }
 
-    /// The provider runs a web search itself, so Blitz never sees a call it could stop to ask.
-    var canAsk: Bool { self != .webSearch }
+    /// Web search is the provider's call and memory rides in every turn, so neither can be asked.
+    var canAsk: Bool { self != .webSearch && self != .memoryRead }
 
     /// Whether every call under the row only looks; a server's row cannot say it for all its tools.
     var isReadOnly: Bool {
         switch self {
         case .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead, .contactsRead,
             .noteRead, .clipboardRead, .snippetsRead, .frontmostApp, .selectedText,
-            .currentClipboard, .sessionsRead:
+            .currentClipboard, .sessionsRead, .memoryRead:
             true
         case .shell, .filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
-            .calendarWrite, .remindersWrite, .noteWrite, .sessionsArchive, .mcp:
+            .calendarWrite, .remindersWrite, .noteWrite, .sessionsArchive, .memoryWrite, .mcp:
             false
         }
     }
@@ -240,6 +251,8 @@ extension AgentTool: Codable {
         case .currentClipboard: "currentClipboard"
         case .sessionsRead: "sessionsRead"
         case .sessionsArchive: "sessionsArchive"
+        case .memoryRead: "memoryRead"
+        case .memoryWrite: "memoryWrite"
         case .mcp(let slug): Self.mcpPrefix + slug
         }
     }

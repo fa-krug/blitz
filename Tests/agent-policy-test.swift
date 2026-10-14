@@ -179,13 +179,13 @@ struct AgentPolicyTests {
                 .systemActions, .windowLayouts, .calendarRead, .calendarWrite, .remindersRead,
                 .remindersWrite, .contactsRead, .noteRead, .noteWrite, .clipboardRead,
                 .snippetsRead, .frontmostApp, .selectedText, .currentClipboard, .sessionsRead,
-                .sessionsArchive
+                .sessionsArchive, .memoryRead, .memoryWrite
             ])
         check(
             "the groups, in Settings order",
             AgentTool.Group.allCases.map(\.title) == [
                 "Commands", "Files", "Web", "Mac", "Calendar & Reminders", "Personal", "Context",
-                "Sessions"
+                "Sessions", "Memory"
             ])
         check(
             "the built-in rows run group by group, so Settings order is the groups' order",
@@ -210,10 +210,11 @@ struct AgentPolicyTests {
                 && AgentTool.Group.context.tools == [
                     .frontmostApp, .selectedText, .currentClipboard
                 ]
-                && AgentTool.Group.sessions.tools == [.sessionsRead, .sessionsArchive])
+                && AgentTool.Group.sessions.tools == [.sessionsRead, .sessionsArchive]
+                && AgentTool.Group.memory.tools == [.memoryRead, .memoryWrite])
         check(
-            "every row but web search is hosted; web search is the provider's",
-            AgentTool.builtIn.filter { !$0.isHosted } == [.webSearch]
+            "every row is hosted but web search, the provider's, and memory, read into each turn",
+            AgentTool.builtIn.filter { !$0.isHosted } == [.webSearch, .memoryRead]
                 && !AgentTool.mcp("x").isHosted)
         check(
             "the file rows and opening weigh paths",
@@ -221,7 +222,9 @@ struct AgentPolicyTests {
         check(
             "reading and opening take Read rules",
             AgentTool.builtIn.filter(\.readsPaths) == [.filesRead, .openItems])
-        check("only web search has no ask", AgentTool.builtIn.filter { !$0.canAsk } == [.webSearch])
+        check(
+            "only web search and reading memory have no ask",
+            AgentTool.builtIn.filter { !$0.canAsk } == [.webSearch, .memoryRead])
         check("an MCP server can ask", AgentTool.mcp("github").canAsk)
         check("an MCP row is titled by its slug", AgentTool.mcp("github").title == "github")
         check(
@@ -279,6 +282,13 @@ struct AgentPolicyTests {
             AgentTool(wireName: ContextToolCatalog.frontmostAppName) == .frontmostApp
                 && AgentTool(wireName: ContextToolCatalog.selectedTextName) == .selectedText
                 && AgentTool(wireName: ContextToolCatalog.clipboardName) == .currentClipboard)
+        for name in [MemoryToolCatalog.rememberName, MemoryToolCatalog.forgetName] {
+            check("\(name) changes memory", AgentTool(wireName: name) == .memoryWrite)
+        }
+        check(
+            "no wire name reads memory: it is read into each turn",
+            AgentTool.memoryRead.title == "Read Memory" && !AgentTool.memoryRead.isHosted
+                && AgentTool.memoryWrite.isHosted)
         check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
@@ -317,6 +327,7 @@ struct AgentPolicyTests {
             + SystemActionToolCatalog.tools().map(\.name)
             + WindowLayoutToolCatalog.tools().map(\.name)
             + personalNames(append: true)
+            + MemoryToolCatalog.tools().map(\.name)
             + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
@@ -361,7 +372,8 @@ struct AgentPolicyTests {
             "web search defaults to allow: the composer toggle is the opt-in",
             defaults.decision(for: .webSearch) == .allow)
         check("no shell rules by default", defaults.shellRules.isEmpty)
-        for tool in AgentTool.builtIn where tool != .webSearch {
+        let ownDefaults: [AgentTool] = [.webSearch, .memoryRead, .memoryWrite]
+        for tool in AgentTool.builtIn where !ownDefaults.contains(tool) {
             check(
                 "\(tool.title) defaults to \(tool.isReadOnly ? "ask" : "deny")",
                 defaults.decision(for: tool) == (tool.isReadOnly ? .ask : .deny))
@@ -374,6 +386,16 @@ struct AgentPolicyTests {
                 && [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
                     .noteWrite, .sessionsArchive]
                 .allSatisfy { defaults.decision(for: $0) == .deny })
+        check(
+            "memory is read by default, and remembering asks",
+            defaults.decision(for: .memoryRead) == .allow
+                && defaults.decision(for: .memoryWrite) == .ask)
+        var askMemory = AgentRules.defaults
+        askMemory.set(.ask, for: .memoryRead)
+        check(
+            "reading memory set to ask reads as deny: it is never a call to stop",
+            askMemory.decision(for: .memoryRead) == .deny
+                && AgentRules([.memoryRead: .ask]).decision(for: .memoryRead) == .deny)
         check("the path rules start on their seeds", defaults.pathRules == PathRule.seeds)
 
         var rules = AgentRules.defaults
@@ -495,7 +517,7 @@ struct AgentPolicyTests {
         check(
             "and gives each row it lacks its default, never the whole defaults table",
             [AgentTool.filesRead, .filesWrite, .webFetch, .openItems, .contactsRead, .noteWrite,
-                .sessionsRead, .sessionsArchive]
+                .sessionsRead, .sessionsArchive, .memoryRead, .memoryWrite]
                 .allSatisfy {
                     olderTable?.decision(for: $0) == AgentRules.defaultDecision(for: $0)
                 })
@@ -717,12 +739,12 @@ struct AgentPolicyTests {
                 == [
                     .shell, .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
                     .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
-                    .selectedText, .currentClipboard, .sessionsRead
+                    .selectedText, .currentClipboard, .sessionsRead, .memoryRead
                 ])
         check(
             "plan never offers a row that writes or acts, even on Allow",
             [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
-                .noteWrite, .sessionsArchive]
+                .noteWrite, .sessionsArchive, .memoryWrite]
                 .allSatisfy { !offered($0, allAllowed, scope: plan) && offered($0, allAllowed) })
         check(
             "plan keeps a new read at its own decision",
@@ -782,7 +804,7 @@ struct AgentPolicyTests {
                 && AgentTool.builtIn.filter(\.isReadOnly) == [
                     .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
                     .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
-                    .selectedText, .currentClipboard, .sessionsRead
+                    .selectedText, .currentClipboard, .sessionsRead, .memoryRead
                 ])
         check(
             "the hint is never read as a command",
@@ -920,9 +942,36 @@ struct AgentPolicyTests {
         noSearch.set(.deny, for: .webSearch)
         check("web search denied → deny", decide(AgentCall(tool: .webSearch), noSearch) == .deny)
         check(
-            "the defaults offer only the read rows and web search",
+            "the defaults offer only the read rows, web search and remembering",
             Set(AgentPolicy.offered(tools, rules: .defaults, mcpTrust: mcpTrust, scope: open))
-                == Set(AgentTool.builtIn.filter(\.isReadOnly)))
+                == Set(AgentTool.builtIn.filter(\.isReadOnly)).union([.memoryWrite]))
+        check(
+            "memory rides a turn while Read Memory is Allow and the chat uses it",
+            AgentPolicy.readsMemory(rules: .defaults, scope: open))
+        var noMemory = AgentSessionScope()
+        noMemory.usesMemory = false
+        check(
+            "the chat's Use Memory off keeps it out",
+            !AgentPolicy.readsMemory(rules: .defaults, scope: noMemory))
+        var toolsOff = AgentSessionScope()
+        toolsOff.isEnabled = false
+        check(
+            "memory is no tool: Use Tools off still reads it, in every mode",
+            AgentPolicy.readsMemory(rules: .defaults, scope: toolsOff)
+                && AgentPolicy.readsMemory(rules: .defaults, scope: plan)
+                && AgentPolicy.readsMemory(rules: .defaults, scope: auto))
+        var memoryDenied = AgentRules.defaults
+        memoryDenied.set(.deny, for: .memoryRead)
+        check(
+            "Read Memory on Deny reads nothing",
+            !AgentPolicy.readsMemory(rules: memoryDenied, scope: open))
+        check(
+            "remembering asks, and is never allowed for the chat or offered in Plan",
+            decide(AgentCall(tool: .memoryWrite)) == .ask
+                && !AgentTool.memoryWrite.canAllowForSession
+                && !AgentTool.memoryRead.canAllowForSession
+                && !offered(.memoryWrite, scope: plan)
+                && decide(AgentCall(tool: .memoryWrite), scope: auto) == .allow)
         check(
             "offered keeps the given order",
             AgentPolicy.offered(

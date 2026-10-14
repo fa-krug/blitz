@@ -24,10 +24,13 @@ struct AgentRules: Equatable, Sendable {
 
     static let defaults = AgentRules()
 
-    /// Reads ask, everything that acts is denied, and web search's composer globe is the opt-in.
+    /// Reads ask and acts are denied; web search's globe and each remembered item are opt-ins.
     static func defaultDecision(for tool: AgentTool) -> AgentDecision {
-        if tool == .webSearch { return .allow }
-        return tool.isReadOnly ? .ask : .deny
+        switch tool {
+        case .webSearch, .memoryRead: .allow
+        case .memoryWrite: .ask
+        default: tool.isReadOnly ? .ask : .deny
+        }
     }
 
     /// The table the old access pickers and shell switch amounted to; read once, then dropped.
@@ -110,7 +113,7 @@ struct AgentRules: Equatable, Sendable {
         return rules
     }
 
-    /// Web search has no Ask, since Blitz never sees the provider's call to stop it.
+    /// A row with no Ask stores one as Deny: there is no call to stop and ask about.
     private static func normalised(_ decision: AgentDecision, _ tool: AgentTool) -> AgentDecision {
         !tool.canAsk && decision == .ask ? .deny : decision
     }

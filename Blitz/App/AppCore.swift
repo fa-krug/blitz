@@ -72,6 +72,7 @@ final class AppCore {
     let extensions: ExtensionManager
     let extensionUpdates: ExtensionUpdateScheduler
     let chatHistory: ChatHistoryStore
+    let agentMemory = AgentMemoryStore(directory: AppPaths.applicationSupport())
     let aiChats: AIChatSurfacesState
     let aiSettings = AISettingsStore(
         environmentStore: .keychain,
@@ -234,6 +235,8 @@ final class AppCore {
         chats: aiChats, settings: settings, appIndex: appIndex,
         paletteCoordinator: paletteCoordinator, settingsCoordinator: settingsCoordinator,
         core: self)
+    @ObservationIgnored private(set) lazy var agentMemoryCoordinator = AgentMemoryCoordinator(
+        store: agentMemory, settings: settings, core: self)
     /// The agent's waiting notifications, and the delegate a click on one comes back through.
     @ObservationIgnored private(set) lazy var agentNotifications = AgentNotificationPresenter()
     @ObservationIgnored private(set) lazy var quickAICoordinator = QuickAICoordinator(

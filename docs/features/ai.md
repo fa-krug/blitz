@@ -52,6 +52,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   Blitz over anything else. It is not shown in the pane, and `AIPreamble.swift` holds the only
   copy of it — edit the prompt there, not here. `compose` returns `nil` when the user has turned
   the system prompt off, and every transport drops a nil instruction, so a turn then carries none.
+  After it, `AIChatCoordinator.instructions(for:)` appends the memory block while Read Memory is
+  Allow and the chat's Use Memory is on (`AgentMemoryInstructions.appending`,
+  [Agent](agent.md#memory)), then a mode's instruction (`AgentModeInstructions.appending`); each
+  has its own switch, so the system prompt switch withholds neither.
 - **API keys live only in the login Keychain.** `AIConnection` persists the provider, endpoint and
   model identifiers in `UserDefaults`; it never contains a key. Keys are addressed by connection UUID
   through `KeychainSecretStore.aiAPIKeys`, and never enter logs, errors or settings backups. A key is issued for one
@@ -634,7 +638,10 @@ streaming gets.
 
 `ChatHistoryStore` writes `ai-chats.sqlite3` below the bundle-specific Application Support directory.
 It uses the system SQLite already linked by Blitz, stores no provider credentials, and repairs a
-reply left streaming by a prior process into an interrupted failure when loaded.
+reply left streaming by a prior process into an interrupted failure when loaded. The agent's
+memories are not in it: they outlive every chat — Delete All Chats, retention and deleting the
+chat a memory came from all leave it — so `AgentMemoryStore` keeps them in `agent-memory.json`
+beside it ([Agent](agent.md#memory)).
 
 ## Questions and plans
 
@@ -735,11 +742,12 @@ unrelated render recomputed hover — and one left mounted let part of the dismi
 the rows. Consuming the whole press at the window avoids both; see
 [palette.md](palette.md#one-menu-at-a-time).
 
-Seven more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
-`CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AIChatSurfacesState` (which
-owns every live `AIChatState`), `MCPSettingsStore` and `MCPServerManager`. `AIChatCoordinator` — the
-window, and every chat action either surface sends — is the nineteenth feature coordinator,
-`MCPCoordinator` the twentieth and `QuickAICoordinator` the twenty-first.
+Eight more `@MainActor @Observable` types join the shared state: `AISettingsStore`,
+`CodexSubscriptionManager`, `InstalledAIManager`, `ChatHistoryStore`, `AgentMemoryStore`,
+`AIChatSurfacesState` (which owns every live `AIChatState`), `MCPSettingsStore` and
+`MCPServerManager`. `AIChatCoordinator` — the window, and every chat action either surface sends —
+is the nineteenth feature coordinator, `MCPCoordinator` the twentieth, `QuickAICoordinator` the
+twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-second.
 
 ### Manual sweep
 
@@ -1060,7 +1068,9 @@ Settings → AI is a normal grouped `Form` inside Blitz's existing Settings wind
 owns the feature switch and the **Providers → Manage…** action, and **Default model** below it picks
 the app-wide route and its reasoning effort. A pick in Quick AI's header or the AI Agent window's
 composer sets that chat's model and moves this default with it, while Quick Actions keeps its own
-model selection.
+model selection. **Agent**, **Shell rules**, **Path rules** and **Memory** follow it
+([Agent](agent.md#settings-and-storage)), then **Conversations**, **System prompt** and **MCP
+Servers**.
 
 Provider management opens as an editor panel laid out like Mail's Accounts: every route in a list on
 the left — **On This Mac**, **Installed**, **API Connections** — each with its mark and a one-line
@@ -1109,7 +1119,8 @@ commands or touch files, and never to invoke a tool beyond the MCP tools an arme
 turn supplies — on a Claude Plan turn, only to look ([Agent](agent.md#routes)). That is a sandbox
 boundary on a local CLI, not Blitz describing itself, and a user switch must not be able to lift it.
 Nor does it reach Plan's instruction, which is the chat's mode speaking, not a prompt: a Plan turn
-carries it with the switch off ([Plans](#plans)).
+carries it with the switch off ([Plans](#plans)). The memory block is the same: Read Memory and
+the chat's Use Memory are its switches ([Agent](agent.md#memory)).
 
 `mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).
 `aiConnections`, `aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt` and
@@ -1125,7 +1136,9 @@ limits what a tool-driven reply may spend, and an import must not raise that una
 ordinary preference it has a `settings.json` key, `ai.notifyWhenWaiting`.
 `aiAgentRules` decides which tools a model may call, from the calendar to the shell; a table that
 grants capabilities travels in neither a backup nor `settings.json`, and the three keys it was
-migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)).
+migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)). The agent's memories
+are no preference at all: `agent-memory.json` is personal data every turn sends, so no backup
+category and no `settings.json` key carries it ([Agent](agent.md#memory)).
 `aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
 another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
 with, and an import must never decide which program a Mac launches. None of the three has a
