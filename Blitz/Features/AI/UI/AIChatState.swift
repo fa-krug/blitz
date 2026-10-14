@@ -428,6 +428,9 @@ final class AIChatState {
             session.replaceLast(with: message)
         case .toolCallRequested:
             break
+        case .barrier(let barrier):
+            flushPendingText()
+            barrier.pass()
         case .usage(let usage):
             guard var message = session.messages.last, message.role == .assistant else { return }
             message.usage = usage

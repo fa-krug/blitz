@@ -43,6 +43,10 @@ function claudeToolLoop() {
     claudeHostedServer(read, emit);
     return;
   }
+  if (modelIndex >= 0 && args[modelIndex + 1] === "hosted-ask") {
+    claudeHostedQuestion(read, emit);
+    return;
+  }
   if (modelIndex >= 0 && args[modelIndex + 1] === "search") {
     claudeWebSearch(emit);
     return;
@@ -194,6 +198,25 @@ function claudeHostedServer(read, emit) {
       }],
     },
   });
+  emit({ type: "result", is_error: false, usage: { input_tokens: 8, output_tokens: 2 } });
+}
+
+/** Text, then a call with no row on the same pipe, the way a reply stops to ask. */
+function claudeHostedQuestion(read, emit) {
+  emit({ type: "stream_event", event: { delta: { type: "text_delta", text: "Let me check." } } });
+  emit({
+    type: "control_request",
+    request_id: "mcp_ask",
+    request: {
+      subtype: "mcp_message",
+      server_name: "blitz_data",
+      message: {
+        jsonrpc: "2.0", id: 7, method: "tools/call",
+        params: { name: "ask_user", arguments: { question: "Which format?", options: ["PDF"] } },
+      },
+    },
+  });
+  record("claude-hosted-ask.log", read.next().value ?? "{}");
   emit({ type: "result", is_error: false, usage: { input_tokens: 8, output_tokens: 2 } });
 }
 

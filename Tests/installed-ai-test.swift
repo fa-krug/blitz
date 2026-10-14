@@ -128,6 +128,7 @@ struct InstalledAITests {
         hostedServerSpeaksJSONRPC()
         aQuestionDrawsItsOwnCardNotACallRow()
         await claudeHostsBlitzsOwnTools(fixture)
+        await aRowlessCallRunsOnlyOnceItsTextIsApplied(fixture)
         claudeSearchFramesBecomeSearchRows()
         await claudeSearchesTheWebOnlyWhenAsked(fixture)
         await aPlanTurnsBoundaryOnlyLetsTheToolsLook(fixture)
@@ -934,6 +935,39 @@ struct InstalledAITests {
             "and the turn finishes on the CLI's own result")
     }
 
+    /// A question's card pins where the reply stands, so the text before it must be applied first.
+    private static func aRowlessCallRunsOnlyOnceItsTextIsApplied(_ fixture: Fixture) async {
+        let order = HostedOrder()
+        let hosted = AIHostedTools {
+            AskUserToolCatalog.tools()
+        } run: { call in
+            await MainActor.run { order.steps.append("run \(call.name)") }
+            return AIToolResult(callID: call.id, content: "The user chose: PDF", isError: false)
+        }
+        let session = AIToolServerSession(rounds: 25, hosted: hosted) {
+            []
+        } consent: { _ in
+            false
+        }
+        await fixture.consume(kind: .claude, model: "hosted-ask", toolServers: session) { event in
+            switch event {
+            case .text(let text):
+                order.steps.append("text \(text)")
+            case .barrier(let barrier):
+                order.steps.append("applied")
+                barrier.pass()
+            default:
+                break
+            }
+        }
+        expect(
+            order.steps == ["text Let me check.", "applied", "run ask_user"],
+            "a call with no row waits until the consumer has applied the text before it: \(order.steps)")
+        expect(
+            fixture.read("claude-hosted-ask.log").contains("The user chose: PDF"),
+            "and then runs and answers on the pipe as any hosted call does")
+    }
+
     private static func theRoundCapEndsTheTurnTheWayTheLoopDoes(_ fixture: Fixture) async {
         let error = await fixture.streamError(
             kind: .claude, model: "round-cap", effort: nil,
@@ -1063,6 +1097,11 @@ private final class HostedRuns {
     var calls: [AIToolCall] = []
 }
 
+@MainActor
+private final class HostedOrder {
+    var steps: [String] = []
+}
+
 /// A reader who is asked once, takes a moment over it, and grants the server for the chat.
 @MainActor
 private final class GrantingReader {
@@ -1148,6 +1187,22 @@ private final class Fixture {
         } catch {
             print("\(kind.title) stream failed: \(error)")
             return []
+        }
+    }
+
+    /// Each event as it arrives, for a test standing in for the consumer that passes barriers.
+    func consume(
+        kind: InstalledAIKind, model: String, toolServers: AIToolServerSession,
+        _ handle: (AIStreamEvent) -> Void
+    ) async {
+        guard let executable = executables[kind] else { return }
+        let provider = InstalledCLIProvider(
+            kind: kind, executable: executable, model: model, effort: nil, workspace: workspace,
+            launch: InstalledAILaunch(), toolServers: toolServers)
+        do {
+            for try await event in provider.stream(request()) { handle(event) }
+        } catch {
+            print("\(kind.title) stream failed: \(error)")
         }
     }
 

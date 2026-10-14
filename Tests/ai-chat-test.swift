@@ -79,6 +79,7 @@ struct AIChatTests {
         await aPlanNeedsATurnAndAnEditWaitsForIt()
         await approvalsWaitOffScreenAndEndExactlyOnce()
         await aWaitIsDerivedFromTheTurn()
+        await aCardWaitsForTheTextBeforeIt()
         surfacesSayWhichChatTheyShow()
 
         print("\(passes) passed, \(failures) failed")
@@ -193,11 +194,7 @@ struct AIChatTests {
             ]
         ])
         expect(chat.send("go", using: provider), "the turn starts")
-        var waited = 0
-        while chat.isStreaming, waited < 400 {
-            try? await Task.sleep(for: .milliseconds(5))
-            waited += 1
-        }
+        await settle(chat)
         let expected = ["tools a", "search news", "tools b", "text Done."]
         expect(
             shape(chat.session.messages.last?.segments) == expected,
@@ -1400,9 +1397,7 @@ extension AIChatTests {
         expect(
             !store.isArchived(answeringID) && chats.window === answering,
             "and stays live where it is")
-        for _ in 0..<500 where stalled.started == 0 {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await waitUntil { stalled.started > 0 }
         stalled.finishAll()
         await settle(answering)
 
@@ -1555,6 +1550,7 @@ extension AIChatTests {
         expect(chats.openInWindow(id: quickID), "the answering chat can be reopened")
         expect(chats.window === quick, "reopening it returns the same live state")
 
+        await waitUntil { stalled.started > 0 }
         stalled.finishAll()
         await settle(quick)
         let settled = saved(store, "older", at: Date(timeIntervalSince1970: 1_000))
@@ -1956,12 +1952,6 @@ extension AIChatTests {
             id: "q1", name: "ask_user",
             arguments: #"{"question":"Which format?","options":["PDF","Word"]}"#))
 
-    static func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0..<200 where !condition() {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
     static func aQuestionPausesTheTurnUntilAnswered() async {
         let (store, directory) = temporaryStore("question")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -2275,7 +2265,7 @@ extension AIChatTests {
         expect(chat.writePlan(tidy), "a running turn writes its plan")
         expect(
             chat.editPlan(markdown: "1. Other") == .refused, "an edit waits until the turn is over")
-        try? await Task.sleep(for: .milliseconds(50))
+        await waitUntil { stalled.started > 0 }
         stalled.finishAll()
         await settle(chat)
         expect(chat.editPlan(markdown: "1. Other") == .saved, "then it is taken")
@@ -2316,10 +2306,15 @@ extension AIChatTests {
 
         let first = chat.beginApproval()
         let second = chat.beginApproval()
-        Task { outcomes.all.append(await chat.holdApproval(first)) }
-        Task { outcomes.all.append(await chat.holdApproval(second)) }
-        await waitUntil { chat.hasHeldApprovals }
-        try? await Task.sleep(for: .milliseconds(20))
+        Task {
+            outcomes.holding += 1
+            outcomes.all.append(await chat.holdApproval(first))
+        }
+        Task {
+            outcomes.holding += 1
+            outcomes.all.append(await chat.holdApproval(second))
+        }
+        await waitUntil { outcomes.holding == 2 }
         chat.cancel()
         await waitUntil { outcomes.all.count == 3 }
         expect(outcomes.all.suffix(2) == [false, false], "Stop declines every request still held")
@@ -2352,7 +2347,7 @@ extension AIChatTests {
         replaced.send("Once more", using: stalled)
         let finished = replaced.beginApproval()
         Task { outcomes.all.append(await replaced.holdApproval(finished)) }
-        await waitUntil { replaced.hasHeldApprovals }
+        await waitUntil { replaced.hasHeldApprovals && stalled.started == 3 }
         stalled.finishAll()
         await waitUntil { outcomes.all.count == 5 }
         expect(
@@ -2381,6 +2376,50 @@ extension AIChatTests {
         expect(chat.awaiting == nil, "answered, the turn goes on and waits on nobody")
     }
 
+    /// The consumer runs late on purpose: a card must still land after the text sent before it.
+    static func aCardWaitsForTheTextBeforeIt() async {
+        let (store, directory) = temporaryStore("card-order")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let asking = AIChatState(history: store)
+        let base = ScriptedProvider(rounds: [
+            [.text("Let me check."), askFormat], [.text(" PDF."), .finished]
+        ])
+        asking.send(
+            "Export it",
+            using: LateConsumer(askingLoop(base, asking, results: AskedResults())))
+        await waitUntil { asking.pendingQuestion != nil }
+        expect(
+            shape(asking.session.messages.last?.segments)
+                == ["text Let me check.", "question Which format?"],
+            "a question pins after the text before it, however late that text is applied")
+        asking.answerQuestion(asking.pendingQuestion?.answer(choosing: 0))
+        await settle(asking)
+
+        let planning = AIChatState(history: store)
+        let plan = ScriptedProvider(rounds: [
+            [.text("Looked."), writePlan("p1", "Tidy", "1. Sort")], [.text(" Done."), .finished]
+        ])
+        planning.send("Plan it", using: LateConsumer(planningLoop(plan, planning)))
+        await settle(planning)
+        expect(
+            shape(planning.session.messages.last?.segments)
+                == ["text Looked.", "plan Tidy", "text  Done."],
+            "and so does a plan")
+
+        let stopped = AIChatState(history: store)
+        let results = AskedResults()
+        let stuck = LateConsumer(
+            askingLoop(ScriptedProvider(rounds: [[askFormat]]), stopped, results: results),
+            releasesAtBarrier: false)
+        stopped.send("Export it", using: stuck)
+        await waitUntil { stuck.sawBarrier }
+        stopped.cancel()
+        await waitUntil { stuck.ended }
+        expect(
+            stuck.ended && results.all.isEmpty && stopped.session.messages.last?.questions == [],
+            "Stop frees a call still waiting at its barrier, and the call never runs")
+    }
+
     static func surfacesSayWhichChatTheyShow() {
         let (store, directory) = temporaryStore("surfaces-presence")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -2394,9 +2433,20 @@ extension AIChatTests {
 
     /// Until the turn ends, with seconds to spare: a two-round reply under full-suite load is slow.
     static func settle(_ chat: AIChatState) async {
-        for _ in 0..<500 where chat.isStreaming {
-            try? await Task.sleep(for: .milliseconds(10))
+        await waitUntil { !chat.isStreaming }
+    }
+
+    /// Polls the real condition, so an idle run returns at once and a loaded one is not cut short.
+    @discardableResult
+    static func waitUntil(
+        _ condition: () -> Bool, timeout: Duration = .seconds(10), poll: Duration = .milliseconds(10)
+    ) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() {
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: poll)
         }
+        return true
     }
 }
 
@@ -2420,6 +2470,52 @@ final class StalledProvider: AIProvider, @unchecked Sendable {
             continuation.yield(.text("done"))
             continuation.yield(.finished)
             continuation.finish()
+        }
+    }
+}
+
+/// A consumer running late: it holds every event back until a barrier, or for good if told to.
+final class LateConsumer: AIProvider, @unchecked Sendable {
+    private let lock = NSLock()
+    private let inner: any AIProvider
+    private let releasesAtBarrier: Bool
+    private var barrierArrived = false
+    private var innerEnded = false
+
+    init(_ inner: any AIProvider, releasesAtBarrier: Bool = true) {
+        self.inner = inner
+        self.releasesAtBarrier = releasesAtBarrier
+    }
+
+    var sawBarrier: Bool {
+        lock.withLock { barrierArrived }
+    }
+
+    var ended: Bool {
+        lock.withLock { innerEnded }
+    }
+
+    func stream(_ request: AIRequest) -> AIProviderStream {
+        AIProviderStream { continuation in
+            let task = Task {
+                var held: [AIStreamEvent] = []
+                do {
+                    for try await event in inner.stream(request) {
+                        held.append(event)
+                        guard case .barrier = event else { continue }
+                        lock.withLock { barrierArrived = true }
+                        guard releasesAtBarrier else { continue }
+                        for event in held { continuation.yield(event) }
+                        held = []
+                    }
+                    for event in held { continuation.yield(event) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+                lock.withLock { innerEnded = true }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }
@@ -2454,6 +2550,8 @@ final class ScriptedProvider: AIProvider, @unchecked Sendable {
 @MainActor
 final class HeldOutcomes {
     var all: [Bool] = []
+    /// Bumped in the same main-actor step that holds the request, so it counts only held ones.
+    var holding = 0
 }
 
 /// What each `ask_user` call handed back to the loop.

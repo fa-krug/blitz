@@ -67,6 +67,9 @@ struct AIToolLoopProvider: AIProvider {
                         .toolCall(
                             id: call.id, origin: tool?.origin ?? "",
                             title: tool?.title ?? call.name))
+                } else {
+                    await continuation.barrier().wait()
+                    try Task.checkCancellation()
                 }
                 let result = await bounded(invoke(call), spent: &spent)
                 if showsRow {

@@ -219,7 +219,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   chat turn with Use Tools on, every such turn on an API connection or the Claude command is
   wrapped or armed. `AITool.showsCallRow` is false for `ask_user` and `write_plan`, whose own cards
   stand in: the loop yields no `.toolCall` or `.toolResult` for them, and the Claude stream decoder
-  drops their `tool_use` row. A turn's tool messages stay inside
+  drops their `tool_use` row. Each such call — the loop's, or a hosted one on Claude's pipe — first
+  yields `.barrier` and runs only once `AIChatState` has applied the text before it and passed it, so
+  a card never lands ahead of that text; Stop or a turn ending frees it. A turn's tool messages stay inside
   the loop — what the transcript keeps is a `ChatToolUse` record, pinned at a text offset like a
   search, so `boundedContext` can never separate a stored call from its result.
 - **Every HTTP request uses a private ephemeral `URLSession` with no URL cache.** Provider traffic must

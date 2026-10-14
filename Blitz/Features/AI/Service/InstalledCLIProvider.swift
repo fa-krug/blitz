@@ -549,14 +549,19 @@ private final class InstalledCLITurnRunner {
 
     /// The server Blitz hosts: listing is answered at once, a call once its tool has run.
     private func serve(_ message: ClaudeHostedServer.Message, token: TurnToken) {
-        let tools = activeHosted
+        let served = ClaudeHostedServer.reply(to: message.body, tools: activeHosted)
+        let barrier = rowlessCallBarrier(for: served)
         answers.append(
             Task { [weak self] in
                 let reply: JSONValue
-                switch ClaudeHostedServer.reply(to: message.body, tools: tools) {
+                switch served {
                 case .answer(let answer):
                     reply = answer
                 case .call(let call, let id):
+                    if let barrier {
+                        await barrier.wait()
+                        guard !Task.isCancelled else { return }
+                    }
                     let run = self?.toolServers?.hosted.run ?? AIHostedTools.none.run
                     reply = ClaudeHostedServer.result(await run(call), id: id)
                 }
@@ -566,6 +571,14 @@ private final class InstalledCLITurnRunner {
                 else { return }
                 self.write(line, closing: false)
             })
+    }
+
+    /// Yielded now, behind the text before it, so a rowless call pins its card after that text.
+    private func rowlessCallBarrier(for served: ClaudeHostedServer.Reply) -> AIStreamBarrier? {
+        guard case .call(let call, _) = served,
+            activeHosted.first(where: { $0.name == call.name })?.showsCallRow == false
+        else { return nil }
+        return continuation?.barrier()
     }
 
     /// A question still waiting its turn belongs to a turn that is over, so it is never asked.
