@@ -178,12 +178,14 @@ struct AgentPolicyTests {
                 .shell, .filesRead, .filesWrite, .webSearch, .webFetch, .openItems, .shortcuts,
                 .systemActions, .windowLayouts, .calendarRead, .calendarWrite, .remindersRead,
                 .remindersWrite, .contactsRead, .noteRead, .noteWrite, .clipboardRead,
-                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard
+                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard, .sessionsRead,
+                .sessionsArchive
             ])
         check(
             "the groups, in Settings order",
             AgentTool.Group.allCases.map(\.title) == [
-                "Commands", "Files", "Web", "Mac", "Calendar & Reminders", "Personal", "Context"
+                "Commands", "Files", "Web", "Mac", "Calendar & Reminders", "Personal", "Context",
+                "Sessions"
             ])
         check(
             "the built-in rows run group by group, so Settings order is the groups' order",
@@ -207,12 +209,13 @@ struct AgentPolicyTests {
                 ]
                 && AgentTool.Group.context.tools == [
                     .frontmostApp, .selectedText, .currentClipboard
-                ])
+                ]
+                && AgentTool.Group.sessions.tools == [.sessionsRead, .sessionsArchive])
         check(
             "only the rows a catalog serves are hosted; web search is the provider's",
             AgentTool.builtIn.filter(\.isHosted) == [
                 .shell, .filesRead, .filesWrite, .webFetch, .calendarRead, .calendarWrite,
-                .remindersRead, .remindersWrite
+                .remindersRead, .remindersWrite, .sessionsRead, .sessionsArchive
             ] && !AgentTool.mcp("x").isHosted)
         check(
             "only the file rows weigh paths",
@@ -239,6 +242,12 @@ struct AgentPolicyTests {
         check(
             "web_fetch fetches pages",
             AgentTool(wireName: WebFetchToolCatalog.fetchName) == .webFetch)
+        for name in [SessionToolCatalog.listName, SessionToolCatalog.readName] {
+            check("\(name) reads other chats", AgentTool(wireName: name) == .sessionsRead)
+        }
+        for name in [SessionToolCatalog.archiveName, SessionToolCatalog.unarchiveName] {
+            check("\(name) archives chats", AgentTool(wireName: name) == .sessionsArchive)
+        }
         check(
             "calendar listing reads",
             AgentTool(wireName: CalendarToolCatalog.listEventsName) == .calendarRead)
@@ -265,6 +274,7 @@ struct AgentPolicyTests {
             ShellToolCatalog.tools().map(\.name)
             + FileToolCatalog.tools(read: true, write: true).map(\.name)
             + WebFetchToolCatalog.tools().map(\.name)
+            + SessionToolCatalog.tools(read: true, archive: true).map(\.name)
             + catalogs(read: true, write: true)
         check(
             "every catalog tool maps to a built-in row",
@@ -273,6 +283,7 @@ struct AgentPolicyTests {
             catalogs(read: true, write: false)
             + FileToolCatalog.tools(read: true, write: false).map(\.name)
             + WebFetchToolCatalog.tools().map(\.name)
+            + SessionToolCatalog.tools(read: true, archive: false).map(\.name)
         check(
             "what a read-only catalog offers maps to a read row",
             readOnlyNames.allSatisfy { name in
@@ -316,10 +327,10 @@ struct AgentPolicyTests {
         check(
             "every new read asks and every new row that acts is denied",
             [AgentTool.filesRead, .webFetch, .contactsRead, .noteRead, .clipboardRead,
-                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard]
+                .snippetsRead, .frontmostApp, .selectedText, .currentClipboard, .sessionsRead]
                 .allSatisfy { defaults.decision(for: $0) == .ask }
                 && [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
-                    .noteWrite]
+                    .noteWrite, .sessionsArchive]
                 .allSatisfy { defaults.decision(for: $0) == .deny })
         check("the path rules start on their seeds", defaults.pathRules == PathRule.seeds)
 
@@ -441,7 +452,8 @@ struct AgentPolicyTests {
                 && olderTable?.decision(for: .remindersWrite) == .deny)
         check(
             "and gives each row it lacks its default, never the whole defaults table",
-            [AgentTool.filesRead, .filesWrite, .webFetch, .openItems, .contactsRead, .noteWrite]
+            [AgentTool.filesRead, .filesWrite, .webFetch, .openItems, .contactsRead, .noteWrite,
+                .sessionsRead, .sessionsArchive]
                 .allSatisfy {
                     olderTable?.decision(for: $0) == AgentRules.defaultDecision(for: $0)
                 })
@@ -663,12 +675,12 @@ struct AgentPolicyTests {
                 == [
                     .shell, .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
                     .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
-                    .selectedText, .currentClipboard
+                    .selectedText, .currentClipboard, .sessionsRead
                 ])
         check(
             "plan never offers a row that writes or acts, even on Allow",
             [AgentTool.filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
-                .noteWrite]
+                .noteWrite, .sessionsArchive]
                 .allSatisfy { !offered($0, allAllowed, scope: plan) && offered($0, allAllowed) })
         check(
             "plan keeps a new read at its own decision",
@@ -728,7 +740,7 @@ struct AgentPolicyTests {
                 && AgentTool.builtIn.filter(\.isReadOnly) == [
                     .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead,
                     .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp,
-                    .selectedText, .currentClipboard
+                    .selectedText, .currentClipboard, .sessionsRead
                 ])
         check(
             "the hint is never read as a command",
@@ -962,6 +974,25 @@ struct AgentPolicyTests {
         check(
             "reminders read as reminders",
             AgentPrompt.read(.remindersRead).title == "Let the agent read your reminders?")
+        let chats = AgentPrompt.sessions(reading: nil)
+        check(
+            "listing chats may be allowed for the chat",
+            titles(chats) == ["Allow", "Allow This Chat", "Don't Allow"]
+                && chats.title == "Let the agent list your chats?"
+                && chats.symbol == AgentTool.sessionsRead.symbolName)
+        check(
+            "reading a chat names it",
+            AgentPrompt.sessions(reading: "Trip").title
+                == "Let the agent read your chat \u{201C}Trip\u{201D}?"
+                && titles(.sessions(reading: "Trip")) == titles(chats))
+        let archive = AgentPrompt.archive(title: "Trip", archiving: true)
+        check(
+            "archiving a chat is asked each time",
+            titles(archive) == ["Allow", "Don't Allow"]
+                && archive.title == "Let the agent archive \u{201C}Trip\u{201D}?"
+                && archive.symbol == AgentTool.sessionsArchive.symbolName
+                && AgentPrompt.archive(title: "Trip", archiving: false).title
+                    == "Let the agent unarchive \u{201C}Trip\u{201D}?")
         let server = AgentPrompt.mcp(serverTitle: "GitHub", tool: "list_issues")
         check(
             "an MCP server keeps its three-way dialog, This Chat by default",
@@ -1050,7 +1081,8 @@ struct AgentPolicyTests {
             "only reads and servers can be allowed for a chat",
             AgentTool.builtIn.filter(\.canAllowForSession) == [
                 .filesRead, .webFetch, .calendarRead, .remindersRead, .contactsRead, .noteRead,
-                .clipboardRead, .snippetsRead, .frontmostApp, .selectedText, .currentClipboard
+                .clipboardRead, .snippetsRead, .frontmostApp, .selectedText, .currentClipboard,
+                .sessionsRead
             ]
                 && AgentTool.mcp("x").canAllowForSession)
 

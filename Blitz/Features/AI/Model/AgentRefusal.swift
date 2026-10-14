@@ -37,6 +37,8 @@ enum AgentRefusal: Equatable, Sendable {
         case .frontmostApp: "see the frontmost app"
         case .selectedText: "read the selected text"
         case .currentClipboard: "read the clipboard"
+        case .sessionsRead: "read the user's other chats"
+        case .sessionsArchive: "archive or unarchive this chat"
         case .mcp: "call this server's tools"
         }
     }

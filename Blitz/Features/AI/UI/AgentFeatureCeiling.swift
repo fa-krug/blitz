@@ -44,7 +44,7 @@ struct AgentFeatureCeiling {
         case .selectedText:
             (isAccessibilityTrusted(), "Allow Blitz Accessibility access first.")
         case .shell, .filesRead, .filesWrite, .webSearch, .webFetch, .openItems, .frontmostApp,
-            .currentClipboard, .mcp:
+            .currentClipboard, .sessionsRead, .sessionsArchive, .mcp:
             nil
         }
     }

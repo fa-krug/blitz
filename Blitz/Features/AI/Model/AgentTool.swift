@@ -23,11 +23,13 @@ enum AgentTool: Hashable, Sendable {
     case frontmostApp
     case selectedText
     case currentClipboard
+    case sessionsRead
+    case sessionsArchive
     case mcp(String)
 
     /// Where Settings lists a built-in row, in Settings order.
     enum Group: CaseIterable, Sendable {
-        case commands, files, web, mac, calendarAndReminders, personal, context
+        case commands, files, web, mac, calendarAndReminders, personal, context, sessions
 
         var title: String {
             switch self {
@@ -38,6 +40,7 @@ enum AgentTool: Hashable, Sendable {
             case .calendarAndReminders: "Calendar & Reminders"
             case .personal: "Personal"
             case .context: "Context"
+            case .sessions: "Sessions"
             }
         }
 
@@ -52,7 +55,8 @@ enum AgentTool: Hashable, Sendable {
         .openItems, .shortcuts, .systemActions, .windowLayouts,
         .calendarRead, .calendarWrite, .remindersRead, .remindersWrite,
         .contactsRead, .noteRead, .noteWrite, .clipboardRead, .snippetsRead,
-        .frontmostApp, .selectedText, .currentClipboard
+        .frontmostApp, .selectedText, .currentClipboard,
+        .sessionsRead, .sessionsArchive
     ]
 
     /// Keyed by the catalogs' wire names, which this layer cannot import; the harness pins them.
@@ -64,6 +68,10 @@ enum AgentTool: Hashable, Sendable {
         "files_move": .filesWrite,
         "files_trash": .filesWrite,
         "web_fetch": .webFetch,
+        "sessions_list": .sessionsRead,
+        "sessions_read": .sessionsRead,
+        "sessions_archive": .sessionsArchive,
+        "sessions_unarchive": .sessionsArchive,
         "calendar_list_events": .calendarRead,
         "calendar_create_event": .calendarWrite,
         "reminders_list": .remindersRead,
@@ -92,6 +100,7 @@ enum AgentTool: Hashable, Sendable {
         case .calendarRead, .calendarWrite, .remindersRead, .remindersWrite: .calendarAndReminders
         case .contactsRead, .noteRead, .noteWrite, .clipboardRead, .snippetsRead: .personal
         case .frontmostApp, .selectedText, .currentClipboard: .context
+        case .sessionsRead, .sessionsArchive: .sessions
         case .mcp: nil
         }
     }
@@ -119,6 +128,8 @@ enum AgentTool: Hashable, Sendable {
         case .frontmostApp: "See the Frontmost App"
         case .selectedText: "Read Selected Text"
         case .currentClipboard: "Read the Clipboard"
+        case .sessionsRead: "Read Other Chats"
+        case .sessionsArchive: "Archive Chats"
         case .mcp(let slug): slug
         }
     }
@@ -146,6 +157,8 @@ enum AgentTool: Hashable, Sendable {
         case .frontmostApp: "macwindow.on.rectangle"
         case .selectedText: "selection.pin.in.out"
         case .currentClipboard: "clipboard"
+        case .sessionsRead: "text.bubble"
+        case .sessionsArchive: "archivebox"
         case .mcp: "wrench.and.screwdriver"
         }
     }
@@ -158,10 +171,10 @@ enum AgentTool: Hashable, Sendable {
         switch self {
         case .filesRead, .webSearch, .webFetch, .calendarRead, .remindersRead, .contactsRead,
             .noteRead, .clipboardRead, .snippetsRead, .frontmostApp, .selectedText,
-            .currentClipboard:
+            .currentClipboard, .sessionsRead:
             true
         case .shell, .filesWrite, .openItems, .shortcuts, .systemActions, .windowLayouts,
-            .calendarWrite, .remindersWrite, .noteWrite, .mcp:
+            .calendarWrite, .remindersWrite, .noteWrite, .sessionsArchive, .mcp:
             false
         }
     }
@@ -205,6 +218,8 @@ extension AgentTool: Codable {
         case .frontmostApp: "frontmostApp"
         case .selectedText: "selectedText"
         case .currentClipboard: "currentClipboard"
+        case .sessionsRead: "sessionsRead"
+        case .sessionsArchive: "sessionsArchive"
         case .mcp(let slug): Self.mcpPrefix + slug
         }
     }

@@ -146,6 +146,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   (Change Files), from `FileToolCatalog`, go to the same routes as the shell. Every path is weighed
   with its symlinks resolved, resolved again just before the runner acts, and nothing is ever
   deleted for good — the Trash is the furthest it goes. See [Agent](agent.md#file-tools).
+- **A model can list and read the reader's other chats, and archive them, only as the rules
+  allow.** `sessions_list` and `sessions_read` (Read Other Chats), and `sessions_archive` and
+  `sessions_unarchive` (Archive Chats), from `SessionToolCatalog`, go to the same routes; a chat
+  never reads or archives itself, and a transcript comes back as text, 64 KB at a time. See
+  [Agent](agent.md#session-tools).
 - **A model can read one web page as text, and a local address always asks.** `web_fetch`
   (`WebFetchToolCatalog`, under Fetch Web Pages) goes to the same routes, fetches an `http` or
   `https` URL on its own cacheless, cookieless `.ephemeral` session (`WebFetchRunner`) — 30 s, 5 MB
@@ -320,11 +325,21 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `ON DELETE CASCADE`, so they needed no migration and a deleted chat takes its facts with it.
 - **Pinned chats are the ones asked to be kept.** Retention skips them, and so does Delete All Chats
   — which says so in its confirmation — the way a clipboard clear keeps its pins.
+- **Archiving puts a chat away and never loses it.** `chat_archive` (`conversation_id` keyed to
+  `conversations` with `ON DELETE CASCADE`, `archived_at`) is `CREATE TABLE IF NOT EXISTS` like the
+  rest, so it needed no migration. `ChatHistoryStore.saved` holds every chat; `conversations`, which
+  the sidebar, ⌃⇥, Quick AI's Chat History and its open policy read, leaves archived ones out, and
+  `archived` holds only those. Only a delete or retention removes an archived chat: Delete All Chats
+  spares it as it spares a pinned one, while `Keep conversations` still prunes it. A pinned chat is
+  never archived — `archive` refuses it, and nothing offers to — and neither is a chat whose reply
+  is still arriving. A chat that takes a turn leaves the archive (`save` drops its row), and opening
+  one from Archived unarchives it first, so an archived chat is never live on a surface. See
+  **Archive** under [AI Agent](#ai-agent).
 - **Retention is enforced only while AI is on.** `Keep conversations` prunes on the enable transition
   and whenever the setting changes, through `AIChatCoordinator.applyRetention` — never on a schedule
   and never while `aiEnabled` is false, because age passes while the feature is off and "off means
   fully off" promises the file is untouched. A Mac left off for four months keeps its chats.
-  `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats, that cascades to messages, images and searches,
+  `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats but not archived ones, that cascades to messages, images, searches and the archive row,
   and it `VACUUM`s only when something actually went: pictures live inline as BLOBs, so this is the
   one store where a delete alone frees pages without ever shrinking the file.
 - **Everything but the newest message is bounded.** `ChatSession.boundedContext` sends that message
@@ -511,14 +526,15 @@ and the Actions menu's own chords, and dies with the window.
   since it may be a price.
 - **Actions** (⌘K): Quick AI's ⌘K menu for a window, on the same chords — Stop Response (`⌘.`), New
   Chat (`⌘N`), Regenerate (`⌘R`), Copy Last Response (`⇧⌘C`), Remove Attachments, Find in Chat
-  (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin and Delete.
+  (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin, Archive (not
+  for a pinned chat, nor while it answers) and Delete.
   `AIChatActionsMenu` builds it per open from the chat's state, as an `NSMenu` hung under the
   toolbar button whether the click or ⌘K opened it.
 - **Escape closes the window** (`closesOnEscape`), the composer focused or not. An open menu, Find
   in Chat or a rename takes Escape first, and the sidebar clears a non-empty filter before the next
   Escape closes. Closing keeps the draft and leaves a reply streaming.
 
-- **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat, Pinned
+- **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat not archived, Pinned
   first and then bucketed by day like Clipboard. The open chat is the selected row; ⌃⇥ / ⌃⇧⇥ open
   the next or previous one, wrapping, over every saved chat whatever the filter shows, in the same
   `pinnedFirst` order the sections are built from. ⌘B shows or hides the sidebar. A new chat has
@@ -528,10 +544,21 @@ and the Actions menu's own chords, and dies with the window.
   ([Agent](agent.md#the-badge-and-the-dot)) — else a spinner while its reply streams, else a pin
   when pinned. Its content fills the whole cell, so hover — a fainter fill in the selection's own
   shape — never blinks off crossing between rows.
-  The context menu pins, renames in place, copies or exports the chat as Markdown
+  The context menu pins, archives — offered for an unpinned chat, disabled while it answers —
+  renames in place, copies or exports the chat as Markdown
   (`ChatSession.markdownTranscript`: each turn's text and its plans under "**Plan: title**", never
   its questions and answers), and deletes one or all through `DialogController`; ⌫ deletes
-  the selected chat the same way.
+  the selected chat the same way. Delete All's confirmation says archived chats are kept.
+  While anything is archived, an **Archived** row with the count sits under the list.
+- **Archive**: archiving the window's chat (`AIChatCoordinator.archiveChat`, through
+  `AIChatSurfacesState.archive`) starts a new chat in its place, as deleting it does, and archiving
+  Quick AI's empties Quick AI; nothing else changes. The **Archived** row swaps the list for
+  `AIChatArchiveList`: a back chevron and the title over the same search field, which now searches
+  archived chats (`searchArchived`, title and last message as the history's search does), then
+  their rows, newest first, each with the day it was last active. Choosing a row opens it — it is
+  unarchived first and appears in its day as any chat — and the sidebar goes back to the list. The
+  context menu opens, unarchives or deletes it through the usual confirmation. Escape clears the
+  field, then goes back, then closes the window. Quick AI's Chat History lists no archived chats.
 - **Transcript**: `ChatTranscriptView` with `surface: .window`, which drops the palette's edge
   dissolve and thin scrollbar (both are measured against the palette's bars) and centres the column
   at `aiChatReadingWidth`. The last finished reply offers Regenerate beside Copy: `AIChatState`
@@ -742,6 +769,12 @@ window, and every chat action either surface sends — is the nineteenth feature
   the edited text.
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
+- Archive a chat from the sidebar's context menu: it leaves the list, an Archived row with a count
+  appears at the bottom, and ⌃⇥ and Quick AI's Chat History skip it. Archive the open chat from ⌘K:
+  the window starts a new chat. A pinned chat offers no Archive, and one still answering shows it
+  disabled. In Archived, search finds the chat; choosing it opens it back in the sidebar; Unarchive
+  and Delete work from its context menu, and Escape goes back. Delete All Chats keeps archived
+  chats, and `Keep conversations` still prunes an old one.
 - Collapse the sidebar with the toolbar button or ⌘B; ⌘N and ⌘Q (Close Window) still work, and ⌘Q
   with Settings in front closes Settings instead.
 - Press the AI Agent shortcut twice: the window opens, then closes; with it open behind another app,
@@ -757,7 +790,10 @@ window, and every chat action either surface sends — is the nineteenth feature
   agent table's storage and one-off migration),
   `agent-policy-test` (the agent's rules, dialogs and refusals — see [Agent](agent.md#harnesses)),
   `ai-chat-test` (`ChatSession`, `MarkdownBlock` with its math delimiters, LaTeX subset and
-  mid-stream hold-back, `ChatHistoryStore` with renames and pins,
+  mid-stream hold-back, `ChatHistoryStore` with renames, pins and the archive — kept out of the
+  lists and their search, found by the archive's, never for a pinned chat, surviving a reopen, left
+  by a new turn, spared by Delete All, still pruned by retention and cascading with a delete —
+  archiving refused while a reply arrives and making a surface start over,
   `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, the agent scope each chat
   starts open and in Manual, `AIChatSurfacesState`'s one-live-place rule, questions — answers from
   chips and text, their place and their context, the paused turn, Stop, leaving and deleting each

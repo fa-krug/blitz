@@ -4,6 +4,8 @@ import SwiftUI
 struct AIChatSidebarView: View {
     @Environment(AIChatCoordinator.self) private var coordinator
     @State private var query = ""
+    /// Archived chats take the list's place until one is opened or the reader backs out.
+    @State private var showsArchive = false
     @State private var renaming: UUID?
     @State private var renameText = ""
     @FocusState private var searchFocused: Bool
@@ -35,20 +37,51 @@ struct AIChatSidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if showsArchive {
+                ArchiveHeader { leaveArchive() }
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.bottom, Theme.Spacing.sm)
+            }
             ChatSearchField(query: $query, focused: $searchFocused)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.bottom, Theme.Spacing.md)
-            list
+            if showsArchive {
+                AIChatArchiveList(query: query) { leaveArchive() }
+            } else {
+                list
+                archiveEntry
+            }
         }
         // The field sits under the toolbar's material, so it needs its own clearance from the top.
         .padding(.top, Theme.Spacing.md)
         .onExitCommand {
-            if query.isEmpty {
-                _ = coordinator.closeWindowIfKey()
-            } else {
+            if !query.isEmpty {
                 query = ""
+            } else if showsArchive {
+                leaveArchive()
+            } else {
+                _ = coordinator.closeWindowIfKey()
             }
         }
+    }
+
+    /// Shown only while something is archived, so an empty archive costs the sidebar nothing.
+    @ViewBuilder private var archiveEntry: some View {
+        let count = history.archived.count
+        if count > 0 {
+            Divider()
+            ArchiveEntryButton(count: count) {
+                query = ""
+                showsArchive = true
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+        }
+    }
+
+    private func leaveArchive() {
+        query = ""
+        showsArchive = false
     }
 
     @ViewBuilder private var list: some View {
@@ -125,6 +158,12 @@ struct AIChatSidebarView: View {
             systemImage: conversation.isPinned ? "pin.slash" : "pin"
         ) {
             coordinator.togglePin(id: conversation.id)
+        }
+        if !conversation.isPinned {
+            Button("Archive Chat", systemImage: "archivebox") {
+                coordinator.archiveChat(id: conversation.id)
+            }
+            .disabled(!coordinator.canArchive(id: conversation.id))
         }
         Button("Rename…", systemImage: "pencil") { beginRename(conversation) }
         Divider()
@@ -211,6 +250,60 @@ private struct ChatSidebarRow: View {
             RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
                 .fill(Theme.Colors.rowHover)
                 .padding(.horizontal, Theme.Spacing.lg)
+        }
+    }
+}
+
+/// The foot of the sidebar: the way into the archived chats, with how many there are.
+private struct ArchiveEntryButton: View {
+    let count: Int
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "archivebox")
+                    .foregroundStyle(.secondary)
+                Text("Archived")
+                Spacer(minLength: 0)
+                Text(count, format: .number)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background {
+                if isHovered {
+                    RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                        .fill(Theme.Colors.rowHover)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel("Archived chats, \(count)")
+    }
+}
+
+/// Above the archive's search field: the way back to every other chat.
+private struct ArchiveHeader: View {
+    let back: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Button(action: back) {
+                Image(systemName: "chevron.backward")
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Back to chats")
+            .help("Back to chats")
+            Text("Archived")
+                .font(.headline)
+            Spacer(minLength: 0)
         }
     }
 }

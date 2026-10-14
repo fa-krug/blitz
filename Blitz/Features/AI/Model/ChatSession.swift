@@ -191,11 +191,25 @@ struct ChatConversation: Identifiable, Equatable, Sendable {
     var isPinned = false
     /// What the chat's harness or model named it; a rename still wins over it.
     var generatedTitle: String?
+    /// Set while the chat is put away under Archived; nil for every chat the sidebar lists.
+    var archivedAt: Date?
 
     var displayTitle: String { customTitle ?? generatedTitle ?? title }
+
+    var isArchived: Bool { archivedAt != nil }
 }
 
 extension [ChatConversation] {
+    /// History's search: the title as shown, or the last words said; blank matches everything.
+    func matching(_ query: String) -> [ChatConversation] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return self }
+        return filter {
+            $0.displayTitle.localizedCaseInsensitiveContains(query)
+                || $0.preview.localizedCaseInsensitiveContains(query)
+        }
+    }
+
     /// The window sidebar's order; each part keeps the newest-first order the store holds.
     var pinnedFirst: [ChatConversation] { filter(\.isPinned) + filter { !$0.isPinned } }
 

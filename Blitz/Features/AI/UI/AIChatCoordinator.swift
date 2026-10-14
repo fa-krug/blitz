@@ -157,6 +157,31 @@ final class AIChatCoordinator {
         core.chatHistory.setPinned(!conversation.isPinned, id: id)
     }
 
+    /// A pinned chat stays in view and a reply still arriving stays live, so neither is archived.
+    func canArchive(id: UUID) -> Bool {
+        guard let conversation = core.chatHistory.conversation(id: id) else { return false }
+        return !conversation.isPinned && !conversation.isArchived
+            && !chats.answeringIDs.contains(id)
+    }
+
+    /// The open chat makes way for a new one, as a delete does; nothing of it is lost.
+    func archiveChat(id: UUID) {
+        guard canArchive(id: id), chats.archive(id: id) else {
+            core.showMessage("That chat could not be archived.", tone: .danger)
+            return
+        }
+    }
+
+    func unarchiveChat(id: UUID) {
+        core.chatHistory.unarchive(id)
+    }
+
+    /// Opening an archived chat brings it back: it is a chat in use again.
+    func openArchivedChat(id: UUID) {
+        unarchiveChat(id: id)
+        openChat(id: id)
+    }
+
     func rename(id: UUID, to title: String) {
         core.chatHistory.rename(id: id, to: title)
     }
@@ -215,8 +240,8 @@ final class AIChatCoordinator {
         guard
             await core.confirm(
                 title: "Delete all chats?",
-                message: "Every saved conversation except pinned ones will be removed. "
-                    + "This can't be undone.",
+                message: "Every chat in the sidebar except pinned ones will be removed; "
+                    + "archived chats are kept. This can't be undone.",
                 symbol: "trash", confirmTitle: "Delete All")
         else { return }
         for conversation in core.chatHistory.conversations where !conversation.isPinned {
@@ -511,8 +536,8 @@ final class AIChatCoordinator {
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
         CalendarToolCatalog.handles(name) || ReminderToolCatalog.handles(name)
             || ShellToolCatalog.handles(name) || FileToolCatalog.handles(name)
-            || WebFetchToolCatalog.handles(name) || AskUserToolCatalog.handles(name)
-            || PlanToolCatalog.handles(name)
+            || WebFetchToolCatalog.handles(name) || SessionToolCatalog.handles(name)
+            || AskUserToolCatalog.handles(name) || PlanToolCatalog.handles(name)
     }
 
     /// Blitz's own tools for a client that hosts them, read again each turn it starts.
@@ -526,6 +551,7 @@ final class AIChatCoordinator {
             if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
             if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
             if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
+            if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
             guard let agentCall = AgentCall(toolCall: call) else {
                 return await AIHostedTools.none.run(call)
             }
@@ -602,6 +628,8 @@ final class AIChatCoordinator {
             + (offered(.shell) ? ShellToolCatalog.tools() : [])
             + FileToolCatalog.tools(read: offered(.filesRead), write: offered(.filesWrite))
             + (offered(.webFetch) ? WebFetchToolCatalog.tools() : [])
+            + SessionToolCatalog.tools(
+                read: offered(.sessionsRead), archive: offered(.sessionsArchive))
             + (AgentPolicy.isOffered(.askUser, scope: chat.agentScope)
                 ? AskUserToolCatalog.tools() : [])
             + (AgentPolicy.isOffered(.writePlan, scope: chat.agentScope)
@@ -678,6 +706,89 @@ final class AIChatCoordinator {
         case .success(let answer):
             return AIToolResult(callID: call.id, content: answer, isError: false)
         case .failure(let failure): return .failure(call.id, failure.message)
+        }
+    }
+
+    /// An id is looked up before asking, so a dialog never names a chat that is not there.
+    private func runSessionTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        let request: SessionToolCatalog.Request
+        do throws(AIToolArguments.Invalid) {
+            request = try SessionToolCatalog.request(name: call.name, arguments: call.arguments)
+        } catch {
+            return .failure(call.id, error.message)
+        }
+        let agentCall = AgentCall(tool: request.tool)
+        // Before any id is looked up, so a denied row never tells which chats exist.
+        guard gate.decision(for: agentCall, in: chat) != .deny else {
+            return .failure(call.id, AgentRefusal.denied.message(for: request.tool))
+        }
+        let current = chat.session.id
+        if let settled = settled(request, excluding: current) {
+            return AIToolResult(callID: call.id, content: settled.message, isError: settled.isError)
+        }
+        let title = request.id.flatMap { history.conversation(id: $0)?.displayTitle }
+        let prompt = SessionToolCatalog.prompt(for: request, title: title)
+        if let refusal = await gate.authorization(for: agentCall, in: chat)(prompt) {
+            return .failure(call.id, refusal)
+        }
+        // Again after the dialog: the chat may have been deleted, opened or pinned meanwhile.
+        if let settled = settled(request, excluding: current) {
+            return AIToolResult(callID: call.id, content: settled.message, isError: settled.isError)
+        }
+        return await answer(request, callID: call.id, excluding: current)
+    }
+
+    private func settled(
+        _ request: SessionToolCatalog.Request, excluding current: UUID
+    ) -> SessionToolEngine.Settled? {
+        guard let id = request.id else { return nil }
+        return SessionToolEngine.settled(
+            request, conversation: history.conversation(id: id), current: current,
+            isAnswering: chats.answeringIDs.contains(id), isOpen: chats.holder(of: id) != nil)
+    }
+
+    private func answer(
+        _ request: SessionToolCatalog.Request, callID: String, excluding current: UUID
+    ) async -> AIToolResult {
+        let done = { (text: String) in AIToolResult(callID: callID, content: text, isError: false) }
+        switch request {
+        case .list(let scope, let query, let limit):
+            let pool: [ChatConversation] =
+                switch scope {
+                case .recent: history.conversations
+                case .archived: history.archived
+                case .all: history.saved
+                }
+            return done(
+                await Task.detached {
+                    SessionToolEngine.listing(
+                        pool, scope: scope, query: query, limit: limit, excluding: current)
+                }.value)
+        case .read(let id, let fromMessage, let limit):
+            guard let conversation = history.conversation(id: id),
+                let session = chats.holder(of: id)?.session ?? history.session(id: id)
+            else { return .failure(callID, SessionToolCatalog.unknown(id)) }
+            let (title, isArchived) = (conversation.displayTitle, conversation.isArchived)
+            let transcript = await Task.detached {
+                SessionToolEngine.transcript(
+                    of: session, title: title, isArchived: isArchived, fromMessage: fromMessage,
+                    limit: limit)
+            }.value
+            guard let transcript else {
+                return .failure(
+                    callID, SessionToolEngine.pastTheEnd(title, count: session.messages.count))
+            }
+            return done(transcript)
+        case .archive(let id):
+            let title = history.conversation(id: id)?.displayTitle ?? ""
+            return chats.archive(id: id)
+                ? done(SessionToolCatalog.archived(title))
+                : .failure(callID, SessionToolCatalog.notSaved(title))
+        case .unarchive(let id):
+            let title = history.conversation(id: id)?.displayTitle ?? ""
+            return history.unarchive(id)
+                ? done(SessionToolCatalog.unarchived(title))
+                : .failure(callID, SessionToolCatalog.notSaved(title))
         }
     }
 

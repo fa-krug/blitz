@@ -124,9 +124,21 @@ final class AIChatSurfacesState {
         answeringElsewhere[id] = nil
     }
 
+    /// Never a reply still arriving; whoever shows the chat starts a new one, as a delete does.
+    @discardableResult
+    func archive(id: UUID) -> Bool {
+        let holder = holder(of: id)
+        guard holder?.isStreaming != true, history.archive(id) else { return false }
+        holder?.startNewChat()
+        return true
+    }
+
     /// Every doomed reply is cancelled before the clear: a cancel saves, which would bring it back.
     func deleteAll() {
-        let doomed = live.filter { history.conversation(id: $0.session.id)?.isPinned != true }
+        let doomed = live.filter { state in
+            let kept = history.conversation(id: state.session.id)
+            return kept?.isPinned != true && kept?.isArchived != true
+        }
         for state in doomed { state.cancel() }
         history.clearAll()
         for state in doomed { state.startNewChat() }

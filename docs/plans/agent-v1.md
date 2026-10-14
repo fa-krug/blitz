@@ -1,6 +1,6 @@
 # Blitz Agent — v1 plan
 
-Status: Phases 1, 1b, 2, 3a and 3b built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
+Status: Phases 1, 1b, 2, 3a, 3b, 3c and 3d built; the rest of phase 3 and phase 4 planned. Builds on PR #49 (web search on Claude routes, the shell tool). Codex is out of
 scope; it keeps MCP servers only.
 
 ## Concept
@@ -329,11 +329,36 @@ As built, in [`docs/features/agent.md`](../features/agent.md#web-fetch):
   resolving first would not hold against rebinding either. No domain rules or Always Allow yet;
   they can come later.
 
+### 3d: sessions & archive (built)
+
+As built, in [`docs/features/agent.md`](../features/agent.md#session-tools) and
+[`docs/features/ai.md`](../features/ai.md#ai-agent):
+
+- **Archive, for the reader.** `chat_archive` beside `conversations`, `CREATE TABLE IF NOT EXISTS`
+  with `ON DELETE CASCADE`, so no migration. The sidebar, ⌃⇥, Quick AI's Chat History and its open
+  policy leave archived chats out; an **Archived** row with the count at the foot of the window's
+  sidebar opens them, with the same search, Unarchive and Delete. Archive is in the sidebar's
+  context menu and the ⌘K menu; archiving the open chat starts a new one, as Delete does.
+- **Decided:** a pinned chat cannot be archived (unpin first), so archiving never quietly exposes
+  a kept chat to retention, which still prunes archived chats. A chat whose reply is still
+  arriving cannot be archived rather than being stopped first: archive never cuts a reply short.
+  Opening an archived chat, or any new turn in it, unarchives it, so an archived chat is never
+  live on a surface. Delete All Chats keeps archived chats, as it keeps pinned ones.
+- **Two rows, group Sessions.** `.sessionsRead` (Read Other Chats: `sessions_list`,
+  `sessions_read`), read-only, Ask by default, allowable for the chat and offered in Plan;
+  `.sessionsArchive` (Archive Chats: `sessions_archive`, `sessions_unarchive`), Deny by default,
+  asked each time, never in Plan. No ceiling beyond AI itself.
+- **Never this chat**, never a chat answering, open on a surface or pinned for archiving; each
+  refused with a sentence and no dialog, as is an unknown id. A transcript comes back 64 KB at a
+  time, one line per search, tool call, question and plan, with "Read on with fromMessage N".
+- **Off-main where it can be.** `ChatHistoryStore` is `@MainActor`, so the chat is loaded there,
+  as opening it does; the listing and the transcript are written in `Task.detached`.
+
 ### Remaining steps
 
-1. **3d Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
+1. **3e Mac** — `.openItems` (an app, file or URL), `.shortcuts` (an Apple Shortcut),
    `.systemActions` (Blitz's system actions), `.windowLayouts` (a window layout).
-2. **3e Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
+2. **3f Personal and context** — `.contactsRead`, `.noteRead`, `.noteWrite` (append),
    `.clipboardRead`, `.snippetsRead` (snippets and quicklinks); `.frontmostApp`, `.selectedText`
    and `.currentClipboard`. Each context row is a tool under the same rules, never pushed into a
    turn by itself.

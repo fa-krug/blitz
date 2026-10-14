@@ -1,8 +1,9 @@
 # Agent
 
 There is one agent, and every chat is a session of it, Quick AI included. It answers directly, or
-calls the tools one rule table allows: the shell, files, web fetch, the calendar, reminders, web
-search and each MCP server, with rows already in the table for the rest of the Phase 3 toolbox —
+calls the tools one rule table allows: the shell, files, web fetch, the reader's other chats, the
+calendar, reminders, web search and each MCP server, with rows already in the table for the rest of
+the Phase 3 toolbox —
 Mac actions, personal data and context — whose runners have not landed. The table says Allow, Ask or Deny per
 tool, plus ordered command patterns for the shell and path patterns for files; a
 session's mode — Manual, Auto or Plan — decides what an Ask does, and nothing a session holds lifts
@@ -10,7 +11,7 @@ a Deny. Two more tools talk only to the chat and have no row: `ask_user` and, in
 `AgentPolicy` decides, `AgentGateCoordinator` enforces and asks — only while the asking chat is on
 screen; a chat left waiting shows a badge and posts a notification — and the tools themselves stay
 with their features — [AI](ai.md#invariants) for the shell runner, the question and the plan,
-[File tools](#file-tools) and [Web fetch](#web-fetch) below,
+[File tools](#file-tools), [Web fetch](#web-fetch) and [Session tools](#session-tools) below,
 [Calendar](calendar.md#chat-tools), [Reminders](reminders.md#chat-tools) and [MCP](mcp.md).
 
 ## Invariants
@@ -38,8 +39,8 @@ with their features — [AI](ai.md#invariants) for the shell runner, the questio
   its dialog never offers Allow This Chat, and a Deny row still denies. See [Web fetch](#web-fetch).
 - **Read-only is the row's or the server's word, never the model's.** `AgentTool.isReadOnly` is true
   for every row that only looks — the calendar, reminders, contacts, note, clipboard history and
-  snippets reads, Read Files, both web rows and the three context rows. An MCP tool is read-only only when its server
-  listed it with `annotations.readOnlyHint` set to `true` (`MCPTool.isReadOnly`); a missing,
+  snippets reads, Read Files, both web rows, the three context rows and Read Other Chats. An MCP
+  tool is read-only only when its server listed it with `annotations.readOnlyHint` set to `true` (`MCPTool.isReadOnly`); a missing,
   `false` or non-boolean hint, or a tool Blitz never saw listed, changes things. A server's bare row
   says nothing for all its tools, so Plan weighs them one at a time.
 - **Asking the reader and writing a plan are no capability.** `ask_user` and `write_plan`
@@ -111,7 +112,7 @@ is its own trust. `AgentDecision` orders `deny < ask < allow`, so `min` is the n
 writes or acts is denied, and web search is Allow, its composer globe being the opt-in.
 
 `AgentTool.builtIn` is Settings order, and runs group by group (`AgentTool.Group`): Commands,
-Files, Web, Mac, Calendar & Reminders, Personal, Context.
+Files, Web, Mac, Calendar & Reminders, Personal, Context, Sessions.
 
 | Group | Row (`AgentTool`) | Settings title | Covers | Read-only | Default | Ceiling |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -120,22 +121,24 @@ Files, Web, Mac, Calendar & Reminders, Personal, Context.
 | | `.filesWrite` | Change Files | `files_write`, `files_move`, `files_trash` | no | Deny | — |
 | Web | `.webSearch` | Web Search | the route's own search | yes | Allow (no Ask) | — |
 | | `.webFetch` | Fetch Web Pages | `web_fetch` | yes | Ask | — |
-| Mac | `.openItems` | Open Apps, Files and Links | (3d) | no | Deny | — |
-| | `.shortcuts` | Run Shortcuts | an Apple Shortcut (3d) | no | Deny | Apple Shortcuts on |
-| | `.systemActions` | Run System Actions | Blitz's system actions (3d) | no | Deny | System Actions on (`VisibilityStore`) |
-| | `.windowLayouts` | Apply Window Layouts | a window layout (3d) | no | Deny | Window Management on |
+| Mac | `.openItems` | Open Apps, Files and Links | (3e) | no | Deny | — |
+| | `.shortcuts` | Run Shortcuts | an Apple Shortcut (3e) | no | Deny | Apple Shortcuts on |
+| | `.systemActions` | Run System Actions | Blitz's system actions (3e) | no | Deny | System Actions on (`VisibilityStore`) |
+| | `.windowLayouts` | Apply Window Layouts | a window layout (3e) | no | Deny | Window Management on |
 | Calendar & Reminders | `.calendarRead` | Read Calendar | `calendar_list_events` | yes | Ask | Calendar on |
 | | `.calendarWrite` | Add Calendar Events | `calendar_create_event` | no | Deny | Calendar on |
 | | `.remindersRead` | Read Reminders | `reminders_list` | yes | Ask | Reminders on |
 | | `.remindersWrite` | Change Reminders | `reminders_create`, `reminders_update`, `reminders_complete` | no | Deny | Reminders on |
-| Personal | `.contactsRead` | Read Contacts | (3e) | yes | Ask | Contacts on |
-| | `.noteRead` | Read the Note | the floating note (3e) | yes | Ask | Notes on |
-| | `.noteWrite` | Add to the Note | append (3e) | no | Deny | Notes on |
-| | `.clipboardRead` | Read Clipboard History | (3e) | yes | Ask | Clipboard on |
-| | `.snippetsRead` | Read Snippets and Quicklinks | (3e) | yes | Ask | Snippets or Quicklinks on |
-| Context | `.frontmostApp` | See the Frontmost App | (3e) | yes | Ask | — |
-| | `.selectedText` | Read Selected Text | (3e) | yes | Ask | Accessibility granted |
-| | `.currentClipboard` | Read the Clipboard | (3e) | yes | Ask | — |
+| Personal | `.contactsRead` | Read Contacts | (3f) | yes | Ask | Contacts on |
+| | `.noteRead` | Read the Note | the floating note (3f) | yes | Ask | Notes on |
+| | `.noteWrite` | Add to the Note | append (3f) | no | Deny | Notes on |
+| | `.clipboardRead` | Read Clipboard History | (3f) | yes | Ask | Clipboard on |
+| | `.snippetsRead` | Read Snippets and Quicklinks | (3f) | yes | Ask | Snippets or Quicklinks on |
+| Context | `.frontmostApp` | See the Frontmost App | (3f) | yes | Ask | — |
+| | `.selectedText` | Read Selected Text | (3f) | yes | Ask | Accessibility granted |
+| | `.currentClipboard` | Read the Clipboard | (3f) | yes | Ask | — |
+| Sessions | `.sessionsRead` | Read Other Chats | `sessions_list`, `sessions_read` | yes | Ask | — |
+| | `.sessionsArchive` | Archive Chats | `sessions_archive`, `sessions_unarchive` | no | Deny | — |
 | — | `.mcp(slug)` | the server's title | every tool of that server | per tool | its trust, `.ask` | MCP and the server on |
 
 A step in parentheses names the Phase 3 step that brings the row's runner; until then the row is not
@@ -165,12 +168,13 @@ Deny; and last, a local-network fetch held at Ask.
 | Plan | `list.bullet.clipboard` | Blitz's dialog | only read-only calls keep their decision; every command asks; everything else is Deny |
 
 Plan's read-only set is `AgentCall.isReadOnly`: every read-only row — Read Files, both web rows,
-the calendar, reminders and personal reads and the three context rows — and an MCP tool its server
+the calendar, reminders and personal reads, the three context rows and Read Other Chats — and an
+MCP tool its server
 marked read-only, each still at its own decision, path rules and grants included. The shell
 is offered while its row is not Deny, and every command asks, under any Allow pattern — Always
 Allow's included, so the new pattern takes effect once the chat leaves Plan — while a Deny pattern
 still refuses. Every row that writes or acts — Change Files, the Mac rows, the calendar,
-reminders and note writes — and every other MCP tool are Deny. `ask_user` and
+reminders and note writes, Archive Chats — and every other MCP tool are Deny. `ask_user` and
 `write_plan` are offered besides, and `AgentModeInstructions.plan` rides each Plan turn: look
 without changing anything, ask where the answer changes the plan, finish with `write_plan`, and
 never start carrying it out. [AI](ai.md#plans) has the plan card that carries it out.
@@ -425,6 +429,46 @@ Known limits:
 - **No domain rules yet.** There is no Always Allow for a site and no per-domain pattern; a row on
   Allow fetches every public page, and Ask asks per call or per chat.
 
+## Session tools
+
+`SessionToolCatalog` (`Model/`) spells four tools over the AI chat history, `SessionToolEngine`
+(`Model/`) writes their answers, and `AIChatCoordinator.runSessionTool` runs them against
+`ChatHistoryStore` and the live chats. Their wire names are what make both Sessions rows hosted.
+
+| Tool | Row | Arguments | What comes back |
+| --- | --- | --- | --- |
+| `sessions_list` | Read Other Chats | `scope` (`recent` default, `archived`, `all`), `query`, `limit` (default 20, at most 50) | a count line, then a tab-separated row per chat, newest first: id, title, last active, messages, archived |
+| `sessions_read` | Read Other Chats | `id`, `fromMessage` (from 1), `limit` (messages) | a header — title, id, archived, last active, message count — then each message numbered with its speaker and time |
+| `sessions_archive` | Archive Chats | `id` | that it is under Archived, where the user can open it |
+| `sessions_unarchive` | Archive Chats | `id` | that it is back in the sidebar |
+
+- **Never this chat.** A listing leaves out the chat that asks, and any call naming it is refused
+  without a dialog: its messages are already in the conversation, and it cannot archive itself.
+- **Scope and search.** `recent` is what the sidebar lists (`ChatHistoryStore.conversations`),
+  `archived` the archive, `all` both (`saved`); `query` matches the shown title or the last message,
+  as the history's own search does. A listing past its limit says how many more there are.
+- **A transcript** walks `ChatMessage.segments`: text as written, and one bracketed line per web
+  search, tool call (origin, title, done or failed), question (with its answer) and plan (its
+  title). Thinking is left out, images are counted and documents named, never inlined, and a
+  reply that did not finish says so. Times are fixed digits in the Mac's time zone. At most 64 KB
+  of UTF-8 comes back (`readLimit`), 100 bytes of it kept for the closing note: reading stops before
+  the message that would not fit and says "Read on with fromMessage N"; a first message longer
+  than the cap shows its start, cut on a character. A `fromMessage` past the end is refused with
+  the count. A chat a surface holds is read live, a reply still arriving included.
+- **Archive and unarchive** go through the same rules as the sidebar's Archive
+  (`AIChatSurfacesState.archive`), and are narrower: a chat still answering, one open on either
+  surface and a pinned one are refused with a sentence and no dialog. Archiving one already
+  archived, or unarchiving one that is not, changes nothing and says so, also without a dialog.
+
+**Order of a call.** Read the arguments (a malformed id is a sentence, never a dialog); refuse if
+the row is Deny before any id is looked up, so a denied row never tells which chats exist;
+settle what needs no dialog (`SessionToolEngine.settled`: this chat, an id no chat has, and the
+archive refusals above), so a dialog never names a chat that is not there; ask through the gate
+with `SessionToolCatalog.prompt`; settle again, since the chat may have been deleted, opened or
+pinned while the dialog was up; then act. The history is read on the main actor, where
+`ChatHistoryStore` lives and where opening a chat reads it too; the listing and the transcript are
+written in `Task.detached`.
+
 ## The gate and its dialogs
 
 `AgentGateCoordinator`, owned by `AIChatCoordinator`, is the one gate. Every route reaches it:
@@ -475,6 +519,9 @@ user declined to let the model …"; the CLI routes send their own fixed decline
 | `files_trash` | Let the agent move "`<path>`" to the Trash? — It can be put back from the Trash. | **Allow** ↵, Always Allow "`<folder>/**`", Don't Allow |
 | `web_fetch` | Let the agent open `<host>`? — the full URL, and that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
 | `web_fetch`, local network | Let the agent open `<host>`? — the URL, the provider, and that the address is local | **Allow** ↵, Don't Allow |
+| `sessions_list` | Let the agent list your chats? — what it sees and can search, and that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `sessions_read` | Let the agent read your chat "`<title>`"? — that it goes to the provider | **Allow** ↵, Allow This Chat, Don't Allow |
+| `sessions_archive` / `sessions_unarchive` | Let the agent archive "`<title>`"? / unarchive "`<title>`"? — where it goes | **Allow** ↵, Don't Allow |
 
 The wording and choices are `AgentPrompt`'s, in `Model/`. Escape is always the last choice, a
 refusal of that one call; only Settings withholds a tool for good.
@@ -712,7 +759,15 @@ Each route honours the mode where it decides what to offer:
   each mode's decisions and offers, the new reads offered in Plan and the new writes refused, MCP
   tools weighed one at a time and servers handed to a CLI in
   Plan, `ask_user` and `write_plan` offered by mode, their schemas, argument checks and results,
-  the plan instruction, and the context card's rows per mode; `web_fetch`'s wire name and row.
+  the plan instruction, and the context card's rows per mode; `web_fetch`'s wire name and row; the
+  Sessions rows — their group and order, wire names, hosting, defaults, Plan offering the read and
+  refusing the archive, tolerant decoding without them — and their three dialogs.
+- `session-tool-test` — the four schemas and wire names, call reading and its refusals (scope,
+  limits, ids, `fromMessage`), the dialogs and refusal sentences, what settles before a dialog
+  (this chat, an unknown id, a chat answering, open or pinned, an archive that changes nothing),
+  listings (format, this chat left out, query, limit and its note, empty scopes), transcripts (one
+  line per search, call, question and plan, thinking left out, attachments named, an unfinished
+  reply), paging with `fromMessage` and `limit`, and clipping at the cap.
 - `file-tool-test` — the five schemas and wire names, call reading and its refusals, each dialog's
   wording and choices (no Always Allow for home, the root or a seed, nor for a move between
   folders), the answers' wording and caps, text decoding, canonical resolution against links in a
@@ -735,7 +790,8 @@ Each route honours the mode where it decides what to offer:
   a fresh install starts on the defaults, a broken table falls back without migrating, a table
   missing rows keeps the rest and fills those in, shell and path rules keep their order, Always
   Allow persists a pattern once, and the waiting notification is on by default and persists off.
-- `ai-chat-test` — the scope per chat, open, in Manual and without grants on a new or deleted chat;
+- `ai-chat-test` — the archive behind the session tools (see [AI](ai.md#manual-sweep)'s harness
+  list); the scope per chat, open, in Manual and without grants on a new or deleted chat;
   requests held off screen, let go on screen and declined exactly once by Stop, a cancelled task,
   a delete or the turn's end; `awaiting` derived from the turn; and which surface holds a chat.
 - `installed-ai-test` — the Claude command's boundary: an armed turn outside Plan is told whatever a
@@ -765,9 +821,10 @@ Each route honours the mode where it decides what to offer:
 - Switching a chat in Plan to a Codex model hides the pill, and the context card shows no Mode row.
 - Switching Calendar off greys its rows in the Agent section and removes them from the tools menu.
 - Settings → AI → Agent lists the rows under Commands, Files, Web, Mac, Calendar & Reminders,
-  Personal and Context; switching Contacts off greys Read Contacts with "Turn on Contacts first.",
-  and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only Read Files,
-  Change Files and Fetch Web Pages appear in the composer's tools menu and the context card.
+  Personal, Context and Sessions; switching Contacts off greys Read Contacts with "Turn on Contacts
+  first.", and with Accessibility not granted Read Selected Text says so. Of the toolbox rows only
+  Read Files, Change Files, Fetch Web Pages, Read Other Chats and Archive Chats appear in the
+  composer's tools menu and the context card.
 - With Read Files on Ask, ask a chat to read a file in `~/Projects/app`: the dialog names it, and
   **Always Allow "~/Projects/app/**"** adds a Read rule to Path rules, after which the next read
   there runs straight away; a write there still asks, or is refused while Change Files is Deny.
@@ -778,6 +835,12 @@ Each route honours the mode where it decides what to offer:
   `http://localhost:8080` or a router's `192.168.…` address: it asks, without Allow This Chat,
   even with the row on Allow, after the chat grant, and in Auto. A PDF link is refused naming
   `application/pdf`.
+- With Read Other Chats on Ask, ask a chat what you talked about yesterday: listing asks first,
+  then reading the chat it picks names that chat; Allow This Chat lets the next read through. Ask
+  it to read the chat it is in: it is refused without a dialog. With Archive Chats on Ask, ask it
+  to archive an old chat: the dialog names it, and the chat moves under Archived; asking it to
+  archive the chat open in the window, a pinned one or one still answering is refused without a
+  dialog. In Plan, `sessions_archive` is not offered whatever its row says.
 - Settings → AI → Path rules starts with the Deny seeds; a rule edited, moved or removed there is
   still so after a relaunch.
 - A server set to Never Allow from the Agent section reads Never Allow in its editor, and the model

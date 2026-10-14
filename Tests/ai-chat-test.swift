@@ -52,6 +52,8 @@ struct AIChatTests {
         await toolOutputIsBoundedBeforeItIsBilled()
         toolUsesPersistAndSettleOnReload()
         renamesAndPinsSurviveSavesAndSpareRetention()
+        archivedChatsLeaveTheListsAndAreNeverLost()
+        await archivingLeavesLiveRepliesAndOpenChatsAlone()
         transcriptsExportAndDropOnlyATrailingReply()
         await regenerateAsksTheSameQuestionAgain()
         await requestsIdentifyTheirConversation()
@@ -1306,6 +1308,117 @@ extension AIChatTests {
             "a deleted chat's rename cascades away with it")
     }
 
+    /// Archive hides a chat from every list but its own, and only delete or retention removes it.
+    static func archivedChatsLeaveTheListsAndAreNeverLost() {
+        let (store, directory) = temporaryStore("archive")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = directory.appendingPathComponent("ai-chats.sqlite3")
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let old = saved(store, "an old trip", at: now.addingTimeInterval(-90 * 86_400))
+        let kept = saved(store, "a kept recipe", at: now.addingTimeInterval(-90 * 86_400))
+        let fresh = saved(store, "a fresh trip", at: now)
+        let other = saved(store, "something else", at: now.addingTimeInterval(-60))
+        store.setPinned(true, id: kept)
+
+        expect(store.archive(old, at: now), "an unpinned chat archives")
+        expect(!store.archive(old, at: now), "archiving twice changes nothing")
+        expect(!store.archive(kept, at: now), "a pinned chat is never archived")
+        expect(!store.archive(UUID(), at: now), "an unknown chat is not archived")
+        expect(store.isArchived(old) && !store.isArchived(fresh), "isArchived says which")
+        expect(
+            !store.conversations.contains { $0.id == old } && store.archived.map(\.id) == [old],
+            "an archived chat leaves the sidebar's list for the archive's")
+        expect(store.saved.count == 4, "and stays among the saved chats")
+        expect(
+            store.search("trip").map(\.id) == [fresh],
+            "history's search leaves archived chats out")
+        expect(store.searchArchived("trip").map(\.id) == [old], "the archive's search finds it")
+        expect(store.searchArchived("recipe").isEmpty, "and only archived chats")
+        expect(
+            store.conversation(id: old)?.archivedAt == now,
+            "an archived chat can still be named, and says when it was archived")
+        expect(store.session(id: old)?.messages.count == 2, "its transcript is untouched")
+
+        let reopened = ChatHistoryStore(directory: directory)
+        reopened.load()
+        expect(reopened.archived.map(\.id) == [old], "the archive survives reopening")
+        expect(
+            reopened.conversation(id: old)?.archivedAt == now,
+            "with the moment it was archived")
+
+        expect(!reopened.unarchive(fresh), "a chat in the sidebar has nothing to unarchive")
+        expect(reopened.archive(fresh, at: now) && reopened.unarchive(fresh), "unarchive undoes it")
+        expect(
+            reopened.conversations.contains { $0.id == fresh } && !reopened.isArchived(fresh),
+            "an unarchived chat is back in the sidebar's list")
+
+        expect(reopened.archive(other, at: now), "another chat archives")
+        var continued = reopened.session(id: other)!
+        continued.append(ChatMessage(role: .user, text: "one more thing", sentAt: now))
+        reopened.save(continued)
+        expect(!reopened.isArchived(other), "a chat that takes a turn leaves the archive")
+        expect(
+            count(database, "SELECT COUNT(*) FROM chat_archive WHERE conversation_id = '"
+                + other.uuidString + "'") == 0,
+            "and its archive row is gone from the file too")
+
+        reopened.clearAll()
+        expect(
+            Set(reopened.saved.map(\.id)) == [old, kept],
+            "Delete All spares pinned and archived chats alike")
+
+        let cutoff = AIRetention.month.cutoff(from: now)!
+        expect(reopened.prune(before: cutoff) == 1, "retention still applies to an archived chat")
+        expect(
+            reopened.conversation(id: old) == nil && reopened.archived.isEmpty,
+            "the old archived chat is gone, from the archive too")
+        expect(reopened.conversation(id: kept) != nil, "a pinned chat still outlives retention")
+        expect(
+            count(database, "SELECT COUNT(*) FROM chat_archive") == 0,
+            "the archive row cascades away with its chat")
+
+        let doomed = saved(reopened, "doomed", at: now)
+        expect(reopened.archive(doomed, at: now), "a chat to delete archives")
+        reopened.remove(id: doomed)
+        expect(
+            reopened.conversation(id: doomed) == nil
+                && count(database, "SELECT COUNT(*) FROM chat_archive") == 0,
+            "deleting an archived chat takes its archive row with it")
+    }
+
+    /// A reply still arriving is never archived; a chat shown on a surface makes way, as on delete.
+    static func archivingLeavesLiveRepliesAndOpenChatsAlone() async {
+        let (store, directory) = temporaryStore("archive-surfaces")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chats = AIChatSurfacesState(history: store)
+        let stalled = StalledProvider()
+
+        chats.window.send("Still thinking", using: stalled)
+        let answering = chats.window
+        let answeringID = answering.session.id
+        expect(!chats.archive(id: answeringID), "a chat still answering is not archived")
+        expect(
+            !store.isArchived(answeringID) && chats.window === answering,
+            "and stays live where it is")
+        for _ in 0..<500 where stalled.started == 0 {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        stalled.finishAll()
+        await settle(answering)
+
+        expect(chats.archive(id: answeringID), "once its reply ends it archives")
+        expect(
+            !chats.window.holds(answeringID) && chats.window.session.messages.isEmpty,
+            "the window makes way for a new chat, as a delete does")
+        expect(store.session(id: answeringID) != nil, "and nothing of the chat is lost")
+
+        let quick = saved(store, "in Quick AI", at: Date())
+        expect(chats.openInQuickAI(id: quick), "a chat opens in Quick AI")
+        expect(chats.archive(id: quick), "archiving it from the window's sidebar works")
+        expect(chats.quickAI.session.messages.isEmpty, "and Quick AI starts over")
+        expect(chats.openInWindow(id: quick), "an archived chat still opens")
+    }
+
     static func transcriptsExportAndDropOnlyATrailingReply() {
         var session = ChatSession()
         expect(!session.dropTrailingReply(), "an empty chat has no reply to drop")
@@ -2296,6 +2409,10 @@ final class StalledProvider: AIProvider, @unchecked Sendable {
         AIProviderStream { continuation in
             lock.withLock { continuations.append(continuation) }
         }
+    }
+
+    var started: Int {
+        lock.withLock { continuations.count }
     }
 
     func finishAll() {

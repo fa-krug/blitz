@@ -176,6 +176,7 @@ run web-fetch-test         $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift 
                            Blitz/Features/MCP/Model/MCPServer.swift \
                            Blitz/Features/MCP/Model/MCPTool.swift \
                            Blitz/Features/MCP/Model/MCPAgentMapping.swift $A/AIToolServer.swift
+run session-tool-test      $A/*.swift
 # The catalogs and `MCPToolName` are compiled in to pin the wire names `AgentTool` maps.
 run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRules.swift $A/PathRule.swift \
                            $A/ShellRule.swift $A/ShellCommandSegments.swift $A/AgentCall.swift \
@@ -185,7 +186,7 @@ run agent-policy-test      $A/AgentTool.swift $A/AgentDecision.swift $A/AgentRul
                            $A/PlanToolCatalog.swift $A/ChatPlan.swift $A/AgentModeInstructions.swift \
                            $A/ShellToolCatalog.swift $A/FileToolCatalog.swift \
                            $A/WebFetchToolCatalog.swift $A/HTMLTextEngine.swift \
-                           $A/LocalNetworkPolicy.swift $A/AITool.swift \
+                           $A/LocalNetworkPolicy.swift $A/SessionToolCatalog.swift $A/AITool.swift \
                            $A/JSONValue.swift $A/AIToolDate.swift $A/AIToolArguments.swift \
                            $A/AIToolJSON.swift $A/AIToolServer.swift Blitz/Features/Calendar/Model/*.swift \
                            Blitz/Features/Reminders/Model/*.swift \

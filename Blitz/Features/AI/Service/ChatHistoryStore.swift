@@ -8,8 +8,14 @@ private let chatSQLiteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.
 @MainActor
 @Observable
 final class ChatHistoryStore {
-    private(set) var conversations: [ChatConversation] = []
+    /// Every saved chat, archived ones included, newest first.
+    private(set) var saved: [ChatConversation] = []
     private(set) var isAvailable = true
+
+    /// The chats the sidebar and Quick AI's history list; an archived one is left out.
+    var conversations: [ChatConversation] { saved.filter { !$0.isArchived } }
+
+    var archived: [ChatConversation] { saved.filter(\.isArchived) }
 
     private static let schema = """
         PRAGMA foreign_keys = ON;
@@ -100,6 +106,11 @@ final class ChatHistoryStore {
           context_window INTEGER,
           cost_usd REAL
         );
+        CREATE TABLE IF NOT EXISTS chat_archive(
+          conversation_id TEXT PRIMARY KEY NOT NULL
+            REFERENCES conversations(id) ON DELETE CASCADE,
+          archived_at REAL NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS message_thinking(
           message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
           position INTEGER NOT NULL,
@@ -129,9 +140,10 @@ final class ChatHistoryStore {
         guard ensureDatabase(), let database else { return }
         let sql = """
             SELECT c.id, c.title, c.preview, c.created_at, c.updated_at, c.message_count,
-              m.custom_title, COALESCE(m.pinned, 0), m.generated_title
+              m.custom_title, COALESCE(m.pinned, 0), m.generated_title, a.archived_at
             FROM conversations c
             LEFT JOIN conversation_details m ON m.conversation_id = c.id
+            LEFT JOIN chat_archive a ON a.conversation_id = c.id
             ORDER BY c.updated_at DESC;
             """
         guard let statement = prepare(sql, in: database) else { return }
@@ -147,29 +159,74 @@ final class ChatHistoryStore {
                     messageCount: Int(sqlite3_column_int64(statement, 5)),
                     customTitle: optionalText(statement, 6),
                     isPinned: sqlite3_column_int64(statement, 7) != 0,
-                    generatedTitle: optionalText(statement, 8)))
+                    generatedTitle: optionalText(statement, 8),
+                    archivedAt: sqlite3_column_type(statement, 9) == SQLITE_NULL
+                        ? nil
+                        : Date(timeIntervalSince1970: sqlite3_column_double(statement, 9))))
         }
-        conversations = loaded
+        saved = loaded
     }
 
     /// Off means fully off: the handle and the resident summaries go, the file on disk stays.
     func close() {
         sqlite3_close(database)
         database = nil
-        conversations = []
+        saved = []
     }
 
     func search(_ query: String) -> [ChatConversation] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return conversations }
-        return conversations.filter {
-            $0.displayTitle.localizedCaseInsensitiveContains(query)
-                || $0.preview.localizedCaseInsensitiveContains(query)
-        }
+        conversations.matching(query)
     }
 
+    func searchArchived(_ query: String) -> [ChatConversation] {
+        archived.matching(query)
+    }
+
+    /// Archived or not, so a chat put away can still be named, opened or deleted.
     func conversation(id: UUID) -> ChatConversation? {
-        conversations.first { $0.id == id }
+        saved.first { $0.id == id }
+    }
+
+    func isArchived(_ id: UUID) -> Bool {
+        conversation(id: id)?.isArchived == true
+    }
+
+    /// A pinned chat is one the reader keeps in view, so it is never put away.
+    @discardableResult
+    func archive(_ id: UUID, at now: Date = Date()) -> Bool {
+        guard var conversation = conversation(id: id), !conversation.isPinned,
+            !conversation.isArchived, ensureDatabase(), let database,
+            let statement = prepare(
+                "INSERT OR IGNORE INTO chat_archive(conversation_id, archived_at) VALUES(?, ?);",
+                in: database)
+        else { return false }
+        defer { sqlite3_finalize(statement) }
+        bind(id.uuidString, to: statement, at: 1)
+        sqlite3_bind_double(statement, 2, now.timeIntervalSince1970)
+        guard sqlite3_step(statement) == SQLITE_DONE else { return false }
+        conversation.archivedAt = now
+        replace(conversation)
+        return true
+    }
+
+    @discardableResult
+    func unarchive(_ id: UUID) -> Bool {
+        guard var conversation = conversation(id: id), conversation.isArchived,
+            ensureDatabase(), let database, unarchive(id, in: database)
+        else { return false }
+        conversation.archivedAt = nil
+        replace(conversation)
+        return true
+    }
+
+    private func unarchive(_ id: UUID, in database: OpaquePointer) -> Bool {
+        guard
+            let statement = prepare(
+                "DELETE FROM chat_archive WHERE conversation_id = ?;", in: database)
+        else { return false }
+        defer { sqlite3_finalize(statement) }
+        bind(id.uuidString, to: statement, at: 1)
+        return sqlite3_step(statement) == SQLITE_DONE
     }
 
     /// A blank name hands the title back to the first question rather than storing an empty one.
@@ -264,8 +321,9 @@ final class ChatHistoryStore {
     func save(_ session: ChatSession) {
         guard !session.messages.isEmpty, ensureDatabase(), let database else { return }
         guard sqlite3_exec(database, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return }
+        // A chat that takes a turn is back in use, so it leaves the archive.
         guard saveConversation(session, in: database), rewriteTail(of: session, database: database),
-            saveModel(of: session)
+            saveModel(of: session), unarchive(session.id, in: database)
         else {
             sqlite3_exec(database, "ROLLBACK", nil, nil, nil)
             return
@@ -285,9 +343,9 @@ final class ChatHistoryStore {
     }
 
     private func replace(_ conversation: ChatConversation) {
-        var updated = conversations.filter { $0.id != conversation.id }
+        var updated = saved.filter { $0.id != conversation.id }
         updated.append(conversation)
-        conversations = updated.sorted { $0.updatedAt > $1.updatedAt }
+        saved = updated.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     /// One fact a conversation's meta row holds; writing one never touches the others.
@@ -337,21 +395,23 @@ final class ChatHistoryStore {
         defer { sqlite3_finalize(statement) }
         bind(id.uuidString, to: statement, at: 1)
         guard sqlite3_step(statement) == SQLITE_DONE else { return }
-        conversations.removeAll { $0.id == id }
+        saved.removeAll { $0.id == id }
     }
 
-    /// Pinned chats are the ones the reader asked to keep, so clearing the rest spares them.
+    /// Clears what the sidebar lists: pinned chats were asked to be kept, archived ones put away.
     func clearAll() {
         guard ensureDatabase(), let database,
             sqlite3_exec(
-                database, "DELETE FROM conversations WHERE id NOT IN (\(Self.pinnedIDs))", nil,
-                nil, nil) == SQLITE_OK
+                database,
+                "DELETE FROM conversations WHERE id NOT IN (\(Self.pinnedIDs)) "
+                    + "AND id NOT IN (\(Self.archivedIDs))", nil, nil, nil) == SQLITE_OK
         else { return }
-        conversations.removeAll { !$0.isPinned }
+        saved.removeAll { !$0.isPinned && !$0.isArchived }
     }
 
     private static let pinnedIDs =
         "SELECT conversation_id FROM conversation_details WHERE pinned = 1"
+    private static let archivedIDs = "SELECT conversation_id FROM chat_archive"
 
     /// Inline BLOBs make this the one store where a delete frees pages without shrinking the file.
     @discardableResult
@@ -370,7 +430,7 @@ final class ChatHistoryStore {
         guard sqlite3_step(statement) == SQLITE_DONE else { return 0 }
         removed = Int(sqlite3_changes(database))
         guard removed > 0 else { return 0 }
-        conversations.removeAll { $0.updatedAt < cutoff && !$0.isPinned }
+        saved.removeAll { $0.updatedAt < cutoff && !$0.isPinned }
         return removed
     }
 

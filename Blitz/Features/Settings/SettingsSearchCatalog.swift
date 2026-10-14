@@ -347,6 +347,11 @@ enum SettingsSearchCatalog {
                 "tools"
             ]),
         .init(
+            group: .aiAgent, "Sessions",
+            keywords: [
+                "other chats", "read chats", "archive chats", "history", "conversations", "tools"
+            ]),
+        .init(
             group: .aiAgent, "MCP server trust",
             keywords: ["mcp", "tools", "always allow", "never allow", "model context protocol"]),
         .init(

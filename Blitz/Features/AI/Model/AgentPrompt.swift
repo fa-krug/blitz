@@ -93,6 +93,33 @@ struct AgentPrompt: Equatable, Sendable {
             choices: [.allowOnce("Allow")] + chat + [.refuse("Don't Allow")], defaultIndex: 0)
     }
 
+    /// The chat list, or one chat by its title; either may be allowed for the whole chat.
+    static func sessions(reading title: String?) -> AgentPrompt {
+        let provider = "What it reads is sent to the model\u{2019}s provider."
+        return AgentPrompt(
+            title: title.map { "Let the agent read your chat \u{201C}\($0)\u{201D}?" }
+                ?? "Let the agent list your chats?",
+            message: title == nil
+                ? "It sees each chat\u{2019}s title, when it was last used and how long it is, "
+                    + "and can search their last messages. " + provider
+                : provider,
+            symbol: AgentTool.sessionsRead.symbolName,
+            choices: [.allowOnce("Allow"), .allowThisChat, .refuse("Don't Allow")],
+            defaultIndex: 0)
+    }
+
+    /// Asked each time: archiving moves a chat out of the reader's sidebar.
+    static func archive(title: String, archiving: Bool) -> AgentPrompt {
+        write(
+            title: archiving
+                ? "Let the agent archive \u{201C}\(title)\u{201D}?"
+                : "Let the agent unarchive \u{201C}\(title)\u{201D}?",
+            message: archiving
+                ? "It moves to Archived at the bottom of the sidebar, where it can be opened again."
+                : "It goes back to the sidebar.",
+            symbol: AgentTool.sessionsArchive.symbolName)
+    }
+
     /// The server's own three-way question; only Settings can withhold a server for good.
     static func mcp(serverTitle: String, tool: String) -> AgentPrompt {
         AgentPrompt(

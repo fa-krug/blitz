@@ -339,7 +339,11 @@ window's does. The context card the gauge raises on hover is glass over a solid
 frame at its bottom edge, so no window size can push it off screen. A reply's choices are `.glass`
 capsules that rise out of the composer's top edge, each a `ChatChoiceChip` — a glyph then the
 option — which a waiting question's options use too. A sidebar row whose chat waits on the reader trades
-its spinner for the wait's symbol in `Colors.warning`. `ChatQuestionCard` and `ChatPlanCard` are
+its spinner for the wait's symbol in `Colors.warning`. While anything is archived, the sidebar's foot
+is an **Archived** row under a divider — `archivebox`, the title and the count in secondary, hover
+in `Colors.rowHover` at `Radius.row` as the rows have — and choosing it swaps the list for
+`AIChatArchiveList` under a back chevron and an "Archived" headline, the search field kept between
+them; archived rows show the day they were last active in secondary caption type. `ChatQuestionCard` and `ChatPlanCard` are
 cards in the transcript, `cardFill` under a `cardStroke` at `Radius.row`: the question with its
 chips, then its answer as plain capsules; the plan as rendered Markdown with **Edit** and `.glass`
 **Execute in Auto** beside the `.glassProminent` **Execute**, a replaced plan folded behind a
