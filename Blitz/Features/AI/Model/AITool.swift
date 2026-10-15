@@ -41,3 +41,19 @@ struct AIToolResult: Equatable, Sendable {
         AIToolResult(callID: callID, content: message, isError: true)
     }
 }
+
+/// Text a tool brought back that Blitz did not write, fenced so the model reads it as data.
+enum AIUntrustedText {
+    static let tag = "untrusted_content"
+
+    /// The tag's own name is broken inside, so nothing in the text can close the fence early.
+    static func wrap(_ text: String) -> String {
+        let defused = text.replacingOccurrences(
+            of: tag, with: "untrusted-content", options: .caseInsensitive)
+        return "<\(tag)>\n\(defused)\n</\(tag)>"
+    }
+
+    static func wrap(_ result: AIToolResult) -> AIToolResult {
+        AIToolResult(callID: result.callID, content: wrap(result.content), isError: result.isError)
+    }
+}

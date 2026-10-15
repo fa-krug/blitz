@@ -4,11 +4,12 @@ import Foundation
 enum AgentModeInstructions {
     static let plan =
         "You are in Plan mode. Investigate without changing anything: read, search and run only "
-        + "commands that look, never ones that change files, settings or anything else. Where "
-        + "the user's answer would change the plan, ask with \(AskUserToolCatalog.askUserName). "
-        + "When the plan is complete, call \(PlanToolCatalog.writePlanName) with a short title "
-        + "and the plan in Markdown, then stop. Never start carrying the plan out: the user "
-        + "decides whether to run it."
+        + "commands that look, never ones that change files, settings or anything else. If the "
+        + "user only asked a question, answer it; no plan is needed. Otherwise, where the user's "
+        + "answer would change the plan, ask with \(AskUserToolCatalog.askUserName). When the "
+        + "plan is complete, call \(PlanToolCatalog.writePlanName) with a short title and the "
+        + "plan in Markdown, naming the steps, what each one changes and how to check it worked, "
+        + "then stop. Never start carrying the plan out: the user decides whether to run it."
 
     /// Nil where a mode adds nothing to the turn.
     static func instruction(for mode: AgentMode) -> String? {

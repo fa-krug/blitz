@@ -70,9 +70,18 @@ struct AIToolDate: Hashable, Sendable {
 
     /// A model cannot know the date, so every tool that takes one is told it, weekday first.
     static func describeNow(_ now: Date, calendar: Calendar) -> String {
+        describe(now, includesTime: true, calendar: calendar)
+    }
+
+    /// The day alone, for instructions that must read the same from one minute to the next.
+    static func describeToday(_ now: Date, calendar: Calendar) -> String {
+        describe(now, includesTime: false, calendar: calendar)
+    }
+
+    private static func describe(_ now: Date, includesTime: Bool, calendar: Calendar) -> String {
         let names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         let weekday = names[(calendar.component(.weekday, from: now) - 1 + 7) % 7]
-        let moment = AIToolDate(date: now, includesTime: true, calendar: calendar).text
+        let moment = AIToolDate(date: now, includesTime: includesTime, calendar: calendar).text
         return "\(weekday) \(moment.replacing("T", with: " ")), time zone "
             + calendar.timeZone.identifier
     }

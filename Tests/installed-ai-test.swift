@@ -523,14 +523,18 @@ struct InstalledAITests {
             let argv = fixture.lastArguments("claude-args.log")
             return argv.firstIndex(of: "--system-prompt").map { argv[$0 + 1] } ?? ""
         }
-        let allowedAll = "whatever one of them does is allowed"
+        let allowedAll = "you may call any of them"
+        let declineIsFinal = "a call the user declines is final"
         let changesNothing = "nothing may be changed"
         let manual = await boundary(readsOnly: false, webSearch: false)
         let manualSearch = await boundary(readsOnly: false, webSearch: true)
         expect(
             manual.contains(allowedAll) && manualSearch.contains(allowedAll)
                 && !manual.contains(changesNothing),
-            "outside Plan an armed turn is told whatever a supplied tool does is allowed")
+            "outside Plan an armed turn is told it may call any supplied tool")
+        expect(
+            manual.contains(declineIsFinal) && manualSearch.contains(declineIsFinal),
+            "and that Blitz may ask first, so a declined call is not retried")
         let plan = await boundary(readsOnly: true, webSearch: false)
         let planSearch = await boundary(readsOnly: true, webSearch: true)
         expect(

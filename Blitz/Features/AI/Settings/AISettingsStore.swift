@@ -20,7 +20,7 @@ final class AISettingsStore {
     var webSearchEnabled: Bool {
         didSet { defaults.set(webSearchEnabled, forKey: AppSettingsKey.aiWebSearch.rawValue) }
     }
-    /// Appended to `AIInstructions.preamble` on every turn, so it is billed on every turn.
+    /// Appended to `AIPreamble` on every turn, so it is billed on every turn.
     var systemPrompt: String {
         didSet { defaults.set(systemPrompt, forKey: AppSettingsKey.aiSystemPrompt.rawValue) }
     }

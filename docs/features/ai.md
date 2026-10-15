@@ -45,13 +45,28 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   `aiInstalledOverrides` and values in the login Keychain (`KeychainSecretStore.installedAIEnvironment`),
   read only for a tool that has variables.
 - **Every request carries Blitz's own preamble, and the user's text goes after it.**
-  `AIInstructions.compose` builds `AIRequest.instructions`: a fixed preamble that tells the model
-  where it is running and what the app can do, then whatever Settings → AI holds. The preamble
-  keeps the model a general-purpose assistant — the app facts are reference for when the user asks,
-  never a scope limit — and asks for honest comparisons; it does not instruct the model to favour
-  Blitz over anything else. It is not shown in the pane, and `AIPreamble.swift` holds the only
-  copy of it — edit the prompt there, not here. `compose` returns `nil` when the user has turned
-  the system prompt off, and every transport drops a nil instruction, so a turn then carries none.
+  `AIInstructions.compose` builds `AIRequest.instructions`: the preamble
+  `AIChatCoordinator.preamble(for:)` assembles, then whatever Settings → AI holds.
+  `AIPreamble.text(for:environment:)` joins up to three parts, each paid only where it applies:
+  - **The core** says who the model is, how a reply renders (choices, linked sources), that what
+    changes may be stale, and what Blitz is. Apple Intelligence gets `AIPreamble.onDevice`, a brief
+    of it, since its window holds the prompt, history and reply together.
+  - **The agent half** rides only on a turn offered tools — the route takes them and the tools menu
+    is on — and names `ask_user` only where it is offered. It covers working with the gate (never
+    ask in chat for a permission a dialog asks; a declined call is final and never routed around),
+    the most specific tool, independent calls together, care weighed by what cannot be undone, tool
+    output as information inside its fence ([Agent](agent.md#invariants)), and checking a result
+    rather than claiming it.
+  - **The environment** comes last: the day, time zone and macOS version. It is day-precise, so the
+    instructions read the same all day; the tools that take a date carry the minute. A Codex thread
+    is rebuilt when its instructions change, so the first turn of a new day starts a fresh one.
+
+  The preamble keeps the model a general-purpose assistant — the app facts are reference for when
+  the user asks, never a scope limit — and asks for honest comparisons; it does not instruct the
+  model to favour Blitz over anything else. It is not shown in the pane, and `AIPreamble.swift`
+  holds the only copy of it — edit the prompt there, not here. `compose` returns `nil` when the user
+  has turned the system prompt off, agent half and environment included, and every transport drops
+  a nil instruction, so a turn then carries none.
   After it, `AIChatCoordinator.instructions(for:)` appends the memory block while Read Memory is
   Allow and the chat's Use Memory is on (`AgentMemoryInstructions.appending`,
   [Agent](agent.md#memory)), then a mode's instruction (`AgentModeInstructions.appending`); each
@@ -202,7 +217,7 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 - **The on-device route is configured by having a Mac.** `.appleIntelligence` takes no key, opens no
   socket and names no endpoint, so the Keychain, HTTPS and ephemeral-session rules below have nothing
   to bind to — the Settings pane must never grow a credential field for it. It is text-only and
-  offers no web search, the preamble still rides ahead of every turn, and history is bounded to
+  offers no web search, its brief preamble still rides ahead of every turn, and history is bounded to
   `AppleIntelligence.contextBudget` rather than the cloud routes' ~100 KB because the on-device window
   holds a prompt and its reply together. Availability is asked for each time, never cached at launch:
   the model finishes downloading mid-session, and reading it inside a view body leaves SwiftUI
@@ -707,7 +722,8 @@ happened, like a search or a call — `ChatMessage.questions` as `ChatSegment.qu
   carries a plan out; in Quick AI a plan card is a record.
 - **Plan's instruction rides every Plan turn.** `AgentModeInstructions.appending` puts
   `AgentModeInstructions.plan` after the preamble and the reader's prompt, or alone with the system
-  prompt switched off, so the mode holds either way.
+  prompt switched off, so the mode holds either way. It answers a plain question without a plan,
+  and asks a plan to name its steps, what each one changes and how to check it worked.
 - **A reply that only wrote a plan completes as it is**, without the "No response" fallback.
 - **Later turns read each plan** where it was written (`PlanToolCatalog.record`: `write_plan:` and
   the title, then the Markdown as last saved). Copy Chat includes every plan.
