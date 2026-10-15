@@ -91,10 +91,17 @@ struct DialogView: View {
 
     @ViewBuilder private func message(font: Font) -> some View {
         if let message = request.message {
-            Text(message)
-                .font(font)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                Text(message)
+                    .font(font)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .hideNativeScrollers()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .thinScrollbar()
+            .frame(maxHeight: metrics.size.dialogMessageMaxHeight)
         }
     }
 

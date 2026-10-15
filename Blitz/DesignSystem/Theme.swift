@@ -267,6 +267,8 @@ enum Theme {
         static let dialogButtonHeight: CGFloat = menuButton - 2
         /// A dialog's multi-line box; it scrolls rather than grows the panel.
         static let dialogTextEditorHeight: CGFloat = 160
+        /// A long message, such as a shell command, scrolls past this rather than outgrow the screen.
+        static let dialogMessageMaxHeight: CGFloat = 240
         /// Subject glyph and its fixed tile at the top of a dialog.
         static let dialogSymbol: CGFloat = 28
         static let dialogSymbolContainer: CGFloat = 52
