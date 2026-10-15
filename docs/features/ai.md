@@ -406,8 +406,9 @@ carry the app title.
 
 Each connection has an ordered, deduplicated list of exact model identifiers. While its editor is open,
 Blitz asks the configured provider for the models available to the entered key and uses the result
-for search-as-you-type completion and validation. It never renders the whole provider catalog at once;
-selected models stay visible and search shows at most twelve additions. Discovery is debounced,
+to list the models the user can add, which typing filters and ranks. A catalog can run to hundreds,
+so the list shows ten at a time with a Show More row. Selected models stay visible above the list and
+drop out of it. Discovery is debounced,
 cacheless and never persists the typed key. A
 custom gateway may not implement a model-list endpoint, so exact identifiers can always be entered
 manually. Blitz does not ship or guess an API catalog that can become stale. Codex gets its models

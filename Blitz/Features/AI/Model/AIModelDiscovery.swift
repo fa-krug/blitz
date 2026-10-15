@@ -110,10 +110,10 @@ enum AIModelDiscovery {
     }
 
     static func search(
-        _ models: [Model], query: String, excluding: Set<String> = [], limit: Int = 12
+        _ models: [Model], query: String, excluding: Set<String> = []
     ) -> [Model] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, limit > 0 else { return [] }
+        guard !query.isEmpty else { return models.filter { !excluding.contains($0.id) } }
         return models.enumerated()
             .filter {
                 !excluding.contains($0.element.id)
@@ -125,7 +125,6 @@ enum AIModelDiscovery {
                 let right = searchRank($1.element, query: query)
                 return left == right ? $0.offset < $1.offset : left < right
             }
-            .prefix(limit)
             .map(\.element)
     }
 
