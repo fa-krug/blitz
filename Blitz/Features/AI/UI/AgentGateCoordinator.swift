@@ -51,9 +51,9 @@ final class AgentGateCoordinator {
 
     /// Bound to one call, for a runner to put its dialog to once it has read the arguments.
     func authorization(for call: AgentCall, in chat: AIChatState) -> AgentAuthorization {
-        { [weak self, weak chat] prompt in
-            guard let self, let chat else { return AgentRefusal.declined.message(for: call.tool) }
-            return await authorize(call, prompt: prompt, in: chat)?.message(for: call.tool)
+        // Strong: an optimized build read these as nil when weak, refusing every call unasked.
+        { [self] prompt in
+            await authorize(call, prompt: prompt, in: chat)?.message(for: call.tool)
         }
     }
 
