@@ -149,8 +149,10 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
 - **Settings and Onboarding** — titled `NSWindow`s, one `Windows/AppWindowController.swift` each, owned
   by `SettingsCoordinator` and `OnboardingCoordinator`. SwiftUI `Settings` and `Window` scenes are
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
-  palette's in both directions. Onboarding opens by itself once, on first launch; the Show Welcome
-  Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
+  palette's in both directions. Every `AppWindowController` window is `.moveToActiveSpace`: a
+  raise from the palette brings it to the current Space, since Blitz's activation never switches
+  Spaces to reach a window left on another. Onboarding opens by itself once, on first launch; the
+  Show Welcome Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
   Settings is the one window **hidden rather than torn down on close** (`keepsContentWhenClosed`):
   rebuilding its split, sidebar and toolbar costs ~200 ms per open, so a reopen keeps them and only
   restarts the session. `SettingsCoordinator.showSettings` calls

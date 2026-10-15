@@ -158,6 +158,8 @@ final class AppWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        // An accessory app's raise never switches Space, so the window comes to the user instead.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.isReleasedWhenClosed = false
         // AppKit would otherwise resurrect the window at launch, before anything is wired up.
         window.isRestorable = false
