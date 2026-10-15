@@ -7,7 +7,8 @@ Apple's own translator. The result either replaces the selection or arrives in a
 action.
 
 A **custom Quick Action** is a name, a glyph and a prompt, run through the same provider. It takes a
-shortcut and a launcher row like any other.
+shortcut and a launcher row like any other, and its prompt may declare
+[`{argument}` placeholders](#arguments) that are asked for each time it runs.
 
 Quick Actions is the provider layer's second consumer. It shares the provider connections and
 selectable Markdown renderer with AI Agent.
@@ -71,6 +72,10 @@ selectable Markdown renderer with AI Agent.
 - **A custom prompt cannot drop that boundary.** An override on a shipped action may replace
   `boundary`, because the sheet shows the whole prompt. A custom action *is* the prompt, so `boundary`
   is prepended and no control removes it.
+- **Only what the reader typed is spliced into a prompt.** `{argument}` values fill the instructions;
+  the selection always travels as the message. A prompt reading `{selection}`, `{clipboard}` or
+  `{browser-tab}` is refused at save (`SnippetTemplateEngine.readsCapturedText`), since captured text
+  inside the instructions would sit above the boundary meant to contain it.
 - **Each model action owns its instructions and its route.** Customize… on the page of Fix Grammar,
   Rewrite or Summarize opens a sheet prefilled with the exact built-in prompt and the action's model.
   Saving replaces both for only that action; Use Default restores the prompt. Translate has no editor
@@ -112,8 +117,9 @@ prompt, because importing them would change results without the reader seeing th
 
 `CustomQuickAction` is `id`, `name`, `iconSymbol`, `instructions`, `previewsResult`, `createdAt`.
 `CustomQuickActionStore` keeps them as JSON in Application Support, ordered by `createdAt`, under an
-injected directory so the harness gets a throwaway one. Name and instructions must be non-empty;
-nothing else is rejected, including a name a shipped action already uses.
+injected directory so the harness gets a throwaway one. Name and instructions must be non-empty, and
+the instructions may not read captured text ([Arguments](#arguments)); nothing else is rejected,
+including a name a shipped action already uses.
 
 **Replace / Preview rides the record.** `QuickActionSettings` keys on `BuiltInQuickAction`, which
 cannot hold a UUID, and a parallel dictionary would outlive what it described. On the record, a delete
@@ -145,6 +151,23 @@ choice out. Every other default is a **Replace / Preview** popup on the action's
 Show in launcher switch, and the row says Preview when that is the choice. `QuickActionSettings` stores
 only what the reader actually changed, so a new action arrives with its own default rather than
 whatever a missing key would have meant.
+
+### Arguments
+
+A custom action's prompt is a template for Blitz's one engine, `SnippetTemplateEngine`, so it
+declares a value the way a quicklink does — `{argument name="Order"}`, with `default=` to answer
+itself and `options="formal, casual"` to be chosen from the palette's menu rather than typed. Date,
+time and `{uuid}` tokens resolve too. `CustomQuickAction.arguments` is the declared list
+(`CustomQuickActionArguments.swift`, kept apart so harnesses that only name an action never compile
+the engine), and every argument without a default is required.
+
+`QuickActionCoordinator.run(id:values:)` is the funnel for the launcher row, the shortcut and a
+`blitz://run/` link's `arguments`. With every value present it fills the record once —
+`filled(with:)` — and runs that copy, so Retry asks the same question again. With one missing it
+calls `PaletteCoordinator.showArguments(of:values:)`, exactly as a custom command does: root search
+opens on that row alone, its first empty field focused. The selection is not read until ↵, and `run`
+then captures it from the app the palette covers, so a shortcut pressed over a selection still acts
+on it. `QuickActionArgumentsAccessory` draws the strip, keyed by argument name.
 
 ## Settings
 
@@ -302,6 +325,11 @@ failure handler, so automatic expansion stays silent.
   action leaves ⌘Space, and its shortcut still works.
 - Add a custom action, bind a shortcut, run it from the shortcut and from ⌘Space, then rename it and
   confirm the shortcut, the Replace choice and Show in launcher all survived.
+- Give a custom action `{argument name="Order"}` and `{argument name="Tone" options="formal,
+  casual"}`. Select text in Mail, press its shortcut: root search opens on the row with Order
+  focused; Tone opens a menu; ↵ runs on the Mail selection with both values in the prompt. Type its
+  alias, a space and the order in ⌘Space: the same.
+- Save a custom action whose prompt reads `{selection}`: refused, saying why.
 - Delete a custom action with a shortcut bound from its page: the dialog asks first, the pane falls
   back to the list, the row leaves both Settings and ⌘Space, and the chord is free for something
   else to take.
@@ -321,6 +349,6 @@ failure handler, so automatic expansion stays silent.
 - Translate into a language that has not been downloaded: the panel names the language, and its
   button closes the panel and opens Language & Region.
 - Revoke Accessibility while enabled: a HUD explains instead of failing silently.
-- Harnesses: `quick-action-test` (action metadata, prompt boundaries, preview choices, routes and
-  their repair, diffs) and
+- Harnesses: `quick-action-test` (action metadata, prompt boundaries, arguments and the captured
+  text they refuse, preview choices, routes and their repair, diffs) and
   `text-diff-test` (exact chunks, Unicode, ties, token boundaries and fast paths).

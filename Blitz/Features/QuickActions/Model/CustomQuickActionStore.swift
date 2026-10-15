@@ -86,6 +86,10 @@ final class CustomQuickActionStore {
         guard !value.name.isEmpty else { throw .emptyName }
         guard !value.name.contains("\0") else { throw .invalidCharacter }
         guard !value.instructions.isEmpty else { throw .emptyInstructions }
+        // Spliced into the instructions, captured text would slip past the boundary.
+        guard !SnippetTemplateEngine.readsCapturedText(value.instructions) else {
+            throw .readsCapturedText
+        }
         return value
     }
 

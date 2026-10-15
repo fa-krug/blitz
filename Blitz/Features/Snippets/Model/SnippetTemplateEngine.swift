@@ -159,6 +159,16 @@ enum SnippetTemplateEngine {
     }
 
     /// Whether expanding reads a browser tab, which is asked for over AppleScript only if so.
+    /// Whether the template splices in text the reader did not type: selection, clipboard or tab.
+    static func readsCapturedText(_ text: String) -> Bool {
+        parseSegments(text).contains { segment in
+            switch segment {
+            case .selection, .clipboard, .browserTab: return true
+            default: return false
+            }
+        }
+    }
+
     static func usesBrowserTab(_ text: String) -> Bool {
         readsBrowserTab(text, snippets: [], depth: 0, visitedIDs: [])
     }

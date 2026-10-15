@@ -831,7 +831,10 @@ run quick-action-test      Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/ChatGPTSubscription.swift \
                            Blitz/Features/AI/Model/InstalledAI.swift \
                            Blitz/Features/QuickActions/Model/*.swift \
-                           Blitz/Features/QuickActions/Settings/QuickActionSettingsStore.swift
+                           Blitz/Features/QuickActions/Settings/QuickActionSettingsStore.swift \
+                           Blitz/Platform/BrowserTab.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift \
+                           Blitz/Features/Snippets/Model/SnippetTemplateEngine.swift
 run apple-intelligence-test Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/*.swift \
                            Blitz/Features/AI/Service/AIProvider.swift \

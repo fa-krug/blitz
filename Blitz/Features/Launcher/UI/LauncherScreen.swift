@@ -174,6 +174,12 @@ struct LauncherScreen: PaletteScreen {
                 metrics: core.settings.interfaceSize.metrics, focus: focus,
                 onSubmit: { activate(at: selection) })
         }
+        if entry.kind == .quickAction {
+            return QuickActionArgumentsAccessory.make(
+                action: core.customQuickActions.action(entryID: entry.id), vm: vm,
+                metrics: core.settings.interfaceSize.metrics, focus: focus,
+                onOpenOptions: openArgumentOptions, onSubmit: { activate(at: selection) })
+        }
         if entry.kind == .command {
             return SmartReminderArgumentsAccessory.make(
                 entry: entry, vm: vm, metrics: core.settings.interfaceSize.metrics, focus: focus,
@@ -200,6 +206,10 @@ struct LauncherScreen: PaletteScreen {
         if entry.kind == .customCommand {
             guard let command = core.customCommands.command(entryID: entry.id) else { return [:] }
             return CustomCommandArgumentsAccessory.values(for: command, vm: vm)
+        }
+        if entry.kind == .quickAction {
+            guard let action = core.customQuickActions.action(entryID: entry.id) else { return [:] }
+            return QuickActionArgumentsAccessory.values(for: action, vm: vm)
         }
         if entry.kind == .command { return SmartReminderArgumentsAccessory.values(for: entry, vm: vm) }
         var values: [String: String] = [:]
