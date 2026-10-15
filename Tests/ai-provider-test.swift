@@ -80,7 +80,7 @@ struct AIProviderTests {
         providerPresetsResolveEndpoints()
         modelCatalogBuildsProviderRequests()
         modelCatalogDecodesProviderResponses()
-        modelCatalogSearchesWithoutRenderingEverything()
+        modelCatalogBrowsesAndSearches()
         endpointPolicyRejectsUnsafeRemoteURLs()
         storedKeysDoNotFollowARetargetedConnection()
         savingAConnectionDecidesItsKey()
@@ -625,7 +625,7 @@ struct AIProviderTests {
             "Gemini discovery keeps generation models and strips the resource prefix")
     }
 
-    static func modelCatalogSearchesWithoutRenderingEverything() {
+    static func modelCatalogBrowsesAndSearches() {
         let models = [
             AIModelDiscovery.Model(id: "openai/gpt-small", name: "GPT Small"),
             AIModelDiscovery.Model(id: "anthropic/claude", name: "Claude"),
@@ -633,8 +633,9 @@ struct AIProviderTests {
             AIModelDiscovery.Model(id: "google/gemini", name: "Gemini")
         ]
         expect(
-            AIModelDiscovery.search(models, query: "").isEmpty,
-            "an empty search never renders the complete provider catalog")
+            AIModelDiscovery.search(models, query: "", excluding: ["anthropic/claude"]).map(\.id)
+                == ["openai/gpt-small", "openai/gpt-large", "google/gemini"],
+            "an empty search lists every unselected model in catalog order")
         expect(
             AIModelDiscovery.search(models, query: "openai").map(\.id)
                 == ["openai/gpt-small", "openai/gpt-large"],
@@ -644,10 +645,9 @@ struct AIProviderTests {
                 == "openai/gpt-large",
             "an exact display-name match ranks first")
         expect(
-            AIModelDiscovery.search(
-                models, query: "gpt", excluding: ["openai/gpt-small"], limit: 1
-            ).map(\.id) == ["openai/gpt-large"],
-            "search excludes selected models and caps visible results")
+            AIModelDiscovery.search(models, query: "gpt", excluding: ["openai/gpt-small"])
+                .map(\.id) == ["openai/gpt-large"],
+            "search excludes selected models")
     }
 
     static func endpointPolicyRejectsUnsafeRemoteURLs() {

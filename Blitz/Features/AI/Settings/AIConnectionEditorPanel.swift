@@ -15,11 +15,13 @@ struct AIConnectionEditorPanel: View {
     @State private var connection: AIConnection
     @State private var key = ""
     @State private var modelQuery = ""
+    @State private var visibleModelCount = Self.modelPageSize
     @State private var discovery: ModelDiscoveryState = .waitingForKey
     @State private var discoveryRevision = 0
     @State private var error: String?
 
     private let modelDiscovery = AIModelDiscoveryService()
+    private static let modelPageSize = 10
 
     init(
         target: AIConnectionEditorTarget,
@@ -102,7 +104,7 @@ struct AIConnectionEditorPanel: View {
                     }
                 } footer: {
                     Text(
-                        "Search the models available to this key and add one or more. Exact model "
+                        "Pick one or more of the models available to this key. Exact model "
                             + "IDs remain available when discovery is unsupported."
                     )
                     .font(.caption)
@@ -130,6 +132,7 @@ struct AIConnectionEditorPanel: View {
             guard !Task.isCancelled else { return }
             await discoverModels()
         }
+        .onChange(of: modelQuery) { visibleModelCount = Self.modelPageSize }
         .onChange(of: key) { discoveryRevision += 1 }
         .onChange(of: connection.baseURL) { discoveryRevision += 1 }
         .onChange(of: connection.provider) { oldProvider, newProvider in
@@ -166,9 +169,9 @@ struct AIConnectionEditorPanel: View {
                     .foregroundStyle(.secondary)
                 manualModelField
             } else {
-                editorField("Find a model") {
+                editorField("Filter") {
                     TextField(
-                        "Find a model", text: $modelQuery,
+                        "Filter models", text: $modelQuery,
                         prompt: Text(modelSearchPlaceholder)
                     )
                     .settingsEditorTextField()
@@ -194,12 +197,13 @@ struct AIConnectionEditorPanel: View {
     private func modelSearchResults(_ models: [AIModelDiscovery.Model]) -> some View {
         let query = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = matchingModels(in: models)
-        if query.isEmpty {
-            Text("Type a model or company name. \(models.count) models available.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if matches.isEmpty {
-            if connection.models.contains(where: { $0.caseInsensitiveCompare(query) == .orderedSame }) {
+        if matches.isEmpty {
+            if query.isEmpty {
+                Label("Every available model is added.", systemImage: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            } else if connection.models.contains(where: {
+                $0.caseInsensitiveCompare(query) == .orderedSame
+            }) {
                 Label("This model is already added.", systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
             } else {
@@ -210,7 +214,7 @@ struct AIConnectionEditorPanel: View {
                 }
             }
         } else {
-            ForEach(matches) { model in
+            ForEach(matches.prefix(visibleModelCount)) { model in
                 Button {
                     addModel(model)
                 } label: {
@@ -231,6 +235,15 @@ struct AIConnectionEditorPanel: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add \(model.name)")
+            }
+            if matches.count > visibleModelCount {
+                LabeledContent {
+                    Button("Show More") { visibleModelCount += Self.modelPageSize }
+                } label: {
+                    Text("Showing \(visibleModelCount) of \(matches.count). Filter to narrow the list.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -283,14 +296,13 @@ struct AIConnectionEditorPanel: View {
 
     private var modelSearchPlaceholder: String {
         connection.provider == .openRouter
-            ? "Search by model or company" : "Search available models"
+            ? "Filter by model or company" : "Filter available models"
     }
 
     private func matchingModels(
         in models: [AIModelDiscovery.Model]
     ) -> [AIModelDiscovery.Model] {
-        AIModelDiscovery.search(
-            models, query: modelQuery, excluding: Set(connection.models), limit: 12)
+        AIModelDiscovery.search(models, query: modelQuery, excluding: Set(connection.models))
     }
 
     private func addExactMatch(from models: [AIModelDiscovery.Model]) {
