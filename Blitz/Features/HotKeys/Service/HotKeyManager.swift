@@ -14,7 +14,7 @@ final class HotKeyManager {
     var onEnterRoom: ((UUID) -> Void)?
     var onRunCustomWindowSize: ((UUID) -> Void)?
     var onOpenQuicklink: ((UUID, [String: String]) -> Void)?
-    var onRunQuickAction: ((UUID) -> Void)?
+    var onRunQuickAction: ((UUID, [String: String]) -> Void)?
     var onRunAppleShortcut: ((UUID) -> Void)?
     var onExpandSnippet: ((StoredSnippet.ID) -> Void)?
     var onRunExtensionCommand: ((String) -> Void)?
@@ -319,7 +319,7 @@ final class HotKeyManager {
         case .windowRoom(let id): onEnterRoom?(id)
         case .customWindowSize(let id): onRunCustomWindowSize?(id)
         case .quicklink(let id): onOpenQuicklink?(id, arguments)
-        case .quickAction(let id): onRunQuickAction?(id)
+        case .quickAction(let id): onRunQuickAction?(id, arguments)
         case .appleShortcut(let id): onRunAppleShortcut?(id)
         case .snippet(let id): onExpandSnippet?(id)
         case .extensionCommand(let entryID): onRunExtensionCommand?(entryID)

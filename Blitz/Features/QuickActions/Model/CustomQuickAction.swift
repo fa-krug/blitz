@@ -42,6 +42,7 @@ struct CustomQuickAction: Codable, Hashable, Identifiable, Sendable {
 enum CustomQuickActionError: Error, LocalizedError, Equatable {
     case emptyName
     case emptyInstructions
+    case readsCapturedText
     case invalidCharacter
     case storageUnavailable
 
@@ -49,6 +50,9 @@ enum CustomQuickActionError: Error, LocalizedError, Equatable {
         switch self {
         case .emptyName: return "Give the action a name."
         case .emptyInstructions: return "Tell the model what the action should do."
+        case .readsCapturedText:
+            return "Blitz sends your selection after the instructions on its own. Refer to it as "
+                + "“the text” instead of {selection}, {clipboard} or {browser-tab}."
         case .invalidCharacter: return "The name contains a character Blitz can't store."
         case .storageUnavailable: return "Blitz couldn't save to its actions file."
         }

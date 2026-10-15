@@ -169,9 +169,16 @@ final class QuickActionCoordinator {
         ranking.reset(itemKey: action.entryID)
     }
 
-    func run(id: UUID) {
-        guard let action = customActions.action(id: id) else { return }
-        run(.custom(action))
+    /// Values still owed send the reader to the launcher row, which captures the selection after.
+    func run(id: UUID, values: [String: String] = [:]) {
+        guard settings.quickActionsEnabled, running == nil,
+            let action = customActions.action(id: id)
+        else { return }
+        guard !action.isMissingArguments(values) else {
+            paletteCoordinator.showArguments(of: AppEntry(action), values: values)
+            return
+        }
+        run(.custom(action.filled(with: values)))
     }
 
     func run(_ action: QuickAction) {

@@ -28,6 +28,8 @@ struct QuickActionTests {
         refusalsNameTheirOwnCause()
         customActionsCarryTheirOwnIdentity()
         customActionsKeepTheBoundary()
+        customActionsAskForTheirArguments()
+        customActionsNeverSpliceCapturedText()
         customActionsSurviveARelaunch()
         customActionsNeverWriteOverWhatTheyCouldNotRead()
 
@@ -412,6 +414,71 @@ struct QuickActionTests {
         expect(
             QuickActionPrompt.message(for: .custom(record), selection: "hi").hasPrefix("Text:"),
             "only Summarize names a task above the text")
+    }
+
+    static func customActionsAskForTheirArguments() {
+        let record = CustomQuickAction(
+            name: "Reply",
+            instructions: """
+                Answer the email as asked: {argument name="Order"}. \
+                Tone: {argument name="Tone" options="formal, casual"}. \
+                Sign as {argument name="Sender" default="me"}. {argument name="Order"}
+                """)
+        expect(
+            record.arguments.map(\.name) == ["Order", "Tone"],
+            "each declared argument is asked once, and a default answers itself, got "
+                + "\(record.arguments.map(\.name))")
+        expect(
+            record.arguments.last?.options == ["formal", "casual"],
+            "a choice argument carries its options to the field")
+        expect(record.isMissingArguments([:]), "nothing typed is something owed")
+        expect(
+            record.isMissingArguments(["Order": "say yes", "Tone": ""]),
+            "a blank value is still owed")
+
+        let filled = record.filled(with: ["Order": "say yes", "Tone": "casual"])
+        expect(
+            filled.instructions
+                == "Answer the email as asked: say yes. Tone: casual. Sign as me. say yes",
+            "every placeholder is filled, got \(filled.instructions)")
+        expect(filled.id == record.id, "a filled run keeps the action's identity")
+        expect(
+            QuickActionPrompt.instructions(for: .custom(filled))
+                .hasPrefix(QuickActionPrompt.boundary),
+            "a filled prompt still opens with the boundary")
+        expect(
+            QuickActionPrompt.message(for: .custom(filled), selection: "Hi").hasSuffix("Hi"),
+            "the selection still travels as the message, never inside the instructions")
+
+        let plain = CustomQuickAction(name: "Trim", instructions: "Trim {it}.")
+        expect(plain.arguments.isEmpty, "an action without placeholders asks for nothing")
+        expect(!plain.isMissingArguments([:]), "and runs at once")
+        expect(
+            plain.filled(with: [:]).instructions == "Trim {it}.",
+            "a brace that is not a placeholder is left as written")
+    }
+
+    /// Spliced into the instructions, a selection could rewrite them; it must stay the message.
+    static func customActionsNeverSpliceCapturedText() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuickActionTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CustomQuickActionStore(directory: directory)
+        for instructions in [
+            "Fix {selection}.", "Fix {selectedText}.", "Use {clipboard}.", "Cite {browser-tab}."
+        ] {
+            do {
+                _ = try store.add(CustomQuickAction(name: "Leaky", instructions: instructions))
+                expect(false, "\(instructions) must be refused")
+            } catch {
+                expect(error == .readsCapturedText, "\(instructions) is refused for what it reads")
+            }
+        }
+        expect(
+            (try? store.add(
+                CustomQuickAction(name: "Dated", instructions: "Mention {date}. {argument}")))
+                != nil,
+            "a placeholder the reader answers is allowed")
     }
 
     static func customActionsSurviveARelaunch() {

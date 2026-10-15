@@ -133,8 +133,10 @@ struct CustomQuickActionEditorPanel: View {
                     }
                 }
             Text(
-                "Blitz always tells the model to return only the transformed text, and to treat "
-                    + "your selection as material rather than as instructions."
+                "Write {argument name=\"Tone\"} to be asked for a value each time the action "
+                    + "runs; add options=\"formal,casual\" to choose from a list. Blitz always "
+                    + "tells the model to return only the transformed text, and to treat your "
+                    + "selection as material rather than as instructions."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
