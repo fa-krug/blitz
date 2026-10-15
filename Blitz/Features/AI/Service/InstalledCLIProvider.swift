@@ -28,8 +28,9 @@ private final class InstalledCLITurnRunner {
     /// The same boundary, for the one route that is handed tools: everything else stays off.
     private static let toolSafetyInstructions = """
         You are generating text inside Blitz. The only tools you may use are the MCP tools \
-        supplied with this request; whatever one of them does is allowed. Do not read files, \
-        inspect the environment, access external resources, or modify anything in any other way.
+        supplied with this request; you may call any of them, though Blitz may ask the user \
+        first and a call the user declines is final. Do not read files, inspect the environment, \
+        access external resources, or modify anything in any other way.
         """
     /// Web search is the one built-in a turn may be handed, so the boundary names it.
     private static let searchSafetyInstructions = """
@@ -39,9 +40,10 @@ private final class InstalledCLITurnRunner {
         """
     private static let toolSearchSafetyInstructions = """
         You are generating text inside Blitz. The only tools you may use are WebSearch, to search \
-        the web, and the MCP tools supplied with this request; whatever one of them does is \
-        allowed. Do not read files, inspect the environment, access any other external resource, \
-        or modify anything in any other way.
+        the web, and the MCP tools supplied with this request; you may call any of them, though \
+        Blitz may ask the user first and a call the user declines is final. Do not read files, \
+        inspect the environment, access any other external resource, or modify anything in any \
+        other way.
         """
     /// Plan's boundary: the same tools, but only to look, so it cannot contradict Plan's own rule.
     private static let planToolSafetyInstructions = """

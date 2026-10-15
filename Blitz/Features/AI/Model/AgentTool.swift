@@ -207,6 +207,24 @@ enum AgentTool: Hashable, Sendable {
         }
     }
 
+    /// Whether an answer can carry text Blitz did not write, so it reaches the model fenced.
+    var returnsOutsideText: Bool {
+        switch self {
+        case .shell, .filesRead, .webFetch, .shortcuts, .calendarRead, .remindersRead,
+            .contactsRead, .noteRead, .clipboardRead, .snippetsRead, .frontmostApp, .selectedText,
+            .currentClipboard, .sessionsRead, .mcp:
+            true
+        case .filesWrite, .webSearch, .openItems, .systemActions, .windowLayouts, .calendarWrite,
+            .remindersWrite, .noteWrite, .sessionsArchive, .memoryRead, .memoryWrite:
+            false
+        }
+    }
+
+    /// A failed call's answer is Blitz's own sentence, so only an answer that came back is fenced.
+    func fenced(_ result: AIToolResult) -> AIToolResult {
+        returnsOutsideText && !result.isError ? AIUntrustedText.wrap(result) : result
+    }
+
     /// Whether an Ask may be answered for the whole chat; a write or a command is asked each time.
     var canAllowForSession: Bool {
         switch self {

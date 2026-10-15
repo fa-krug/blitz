@@ -323,8 +323,7 @@ run palette-menu-click-test Blitz/Platform/Appearance.swift \
 run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
 run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
 run keyboard-focus-test    Blitz/DesignSystem/Interaction/KeyboardFocus.swift
-run ai-instructions-test   Blitz/Features/AI/Model/AIInstructions.swift \
-                           Blitz/Features/AI/Model/AIPreamble.swift
+run ai-instructions-test   $A/AIInstructions.swift $A/AIPreamble.swift $A/AskUserToolCatalog.swift $T
 run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Palette/PaletteState.swift \
                            Blitz/Palette/PaletteMode.swift \

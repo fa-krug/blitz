@@ -32,11 +32,14 @@ enum MemoryToolCatalog {
         [
             AITool(
                 name: rememberName,
-                description: "Remember one short fact or preference across chats, such as how "
-                    + "the user likes answers written. It is added to your instructions in every "
-                    + "later chat. Remember only what the user asks you to, or would clearly want "
-                    + "kept, and never a password or other secret. The user may be asked to "
-                    + "confirm, and may decline.",
+                description: "Remember one short, lasting fact about the user across chats, such "
+                    + "as how they like answers written. It is added to your instructions in "
+                    + "every later chat. Remember only what the user asks you to, or a stable "
+                    + "preference they would clearly want kept, and never a password or other "
+                    + "secret, something true only today, or the details of the current task; if "
+                    + "unsure, ask. Write it as a fact about the user, such as \u{201C}Prefers "
+                    + "metric units\u{201D}, not as a command to yourself. The user may be asked "
+                    + "to confirm, and may decline.",
                 parameters: AIToolJSON.object(
                     properties: [
                         "text": AIToolJSON.string(

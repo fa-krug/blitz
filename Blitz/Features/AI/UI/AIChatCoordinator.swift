@@ -463,7 +463,7 @@ final class AIChatCoordinator {
     /// The system prompt switch withholds neither memory nor the mode: each has its own switch.
     private func instructions(for chat: AIChatState) -> String? {
         let prompt = AIInstructions.compose(
-            userPrompt: core.aiSettings.systemPrompt,
+            preamble: preamble(for: chat), userPrompt: core.aiSettings.systemPrompt,
             isEnabled: core.aiSettings.systemPromptEnabled)
         let memory = readsMemory(in: chat)
             ? core.agentMemoryCoordinator.instructions(
@@ -471,6 +471,19 @@ final class AIChatCoordinator {
             : nil
         return AgentModeInstructions.appending(
             to: AgentMemoryInstructions.appending(memory, to: prompt), for: chat.agentScope.mode)
+    }
+
+    /// The agent's half rides only where the turn is offered tools, so a chat route never pays it.
+    private func preamble(for chat: AIChatState) -> String {
+        let model = model(for: chat)
+        let turn = AIPreamble.Turn(
+            isOnDevice: model?.isOnDevice == true,
+            offersTools: capabilities(for: chat).tools && chat.agentScope.isEnabled,
+            asksUser: model?.reachesBlitzTools == true
+                && AgentPolicy.isOffered(.askUser, scope: chat.agentScope))
+        let environment = AIPreamble.environment(
+            now: Date(), calendar: .current, system: ProcessInfo.processInfo.operatingSystemVersion)
+        return AIPreamble.text(for: turn, environment: environment)
     }
 
     /// Read Memory on Allow and the chat's Use Memory on; it is no tool, so every route reads it.
@@ -555,7 +568,8 @@ final class AIChatCoordinator {
         if let refusal = await gate.authorize(request, in: chat) {
             return .failure(call.id, refusal.message(for: .mcp(route.slug)))
         }
-        return await core.mcpCoordinator.invoke(call)
+        // A server's error is its own text too, so every answer it gives is fenced.
+        return AIUntrustedText.wrap(await core.mcpCoordinator.invoke(call))
     }
 
     nonisolated private static func isBlitzTool(_ name: String) -> Bool {
@@ -578,18 +592,23 @@ final class AIChatCoordinator {
             return blitzTools(for: chat)
         } run: { @MainActor [weak self, weak chat] call in
             guard let self, let chat else { return await AIHostedTools.none.run(call) }
-            if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
-            if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
-            if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
-            if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
-            if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
-            if OpenToolCatalog.handles(call.name) { return await openItem(call, in: chat) }
-            if let routed = await runFeatureTool(call, in: chat) { return routed }
-            guard let agentCall = AgentCall(toolCall: call) else {
-                return await AIHostedTools.none.run(call)
-            }
-            return await runBlitzTool(call, authorize: gate.authorization(for: agentCall, in: chat))
+            let result = await runHostedTool(call, in: chat)
+            return AgentTool(builtInToolName: call.name)?.fenced(result) ?? result
         }
+    }
+
+    private func runHostedTool(_ call: AIToolCall, in chat: AIChatState) async -> AIToolResult {
+        if AskUserToolCatalog.handles(call.name) { return await askUser(call, in: chat) }
+        if PlanToolCatalog.handles(call.name) { return writePlan(call, in: chat) }
+        if FileToolCatalog.handles(call.name) { return await runFileTool(call, in: chat) }
+        if WebFetchToolCatalog.handles(call.name) { return await fetchWebPage(call, in: chat) }
+        if SessionToolCatalog.handles(call.name) { return await runSessionTool(call, in: chat) }
+        if OpenToolCatalog.handles(call.name) { return await openItem(call, in: chat) }
+        if let routed = await runFeatureTool(call, in: chat) { return routed }
+        guard let agentCall = AgentCall(toolCall: call) else {
+            return await AIHostedTools.none.run(call)
+        }
+        return await runBlitzTool(call, authorize: gate.authorization(for: agentCall, in: chat))
     }
 
     /// Never past the gate: asking the reader is no capability, so it has no rule row to consult.
@@ -700,7 +719,9 @@ final class AIChatCoordinator {
             command: request.command,
             summary: ShellToolCatalog.summary(of: request, homeDirectory: home))
         if let refusal = await authorize(prompt) { return .failure(call.id, refusal) }
-        return ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
+        let result = ShellToolCatalog.result(await ShellToolRunner.run(request), callID: call.id)
+        // A failed command still answers with its own output, which `AgentTool.fenced` passes over.
+        return result.isError ? AIUntrustedText.wrap(result) : result
     }
 
     /// The gate weighs canonical paths, and the runner re-resolves them before it acts.
