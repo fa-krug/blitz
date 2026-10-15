@@ -156,8 +156,8 @@ panel, the shortcut-recorder callout and the Notes switcher, and `menuRow` is de
 `emojiGridInset 16` ·
 `settingsSidebar 215` · `settingsRowIcon 20` · `dialogCompactWidth 290` ·
 `dialogWidth 360` · `dialogButtonHeight 34` · `dialogSymbol 28` · `dialogSymbolContainer 52` ·
-`dialogHeaderSymbol 15` · `dialogIcon 32` · `bannerWidth 360` · `hudWidth 200` ·
-`hudHeight 100` · `volumeTrackHeight 6` · `volumeReadout 38`
+`dialogHeaderSymbol 15` · `dialogIcon 32` · `dialogMessageMaxHeight 240` · `bannerWidth 360` ·
+`hudWidth 200` · `hudHeight 100` · `volumeTrackHeight 6` · `volumeReadout 38`
 
 Notes adds `noteWindow 520×420` (opening size on a first run only), `noteWindowMinimum 320×220`,
 `noteTitlebar 44`, `noteTitleInset 120`, `noteEditorInset 16`, `noteSearchHeight 34`,
@@ -496,7 +496,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `selection`, while a destructive action uses the destructive tint. The **volume HUD** and **message
   pill** keep the non-glass panel recipe.
 - **Layout.** Subject glyph in a low-opacity rounded tile, then title (`panelTitle`) + wrapped
-  secondary message, optional accessory and full-width actions. **A form is a quick add**, so
+  secondary message (scrolling past `dialogMessageMaxHeight 240`, so a long command never outgrows
+  the screen), optional accessory and full-width actions. **A form is a quick add**, so
   `DialogAccessory.isForm` swaps the tile for a `dialogHeaderSymbol 15` glyph on the title's own line
   and tightens the gaps; its fields carry the dialog, and none of the quick-add forms passes a
   message. Content uses a 22-point inset while

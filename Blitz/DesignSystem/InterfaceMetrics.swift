@@ -123,6 +123,9 @@ struct InterfaceMetrics: Equatable, Sendable {
         var dialogTextEditorHeight: CGFloat {
             scaledPoints(Theme.Size.dialogTextEditorHeight, scale)
         }
+        var dialogMessageMaxHeight: CGFloat {
+            scaledPoints(Theme.Size.dialogMessageMaxHeight, scale)
+        }
         var dialogSymbol: CGFloat { scaledPoints(Theme.Size.dialogSymbol, scale) }
         var dialogSymbolContainer: CGFloat {
             scaledPoints(Theme.Size.dialogSymbolContainer, scale)
