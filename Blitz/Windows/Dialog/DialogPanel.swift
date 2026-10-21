@@ -51,6 +51,9 @@ final class DialogPanel: NSPanel {
         switch Int(event.keyCode) {
         case kVK_Escape:
             onKey(.cancel)
+        // An input method commits its marked text on ↵, so that press is never a confirm.
+        case kVK_Return where (firstResponder as? NSTextView)?.hasMarkedText() == true:
+            super.sendEvent(event)
         case kVK_Return where returnNeedsCommand && !event.modifierFlags.contains(.command),
             kVK_ANSI_KeypadEnter where returnNeedsCommand && !event.modifierFlags.contains(.command):
             super.sendEvent(event)

@@ -518,7 +518,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   **↵ runs the dialog's primary action; Escape cancels**, on every dialog including destructive ones.
   Arrow keys walk the volume slider along the same 5% grid the volume commands use (`DialogPanel`
   reports `.increment` / `.decrement` and `DialogController` applies `VolumeLevel.stepped`, so the
-  panel never learns what a volume step is); click-away resolves as a dismissal (see below).
+  panel never learns what a volume step is); click-away resolves as a dismissal (see below). ↵ that
+  commits an input method's marked text goes to the field and never confirms.
 - **Click-away dismisses, but a form keeps what was typed.** `windowDidResignKey` resolves the dialog
   as its cancel rather than leaving it up: the panel floats at `.dialog` on every Space, so a dialog
   kept open after the user moved to another app would cover that app, keep the palette dimmed, and
