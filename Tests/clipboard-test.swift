@@ -26,6 +26,8 @@ struct ClipboardTests {
         persistence()
         exportSeesPastTheMemoryWindow()
         importedImagesArriveOnce()
+        imageCopiesLeaveWithTheirBlob()
+        orphanedCopiesAreSweptOnLoad()
         multiFileCopyMakesOneRowEach()
         referencedFilesOutliveTheirRows()
         filePathsAreNeverATextForm()
@@ -592,6 +594,64 @@ struct ClipboardTests {
             let images =
                 (try? FileManager.default.contentsOfDirectory(atPath: store.imagesDir.path)) ?? []
             expect(images == ["blob.png"], "and no second copy of the blob")
+        }
+    }
+
+    static func imageCopiesLeaveWithTheirBlob() {
+        for way in ["removing", "clearing history", "a retention cut"] {
+            withStore { store, dir in
+                let blob = dir.appendingPathComponent("blob.png")
+                try? Data("png".utf8).write(to: blob)
+                let staged = ClipboardItem(
+                    imagePath: blob.path, createdAt: Date().addingTimeInterval(-2 * 86_400),
+                    sourceBundleID: nil)
+                expect(!store.ownsImage(of: staged), "an image outside the store gets no copies")
+                _ = ClipboardStore.importStoredItems(
+                    inDatabaseAt: store.dbURL, adoptingImagesInto: store.imagesDir, [staged])
+                store.load()
+                guard let item = store.items.first, let url = store.imageURL(for: item) else {
+                    return expect(false, "the adopted image is listed")
+                }
+                expect(store.ownsImage(of: item), "an adopted blob is ours to derive from")
+                let copies = ImageDerivative.all(of: url).map(\.url.path)
+                try? FileManager.default.createDirectory(
+                    at: ImageDerivative.folder(beside: url), withIntermediateDirectories: true)
+                for copy in copies { try? Data("copy".utf8).write(to: URL(fileURLWithPath: copy)) }
+
+                switch way {
+                case "removing": store.remove(item)
+                case "clearing history": store.clearAll()
+                default:
+                    store.maxAge = 86_400
+                    store.enforceLimits()
+                }
+                expect(eventually { noneExist(copies) }, "\(way) deletes the copies")
+            }
+        }
+    }
+
+    /// A quit before a queued copy delete runs leaves orphaned copies; the next load sweeps them.
+    static func orphanedCopiesAreSweptOnLoad() {
+        withStore { store, dir in
+            let blob = dir.appendingPathComponent("kept.png")
+            try? Data("png".utf8).write(to: blob)
+            _ = ClipboardStore.importStoredItems(
+                inDatabaseAt: store.dbURL, adoptingImagesInto: store.imagesDir,
+                [ClipboardItem(imagePath: blob.path, sourceBundleID: nil)])
+            let kept = ImageDerivative.all(of: store.imagesDir.appendingPathComponent("kept.png"))
+                .map(\.url)
+            let gone = store.imagesDir.appendingPathComponent("gone.png")
+            let orphans = ImageDerivative.all(of: gone).map(\.url)
+            try? FileManager.default.createDirectory(
+                at: ImageDerivative.folder(beside: kept[0]), withIntermediateDirectories: true)
+            for copy in kept + orphans { try? Data("copy".utf8).write(to: copy) }
+
+            store.load()
+            ImageDerivative.queue.sync {}
+            expect(noneExist(orphans.map(\.path)), "a copy whose blob is gone is swept on load")
+            expect(
+                kept.allSatisfy { FileManager.default.fileExists(atPath: $0.path) },
+                "a live blob's copies survive the sweep")
         }
     }
 

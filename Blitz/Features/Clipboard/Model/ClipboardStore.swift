@@ -390,6 +390,7 @@ final class ClipboardStore {
         sqlite3_reset(stmt)
         sqlite3_clear_bindings(stmt)
         items = loaded
+        ImageDerivative.removeOrphans(in: imagesDir)
         // Age passes while the app isn't running; insert-time pruning alone can't catch that.
         enforceLimits()
     }
@@ -537,11 +538,11 @@ final class ClipboardStore {
             WHERE i.pinned_at IS NULL
             """)
         // RETURNING hands back the deleted blobs in the same pass, so no separate SELECT is needed.
-        let orphaned =
-            formats + ownedPaths("DELETE FROM items WHERE pinned_at IS NULL RETURNING image_path")
-        if !orphaned.isEmpty {
+        let blobs = ownedPaths("DELETE FROM items WHERE pinned_at IS NULL RETURNING image_path")
+        if !formats.isEmpty || !blobs.isEmpty {
             Task.detached(priority: .utility) {
-                for path in orphaned { try? FileManager.default.removeItem(atPath: path) }
+                for path in formats { try? FileManager.default.removeItem(atPath: path) }
+                for path in blobs { Self.removeBlob(atPath: path) }
             }
         }
         // Every pinned row is resident however old, so the window stays whole without a reload.
@@ -633,6 +634,11 @@ final class ClipboardStore {
         invalidateSearch(preservingMatches: true)
         searchRevision += 1
         return true
+    }
+
+    /// Only an owned blob is immutable and ours, so only it may grow downscaled copies.
+    func ownsImage(of item: ClipboardItem) -> Bool {
+        item.imagePath.map(owns) ?? false
     }
 
     func imageURL(for item: ClipboardItem) -> URL? {
@@ -996,7 +1002,7 @@ final class ClipboardStore {
         return paths
     }
 
-    /// A row's own files, a blob or a flavour or two, so they go in place rather than off-main.
+    /// A row's own flavour files, a few at most, so they go in place rather than off-main.
     private func deleteOwned(_ paths: [String]) {
         for path in paths where owns(path) { try? FileManager.default.removeItem(atPath: path) }
     }
@@ -1011,11 +1017,15 @@ final class ClipboardStore {
         textSearchMatches.removeAll { $0.createdAt < cutoff && !$0.isPinned }
         if let imagesStmt = staleImagesStmt, let deleteStmt = deleteStaleStmt {
             sqlite3_bind_double(imagesStmt, 1, cutoff.timeIntervalSince1970)
-            var staleOwnedPaths: [String] = []
+            var staleBlobs: [String] = []
+            var staleFormats: [String] = []
             while sqlite3_step(imagesStmt) == SQLITE_ROW {
                 // Only delete files we own; an external reference just loses its row.
-                if let path = Self.columnString(imagesStmt, 0), owns(path) {
-                    staleOwnedPaths.append(path)
+                guard let path = Self.columnString(imagesStmt, 0), owns(path) else { continue }
+                if sqlite3_column_int(imagesStmt, 1) == 1 {
+                    staleBlobs.append(path)
+                } else {
+                    staleFormats.append(path)
                 }
             }
             sqlite3_reset(imagesStmt)
@@ -1029,11 +1039,10 @@ final class ClipboardStore {
             sqlite3_reset(deleteStmt)
             sqlite3_clear_bindings(deleteStmt)
             // A retention cut can strand hundreds of files, so delete them off the main actor.
-            if !staleOwnedPaths.isEmpty {
+            if !staleBlobs.isEmpty || !staleFormats.isEmpty {
                 Task.detached(priority: .utility) {
-                    for path in staleOwnedPaths {
-                        try? FileManager.default.removeItem(atPath: path)
-                    }
+                    for path in staleFormats { try? FileManager.default.removeItem(atPath: path) }
+                    for path in staleBlobs { Self.removeBlob(atPath: path) }
                 }
             }
         }
@@ -1044,7 +1053,15 @@ final class ClipboardStore {
     }
 
     private func deleteBlob(_ item: ClipboardItem) {
-        deleteOwned([item.imagePath].compactMap(\.self) + item.formats.values)
+        deleteOwned(Array(item.formats.values))
+        if let path = item.imagePath, owns(path) { Self.removeBlob(atPath: path) }
+    }
+
+    /// The blob goes at once; its copies wait on the queue, behind any copy still being made.
+    nonisolated private static func removeBlob(atPath path: String) {
+        let url = URL(fileURLWithPath: path)
+        try? FileManager.default.removeItem(at: url)
+        ImageDerivative.removeCopies(of: url)
     }
 
     private func openDatabase() -> Bool {
@@ -1085,10 +1102,10 @@ final class ClipboardStore {
         pinStmt = prepare("UPDATE items SET pinned_at = ? WHERE id = ?")
         staleImagesStmt = prepare(
             """
-            SELECT image_path FROM items
+            SELECT image_path, 1 FROM items
             WHERE created_at < ?1 AND pinned_at IS NULL AND image_path IS NOT NULL
             UNION ALL
-            SELECT f.path FROM item_formats f JOIN items i ON i.id = f.item_id
+            SELECT f.path, 0 FROM item_formats f JOIN items i ON i.id = f.item_id
             WHERE i.created_at < ?1 AND i.pinned_at IS NULL
             """)
         deleteStaleStmt = prepare("DELETE FROM items WHERE created_at < ? AND pinned_at IS NULL")

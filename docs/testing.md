@@ -128,6 +128,12 @@ Its Keychain scope is unique to each run and removed on completion. `ext-fetch-t
 `ext-test`) serves its requests from `Tests/ext-fixtures/http-server.js`, and its Unix-socket ones
 from `Tests/ext-fixtures/unix-server.js` on a socket path unique to each run.
 
+`clipboard-thumbnail-test` plays `ClipboardTextHelper` with a shell script written to its scratch
+directory, which reads the source first and writes the copy last, as the real helper does. Against
+the real store it checks that a remove or a clear mid-copy leaves no copy, that same-named JPEG and
+PNG copies stay apart, that a timeout or a cancel frees the queue, and that a failed or unreadable
+copy falls back to the original.
+
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
 same commit with the reason in the message.
@@ -238,11 +244,32 @@ the attachment path against the bounded reader it delegates to. Compare three fr
 per build with identical `-O` settings:
 
 ```sh
-swiftc -O -swift-version 6 Blitz/Platform/PasteboardFiles.swift \
-    Blitz/Features/Clipboard/Model/{ClipboardStore,ClipboardFilter,ClipboardFileKind,ColorValue,ColorFormat,ColorSpaces}.swift \
+swiftc -O -swift-version 6 Blitz/Platform/{PasteboardFiles,PasteboardSensitivity}.swift \
+    Blitz/Features/Clipboard/Model/{ClipboardStore,ClipboardRichFormat,ClipboardFilter,ClipboardFileKind,ColorValue,ColorFormat,ColorSpaces}.swift \
+    Blitz/Platform/Images/ImageDerivative.swift \
     Blitz/Features/Clipboard/Service/ClipboardManager.swift \
     Tests/clipboard-file-performance.swift -o /tmp/clipboard-file-performance
 /tmp/clipboard-file-performance
+```
+
+`Tests/clipboard-thumbnail-performance.swift` draws 10 image rows at once, then 10 previews one by
+one, as Clipboard History does, and prints the times with the footprint and its peak as JSON.
+`--fixtures` writes 10 seeded synthetic Display P3 screenshots up to 3456 × 2234, so no real
+clipboard is needed. `--original` decodes the blobs as before the copies existed; `--copies` makes
+and reads the `ImageDerivative` copies, so its first run measures a first view and later runs every
+other one. The helper must sit at `Contents/Helpers` beside the benchmark:
+
+```sh
+D=/tmp/clipboard-thumbnail-performance; mkdir -p $D/Contents/Helpers
+swiftc -O -swift-version 6 -parse-as-library \
+    Blitz/Features/Clipboard/Service/{ClipboardTextExtractor,ClipboardTextHelper}.swift \
+    -o $D/Contents/Helpers/ClipboardTextHelper
+swiftc -O -swift-version 6 Blitz/Platform/ProcessExit.swift \
+    Blitz/Platform/Images/{ImageThumbnail,ImageDerivative,ThumbnailCache}.swift \
+    Tests/clipboard-thumbnail-performance.swift -o $D/clipboard-thumbnail-performance
+$D/clipboard-thumbnail-performance /tmp/ctp --fixtures
+$D/clipboard-thumbnail-performance /tmp/ctp --original
+$D/clipboard-thumbnail-performance /tmp/ctp --copies
 ```
 
 `Tests/emoji-search-performance.swift` times uncached queries, typing prefixes and memo hits against
