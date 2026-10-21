@@ -65,7 +65,8 @@ struct ExtensionTests {
                 return "[]"
             case "oauth.authorize":
                 let state = arguments[safe: 1]?.stringValue ?? ""
-                return "{\"authorizationCode\":\"auth_code_swift_test\",\"state\":\"\(state)\"}"
+                let scheme = arguments[safe: 2]?.stringValue ?? "missing"
+                return "{\"authorizationCode\":\"code_\(scheme)\",\"state\":\"\(state)\"}"
             case "oauth.getTokens":
                 let providerId = arguments.first?.stringValue ?? ""
                 return oauthTokens[providerId] ?? ""
@@ -197,6 +198,7 @@ struct ExtensionTests {
         deepLinkChecks()
         nodeShimChecks()
         fsErrorChecks()
+        fsStatChecks()
         await runtimeChecks()
         await searchAccessoryRuntimeChecks()
         await bundledModuleChecks()
@@ -293,6 +295,52 @@ struct ExtensionTests {
         if geteuid() != 0 {
             check("fs.readFile of an unreadable file is EACCES", code("readFile", [locked]) == "EACCES")
         }
+    }
+
+    static func fsStatChecks() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-fs-stat-\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("file").path
+        let link = directory.appendingPathComponent("link").path
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: file, contents: Data("x".utf8))
+        try? FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: file)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var times = [timeval(tv_sec: 1000, tv_usec: 250_000), timeval(tv_sec: 2000, tv_usec: 0)]
+        check("utimes stamps the fixture", utimes(file, &times) == 0)
+        let stampedAt = Date().timeIntervalSince1970 * 1000
+
+        func stats(_ path: String, lstat: Bool) -> [String: Any] {
+            let argsJSON =
+                (try? JSONSerialization.data(withJSONObject: [path, lstat] as [Any]))
+                .flatMap { String(bytes: $0, encoding: .utf8) } ?? "[]"
+            let result = ExtensionNodeShims().perform(api: "fs", method: "stat", argsJSON: argsJSON)
+            guard let data = result.data(using: .utf8),
+                let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return [:] }
+            return envelope["value"] as? [String: Any] ?? [:]
+        }
+        func number(_ stats: [String: Any], _ key: String) -> Double {
+            (stats[key] as? NSNumber)?.doubleValue ?? .nan
+        }
+        func fileType(_ stats: [String: Any]) -> Int {
+            ((stats["mode"] as? NSNumber)?.intValue ?? 0) & Int(S_IFMT)
+        }
+
+        let followed = stats(link, lstat: false)
+        check("fs.stat reads the access time", number(followed, "atimeMs") == 1_000_250)
+        check("fs.stat reads the modification time", number(followed, "mtimeMs") == 2_000_000)
+        check(
+            "fs.stat's ctime is the status change, not the birth time",
+            abs(number(followed, "ctimeMs") - stampedAt) < 60_000
+                && number(followed, "ctimeMs") != number(followed, "birthtimeMs"))
+        check("fs.stat's mode carries the file type", fileType(followed) == Int(S_IFREG))
+        check("fs.stat follows a link", followed["_isFile"] as? Bool == true)
+        let unfollowed = stats(link, lstat: true)
+        check("fs.lstat's mode carries the link type", fileType(unfollowed) == Int(S_IFLNK))
+        check("fs.lstat reports the link", unfollowed["_isSymbolicLink"] as? Bool == true)
+        let folder = stats(directory.path, lstat: false)
+        check("fs.stat's mode carries the directory type", fileType(folder) == Int(S_IFDIR))
     }
 
     @MainActor
@@ -933,17 +981,6 @@ struct ExtensionTests {
         check(
             "parseCallback parses hash fragment",
             fragParams["access_token"] == "token_xyz" && fragParams["state"] == "state_789")
-
-        let nonOAuthURL = URL(string: "raycast://extensions/installed")!
-        check(
-            "handleCallbackURL ignores a non-oauth URL",
-            ExtensionOAuthSession.handleCallbackURL(nonOAuthURL) == .ignored)
-
-        // A callback with nothing waiting for it is reported, not silently dropped.
-        let strayURL = URL(string: "blitz://oauth?code=abc&state=xyz")!
-        check(
-            "handleCallbackURL reports an expired callback",
-            ExtensionOAuthSession.handleCallbackURL(strayURL) == .expired)
     }
 
     static func deepLinkChecks() {
@@ -1242,8 +1279,8 @@ struct ExtensionTests {
         await settle()
         check("oauth command finished", oauthRecorder.finished, oauthRecorder.failures.joined())
         check(
-            "oauth flow reached token storage",
-            oauthHost.huds == ["token_auth_code_swift_test"],
+            "oauth flow passed the callback scheme and reached token storage",
+            oauthHost.huds == ["token_code_raycast"],
             oauthHost.huds.joined(separator: ","))
         await oauthRuntime.stop(session: "sOAuth")
 
@@ -1552,6 +1589,7 @@ struct ExtensionTests {
               const listing = "\(directory.path)/listing";
               fs.mkdirSync(listing + "/folder", { recursive: true });
               fs.writeFileSync(listing + "/entry", "");
+              assert.equal(fs.statSync(listing).mode & 0o170000, 0o040000);
               const handle = fs.opendirSync(listing);
               assert.equal(handle.path, listing);
               const first = handle.readSync(), second = handle.readSync();

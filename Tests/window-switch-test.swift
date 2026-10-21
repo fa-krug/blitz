@@ -27,6 +27,7 @@ struct WindowSwitchTests {
         searchMapping()
         ordering()
         orderingIsTotal()
+        stepping()
         ranking()
         rankingLimit()
 
@@ -87,6 +88,19 @@ struct WindowSwitchTests {
         expect(
             once[split...].allSatisfy(\.isMinimized),
             "minimized windows form one run at the end, never interleaved")
+    }
+
+    static func stepping() {
+        expect(WindowSwitchOrder.step(from: 0, by: 1, count: 4) == 1, "a forward step moves down")
+        expect(WindowSwitchOrder.step(from: 3, by: 1, count: 4) == 0, "forward wraps to the first row")
+        expect(WindowSwitchOrder.step(from: 2, by: -1, count: 4) == 1, "a backward step moves up")
+        expect(
+            WindowSwitchOrder.step(from: 0, by: -1, count: 4) == 3,
+            "the first backward step from the open row wraps to the last window")
+        expect(WindowSwitchOrder.step(from: 0, by: -1, count: 1) == 0, "one row stays put either way")
+        expect(
+            WindowSwitchOrder.step(from: 6, by: 1, count: 4) == 3,
+            "a selection past a narrowed list still lands inside it")
     }
 
     static func ranking() {

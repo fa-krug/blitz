@@ -213,6 +213,43 @@ export default function Command() {
 }
 `;
 
+const malformedUtf8Cases = [
+  [0x68, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80],
+  [0xff],
+  [0x41, 0xc3],
+  [0xe2, 0x28, 0xa1],
+  [0xc0, 0xaf],
+  [0xed, 0xa0, 0x80],
+  [0xf4, 0x90, 0x80, 0x80],
+  [0xf8, 0x88, 0x80, 0x80, 0x80],
+  [0xf0, 0x9f, 0x98],
+  [0x30, 0x82, 0x01, 0x0a, 0x02, 0x82, 0x01, 0x01, 0x00, 0xbb, 0xfe, 0x9c],
+];
+
+const malformedUtf8Source = `
+import { Buffer } from "node:buffer";
+import { Detail } from "@raycast/api";
+
+const cases = ${JSON.stringify(malformedUtf8Cases)};
+
+export default function Command() {
+  const fatal = (bytes) => {
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes));
+      return "none";
+    } catch (error) {
+      return error.code;
+    }
+  };
+  const lines = cases.flatMap((bytes) => [
+    JSON.stringify(Buffer.from(bytes).toString("utf8")),
+    JSON.stringify(new TextDecoder().decode(Uint8Array.from(bytes))),
+    fatal(bytes),
+  ]);
+  return <Detail markdown={lines.join("\\n")} />;
+}
+`;
+
 const nodeSource = `
 import path from "node:path";
 import os from "node:os";
@@ -244,6 +281,7 @@ export default function Command() {
     String(os.loadavg().length === 3 && os.loadavg().every(Number.isFinite)),
     new URL("/next?q=1", "https://example.com/base/page").href,
     new URLSearchParams({ a: "1", b: "two words" }).toString(),
+    Object.prototype.toString.call(new URLSearchParams()),
     crypto.createHash("sha256").update("abc").digest("hex").slice(0, 8),
     Buffer.from("hello").toString("base64"),
     Buffer.from("aGVsbG8=", "base64").toString("utf8"),
@@ -878,6 +916,28 @@ export default async function Command() {
 }
 `;
 
+// The sign-in window catches one URL scheme, so each redirect method has to name the one it lands on.
+const oauthSchemeSource = `
+import { OAuth } from "@raycast/api";
+
+export default async function Command() {
+  const schemeOf = async (redirectMethod, extraParameters) => {
+    const client = new OAuth.PKCEClient({ redirectMethod, providerName: "GitHub", providerId: "github" });
+    const req = await client.authorizationRequest({ endpoint: "https://example.com/authorize", clientId: "c", extraParameters });
+    const { authorizationCode } = await client.authorize(req);
+    return { scheme: authorizationCode, state: req.state };
+  };
+  const web = await schemeOf(OAuth.RedirectMethod.Web);
+  globalThis.__oauthSchemes = {
+    web: web.scheme,
+    app: (await schemeOf(OAuth.RedirectMethod.App)).scheme,
+    appURI: (await schemeOf(OAuth.RedirectMethod.AppURI)).scheme,
+    custom: (await schemeOf(OAuth.RedirectMethod.Web, { redirect_uri: "com.example.app:/oauth" })).scheme,
+    stateScheme: JSON.parse(atob(web.state.replace(/-/g, "+").replace(/_/g, "/"))).scheme,
+  };
+}
+`;
+
 // `@raycast/utils` stores the provider's raw token response, which carries no timestamp, so the
 // stored time is the only thing `isExpired()` can count from; without it a token never expired.
 const tokenExpirySource = `
@@ -1081,6 +1141,25 @@ export async function runFixtures() {
     check("an unchanged tree is not sent again", harness.state.trees.length === before);
   });
 
+  // A plist's binary <data> must decode without aborting the host read.
+  await run("Malformed UTF-8 decodes the way Node does", malformedUtf8Source, "view", async (harness) => {
+    const lines = findNode(harness.state.trees.at(-1), "Detail").props.markdown.split("\n");
+    const fatal = (bytes) => {
+      try {
+        new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes));
+        return "none";
+      } catch (error) {
+        return error.code;
+      }
+    };
+    malformedUtf8Cases.forEach((bytes, index) => {
+      const expected = JSON.stringify(Buffer.from(bytes).toString("utf8"));
+      check(`Buffer bytes ${index}`, lines[index * 3] === expected, lines[index * 3]);
+      check(`TextDecoder bytes ${index}`, lines[index * 3 + 1] === expected, lines[index * 3 + 1]);
+      check(`fatal TextDecoder bytes ${index}`, lines[index * 3 + 2] === fatal(bytes), lines[index * 3 + 2]);
+    });
+  });
+
   await run("Node shims and web globals", nodeSource, "view", async (harness) => {
     const markdown = findNode(harness.state.trees.at(-1), "Detail").props.markdown.split("\n");
     const expected = [
@@ -1095,6 +1174,7 @@ export async function runFixtures() {
       "true",
       "https://example.com/next?q=1",
       "a=1&b=two+words",
+      "[object URLSearchParams]",
       "ba7816bf",
       "aGVsbG8=",
       "hello",
@@ -1482,6 +1562,25 @@ export async function runFixtures() {
     check("TokenSet isExpired calculation works", result?.isExpiredLive === false && result?.isExpiredOld === true);
     check("removeTokens cleans up tokens", result?.afterRemove === undefined || result?.afterRemove === null);
   });
+
+  await run(
+    "OAuth authorize names the redirect's callback scheme",
+    oauthSchemeSource,
+    "no-view",
+    async (harness) => {
+      const result = harness.call("globalThis.__oauthSchemes");
+      check("Web waits for the raycast scheme its redirect page forwards to", result?.web === "raycast", JSON.stringify(result));
+      check("App waits for raycast", result?.app === "raycast", JSON.stringify(result));
+      check("AppURI waits for com.raycast", result?.appURI === "com.raycast", JSON.stringify(result));
+      check("a custom redirect_uri waits for its own scheme", result?.custom === "com.example.app", JSON.stringify(result));
+      check("the Web state asks Raycast's page for the raycast scheme", result?.stateScheme === "raycast", JSON.stringify(result));
+    },
+    {
+      stubs: {
+        "oauth.authorize": (args) => ({ authorizationCode: args[2], state: args[1] ?? "" }),
+      },
+    },
+  );
 
   const storedTokens = new Map([["unstamped", JSON.stringify({ access_token: "ya29.old", expires_in: 3599 })]]);
   await run(

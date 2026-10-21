@@ -90,6 +90,8 @@ struct AIMessage: Equatable, Sendable {
 }
 
 struct AIRequest: Equatable, Sendable {
+    static let defaultMaxOutputTokens = 4_096
+
     /// The chat a turn belongs to; nil for a one-off generation, which never continues anything.
     let conversationID: UUID?
     let instructions: String?
@@ -101,7 +103,8 @@ struct AIRequest: Equatable, Sendable {
     let tools: [AITool]
 
     init(
-        instructions: String? = nil, messages: [AIMessage], maxOutputTokens: Int = 4_096,
+        instructions: String? = nil, messages: [AIMessage],
+        maxOutputTokens: Int = defaultMaxOutputTokens,
         webSearch: Bool = false, tools: [AITool] = [], conversationID: UUID? = nil
     ) {
         self.conversationID = conversationID

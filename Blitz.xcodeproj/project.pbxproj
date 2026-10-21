@@ -136,6 +136,7 @@
 		243F8A10CA105AA899A200CD /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEC602C79173973EC6F0121 /* AppearanceSettingsView.swift */; };
 		244C5FA26DE28EB9486298CE /* WindowLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D32BDA0C5B0777433C0337 /* WindowLevel.swift */; };
 		2486BD85033A005E776C96AC /* CommandID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9F42A9C5963A16D341F6D1 /* CommandID.swift */; };
+		2498E2EC98E0BDAAD633AD35 /* ImageDerivative.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */; };
 		24DE6CA00FB159333CCD50E1 /* QuicklinkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F3D3CE82D061CF2879BF88 /* QuicklinkStore.swift */; };
 		24FF3F217731D34F3CDBC2E0 /* ExtensionFieldChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730FAE25CFF479DE22707FA /* ExtensionFieldChrome.swift */; };
 		25987A592FB9A7DF6E46D997 /* UpdateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46D41DD3C55C775A4B0B6F57 /* UpdateCoordinator.swift */; };
@@ -557,6 +558,7 @@
 		991EEC8F5F925307796384CC /* ChatPlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */; };
 		994DC0596EA3BB10BF8A117F /* MessageHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A975C1994C3F3CA944807853 /* MessageHUDController.swift */; };
 		9990C636BED5F696FFAA76E7 /* ContactLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7C80336EBCFC33C2754E6F /* ContactLink.swift */; };
+		99D1C3AD7BCB112D6208F62C /* HIDKeyMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */; };
 		99E49F6B0C9E6BEFD847F03A /* RoomMinimumSizeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E527BF34A3F48D74D2A614D /* RoomMinimumSizeStore.swift */; };
 		9A5BA262D33B406D9FE405F4 /* ClipboardToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04011191AFD893034E3E1219 /* ClipboardToolCatalog.swift */; };
 		9A829C4EEB1ADCBD30CC8556 /* NoteMarkdownEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C6A5FD81F643A81C408027 /* NoteMarkdownEditing.swift */; };
@@ -1799,9 +1801,11 @@
 		EBBB418FA71857A10259E2A3 /* blitz.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = blitz.icon; sourceTree = "<group>"; };
 		EBCFA5F272D4272AB912F764 /* BackupClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupClipboardItem.swift; sourceTree = "<group>"; };
 		EC2E689176A69E17F3DB579C /* UpdateFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateFailure.swift; sourceTree = "<group>"; };
+		EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDKeyMapping.swift; sourceTree = "<group>"; };
 		EC6A392887CAF1B870A991C7 /* ExtensionListPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListPanel.swift; sourceTree = "<group>"; };
 		EC6D21885AAC82B79DBBFA11 /* MessageHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageHUDView.swift; sourceTree = "<group>"; };
 		EC7F545A7BD53E8C1E08878E /* ExtensionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListView.swift; sourceTree = "<group>"; };
+		ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDerivative.swift; sourceTree = "<group>"; };
 		ED4FCB7607BA248829681DBC /* KeyboardFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFocus.swift; sourceTree = "<group>"; };
 		ED5257AC6ED993B83DED0C31 /* MathLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathLayoutEngine.swift; sourceTree = "<group>"; };
 		ED8D0773CCF4375485F20D06 /* ReminderDue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderDue.swift; sourceTree = "<group>"; };
@@ -1943,6 +1947,7 @@
 				7151167CF75582769201B643 /* DoubleTapDetector.swift */,
 				8DD940FFD5F3F090BC901060 /* DoubleTapModifier.swift */,
 				D217BE5FDC966469F3AEC6B7 /* GlobeTapDetector.swift */,
+				EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */,
 				43D566315047133ABFEA2CAB /* HotKeyAction.swift */,
 				89FC0CEB256B8CBBF2C0D322 /* HotKeyActionDeepLink.swift */,
 				763852F657DAA657146B5148 /* HotKeyBinding.swift */,
@@ -2226,6 +2231,7 @@
 				2AB3C33CE76BE4F3E9270B7E /* FilePreviewThumbnail.swift */,
 				5A3CAE010135609F75C30B32 /* IconCache.swift */,
 				39CC7ADAB5E2F75C2EBCC391 /* IconStyleMonitor.swift */,
+				ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */,
 				1386C0A0E388CC437B052986 /* ImageThumbnail.swift */,
 				446D18FD77BCAD1E32BBE2A1 /* ThumbnailCache.swift */,
 			);
@@ -4629,6 +4635,7 @@
 				B3F9FAA73E68461FD10FFBD4 /* GeneralSettingsView.swift in Sources */,
 				8FAA73EE2433FEBCA60FC039 /* GlassEffectView.swift in Sources */,
 				5D01539210D082D47F518F90 /* GlobeTapDetector.swift in Sources */,
+				99D1C3AD7BCB112D6208F62C /* HIDKeyMapping.swift in Sources */,
 				ED0A40D4E3907AA9AD22FB5F /* HTMLTextEngine.swift in Sources */,
 				6A86F353329B453D03C20C44 /* HTTPAIProvider.swift in Sources */,
 				3EA449CCBA97FE15E82BCCFC /* HUDPanel.swift in Sources */,
@@ -4646,6 +4653,7 @@
 				1736AA6E466CF756756CB9A3 /* HyperKeyTap.swift in Sources */,
 				4D786FADAF24CEECAE93736A /* IconCache.swift in Sources */,
 				D2EAFC7AD5A192B3D365BEAB /* IconStyleMonitor.swift in Sources */,
+				2498E2EC98E0BDAAD633AD35 /* ImageDerivative.swift in Sources */,
 				F566C2AFE914571971D0F6A5 /* ImageThumbnail.swift in Sources */,
 				5BCA7B6E0C1FFB092F47A2DD /* InProcessInjection.swift in Sources */,
 				5A695F0484F30062D68758CD /* InjectableTextView.swift in Sources */,

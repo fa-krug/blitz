@@ -29,17 +29,28 @@ function generateRandomString(length = 16) {
 }
 
 function generateState(client) {
-  // raycast.com/redirect expects state to be a JSON object (base64url-encoded)
-  // containing providerName and scheme ("blitz") so it redirects to blitz://oauth
+  // raycast.com/redirect reads `scheme` from this base64url JSON and forwards to `<scheme>://oauth`.
   const payload = {
     token: generateRandomString(16),
     providerName: client?.providerName || "",
     providerId: client?.providerId || "",
-    scheme: "blitz",
+    scheme: "raycast",
   };
   const json = JSON.stringify(payload);
   const bytes = utf8Encode(json);
   return base64UrlEncode(bytes);
+}
+
+function defaultRedirectURI(redirectMethod) {
+  if (redirectMethod === nestedEnums.OAuth.RedirectMethod.App) return "raycast://oauth?package_name=Extension";
+  if (redirectMethod === nestedEnums.OAuth.RedirectMethod.AppURI) return "com.raycast:/oauth?package_name=Extension";
+  return "https://raycast.com/redirect?packageName=Extension";
+}
+
+// The scheme the sign-in window waits for; a web redirect page forwards to `raycast://oauth`.
+function callbackScheme(redirectURI) {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(redirectURI ?? "")?.[1]?.toLowerCase();
+  return scheme && scheme !== "http" && scheme !== "https" ? scheme : "raycast";
 }
 
 export class TokenSet {
@@ -79,16 +90,7 @@ export class PKCEClient {
     const codeChallengeMethod = "S256";
     const state = options.state || generateState(this);
 
-    let redirectURI = options.extraParameters?.redirect_uri;
-    if (!redirectURI) {
-      if (this.redirectMethod === nestedEnums.OAuth.RedirectMethod.App) {
-        redirectURI = "raycast://oauth?package_name=Extension";
-      } else if (this.redirectMethod === nestedEnums.OAuth.RedirectMethod.AppURI) {
-        redirectURI = "com.raycast:/oauth?package_name=Extension";
-      } else {
-        redirectURI = "https://raycast.com/redirect?packageName=Extension";
-      }
-    }
+    const redirectURI = options.extraParameters?.redirect_uri || defaultRedirectURI(this.redirectMethod);
 
     const url = new URL(options.endpoint);
     url.searchParams.set("response_type", "code");
@@ -135,8 +137,9 @@ export class PKCEClient {
       throw new Error("authorize requires a valid authorization URL");
     }
     const state = typeof request === "object" ? request?.state : undefined;
+    const redirectURI = (typeof request === "object" && request?.redirectURI) || defaultRedirectURI(this.redirectMethod);
 
-    let res = await hostCall("oauth", "authorize", [url, state]);
+    let res = await hostCall("oauth", "authorize", [url, state, callbackScheme(redirectURI)]);
 
     if (typeof res === "string") {
       try {

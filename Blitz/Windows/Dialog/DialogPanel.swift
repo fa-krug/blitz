@@ -33,8 +33,7 @@ final class DialogPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        // Suppresses AppKit's own window animation; `fadeIn`/`fadeOut` replace it.
-        animationBehavior = .none
+        animationBehavior = .documentWindow
         isReleasedWhenClosed = false
         content.wantsLayer = true
         content.layer?.cornerRadius = cornerRadius
@@ -51,6 +50,9 @@ final class DialogPanel: NSPanel {
         switch Int(event.keyCode) {
         case kVK_Escape:
             onKey(.cancel)
+        // An input method commits its marked text on ↵, so that press is never a confirm.
+        case kVK_Return where (firstResponder as? NSTextView)?.hasMarkedText() == true:
+            super.sendEvent(event)
         case kVK_Return where returnNeedsCommand && !event.modifierFlags.contains(.command),
             kVK_ANSI_KeypadEnter where returnNeedsCommand && !event.modifierFlags.contains(.command):
             super.sendEvent(event)
