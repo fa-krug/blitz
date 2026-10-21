@@ -595,10 +595,14 @@ handled in `PalettePanel.sendEvent` before `super` hands the event to the respon
   the responder chain compiles, runs never, and looks like a palette bug. `CommandEscapeTap` takes it
   at the head of the HID stream instead, the one place earlier than the system's own binding, and
   `prepare(mode: .launcher)`s: one chord back to the root search from any depth, window still open.
-  The tap is enabled only while the palette is on screen, watches `keyDown` alone, and declines the
-  chord whenever the panel is not key, so nothing else on the system loses ⌘⎋ to it. It is a
-  modifying tap, so it needs Accessibility — without that grant the chord is simply unavailable,
-  which is the only path this codebase has to it.
+  Each key-focus session owns a modifying `keyDown` tap on its own thread and run loop, so a busy
+  main thread never holds up ordinary typing anywhere on the system. Losing key focus ends the
+  session at once and wakes its worker to remove the source and invalidate the port, and timeout
+  recovery cannot re-enable an ended session. The worker swallows only a bare ⌘⎋ and queues the
+  root-search action on the main actor; a closed session drops that action, even across a reopen,
+  and the action itself checks the panel is still key. So nothing else on the system loses ⌘⎋ to it,
+  and a menu or dialog over the palette lets it through. The tap needs Accessibility — without that
+  grant the chord is unavailable, and the next key-focus session retries the install.
 
 Adding a chord that "does nothing" is almost always one of these — check `sendEvent`, and then
 whether macOS has claimed the chord, before assuming the handler is wrong.
