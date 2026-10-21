@@ -7,12 +7,14 @@ enum AIPreamble {
         var isOnDevice = false
         var offersTools = false
         var asksUser = false
+        var offersChoices = false
     }
 
     /// The agent's half rides only on a turn offered tools; the environment always comes last.
     static func text(for turn: Turn, environment: String) -> String {
+        let choices = turn.offersChoices ? [turn.isOnDevice ? onDeviceChoices : self.choices] : []
         let agent = turn.offersTools ? [self.agent(asksUser: turn.asksUser)] : []
-        return ([turn.isOnDevice ? onDevice : core] + agent + [environment])
+        return ([turn.isOnDevice ? onDevice : core] + choices + agent + [environment])
             .joined(separator: "\n\n")
     }
 
@@ -31,10 +33,8 @@ enum AIPreamble {
 
         Replies appear in Quick AI or the AI Agent window of Blitz, so lead with the answer and \
         keep it as short as the question allows; use headings, lists or tables only where they \
-        help. To offer a choice of a few next steps, end with a block that opens with ```choices \
-        and closes with ```, one short option per line; each becomes a button that answers for \
-        the user. Link any page your answer relies on inline as a Markdown link with its URL; \
-        Blitz lists those as sources. Never write a link without a URL, and never guess one.
+        help. Link any page your answer relies on inline as a Markdown link with its URL; Blitz \
+        lists those as sources. Never write a link without a URL, and never guess one.
 
         Your knowledge stops at your training, so treat anything that changes — prices, \
         versions, news, who holds a role — as possibly out of date, and check it with a tool \
@@ -57,7 +57,17 @@ enum AIPreamble {
     /// The on-device window holds a few thousand bytes, so it gets the core in brief.
     static let onDevice = """
         You are a helpful assistant built into Blitz, a macOS launcher. Answer briefly, in the \
-        language the user writes in. If you are not sure of a fact, say so rather than guessing. \
+        language the user writes in. If you are not sure of a fact, say so rather than guessing.
+        """
+
+    /// Asked for only while suggested replies are on, so no turn pays for buttons nobody sees.
+    static let choices = """
+        To offer a choice of a few next steps, end with a block that opens with ```choices and \
+        closes with ```, one short option per line; each becomes a button that answers for the \
+        user.
+        """
+
+    static let onDeviceChoices = """
         To offer a few next steps, end with a block that opens with ```choices and closes with \
         ```, one short option per line.
         """

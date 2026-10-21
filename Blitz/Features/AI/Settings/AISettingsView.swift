@@ -140,7 +140,8 @@ struct AISettingsView: View {
             Picker(selection: $settings.opensTo) {
                 ForEach(AIOpensTo.allCases) { Text($0.title).tag($0) }
             } label: {
-                SettingsRowTitle(.aiConversations, "Quick AI opens to")
+                SettingsRowTitle(.aiConversations, "Opens to")
+                Text("What Quick AI and the AI Agent window show when you open them.")
             }
             if settings.opensTo == .recent {
                 Picker(selection: $settings.newChatAfter) {
@@ -148,6 +149,10 @@ struct AISettingsView: View {
                 } label: {
                     SettingsRowTitle(.aiConversations, "Start a new conversation after")
                 }
+            }
+            Toggle(isOn: $settings.choicesEnabled) {
+                SettingsRowTitle(.aiConversations, "Suggested replies")
+                Text("Next steps the model offers as buttons after a reply.")
             }
             Picker(selection: $settings.retention) {
                 ForEach(AIRetention.allCases) { Text($0.title).tag($0) }

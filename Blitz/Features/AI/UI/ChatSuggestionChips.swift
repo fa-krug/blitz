@@ -40,11 +40,31 @@ struct ChatChoiceChip: View {
                     .truncationMode(.tail)
             }
             .font(metrics.typography.rowTrailing)
-            .padding(.horizontal, metrics.spacing.xs)
-            .padding(.vertical, metrics.spacing.xxs)
+            .chatChip()
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
+        .buttonStyle(.plain)
+    }
+}
+
+/// The capsule a choice and a source share; a source's number disc sits nearer the leading edge.
+private struct ChatChipSurface: ViewModifier {
+    @Environment(\.metrics) private var metrics
+    let leadsWithBadge: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .padding(.leading, leadsWithBadge ? metrics.spacing.sm : metrics.spacing.xl)
+            .padding(.trailing, metrics.spacing.xl)
+            .padding(.vertical, metrics.spacing.sm)
+            .background { Capsule().fill(Color.clear).frosted(in: Capsule()) }
+            .contentShape(Capsule())
+    }
+}
+
+extension View {
+    func chatChip(leadsWithBadge: Bool = false) -> some View {
+        modifier(ChatChipSurface(leadsWithBadge: leadsWithBadge))
     }
 }
 

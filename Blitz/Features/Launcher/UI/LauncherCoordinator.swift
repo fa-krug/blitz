@@ -196,7 +196,7 @@ final class LauncherCoordinator {
             let fromPalette = paletteCoordinator.isVisible
             dismissPalette()
             if fromPalette {
-                core.aiChatCoordinator.showWindow()
+                core.aiChatCoordinator.showWindow(applyingOpenPolicy: true)
             } else {
                 core.aiChatCoordinator.toggleWindow()
             }
