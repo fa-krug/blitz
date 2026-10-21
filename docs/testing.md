@@ -74,6 +74,10 @@ the capture cap, exact ordering, rejected prefixes, duplicates and symlinks usin
 The reader cases add the limit boundaries, the predicate call counts and modern/legacy precedence.
 Note that macOS synthesizes `public.file-url` items for any `NSFilenamesPboardType` write, so a
 legacy fixture still exercises the modern representation and the fallback branch stays unreached.
+`command-escape-tap-test` is the same rule for input: it shadows `CGEvent.tapCreate` and `tapEnable`
+with module-local fakes over private ports, so it drives the shipped worker thread — dispatch while
+main is blocked, timeout recovery, stale actions, cancelled installs, teardown — without ever
+installing a system-wide event tap.
 
 Never join a compile to its run with `&&` in a `set -e` script. `set -e` is specified to ignore a
 failing command in a non-final AND-OR list member, so `swiftc … && /tmp/x` swallows a compile error and
@@ -93,7 +97,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | Touching | Run |
 | --- | --- |
 | launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
-| the palette shell and shared views | `palette-*`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
+| the palette shell and shared views | `palette-*`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
@@ -101,7 +105,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | window management, layouts and rooms | `window-*`, `space-gesture-test`, `mac-tool-test` |
 | calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test`, `personal-tool-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
-| hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
+| hotkeys and deeplinks | `hotkey-test`, `hid-key-mapping-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-*` |
@@ -325,7 +329,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - ⌘⎋ from any depth lands on an empty root search with the window still open — **must be checked on
   a real keyboard**: macOS claims the chord, so `CommandEscapeTap` is the only thing that delivers it
   and it needs Accessibility granted to the running build. With the palette closed, ⌘⎋ still does
-  whatever macOS does with it
+  whatever macOS does with it. With a menu or dialog open over the palette, ⌘⎋ passes through;
+  once it is dismissed, the palette chord works again
 - A bare ⌫ in an empty field walks the same path Escape does
 - General ▸ Escape Key Behavior set to `Close window and pop to root`: Escape on any screen closes
   the window, and reopening lands on the root search whatever Pop to Root Search says
@@ -434,6 +439,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Recording captures a shortcut, and the old binding does not fire while recording
 - A conflicting binding is rejected and names its current owner
 - A double-tap binding fires; Hyper Key remaps and its status dot is green
+- With another `hidutil` key mapping set, switching the Hyper Key to Caps Lock and back, then
+  quitting, leaves that mapping in `hidutil property --get UserKeyMapping`; a Caps Lock mapping
+  Hyper displaced comes back
+- With a right-side modifier as Hyper, hold it across a fast user switch and back, then release:
+  plain typing afterwards carries no chord
+- With Secure Input held, record Hyper+J with Caps Lock and with a right-side modifier as Hyper:
+  both save ✦J, never F18 or ⌃J, and a quick Hyper+J leaves Caps Lock off
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands
@@ -650,6 +662,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A bare amount (`1 usd`) answers in the Mac's region currency, and follows a change to
   System Settings ▸ General ▸ Language & Region without a relaunch — and nothing prompts for location
 - A crypto query (`1 btc`, `0.5 sol to eur`) answers, and `1 usd to btc` stays in plain notation
+- `1000 usd in eur/12` converts and then divides; copying preserves the euro amount and code.
+  `100km/h in m/s / 2` retains the compound target, and `1000 usd in eur / 0` stays silent
 
 ### Emoji
 
@@ -738,8 +752,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   starts on the camera switched to
 - Scan QR Code shows the hint until a code is in frame; a URL code offers Open on ↵ and Copy beside
   it, a plain-text or `WIFI:` code offers only Copy, and either action closes the panel
-- Aiming at a second code replaces the first; closing a scan and opening Open Camera inside the fade
-  leaves no camera light behind once both panels are gone
+- Aiming at a second code replaces the first; closing a scan and opening Open Camera inside the close
+  animation leaves no camera light behind once both panels are gone
 
 ### Reminders
 
@@ -779,12 +793,16 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 ### Navigation
 
-- With Settings ▸ Navigation off, Switch Windows and Search Menu Bar Items are absent and their
-  shortcuts do nothing
+- With Settings ▸ Navigation off, Switch Windows, Switch Windows Backwards and Search Menu Bar
+  Items are absent and their shortcuts do nothing
 - Switch Windows lists every open window of every running app, most recent app first and minimized
   windows last; ↵ raises the chosen window — un-minimizing it, or pulling its Space forward
 - Pressing the Switch Windows shortcut again steps down the list, and releasing its modifiers
   switches, as ⌘Tab does; a single press then typing still searches
+- With Switch Windows Backwards on ⌥⇧⇥, holding ⌥ and pressing ⇥ or ⇧⇥ walks either way, the first
+  backward step wraps to the last window, and letting go of ⇧ alone switches nothing
+- In Switch Windows, ⌃⇧M minimizes the selected window and ⌃⇧H hides its app, each without opening
+  ⌘K; quitting a listed app elsewhere drops its rows while the list stays open
 - Search Menu Bar Items lists the front app's menu items by path; ↵ presses one, ⌘K offers Copy Menu
   Path and Turn Off Menu Search for that app, and an app turned off reads as excluded on next open
 

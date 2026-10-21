@@ -557,6 +557,7 @@
 		991EEC8F5F925307796384CC /* ChatPlanCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */; };
 		994DC0596EA3BB10BF8A117F /* MessageHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A975C1994C3F3CA944807853 /* MessageHUDController.swift */; };
 		9990C636BED5F696FFAA76E7 /* ContactLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7C80336EBCFC33C2754E6F /* ContactLink.swift */; };
+		99D1C3AD7BCB112D6208F62C /* HIDKeyMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */; };
 		99E49F6B0C9E6BEFD847F03A /* RoomMinimumSizeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E527BF34A3F48D74D2A614D /* RoomMinimumSizeStore.swift */; };
 		9A5BA262D33B406D9FE405F4 /* ClipboardToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04011191AFD893034E3E1219 /* ClipboardToolCatalog.swift */; };
 		9A829C4EEB1ADCBD30CC8556 /* NoteMarkdownEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C6A5FD81F643A81C408027 /* NoteMarkdownEditing.swift */; };
@@ -1797,6 +1798,7 @@
 		EBBB418FA71857A10259E2A3 /* blitz.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = blitz.icon; sourceTree = "<group>"; };
 		EBCFA5F272D4272AB912F764 /* BackupClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupClipboardItem.swift; sourceTree = "<group>"; };
 		EC2E689176A69E17F3DB579C /* UpdateFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateFailure.swift; sourceTree = "<group>"; };
+		EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDKeyMapping.swift; sourceTree = "<group>"; };
 		EC6A392887CAF1B870A991C7 /* ExtensionListPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListPanel.swift; sourceTree = "<group>"; };
 		EC6D21885AAC82B79DBBFA11 /* MessageHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageHUDView.swift; sourceTree = "<group>"; };
 		EC7F545A7BD53E8C1E08878E /* ExtensionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListView.swift; sourceTree = "<group>"; };
@@ -1941,6 +1943,7 @@
 				7151167CF75582769201B643 /* DoubleTapDetector.swift */,
 				8DD940FFD5F3F090BC901060 /* DoubleTapModifier.swift */,
 				D217BE5FDC966469F3AEC6B7 /* GlobeTapDetector.swift */,
+				EC65920B3C8FF46860E65284 /* HIDKeyMapping.swift */,
 				43D566315047133ABFEA2CAB /* HotKeyAction.swift */,
 				89FC0CEB256B8CBBF2C0D322 /* HotKeyActionDeepLink.swift */,
 				763852F657DAA657146B5148 /* HotKeyBinding.swift */,
@@ -4625,6 +4628,7 @@
 				B3F9FAA73E68461FD10FFBD4 /* GeneralSettingsView.swift in Sources */,
 				8FAA73EE2433FEBCA60FC039 /* GlassEffectView.swift in Sources */,
 				5D01539210D082D47F518F90 /* GlobeTapDetector.swift in Sources */,
+				99D1C3AD7BCB112D6208F62C /* HIDKeyMapping.swift in Sources */,
 				ED0A40D4E3907AA9AD22FB5F /* HTMLTextEngine.swift in Sources */,
 				6A86F353329B453D03C20C44 /* HTTPAIProvider.swift in Sources */,
 				3EA449CCBA97FE15E82BCCFC /* HUDPanel.swift in Sources */,

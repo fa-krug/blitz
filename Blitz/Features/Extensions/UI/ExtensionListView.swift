@@ -412,7 +412,7 @@ private struct ExtensionGridContentView: View {
         switch resolved?.source {
         case .symbol(let name):
             // A symbol has no artwork to scale, so it takes a share of the tile, not all of it.
-            Image(systemName: name)
+            Image(systemName: SystemSymbolName.resolve(name, isDark: isDark))
                 .resizable()
                 .scaledToFit()
                 .symbolRenderingMode(resolved?.tint == nil ? .hierarchical : .monochrome)

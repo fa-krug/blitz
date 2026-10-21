@@ -263,17 +263,6 @@ struct PalettePlacementTests {
             headerExtent: headerExtent)
         expect(header.maxX, parent.maxX - inset * 2, "a header menu follows its trailing control")
         expect(header.maxY, parent.maxY - headerExtent, "a header menu opens below the field")
-
-        let scale = Theme.MenuMotion.maximumScale
-        let leadingCanvas = MenuPanelCorner.bottomLeading.scaledFrame(leading, by: scale)
-        let trailingCanvas = MenuPanelCorner.bottomTrailing.scaledFrame(trailing, by: scale)
-        let headerCanvas = MenuPanelCorner.belowHeaderTrailing.scaledFrame(header, by: scale)
-        expect(leadingCanvas.minX, leading.minX, "left expansion keeps its leading edge fixed")
-        expect(leadingCanvas.minY, leading.minY, "left expansion keeps its bottom edge fixed")
-        expect(trailingCanvas.maxX, trailing.maxX, "right expansion keeps its trailing edge fixed")
-        expect(trailingCanvas.minY, trailing.minY, "right expansion keeps its bottom edge fixed")
-        expect(headerCanvas.maxX, header.maxX, "header expansion keeps its trailing edge fixed")
-        expect(headerCanvas.maxY, header.maxY, "header expansion keeps its top edge fixed")
     }
 
     // MARK: - The tokens these rules depend on

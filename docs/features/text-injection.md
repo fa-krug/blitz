@@ -54,7 +54,8 @@ point; `replaceSelection(with:in:…)` is the same call with no keyword.
 `{selection}` — from the editor directly, or over Accessibility. `copySelection(from:)` is the
 fallback Quick Actions use when Accessibility yields nothing: it drains the queue, borrows a ⌘C,
 polls the change count for up to a second, and restores the snapshot either way. A change count that
-never moves means nothing was selected.
+never moves means nothing was selected. A second borrow while one is in flight returns nothing, since
+it would snapshot the first one's copy and read its restore as the selection.
 
 **Handing focus back.** `InjectionTarget.restoreFocus()` reactivates the external app or makes the
 editor first responder again — after a modal argument prompt, or an expansion that went nowhere.
