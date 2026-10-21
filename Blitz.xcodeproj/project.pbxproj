@@ -136,6 +136,7 @@
 		243F8A10CA105AA899A200CD /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEC602C79173973EC6F0121 /* AppearanceSettingsView.swift */; };
 		244C5FA26DE28EB9486298CE /* WindowLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D32BDA0C5B0777433C0337 /* WindowLevel.swift */; };
 		2486BD85033A005E776C96AC /* CommandID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9F42A9C5963A16D341F6D1 /* CommandID.swift */; };
+		2498E2EC98E0BDAAD633AD35 /* ImageDerivative.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */; };
 		24DE6CA00FB159333CCD50E1 /* QuicklinkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F3D3CE82D061CF2879BF88 /* QuicklinkStore.swift */; };
 		24FF3F217731D34F3CDBC2E0 /* ExtensionFieldChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730FAE25CFF479DE22707FA /* ExtensionFieldChrome.swift */; };
 		25987A592FB9A7DF6E46D997 /* UpdateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46D41DD3C55C775A4B0B6F57 /* UpdateCoordinator.swift */; };
@@ -1802,6 +1803,7 @@
 		EC6A392887CAF1B870A991C7 /* ExtensionListPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListPanel.swift; sourceTree = "<group>"; };
 		EC6D21885AAC82B79DBBFA11 /* MessageHUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageHUDView.swift; sourceTree = "<group>"; };
 		EC7F545A7BD53E8C1E08878E /* ExtensionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListView.swift; sourceTree = "<group>"; };
+		ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDerivative.swift; sourceTree = "<group>"; };
 		ED4FCB7607BA248829681DBC /* KeyboardFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFocus.swift; sourceTree = "<group>"; };
 		ED5257AC6ED993B83DED0C31 /* MathLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathLayoutEngine.swift; sourceTree = "<group>"; };
 		ED8D0773CCF4375485F20D06 /* ReminderDue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderDue.swift; sourceTree = "<group>"; };
@@ -2227,6 +2229,7 @@
 				2AB3C33CE76BE4F3E9270B7E /* FilePreviewThumbnail.swift */,
 				5A3CAE010135609F75C30B32 /* IconCache.swift */,
 				39CC7ADAB5E2F75C2EBCC391 /* IconStyleMonitor.swift */,
+				ECBF78995AFFFD32A291DAB4 /* ImageDerivative.swift */,
 				1386C0A0E388CC437B052986 /* ImageThumbnail.swift */,
 				446D18FD77BCAD1E32BBE2A1 /* ThumbnailCache.swift */,
 			);
@@ -4646,6 +4649,7 @@
 				1736AA6E466CF756756CB9A3 /* HyperKeyTap.swift in Sources */,
 				4D786FADAF24CEECAE93736A /* IconCache.swift in Sources */,
 				D2EAFC7AD5A192B3D365BEAB /* IconStyleMonitor.swift in Sources */,
+				2498E2EC98E0BDAAD633AD35 /* ImageDerivative.swift in Sources */,
 				F566C2AFE914571971D0F6A5 /* ImageThumbnail.swift in Sources */,
 				5BCA7B6E0C1FFB092F47A2DD /* InProcessInjection.swift in Sources */,
 				5A695F0484F30062D68758CD /* InjectableTextView.swift in Sources */,

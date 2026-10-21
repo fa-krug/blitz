@@ -123,12 +123,13 @@ fine too; deciding something with one is what the rule forbids. `showNotice`, `c
 
 New long-lived state belongs on `AppCore`, wired in `start()`. Do not create a competing singleton: this is a singleton, not a container.
 
-Text recognition — the clipboard's and Search Screenshots' — is the one thing that leaves the
-process. `AppCore` owns both indexers;
+Text recognition — the clipboard's and Search Screenshots' — and the clipboard's image downscaling
+are the only work that leaves the process. `AppCore` owns both indexers;
 the stateless `ClipboardTextWorker` runs one bundled `ClipboardTextHelper` per item, from
 `Contents/Helpers`, and reaps it before returning. Vision's and PDFKit's allocations therefore belong
 to a process that exits, and the helper — which has no database, clipboard or settings access — is
-handed an input path and answers with bounded text down a pipe.
+handed an input path and answers with bounded text down a pipe. Its `thumbnail` mode writes the
+clipboard's downscaled image copies, so a full-size decode stays out of the app unless that fails.
 
 ## Entry points and windows
 
