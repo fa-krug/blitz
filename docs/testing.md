@@ -780,12 +780,16 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 
 ### Navigation
 
-- With Settings ▸ Navigation off, Switch Windows and Search Menu Bar Items are absent and their
-  shortcuts do nothing
+- With Settings ▸ Navigation off, Switch Windows, Switch Windows Backwards and Search Menu Bar
+  Items are absent and their shortcuts do nothing
 - Switch Windows lists every open window of every running app, most recent app first and minimized
   windows last; ↵ raises the chosen window — un-minimizing it, or pulling its Space forward
 - Pressing the Switch Windows shortcut again steps down the list, and releasing its modifiers
   switches, as ⌘Tab does; a single press then typing still searches
+- With Switch Windows Backwards on ⌥⇧⇥, holding ⌥ and pressing ⇥ or ⇧⇥ walks either way, the first
+  backward step wraps to the last window, and letting go of ⇧ alone switches nothing
+- In Switch Windows, ⌃⇧M minimizes the selected window and ⌃⇧H hides its app, each without opening
+  ⌘K; quitting a listed app elsewhere drops its rows while the list stays open
 - Search Menu Bar Items lists the front app's menu items by path; ↵ presses one, ⌘K offers Copy Menu
   Path and Turn Off Menu Search for that app, and an app turned off reads as excluded on next open
 
