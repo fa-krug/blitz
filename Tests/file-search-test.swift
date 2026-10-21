@@ -156,12 +156,17 @@ struct FileSearchTests {
 
     static func pathPolicy() {
         let shipped = FileSearchIgnoreList(patterns: FileSearchIgnoreList.defaults)
-        for directory in FileSearchIgnoreList.defaults {
+        for directory in FileSearchIgnoreList.defaults where !directory.contains("*") {
             expect(
                 FileSearchQuery.isExcludedPath(
                     "/Users/test/Documents/App/\(directory)/file.txt", ignoring: shipped),
                 "\(directory) descendants are excluded")
         }
+        expect(
+            FileSearchQuery.isExcludedPath(
+                "/Users/test/Pictures/Photos Library.photoslibrary/originals/A/1.heic",
+                ignoring: shipped),
+            "the Photos library's contents are excluded")
         expect(
             FileSearchQuery.isExcludedPath(
                 "/Users/test/Documents/App/.git/config", ignoring: shipped),
@@ -215,6 +220,18 @@ struct FileSearchTests {
             !FileSearchIgnoreList(patterns: []).excludes(path: "/Users/test/Documents/node_modules/a"),
             "the shipped rules are supplied by the policy, not baked into the matcher")
 
+        let edited = FileSearchIgnoreList.patterns(
+            added: ["*.log", "node_modules", "*.log"], removedDefaults: ["Pods", "*.log"])
+        expect(!edited.contains("Pods"), "a removed default no longer applies")
+        expect(
+            edited.filter { $0 == "node_modules" }.count == 1,
+            "an added copy of a default never lists it twice")
+        expect(edited.last == "*.log", "an added pattern follows the defaults once")
+        expect(
+            FileSearchIgnoreList.patterns(added: [], removedDefaults: [])
+                == FileSearchIgnoreList.defaults,
+            "no edits leave exactly the defaults")
+
         expect(
             list.spotlightNameExclusions == ["*.tmp"],
             "only bare `*` name globs are pushed into the Spotlight expression")
@@ -236,8 +253,8 @@ struct FileSearchTests {
             policy.ignore.excludes(path: "/Volumes/Work/run.log"),
             "a user pattern applies outside home as well")
         expect(
-            policy.ignore.excludes(path: "/Volumes/Work/node_modules/a.js"),
-            "the shipped rules always apply on top of the user's")
+            !policy.ignore.excludes(path: "/Volumes/Work/node_modules/a.js"),
+            "the policy applies exactly the patterns it is given")
 
         let away = FileSearchPolicy(
             scopes: ["~/Developer"], ignorePatterns: [], homeDirectory: home)
