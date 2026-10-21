@@ -126,6 +126,19 @@ final class WindowSwitchCoordinator {
         session.markMinimized(entry.handle)
     }
 
+    func hideApplication(_ entry: WindowSwitchEntry) {
+        guard Permissions.ensureAccessibility() else {
+            Task { await self.reportPermissionFailure() }
+            return
+        }
+        guard let element = liveElement(for: entry) else {
+            return core.showMessage("Couldn’t hide \(entry.appName)", tone: .danger)
+        }
+        // Restoring focus would reactivate, and so unhide, an app hidden from in front.
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        if !element.app.hide() { AXWindowAccess.setHidden(true, application: element.application) }
+    }
+
     private func liveElement(for entry: WindowSwitchEntry) -> WindowSwitchSweep.Element? {
         guard let element = session.element(for: entry.handle), !element.app.isTerminated
         else { return nil }

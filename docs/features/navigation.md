@@ -44,8 +44,8 @@ launcher and a still-recorded shortcut for any does nothing.
 | `Model/WindowSwitchQuery.swift` | ranking over `SearchRelevance`, capped at 200 rows |
 | `Service/WindowZOrder.swift` | the one `CGWindowList` call: per-pid front rank |
 | `Service/WindowSwitchSweep.swift` | the AX sweep, and the live element table it hands back |
-| `Service/WindowSwitchSession.swift` | the observable state — snapshot, filtered rows, elements |
-| `UI/WindowSwitchCoordinator.swift` | show, activate, close, minimize, the switch, the reports |
+| `Service/WindowSwitchSession.swift` | the observable state — snapshot, filtered rows, elements, exits |
+| `UI/WindowSwitchCoordinator.swift` | show, activate, close, minimize, hide, the switch, the reports |
 | `UI/WindowSwitchScreen.swift` | the `PaletteScreen` conformance, the ⌘K menu, the empty states |
 | `UI/WindowSwitchList.swift` | the list and its row: app icon, title, app name |
 
@@ -116,13 +116,22 @@ act on, so `hasActions` reads `actions(at:)` and the footer drops its Actions ha
   anything, so an unsaved document still puts up its save sheet. A successful press drops the row
   through `WindowSwitchSession.remove` instead of re-sweeping, which would race an app that is still
   closing — or still asking.
-- **Minimize Window** sets `kAXMinimizedAttribute`, offered only on a row not already minimized.
+- **Minimize Window** (⌃⇧M) sets `kAXMinimizedAttribute`, offered only on a row not already
+  minimized; `perform` declines the chord on a minimized row too, just as the menu leaves the row out.
   `markMinimized` flips the entry in place and re-sorts, so the row joins the minimized run at the
   end exactly where the next sweep would put it.
+- **Hide _App_** (⌃⇧H) calls `NSRunningApplication.hide()`, falling back to `kAXHiddenAttribute` when
+  the app refuses. It closes the palette with `restoreFocus: false`: restoring focus would activate
+  the app that was in front, and activating a hidden app unhides it.
 - **Quit _App_** (⌃⇧Q) and **Force Quit _App_** (⌃⌥⇧Q) go through
   `LauncherCoordinator.quit(bundleID:force:)`, the path the launcher's own Quit rows take, so every
-  instance quits and focus is handed back the same way. `perform` answers both chords without the
-  menu open.
+  instance quits and focus is handed back the same way.
+- **The chords are ⌃⇧M and ⌃⇧H, not ⌘M and ⌘H.** The app menu's Minimize and Hide take those
+  before the palette sees them. `perform` answers all four chords without the menu open.
+- **An app that exits takes its rows with it.** While rows are shown the session holds a
+  `didTerminateApplicationNotification` observer in a `NotificationToken` and drops that pid's rows;
+  `reset()` releases it. So an app quit from anywhere else — its own menu, the Dock — leaves the
+  list while it stays open.
 
 A refused press or write — no close button, a window that will not minimize, an app gone since the
 sweep — is a danger `showMessage`, and the palette stays open: nothing was raised to hide it for.
@@ -175,3 +184,6 @@ coverage — the AX and `CGWindowList` paths need manual verification, particula
 4. An app quit between the summon and the ↵ reports rather than failing silently.
 5. Close Window on an edited document leaves its save sheet up; the row leaves the list either way.
 6. Minimize Window moves the row into the minimized run, and ↵ on it then un-minimizes.
+7. Hide (⌃⇧H) hides the frontmost app as well as a background one, and the palette's close does not
+   bring it back.
+8. Quitting an app from its own menu while the switcher is open drops its rows at once.

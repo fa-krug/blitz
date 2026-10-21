@@ -783,6 +783,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   switches, as ⌘Tab does; a single press then typing still searches
 - With Switch Windows Backwards on ⌥⇧⇥, holding ⌥ and pressing ⇥ or ⇧⇥ walks either way, the first
   backward step wraps to the last window, and letting go of ⇧ alone switches nothing
+- In Switch Windows, ⌃⇧M minimizes the selected window and ⌃⇧H hides its app, each without opening
+  ⌘K; quitting a listed app elsewhere drops its rows while the list stays open
 - Search Menu Bar Items lists the front app's menu items by path; ↵ presses one, ⌘K offers Copy Menu
   Path and Turn Off Menu Search for that app, and an app turned off reads as excluded on next open
 
