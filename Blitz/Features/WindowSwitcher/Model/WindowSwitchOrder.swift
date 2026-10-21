@@ -14,4 +14,10 @@ enum WindowSwitchOrder {
             return left.handle < right.handle
         }
     }
+
+    /// Wraps both ways, so a backward step from the first row lands on the last.
+    static func step(from selection: Int, by offset: Int, count: Int) -> Int {
+        let next = (selection + offset) % count
+        return next < 0 ? next + count : next
+    }
 }
