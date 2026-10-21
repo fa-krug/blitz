@@ -41,12 +41,13 @@ struct FileSearchIgnoreList: Sendable, Equatable {
     }
 
     func excludes(path: String) -> Bool {
+        var name = ""
         for component in path.split(separator: "/") {
-            let name = String(component)
+            name = String(component)
             if literalNames.contains(name.lowercased()) { return true }
             if nameGlobs.contains(where: { $0.matches(name) }) { return true }
         }
-        return pathGlobs.contains { $0.matches(path) }
+        return pathGlobs.contains { $0.couldMatchName(name) && $0.matches(path) }
     }
 
     /// Name globs Spotlight can evaluate itself, so ignored files never fill the candidate cap.
@@ -59,10 +60,19 @@ struct FileSearchIgnoreList: Sendable, Equatable {
 private struct Glob: Sendable, Equatable {
     let pattern: String
     private let terminated: ContiguousArray<CChar>
+    /// A literal path matches only a candidate whose own name is its last component.
+    private let literalPathName: ContiguousArray<CChar>?
 
     init(_ pattern: String) {
         self.pattern = pattern
         terminated = pattern.utf8CString
+        if let slash = pattern.lastIndex(of: "/"), !pattern.hasSuffix("/"),
+            !pattern.contains(where: { Self.isMetacharacter($0) || $0 == "\\" })
+        {
+            literalPathName = String(pattern[pattern.index(after: slash)...]).utf8CString
+        } else {
+            literalPathName = nil
+        }
     }
 
     static func isMetacharacter(_ character: Character) -> Bool {
@@ -72,6 +82,13 @@ private struct Glob: Sendable, Equatable {
     /// Spotlight reads `?` and `[` as literals and knows only `*`, so anything else stays local.
     var isSpotlightExpressible: Bool {
         !pattern.contains(where: { $0 == "?" || $0 == "[" || $0 == "\"" || $0 == "\\" })
+    }
+
+    func couldMatchName(_ name: String) -> Bool {
+        guard let literalPathName else { return true }
+        return literalPathName.withUnsafeBufferPointer { pattern in
+            name.withCString { fnmatch(pattern.baseAddress!, $0, FNM_CASEFOLD) == 0 }
+        }
     }
 
     func matches(_ candidate: String) -> Bool {

@@ -220,6 +220,25 @@ struct FileSearchTests {
             !FileSearchIgnoreList(patterns: []).excludes(path: "/Users/test/Documents/node_modules/a"),
             "the shipped rules are supplied by the policy, not baked into the matcher")
 
+        let literalPath = FileSearchIgnoreList(patterns: ["/Users/test/Library/Caches"])
+        expect(
+            literalPath.excludes(path: "/users/TEST/library/CACHES"),
+            "a literal path still folds case once its name passes the pre-check")
+        expect(
+            !literalPath.excludes(path: "/Users/test/Developer/Caches"),
+            "a literal path never matches the same name elsewhere")
+        for (pattern, path) in [
+            ("/x/[a/b]", "/x/a"), ("/x/cache\\?", "/x/cache?"), ("/x/\\*/cache", "/x/*/cache"),
+            ("**/Cache/*.bin", "/x/Cache/nested/blob.bin")
+        ] {
+            expect(
+                FileSearchIgnoreList(patterns: [pattern]).excludes(path: path),
+                "\(pattern) keeps matching \(path) past the name pre-check")
+        }
+        expect(
+            !FileSearchIgnoreList(patterns: ["/x/Reports/"]).excludes(path: "/x/Reports"),
+            "a trailing slash still never matches the folder itself")
+
         let edited = FileSearchIgnoreList.patterns(
             added: ["*.log", "node_modules", "*.log"], removedDefaults: ["Pods", "*.log"])
         expect(!edited.contains("Pods"), "a removed default no longer applies")

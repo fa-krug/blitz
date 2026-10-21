@@ -143,6 +143,8 @@ switch. `FileSearchPolicy` applies exactly the list it is handed.
 `fnmatch` runs with `FNM_CASEFOLD` and deliberately **without** `FNM_PATHNAME`, so `*` spans `/` and a
 `**/…/**` pattern behaves as written. Patterns are stored pre-terminated as `ContiguousArray<CChar>`, so
 the hot path never re-encodes a `String` into a temporary C buffer.
+A path pattern with no metacharacter first compares its last component with the
+candidate's own name, so the whole-path `fnmatch` runs only for a candidate that could match.
 
 Bare `*` name globs are also pushed into the Spotlight expression as `kMDItemFSName != "…"cd` clauses, so
 ignored files cannot consume the 1,000-candidate cap. Only that shape is pushed: Spotlight reads `?` and
