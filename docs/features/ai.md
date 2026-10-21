@@ -628,6 +628,9 @@ and the Actions menu's own chords, and dies with the window.
   (`ChatSession.markdownTranscript`: each turn's text and its plans under "**Plan: title**", never
   its questions and answers), and deletes one or all through `DialogController`; ⌫ deletes
   the selected chat the same way. Delete All's confirmation says archived chats are kept.
+  Renaming swaps only the row's title for a field: a `ForEach` row that is itself an `if`/`else`
+  makes the sidebar `List` diff in quadratic time, which held the main thread for seconds on opening
+  the window and on every selection with a few thousand chats.
   While anything is archived, an **Archived** row with the count sits under the list.
 - **Archive**: archiving the window's chat (`AIChatCoordinator.archiveChat`, through
   `AIChatSurfacesState.archive`) starts a new chat in its place, as deleting it does, and archiving

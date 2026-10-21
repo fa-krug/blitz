@@ -96,10 +96,14 @@ struct AIChatSidebarView: View {
                 ForEach(sections) { section in
                     Section(section.title) {
                         ForEach(section.conversations) { conversation in
-                            row(
-                                conversation, isAnswering: answering.contains(conversation.id),
-                                wait: waits[conversation.id], isSelected: conversation.id == openID
-                            )
+                            ChatSidebarRow(
+                                conversation: conversation,
+                                isAnswering: answering.contains(conversation.id),
+                                wait: waits[conversation.id],
+                                isSelected: conversation.id == openID
+                            ) {
+                                title(of: conversation)
+                            }
                             .tag(conversation.id)
                         }
                     }
@@ -133,9 +137,8 @@ struct AIChatSidebarView: View {
         }
     }
 
-    @ViewBuilder private func row(
-        _ conversation: ChatConversation, isAnswering: Bool, wait: AgentWait?, isSelected: Bool
-    ) -> some View {
+    /// Only the title swaps for a rename field; an if/else row makes the List diff quadratically.
+    @ViewBuilder private func title(of conversation: ChatConversation) -> some View {
         if renaming == conversation.id {
             TextField("Chat name", text: $renameText, prompt: Text(conversation.title))
                 .textFieldStyle(.plain)
@@ -146,9 +149,9 @@ struct AIChatSidebarView: View {
                     if !focused { commitRename(conversation.id) }
                 }
         } else {
-            ChatSidebarRow(
-                conversation: conversation, isAnswering: isAnswering, wait: wait,
-                isSelected: isSelected)
+            Text(conversation.displayTitle)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -206,18 +209,17 @@ struct AIChatSidebarView: View {
 }
 
 /// A chat's title, then its wait, a spinner or a pin; hover is a fainter selection.
-private struct ChatSidebarRow: View {
+private struct ChatSidebarRow<Title: View>: View {
     let conversation: ChatConversation
     let isAnswering: Bool
     let wait: AgentWait?
     let isSelected: Bool
+    @ViewBuilder let title: Title
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Text(conversation.displayTitle)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            title
             Spacer(minLength: 0)
             if let wait {
                 Image(systemName: wait.symbol)
