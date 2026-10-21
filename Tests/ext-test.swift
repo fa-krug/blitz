@@ -65,7 +65,8 @@ struct ExtensionTests {
                 return "[]"
             case "oauth.authorize":
                 let state = arguments[safe: 1]?.stringValue ?? ""
-                return "{\"authorizationCode\":\"auth_code_swift_test\",\"state\":\"\(state)\"}"
+                let scheme = arguments[safe: 2]?.stringValue ?? "missing"
+                return "{\"authorizationCode\":\"code_\(scheme)\",\"state\":\"\(state)\"}"
             case "oauth.getTokens":
                 let providerId = arguments.first?.stringValue ?? ""
                 return oauthTokens[providerId] ?? ""
@@ -933,17 +934,6 @@ struct ExtensionTests {
         check(
             "parseCallback parses hash fragment",
             fragParams["access_token"] == "token_xyz" && fragParams["state"] == "state_789")
-
-        let nonOAuthURL = URL(string: "raycast://extensions/installed")!
-        check(
-            "handleCallbackURL ignores a non-oauth URL",
-            ExtensionOAuthSession.handleCallbackURL(nonOAuthURL) == .ignored)
-
-        // A callback with nothing waiting for it is reported, not silently dropped.
-        let strayURL = URL(string: "blitz://oauth?code=abc&state=xyz")!
-        check(
-            "handleCallbackURL reports an expired callback",
-            ExtensionOAuthSession.handleCallbackURL(strayURL) == .expired)
     }
 
     static func deepLinkChecks() {
@@ -1242,8 +1232,8 @@ struct ExtensionTests {
         await settle()
         check("oauth command finished", oauthRecorder.finished, oauthRecorder.failures.joined())
         check(
-            "oauth flow reached token storage",
-            oauthHost.huds == ["token_auth_code_swift_test"],
+            "oauth flow passed the callback scheme and reached token storage",
+            oauthHost.huds == ["token_code_raycast"],
             oauthHost.huds.joined(separator: ","))
         await oauthRuntime.stop(session: "sOAuth")
 

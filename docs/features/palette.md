@@ -76,8 +76,10 @@ Hiding schedules Pop to Root Search, and `PaletteWindowController.popToRoot` is 
 palette returns to the launcher *and* chat starts a new conversation, at once or after
 `popToRootTimeout`, unless a re-summon inside that window consumes the pending reset first. An
 unfinished chat is a thing being done, exactly like a typed query, so the screen and the conversation
-are reset together rather than the screen alone. A reply still streaming is the one exception — it was
-asked for, and resetting would throw the answer away. Nothing is lost either way: a conversation is
+are reset together rather than the screen alone. A reply still streaming is one exception — it was
+asked for, and resetting would throw the answer away. An extension's open OAuth sign-in holds the reset
+off too, since resetting would cancel it, and a re-summon meanwhile returns to the waiting command
+(`consumePreservedState`). Nothing is lost either way: a conversation is
 written to Chat History, and the AI Agent window's sidebar, as soon as it has a message.
 
 Each `PaletteMode` maps to one type conforming to `PaletteScreen`, and the protocol is what keeps the

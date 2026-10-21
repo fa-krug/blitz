@@ -8,6 +8,8 @@ protocol ExtensionHostContext: AnyObject {
     var activeExtensionName: String? { get }
     /// Background runs report no UI: toasts, HUDs and dialogs would fire on a timer.
     var activeLaunchType: ExtensionLaunchType { get }
+    /// An OAuth sign-in window is open; the palette keeps its command alive meanwhile.
+    var isAuthorizing: Bool { get }
     var storage: ExtensionStorage { get }
     /// The app a paste would land in — the palette's recorded `previousApp`.
     var pasteTarget: NSRunningApplication? { get }
@@ -603,11 +605,19 @@ final class ExtensionHostBridge: ExtensionHostAPI {
         guard let context else { throw ExtensionHostError.noActiveExtension }
         switch method {
         case "authorize":
-            guard let urlString = arguments.first?.stringValue, let url = URL(string: urlString) else {
-                throw ExtensionHostError.unsupported("authorize requires url")
+            guard context.activeLaunchType != .background else {
+                throw ExtensionHostError.unsupported("Signing in during a background refresh")
+            }
+            guard !context.isAuthorizing else {
+                throw ExtensionHostError.unsupported("A second sign-in while one is open")
+            }
+            guard let urlString = arguments.first?.stringValue, let url = URL(string: urlString),
+                let callbackScheme = arguments[safe: 2]?.stringValue
+            else {
+                throw URLError(.badURL)
             }
             let options = ExtensionOAuthAuthorizeOptions(
-                url: url, state: arguments[safe: 1]?.stringValue)
+                url: url, state: arguments[safe: 1]?.stringValue, callbackScheme: callbackScheme)
             let result = try await context.authorizeOAuth(options: options)
             var dict: [String: Any] = ["authorizationCode": result.authorizationCode]
             if let token = result.accessToken { dict["accessToken"] = token }

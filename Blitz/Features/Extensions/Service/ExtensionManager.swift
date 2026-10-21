@@ -53,7 +53,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     /// Whether the commands reach the launcher at all; independent of `isEnabled`.
     private(set) var showsInLauncher = true
 
-    var isAuthorizing: Bool { oauthSession.isAuthorizing }
+    var isAuthorizing: Bool { oauthSession != nil }
 
     let storage: ExtensionStorage
     /// Extension-scoped state the launcher and Settings read through here, like `storage`.
@@ -63,7 +63,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     private let storeVersions = ExtensionVersionStore(fileURL: ExtensionCatalog.storeVersionsFile())
     @ObservationIgnored private let runtime: ExtensionRuntime
     @ObservationIgnored private let bridge: ExtensionHostBridge
-    @ObservationIgnored private let oauthSession = ExtensionOAuthSession()
+    @ObservationIgnored private var oauthSession: ExtensionOAuthSession?
     @ObservationIgnored private weak var appIndex: AppIndex?
     @ObservationIgnored private weak var coordinator: ExtensionCoordinator?
 
@@ -600,7 +600,9 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     }
 
     func stop() async {
-        oauthSession.cancel()
+        oauthSession?.cancel()
+        // Dropped first, so the cancelled sign-in doesn't bring back a palette with nothing on it.
+        oauthSession = nil
         guard let sessionID else {
             resetSessionState()
             return
@@ -1160,7 +1162,16 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     func authorizeOAuth(options: ExtensionOAuthAuthorizeOptions) async throws -> ExtensionOAuthAuthorizeResult
     {
         lastOAuthExtensionName = running?.extensionName
-        return try await oauthSession.authorize(options: options)
+        let session = ExtensionOAuthSession(anchor: coordinator?.paletteWindow)
+        oauthSession = session
+        defer {
+            if oauthSession === session {
+                // Still flagged, so the palette restores the waiting command rather than resetting.
+                if !Task.isCancelled { reopenPalette() }
+                oauthSession = nil
+            }
+        }
+        return try await session.authorize(options: options)
     }
 
     func getOAuthTokens(providerId: String) -> String? {

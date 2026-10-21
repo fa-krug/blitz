@@ -497,16 +497,6 @@ final class AppCore {
     }
 
     func handleOpenURL(_ url: URL) {
-        switch ExtensionOAuthSession.handleCallbackURL(url) {
-        case .delivered:
-            paletteCoordinator.showPalette(mode: .extensionCommand, restoreAnyMode: true)
-            return
-        case .expired:
-            showMessage("Sign-in expired — run the command again", tone: .danger)
-            return
-        case .ignored:
-            break
-        }
         // Through the chord's own funnel, so a link passes every gate its shortcut would.
         if let action = HotKeyAction(deepLink: url) {
             hotKeys.perform(action, arguments: HotKeyAction.deepLinkArguments(in: url))

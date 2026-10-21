@@ -878,6 +878,28 @@ export default async function Command() {
 }
 `;
 
+// The sign-in window catches one URL scheme, so each redirect method has to name the one it lands on.
+const oauthSchemeSource = `
+import { OAuth } from "@raycast/api";
+
+export default async function Command() {
+  const schemeOf = async (redirectMethod, extraParameters) => {
+    const client = new OAuth.PKCEClient({ redirectMethod, providerName: "GitHub", providerId: "github" });
+    const req = await client.authorizationRequest({ endpoint: "https://example.com/authorize", clientId: "c", extraParameters });
+    const { authorizationCode } = await client.authorize(req);
+    return { scheme: authorizationCode, state: req.state };
+  };
+  const web = await schemeOf(OAuth.RedirectMethod.Web);
+  globalThis.__oauthSchemes = {
+    web: web.scheme,
+    app: (await schemeOf(OAuth.RedirectMethod.App)).scheme,
+    appURI: (await schemeOf(OAuth.RedirectMethod.AppURI)).scheme,
+    custom: (await schemeOf(OAuth.RedirectMethod.Web, { redirect_uri: "com.example.app:/oauth" })).scheme,
+    stateScheme: JSON.parse(atob(web.state.replace(/-/g, "+").replace(/_/g, "/"))).scheme,
+  };
+}
+`;
+
 // `@raycast/utils` stores the provider's raw token response, which carries no timestamp, so the
 // stored time is the only thing `isExpired()` can count from; without it a token never expired.
 const tokenExpirySource = `
@@ -1482,6 +1504,25 @@ export async function runFixtures() {
     check("TokenSet isExpired calculation works", result?.isExpiredLive === false && result?.isExpiredOld === true);
     check("removeTokens cleans up tokens", result?.afterRemove === undefined || result?.afterRemove === null);
   });
+
+  await run(
+    "OAuth authorize names the redirect's callback scheme",
+    oauthSchemeSource,
+    "no-view",
+    async (harness) => {
+      const result = harness.call("globalThis.__oauthSchemes");
+      check("Web waits for the raycast scheme its redirect page forwards to", result?.web === "raycast", JSON.stringify(result));
+      check("App waits for raycast", result?.app === "raycast", JSON.stringify(result));
+      check("AppURI waits for com.raycast", result?.appURI === "com.raycast", JSON.stringify(result));
+      check("a custom redirect_uri waits for its own scheme", result?.custom === "com.example.app", JSON.stringify(result));
+      check("the Web state asks Raycast's page for the raycast scheme", result?.stateScheme === "raycast", JSON.stringify(result));
+    },
+    {
+      stubs: {
+        "oauth.authorize": (args) => ({ authorizationCode: args[2], state: args[1] ?? "" }),
+      },
+    },
+  );
 
   const storedTokens = new Map([["unstamped", JSON.stringify({ access_token: "ya29.old", expires_in: 3599 })]]);
   await run(

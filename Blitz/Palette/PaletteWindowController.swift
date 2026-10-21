@@ -219,9 +219,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         popToRoot()
     }
 
-    /// True while a hidden palette still holds pre-close state; consuming cancels the reset.
+    /// True while a hidden palette keeps its screen: a reset is pending, or a sign-in holds it.
     func consumePreservedState() -> Bool {
-        guard let timer = popToRootTimer else { return false }
+        guard let timer = popToRootTimer else { return core.extensions.isAuthorizing }
         timer.invalidate()
         popToRootTimer = nil
         queryWasPreserved = true
