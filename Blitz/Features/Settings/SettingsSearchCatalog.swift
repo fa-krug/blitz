@@ -788,6 +788,9 @@ enum SettingsSearchCatalog {
             .permissionsAccessibility, "Accessibility",
             keywords: ["paste", "keystrokes", "privacy", "grant"]),
         .init(
+            .permissionsFullDiskAccess, "Full Disk Access",
+            keywords: ["files", "uninstall", "leftovers", "containers", "privacy", "grant", "fda"]),
+        .init(
             .permissionsCalendars, "Calendars",
             keywords: ["events", "privacy", "grant", "eventkit"]),
         .init(

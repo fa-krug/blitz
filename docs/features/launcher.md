@@ -881,10 +881,10 @@ running dot and the availability of the running-only actions:
   app gets no chance to save or refuse.
 - **Restart Application** — the row above Quit and **⌘R**, on the same guard: all three chords resolve
   their target through `LauncherScreen.runningApplication(at:)`, the single place that condition
-  lives. `AppLauncher.restart(bundleID:url:)` snapshots the running instances, subscribes to
-  `NSWorkspace.DidTerminateApplicationMessage` _before_ terminating so an instance that exits at
-  once can't outrun the wait, then reopens the bundle once every snapshotted PID has gone. The wait
-  is bounded by a five-second grace: a quit an app refuses, or one sitting behind a save sheet the
+  lives. `AppLauncher.restart(bundleID:url:)` snapshots the running instances, terminates them,
+  then reopens the bundle once every one reads `isTerminated`, polled every 50 ms: workspace exit
+  notifications skip background and menu-bar apps. Uninstall waits on the same poll through
+  `quitAwaitingExit(bundleID:)`. The wait is bounded by a five-second grace: a quit an app refuses, or one sitting behind a save sheet the
   user leaves standing, relaunches nothing and leaves that app running. The palette dismisses the
   moment the quit is asked for and never restores focus — either the relaunch takes it, or the app
   that refused the quit is the one asking for it.

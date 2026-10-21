@@ -866,7 +866,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   paints in one update took the highlight down with it for 100–280 ms.
 - **A pane never asks TCC on the main actor.** A status read is a round trip to TCC — Contacts costs
   ~17 ms every time, Accessibility and Calendars ~45 ms on the first — so the Permissions pane reads
-  all four together in a `Task.detached`, polls that each second while open (nothing announces a
+  all five together in a `Task.detached`, polls that each second while open (nothing announces a
   grant made in System Settings), and opens on the last read in ~65 ms rather than ~280.
 
 ### The window-layout editor

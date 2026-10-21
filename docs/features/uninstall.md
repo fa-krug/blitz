@@ -13,8 +13,9 @@ any `.application` entry; it opens the `.uninstall` palette sub-screen scoped to
 - **The deciding half is pure** for `uninstall-test`, with every environment fact injected: the
   scanner hands the rules directory **names**, never URLs, and hands the classifier a
   `PathFacts`.
-- **`UninstallScanner` detects Full Disk Access and never requests it.** The probe is silent and
-  promptless; this feature asks for no permission and never escalates privilege.
+- **`UninstallScanner` detects Full Disk Access and never requests it.** The probe,
+  `Permissions.hasFullDiskAccess`, is silent and promptless; this feature asks for no permission and
+  never escalates privilege.
 - **`tccRelativePrefixes` is measured, not assumed.** Probe a location by creating and trashing a
   throwaway directory there before adding it — *listing* is not the test. `~/Library/Containers`
   enumerates fine and still refuses the move, while `~/Library/Application Scripts` allows it.
@@ -37,11 +38,11 @@ Same split as `WindowManagement`: a pure half that decides, an impure half that 
 | `Model/UninstallRules.swift` | Matching, plus `isAcceptableCandidate` |
 | `Model/UninstallProtection.swift` | `PathFacts` → `UninstallProtection` |
 | `Model/UninstallPlan.swift` | `UninstallCandidate`, `UninstallPlan`, `UninstallSelection` |
-| `Service/UninstallScanner.swift` | **Impure.** `discover` (`contentsOfDirectory`, `lstat`, the FDA probe) and `measure` (the directory walks) |
+| `Service/UninstallScanner.swift` | **Impure.** `discover` (`contentsOfDirectory`, `lstat`, `Permissions.hasFullDiskAccess`) and `measure` (the directory walks) |
 | `Service/UninstallRunner.swift` | **Impure.** `trashItem`, and nothing else |
 | `Service/UninstallSession.swift` | `@MainActor` lifecycle behind the screen |
 | `UI/UninstallScreen.swift`, `UI/UninstallView.swift` | The palette screen, list, row and actions menu |
-| `UI/UninstallCoordinator.swift` | The action surface — confirmation lives here, not in the runner |
+| `UI/UninstallCoordinator.swift` | The action surface — confirmation and the quit gate live here, not in the runner |
 
 The first five compile standalone into `Tests/uninstall-test.swift`, so they stay Foundation-only
 and take every environment fact as a parameter. The scanner hands the rules **child names**, never
@@ -126,6 +127,11 @@ corrupts the installer's view of the system), `~/Library/Keychains`, `/Library/E
 user-document location. `/usr/local` is reached **only** through `binDirectories`, and only for
 symlinks that resolve into the bundle — never by name, and never recursively.
 
+One root only yields under Full Disk Access:
+`Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments`,
+each app's recent-documents list, named `<bundle id>.sfl3`. Without the grant the listing itself is
+refused, so the root contributes nothing rather than a locked row.
+
 `UninstallRules.isAcceptableCandidate` is belt and braces over whatever matched: an immediate child of
 its own root, never the home directory or `/`, no relative components, and no overlap with the app
 bundle (which is emitted separately).
@@ -166,17 +172,21 @@ a row that has since become locked for free.
 
 The TCC list is **measured, not assumed.** A probe that creates and then trashes a throwaway
 directory in each candidate location shows that `~/Library/Containers`, `~/Library/Group Containers`
-and `~/Library/Cookies` refuse the move, while `~/Library/Application Scripts` and
-`~/Library/Autosave Information` allow it — which is why Books' five `Application Scripts` rows are
-checkable while the five `Containers` rows beside them are locked. Note that _listing_ a directory is
-not the test: both container roots enumerate fine and still refuse the trash. Re-measure before
-adding an entry.
+and `~/Library/Cookies` refuse the move, and `com.apple.sharedfilelist` refuses even the listing,
+while `~/Library/Application Scripts` and `~/Library/Autosave Information` allow it — which is why
+Books' five `Application Scripts` rows are checkable while the five `Containers` rows beside them are
+locked. Note that _listing_ a directory is not the test: both container roots enumerate fine and
+still refuse the trash. Re-measure before adding an entry.
 
-**Full Disk Access is detected, never requested.** The probe opens
-`~/Library/Application Support/com.apple.TCC/TCC.db` — TCC denies that read _silently_, with no
-prompt, which is what makes it usable under the rule that this feature asks for no permissions. It
-runs once per scan, not once per candidate, and can only under-report (a per-folder grant reads as
-"no access"), which just leaves a row locked.
+**Full Disk Access is detected, never requested.** The probe is `Permissions.hasFullDiskAccess()`: it
+opens the per-user `TCC.db`, then the system one at
+`/Library/Application Support/com.apple.TCC/TCC.db`. TCC denies that read _silently_, with no prompt,
+which is what makes it usable under the rule that this feature asks for no permissions. macOS 27 has
+no per-user `TCC.db` at all, so a probe of that file alone reads every grant as "no access" and locks
+every gated row — keep the system path. It runs once per scan, not once per candidate, and can only
+under-report (a per-folder grant reads as "no access"), which just leaves a row locked. Settings ›
+Permissions shows the same status and opens the Full Disk Access pane in System Settings; granting it
+is optional.
 
 Symlinks are never followed: `lstat`, and no descent when sizing. A symlinked candidate is judged and
 trashed as the link.
@@ -226,22 +236,32 @@ trade); the two Finder actions hand focus to Finder and so hide the palette. Sho
 route and drives Finder over Apple events, which raises the system Automation prompt on first use.
 
 `UninstallCoordinator.performUninstall()` is the one funnel, so neither ↵ nor the menu row can skip the
-confirmation. It quits the app first if it's running, trashes, and **only clears the app's hotkey,
-favorite, visibility and ranking when the bundle itself went** — a leftovers-only cleanup leaves the
-app installed. The bundle is trashed last: either order can leave a partial state, but with the
-bundle still in place the user can re-run the uninstall to retry, and once it's gone the launcher
-entry that reaches this screen is gone with it. Success shows the message pill; partial failure names
-what stayed behind.
+confirmation. After confirmation it checks the app again and **waits for it to exit** before
+trashing anything — an app still quitting writes its saved state and preferences back behind the
+trash. If it hasn't exited within `AppLauncher`'s grace period (a save sheet left standing), nothing
+is moved and a notice says so. The wait polls `NSRunningApplication.isTerminated`, since workspace
+exit notifications exclude background and menu-bar apps. It then trashes, and **only clears the
+app's hotkey, favorite, visibility and ranking when the bundle itself went** — a leftovers-only
+cleanup leaves the app installed. The bundle is trashed last: either order can leave a partial
+state, but with the bundle still in place the user can re-run the uninstall to retry, and once it's
+gone the launcher entry that reaches this screen is gone with it. Success shows the message pill;
+partial failure names what stayed behind.
 
 ## Tests
 
 ```sh
 ./Scripts/run-tests.sh uninstall-test
+./Scripts/run-tests.sh uninstall-coordinator-test
 ```
 
-No filesystem, no temp directories — every input is a `String` or a `PathFacts`. `testStreamedSizes`
+`uninstall-test` needs no filesystem and no temp directories — every input is a `String` or a
+`PathFacts`. `testStreamedSizes`
 covers the half a walk cannot: a landed size never reorders the plan, never disturbs a neighbour's
 pending state and never re-derives the checked set. Beyond the per-rule
 assertions it ends with a cross-identity sweep: for a set of realistic apps × every root × every
 artifact shape, no app's artifacts may ever be attributed to another. That is the one test that
 catches a regression in the matcher as a whole rather than in a single rule.
+
+`uninstall-coordinator-test` compiles the shipped `UninstallCoordinator` against stand-ins that only
+record: across confirm/cancel and quit/refuse, only a confirmed uninstall whose app exits reaches the
+runner, and a refused quit reports "Nothing Was Moved".

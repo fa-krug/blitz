@@ -102,6 +102,7 @@ enum UninstallProtectionRules {
         "Library/Application Support/AddressBook",
         "Library/Application Support/CallHistoryDB",
         "Library/Application Support/com.apple.TCC",
-        "Library/Application Support/MobileSync"
+        "Library/Application Support/MobileSync",
+        "Library/Application Support/com.apple.sharedfilelist/"
     ]
 }

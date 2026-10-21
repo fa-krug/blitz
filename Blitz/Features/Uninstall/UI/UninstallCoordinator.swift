@@ -1,4 +1,4 @@
-import AppKit
+import Foundation
 
 /// Owns the uninstall flow: the scan hand-off, the one confirmation funnel, the reference cleanup.
 @MainActor
@@ -70,8 +70,16 @@ final class UninstallCoordinator {
                     symbol: "trash", confirmTitle: "Move to Trash")
             else { return }
 
-            if running, let bundleID = app.bundleID { _ = AppLauncher.quit(bundleID: bundleID) }
             session.setTrashing(true)
+            // An app still quitting rewrites its saved state and preferences behind the trash.
+            if let bundleID = app.bundleID, await !AppLauncher.quitAwaitingExit(bundleID: bundleID) {
+                session.setTrashing(false)
+                await core.showNotice(
+                    title: "Nothing Was Moved",
+                    message: "\(app.name) didn’t quit. Quit it, then try again.",
+                    symbol: "trash", tone: .danger)
+                return
+            }
             let report = await UninstallRunner.moveToTrash(items)
             session.setTrashing(false)
 
