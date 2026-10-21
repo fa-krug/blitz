@@ -847,6 +847,7 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
@@ -866,6 +867,7 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
