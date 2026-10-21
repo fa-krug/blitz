@@ -58,7 +58,8 @@ final class InstalledAIManager {
             let name = file.lastPathComponent
             guard
                 (name.hasPrefix("blitz-mcp-") && name.hasSuffix(".json"))
-                    || (name.hasPrefix("blitz-prompt-") && name.hasSuffix(".txt")),
+                    || (name.hasPrefix("blitz-prompt-") && name.hasSuffix(".txt"))
+                    || name.hasPrefix("blitz-image-"),
                 let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey])
                     .contentModificationDate,
                 modified < launch
@@ -249,9 +250,18 @@ final class InstalledAIManager {
                     account: InstalledAIModel.claudeAccount(catalog.output))
             )
         case .openCode:
+            guard let version, let major = Int(version.prefix(while: \.isNumber)), major >= 2 else {
+                return (
+                    kind,
+                    InstalledAIStatus(
+                        phase: .failed("Blitz needs OpenCode 2. Update OpenCode, then Check Again."),
+                        version: version, executable: executable)
+                )
+            }
+            // A private server boots, and settles its plugins, before it answers.
             let models = await InstalledAIProbe.run(
-                executable: executable, arguments: ["models", "--pure", "--verbose"],
-                workspace: workspace, environment: environment)
+                executable: executable, arguments: ["api", "GET", "/api/model", "--standalone"],
+                workspace: workspace, environment: environment, timeout: .seconds(30))
             let catalog = InstalledAIModel.openCodeCatalog(models.output)
             return (
                 kind,

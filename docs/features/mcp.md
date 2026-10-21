@@ -297,9 +297,9 @@ stand in. Every other server request is declined. `item/started` and
 `ClaudeMCPLaunch` writes the same list as the CLI's own `mcpServers` record, into a file because
 argv is in `ps`: `0600`, and named per turn, like Grok's prompt file, so a second turn never
 overwrites or deletes a live turn's configuration out from under the process reading it. It is
-deleted with the turn; a crash leaves it, and Grok's prompt file, for `InstalledAIManager` to delete
-at the next launch, which removes only `blitz-mcp-*` and `blitz-prompt-*` files older than
-that launch. The turn then runs `--input-format stream-json` so the consent channel has a
+deleted with the turn; a crash leaves it, Grok's prompt file and OpenCode's pictures for
+`InstalledAIManager` to delete at the next launch, which removes only `blitz-mcp-*`,
+`blitz-prompt-*` and `blitz-image-*` files older than that launch. The turn then runs `--input-format stream-json` so the consent channel has a
 pipe to answer on, and drops `--disallowedTools "*"` — verified to remove the MCP tools along with
 the built-ins, after which the model narrates a call it never made. The question only reaches
 Blitz if the CLI's own permission system asks it, and the reader's settings can answer first:
