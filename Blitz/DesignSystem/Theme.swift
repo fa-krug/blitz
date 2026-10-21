@@ -50,6 +50,7 @@ enum Theme {
         /// A pill holding a square thumbnail; a full capsule fights the thumbnail's own corners.
         static let attachmentChip: CGFloat = 8
         static let card: CGFloat = 10
+        static let codeBlock: CGFloat = 14
         /// A window-to-be in the room preview, rounded like a real window rather than a row.
         static let roomCard: CGFloat = 16
         static let keyCap: CGFloat = 6
@@ -219,6 +220,7 @@ enum Theme {
         static let chatContextGauge: CGFloat = 14
         /// A source chip's title before it middle-truncates, so three chips share a row.
         static let chatSourceTitle: CGFloat = 200
+        static let chatSourceBadge: CGFloat = 18
         /// The context card's width: a label column and a value one, with room for a model name.
         static let chatContextCard: CGFloat = 300
         /// A plan being edited in its card; past this the Markdown scrolls inside the editor.

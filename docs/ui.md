@@ -98,7 +98,7 @@ groups. See "Section headers" below.
 
 ### Radius (`Theme.Radius`)
 
-`panel 26` · `row 10` · `card 10` · `dialog 20` · `dialogSymbol 16` · `menuPanel 16` · `menu 6` · `menuRow 10` · `barControl 8` · `thumbnail 6` · `keyCap 6` · `recorderKeyCap 4`
+`panel 26` · `row 10` · `card 10` · `codeBlock 14` · `dialog 20` · `dialogSymbol 16` · `menuPanel 16` · `menu 6` · `menuRow 10` · `barControl 8` · `thumbnail 6` · `keyCap 6` · `recorderKeyCap 4`
 
 `barControl` dresses the header pop-ups (type filter, AI model), which state a value and drop a menu
 the way a native pop-up button does — a rectangle, not a pill.
@@ -338,9 +338,12 @@ value: in Auto, `modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.
 calls run with no dialog. The title bar keeps the system's own toolbar band, as any document
 window's does. The context card the gauge raises on hover is glass over a solid
 `windowBackgroundColor`, because it rises over transcript text, and sits in the transcript's own
-frame at its bottom edge, so no window size can push it off screen. A reply's choices are `.glass`
-capsules that rise out of the composer's top edge, each a `ChatChoiceChip` — a glyph then the
-option — which a waiting question's options use too. A sidebar row whose chat waits on the reader trades
+frame at its bottom edge, so no window size can push it off screen. A reply's choices are frosted
+capsules, each wrapped row centred, that rise out of the composer's top edge, each a
+`ChatChoiceChip` — a glyph then the option — which a waiting question's options use too, left-aligned
+on its card. The capsule is `chatChip()`: `frosted(in: Capsule())` padded `spacing.xl` either side.
+A source chip under a cited reply is the same capsule led by a `chatSourceBadge 18` number disc in
+`controlSurface`, which `chatChip(leadsWithBadge: true)` pulls in to `spacing.sm`. A sidebar row whose chat waits on the reader trades
 its spinner for the wait's symbol in `Colors.warning`. While anything is archived, the sidebar's foot
 is an **Archived** row under a divider — `archivebox`, the title and the count in secondary, hover
 in `Colors.rowHover` at `Radius.row` as the rows have — and choosing it swaps the list for

@@ -122,8 +122,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   result, and `displayTitle` prefers a rename, then this, then the first question.
 - **A reply's links are its sources.** `ChatReferences.extract` gathers the web links of a finished
   reply — Markdown links by their own names, bare URLs by host and path — in the order cited, one
-  per page, skipping code, and both surfaces list them under the reply as numbered glass chips that
-  open in the browser. The same numbers close the sentence that cited each source, as a raised,
+  per page, skipping code, and both surfaces list them under the reply as glass capsules, each led
+  by its number in a disc, that open in the browser and share `chatChip()` with the suggested
+  replies. The same numbers close the sentence that cited each source, as a raised,
   linked `[n]`: `ChatCitations` finds each link's sentence end in the drawn text and inserts after
   it, two sources in one sentence sharing it, so prose and chips always agree. The preamble asks the model to link a page it relies on inline, so a cited
   answer carries its sources without a second request.
@@ -207,7 +208,7 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   bare fence right on the label and any fence closing or trailing the list go with them, and no
   empty code box is left behind. A label inside a fence with a language, or any other open code
   block, is code and stays. `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a waiting
-  question's options use too: in the window they rise out of the
+  question's options use too — each wrapped row centred (`ChatFlowLayout(centersRows:)`): in the window they rise out of the
   composer, sitting on its top edge until the reader starts typing; in Quick AI they close the
   transcript. A click sends the option as the reader's next message, through the same `send` a
   typed one takes. Older replies lose their chips, since only the last question is still open. It is text in, text out, so it
@@ -559,7 +560,9 @@ and the Actions menu's own chords, and dies with the window.
   `ChatMarkdownRenderer` builds its single attributed string: lists with hanging indents, quotes,
   code as `NSTextBlock`s, tables as an `NSTextTable`, with find's marks and the citation numbers
   in it. Its leaf paths are `ChatFindIndex.leaves`'s, which `chat-markdown-test` pins. A code
-  block's language and Copy sit in a strip its block leaves above the code. Thinking folds, search
+  block is a `RoundedTextBlock`, a continuous rounded rectangle (`Theme.Radius.codeBlock`) in place
+  of the rectangle `NSTextBlock` draws, and its language and Copy sit in a strip its block leaves
+  above the code. Thinking folds, search
   and tool rows stay separate views, so a drag spans one segment's text. A fold holding a match
   opens. A glass counter at the transcript's top edge says "3 of 17" with the same steps as
   Return / ⇧↩ in the field and ⌘G / ⇧⌘G anywhere. The sidebar's own filter is still there, by click.
@@ -850,7 +853,9 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
 - A failed reply keeps what was written in the normal colour; only the closing note is red. Quit
   while a reply streams and reopen the chat: its text is there, closed by "Response interrupted."
 - Move the pointer over a code block's header: an arrow, not an I-beam.
-- Code blocks are coloured: ask for a snippet each in Swift, Python, shell, JSON, SQL, a diff and
+- Suggested replies are centred glass capsules, and when they wrap each row is centred. Source chips
+  under a cited reply match them, the number first in its own disc.
+- Code blocks have rounded corners in Dark and Light, and are coloured: ask for a snippet each in Swift, Python, shell, JSON, SQL, a diff and
   HTML; a `diff` shows additions green and removals red, and an unlabelled block stays plain.
   Switching appearance recolours them without a relaunch.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.

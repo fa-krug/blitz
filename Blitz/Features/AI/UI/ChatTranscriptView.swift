@@ -396,11 +396,14 @@ private struct ChatSourceChip: View {
         Button {
             NSWorkspace.shared.open(reference.url)
         } label: {
-            HStack(spacing: metrics.spacing.xs) {
+            HStack(spacing: metrics.spacing.md) {
                 Text("\(index)")
                     .font(metrics.typography.keyCap)
                     .monospacedDigit()
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .frame(minWidth: metrics.size.chatSourceBadge)
+                    .frame(height: metrics.size.chatSourceBadge)
+                    .background(Circle().fill(Theme.Colors.controlSurface))
                 Text(reference.title)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -413,9 +416,9 @@ private struct ChatSourceChip: View {
                 }
             }
             .font(metrics.typography.rowTrailing)
-            .padding(.horizontal, metrics.spacing.xs)
+            .chatChip(leadsWithBadge: true)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         .help(reference.url.absoluteString)
         .accessibilityLabel("Source \(index): \(reference.title), \(reference.host)")
     }

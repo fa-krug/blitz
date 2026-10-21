@@ -25,6 +25,34 @@ struct ChatRenderedText {
     }
 }
 
+/// `NSTextBlock` can only fill and stroke a rectangle, so a code block draws its own rounded box.
+private final class RoundedTextBlock: NSTextBlock {
+    var cornerRadius: CGFloat = 0
+
+    override func drawBackground(
+        withFrame frameRect: NSRect, in controlView: NSView?, characterRange charRange: NSRange,
+        layoutManager: NSLayoutManager
+    ) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let line = width(for: .border, edge: .minX)
+        let box = frameRect.insetBy(dx: line / 2, dy: line / 2)
+        let path = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).path(in: box).cgPath
+        context.saveGState()
+        if let fill = backgroundColor {
+            context.setFillColor(fill.cgColor)
+            context.addPath(path)
+            context.fillPath()
+        }
+        if let stroke = borderColor(for: .minX), line > 0 {
+            context.setStrokeColor(stroke.cgColor)
+            context.setLineWidth(line)
+            context.addPath(path)
+            context.strokePath()
+        }
+        context.restoreGState()
+    }
+}
+
 /// Markdown into one attributed string; each text takes `ChatFindIndex.leaves`' path for find.
 @MainActor
 struct ChatMarkdownRenderer {
@@ -362,7 +390,9 @@ struct ChatMarkdownRenderer {
         language: String?, text: String, leaf: [Int], in context: Context, into output: Output,
         after: CGFloat
     ) {
-        let box = Self.fullWidthBlock()
+        let box = RoundedTextBlock()
+        box.setValue(100, type: .percentageValueType, for: .width)
+        box.cornerRadius = source.metrics.radius.codeBlock
         box.backgroundColor = NSColor(Theme.Colors.cardFill)
         box.setBorderColor(NSColor(Theme.Colors.cardStroke))
         box.setWidth(Theme.Size.hairline, type: .absoluteValueType, for: .border)
