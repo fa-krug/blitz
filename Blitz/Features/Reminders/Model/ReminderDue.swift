@@ -80,9 +80,9 @@ struct ReminderDue: Hashable, Sendable {
             case 1: "Tomorrow"
             case let offset? where (2...6).contains(offset): date.formatted(style.weekday(.wide))
             default:
-                calendar.component(.year, from: now) == year
-                    ? date.formatted(style.month(.abbreviated).day())
-                    : date.formatted(style.month(.abbreviated).day().year())
+                date.formatted(
+                    calendar.component(.year, from: now) == year
+                        ? style.month(.abbreviated).day() : style.month(.abbreviated).day().year())
             }
         guard time != nil else { return dayTitle }
         return "\(dayTitle), \(date.formatted(style.hour().minute()))"
