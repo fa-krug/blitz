@@ -23,9 +23,8 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     private var pasteMonitor: Any?
     /// ⌘⎋: the window server claims it, so no keystroke is left for the responder chain to see.
     private lazy var commandEscapeTap = CommandEscapeTap { [weak self] in
-        guard let self, self.panel?.isKeyWindow == true else { return false }
+        guard let self, self.panel?.isKeyWindow == true else { return }
         self.core.palette.prepare(mode: .launcher)
-        return true
     }
 
     /// The centre line and its height detents for a drag in flight.
@@ -88,8 +87,6 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             panel.contentView?.layoutSubtreeIfNeeded()
             core.inputSourceSwitcher.beginSession(
                 preferredInputSourceID: core.settings.autoSwitchInputSourceID)
-            // Only while we are on screen: a system-wide tap has no business outliving the window.
-            commandEscapeTap.enable()
             // Non-activating, so summoning never raises our own aux windows behind it.
             panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
@@ -159,7 +156,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     func hide(restoreFocus: Bool) {
+        NotesPanel.refusesInheritedKey = previousOwnWindow?.isVisible != true
         panel?.orderOut(nil)
+        NotesPanel.refusesInheritedKey = false
         commandEscapeTap.disable()
         core.inputSourceSwitcher.endSession()
         core.calendarCoordinator.paletteDidHide()
@@ -219,9 +218,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         popToRoot()
     }
 
-    /// True while a hidden palette still holds pre-close state; consuming cancels the reset.
+    /// True while a hidden palette keeps its screen: a reset is pending, or a sign-in holds it.
     func consumePreservedState() -> Bool {
-        guard let timer = popToRootTimer else { return false }
+        guard let timer = popToRootTimer else { return core.extensions.isAuthorizing }
         timer.invalidate()
         popToRootTimer = nil
         queryWasPreserved = true
@@ -243,6 +242,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
 
     /// Not for a dialog or a modal: hiding tears down a running command.
     func windowDidResignKey(_ notification: Notification) {
+        commandEscapeTap.disable()
         guard isVisible, !core.isShowingDialog else { return }
         if core.palette.menuOpen { return }
         // A file panel sets its own level under ours, so sink rather than dismiss.
@@ -255,6 +255,8 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
 
     /// Re-bump a turn later: on the first show a synchronous bump lands before `onChange`.
     func windowDidBecomeKey(_ notification: Notification) {
+        // Only while key: a system-wide tap has no business outliving the palette's focus.
+        commandEscapeTap.enable()
         panel?.level = .palette
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }

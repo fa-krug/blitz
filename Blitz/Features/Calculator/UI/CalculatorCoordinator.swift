@@ -46,6 +46,11 @@ final class CalculatorCoordinator {
         }
     }
 
+    /// The money card's refresh button; the store's own schedule carries on untouched.
+    func refreshExchangeRates() {
+        core.currencyRates.refresh()
+    }
+
     /// Enter on the inline calculator card: copy the answer, remember the calculation, dismiss.
     func copyCalculatorResult(_ result: CalcResult) {
         guard case .value(let display, let copyText) = result.payload else { return }

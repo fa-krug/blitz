@@ -1,9 +1,10 @@
 import AppKit
-import Foundation
+import AuthenticationServices
 
 struct ExtensionOAuthAuthorizeOptions: Sendable {
     let url: URL
     let state: String?
+    let callbackScheme: String
 }
 
 struct ExtensionOAuthAuthorizeResult: Sendable {
@@ -12,19 +13,12 @@ struct ExtensionOAuthAuthorizeResult: Sendable {
     let state: String?
 }
 
-/// An OAuth 2.0 PKCE session: the browser authorizes and an `oauth` callback completes it.
+/// One browser sign-in. It catches its own redirect, so an installed Raycast cannot take it.
 @MainActor
-final class ExtensionOAuthSession {
-    private var continuation: CheckedContinuation<[String: String], Error>?
-    private var expectedState: String?
-    private var timeoutTimer: Timer?
-
-    private static weak var activeSession: ExtensionOAuthSession?
-
-    /// True while this session is waiting for the browser to come back.
-    var isAuthorizing: Bool {
-        continuation != nil
-    }
+final class ExtensionOAuthSession: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private nonisolated let anchor: ASPresentationAnchor
+    private var session: ASWebAuthenticationSession?
+    private var continuation: CheckedContinuation<URL, Error>?
 
     enum OAuthError: LocalizedError {
         case canceled
@@ -40,111 +34,79 @@ final class ExtensionOAuthSession {
         }
     }
 
-    /// What a deep link turned out to be, so the caller can tell "not ours" from "too late".
-    enum Callback {
-        case delivered
-        case expired
-        case ignored
-    }
-
-    /// Deep links from the app delegate, such as `raycast://oauth?code=…`.
-    static func handleCallbackURL(_ url: URL) -> Callback {
-        guard let scheme = url.scheme?.lowercased(),
-            scheme == "raycast" || scheme == "blitz" || scheme == "com.raycast"
-        else { return .ignored }
-
-        let host = url.host?.lowercased() ?? ""
-        let path = url.path.lowercased()
-        guard
-            host == "oauth" || host == "redirect"
-                || path == "/oauth" || path == "/redirect"
-                || path.hasPrefix("/oauth/") || path.hasPrefix("/redirect/")
-        else {
-            return .ignored
-        }
-
-        // The browser can come back after the session is gone: quit, timed out, or torn down.
-        guard let active = activeSession else { return .expired }
-        active.receiveCallback(url: url)
-        return .delivered
+    init(anchor: NSWindow?) {
+        self.anchor = anchor ?? NSApp.keyWindow ?? ASPresentationAnchor()
+        super.init()
     }
 
     func authorize(options: ExtensionOAuthAuthorizeOptions) async throws -> ExtensionOAuthAuthorizeResult {
-        let params = try await authorize(url: options.url, expectedState: options.state)
-        let code = params["code"] ?? ""
-        let token = params["access_token"]
-        let state = params["state"]
-        return ExtensionOAuthAuthorizeResult(authorizationCode: code, accessToken: token, state: state)
+        let redirect = try await run(url: options.url, callbackScheme: options.callbackScheme)
+        let params = Self.parseCallback(url: redirect)
+        if let error = params["error"] {
+            throw OAuthError.failed(params["error_description"] ?? error)
+        }
+        // Raycast's web redirect page can drop `state`, so only a returned one can be checked.
+        if let expected = options.state, !expected.isEmpty, let received = params["state"],
+            received != expected
+        {
+            throw OAuthError.stateMismatch
+        }
+        return ExtensionOAuthAuthorizeResult(
+            authorizationCode: params["code"] ?? "", accessToken: params["access_token"],
+            state: params["state"])
     }
 
-    func authorize(
-        url: URL,
-        expectedState: String? = nil
-    ) async throws -> [String: String] {
-        if continuation != nil {
-            cancel()
-        }
+    /// Closes the sign-in window; the waiting `authorize` throws `canceled`.
+    func cancel() {
+        let session = session
+        finish(.failure(OAuthError.canceled))
+        session?.cancel()
+    }
 
-        self.expectedState = expectedState
-        Self.activeSession = self
-
-        return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-
-            self.timeoutTimer?.invalidate()
-            self.timeoutTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: false) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.finish(error: OAuthError.failed("Authentication timed out."))
+    private func run(url: URL, callbackScheme: String) async throws -> URL {
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                let session = ASWebAuthenticationSession(
+                    url: url, callback: .customScheme(callbackScheme)
+                ) { @Sendable redirect, error in
+                    Task { @MainActor in self.complete(redirect: redirect, error: error) }
+                }
+                session.presentationContextProvider = self
+                // Shares browser cookies, so a provider the user is signed in to skips its login.
+                session.prefersEphemeralWebBrowserSession = false
+                self.session = session
+                guard session.start() else {
+                    self.finish(.failure(OAuthError.failed("Couldn't open the sign-in window.")))
+                    return
                 }
             }
-
-            let opened = NSWorkspace.shared.open(url)
-            if !opened {
-                self.finish(error: OAuthError.failed("Failed to open authorization URL in default browser."))
-            }
+        } onCancel: {
+            Task { @MainActor in self.cancel() }
         }
     }
 
-    private func receiveCallback(url: URL) {
-        let params = Self.parseCallback(url: url)
-        if let error = params["error"] {
-            let desc = params["error_description"] ?? error
-            finish(error: OAuthError.failed(desc))
-            return
-        }
-
-        if let expected = expectedState, !expected.isEmpty {
-            guard let received = params["state"], !received.isEmpty, received == expected else {
-                finish(error: OAuthError.stateMismatch)
-                return
-            }
-        }
-
-        finish(result: params)
-    }
-
-    private func finish(result: [String: String]? = nil, error: Error? = nil) {
-        timeoutTimer?.invalidate()
-        timeoutTimer = nil
-
-        if Self.activeSession === self {
-            Self.activeSession = nil
-        }
-
-        if let continuation = self.continuation {
-            self.continuation = nil
-            if let error {
-                continuation.resume(throwing: error)
-            } else if let result {
-                continuation.resume(returning: result)
-            } else {
-                continuation.resume(throwing: OAuthError.canceled)
-            }
+    private func complete(redirect: URL?, error: Error?) {
+        if let redirect {
+            finish(.success(redirect))
+        } else if let error, (error as? ASWebAuthenticationSessionError)?.code != .canceledLogin {
+            finish(.failure(error))
+        } else {
+            finish(.failure(OAuthError.canceled))
         }
     }
 
-    func cancel() {
-        finish(error: OAuthError.canceled)
+    /// The only resume: `cancel()` and the session's own completion can both arrive.
+    private func finish(_ result: Result<URL, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        session = nil
+        continuation.resume(with: result)
+    }
+
+    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        anchor
     }
 
     // MARK: - URL Parsing

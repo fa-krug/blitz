@@ -111,6 +111,9 @@ struct InstalledAITests {
         statusJSONRecognizesLogin()
         versionKeepsPrereleaseAndBuild()
         await openCodeRunsWithoutToolsAndDeletesItsSession(fixture)
+        await openCodeTakesPicturesAsPrivateFiles(fixture)
+        await anOpenCodeFailureCarriesItsOwnMessage(fixture)
+        await openCodeDiscoveryNeedsVersionTwo(fixture)
         claudeDiscoveryReadsTheCLIsOwnModelList()
         await claudeRunsWithoutToolsOrHistory(fixture)
         await grokRunsWithoutToolsAndDeletesItsSession(fixture)
@@ -146,26 +149,21 @@ struct InstalledAITests {
     }
 
     private static func openCodeCatalogCarriesModelVariants() {
-        let output = """
-            provider/model
-            {
-              "name": "Model",
-              "variants": {
-                "low": {"reasoningEffort": "low"},
-                "high": {"reasoningEffort": "high"}
-              }
-            }
-            provider/plain
-            {
-              "name": "Plain",
-              "variants": {}
-            }
-            """
+        let output = #"""
+            {"location":{"directory":"/w"},"data":[
+            {"id":"model","providerID":"provider","name":"Model",
+            "capabilities":{"input":["text","image"]},"variants":[{"id":"high"},{"id":"low"}]},
+            {"id":"plain","providerID":"provider","name":"Plain",
+            "capabilities":{"input":["text"]},"variants":[]}]}
+            """#
         let models = InstalledAIModel.openCodeCatalog(output)
         expect(
             models.first?.efforts.map(\.id) == ["low", "high"],
             "OpenCode discovery keeps each model's supported reasoning variants")
         expect(models.last?.efforts.isEmpty == true, "models without variants show no effort picker")
+        expect(
+            models.map(\.acceptsImages) == [true, false],
+            "OpenCode discovery reads which models take pictures")
     }
 
     private static func cursorCatalogParsesListModels() {
@@ -218,22 +216,90 @@ struct InstalledAITests {
         let events = await fixture.events(
             kind: .openCode, model: "provider/model", effort: "high")
         expect(events.contains(.text("OpenCode reply")), "OpenCode text reaches the provider stream")
-        expect(events.last == .finished, "OpenCode finishes the provider stream")
-        let arguments = fixture.read("opencode-args.log")
         expect(
-            arguments.contains("--pure") && arguments.contains("--format")
-                && arguments.contains("provider/model") && arguments.contains("--variant")
-                && arguments.contains("high"),
-            "OpenCode runs pure with JSON output, the chosen model and its variant")
+            events.contains(.usage(AIUsage(inputTokens: 9, outputTokens: 2))),
+            "OpenCode's step usage reaches the provider stream")
+        expect(events.last == .finished, "OpenCode finishes the provider stream on a clean exit")
+        let argv = fixture.arguments("opencode-args.log")
+        for flag in ["run", "--standalone", "--format", "json", "--thinking"] {
+            expect(argv.contains(flag), "OpenCode runs with \(flag)")
+        }
+        expect(
+            argv.firstIndex(of: "--agent").map { argv[$0 + 1] } == "blitz"
+                && argv.firstIndex(of: "--model").map { argv[$0 + 1] } == "provider/model#high",
+            "OpenCode runs Blitz's agent with the variant joined to the model")
+        expect(!argv.contains("--file"), "a turn with no picture attaches no file")
         let configuration = fixture.read("opencode-environment.log")
         expect(
-            configuration.contains("\"permission\":\"deny\"")
-                && configuration.contains("\"share\":\"disabled\""),
-            "OpenCode receives deny-all permissions and disabled sharing")
+            configuration.contains("\"agents\":{\"blitz\"")
+                && configuration.contains("\"effect\":\"deny\"")
+                && configuration.contains("\"share\":\"disabled\"")
+                && configuration.contains("\"snapshots\":false"),
+            "OpenCode receives a deny-all agent with sharing and snapshots off")
+        expect(
+            fixture.lastLine("opencode-pwd.log") == fixture.workspace.path,
+            "OpenCode's PWD is the private workspace, which it reads ahead of the real one")
         let deleted = await fixture.awaitFile("deleted.log", containing: "ses_stub")
         if !deleted { print("OpenCode invocations: \(fixture.read("opencode-args.log"))") }
         expect(deleted, "OpenCode deletes the session created for the reply")
+        expect(
+            fixture.read("opencode-args.log").contains(
+                #"["session","delete","ses_stub","--standalone"]"#),
+            "the cleanup runs standalone too")
         fixture.expectPrompt("opencode-prompt.log")
+    }
+
+    private static func openCodeTakesPicturesAsPrivateFiles(_ fixture: Fixture) async {
+        let picture = AIImage(data: Data([0x89, 0x50, 0x4E, 0x47]), mimeType: "image/jpeg")
+        let events = await fixture.events(
+            kind: .openCode, model: "provider/model", effort: nil, images: [picture, picture])
+        expect(events.last == .finished, "a turn with pictures still finishes")
+        let argv = fixture.lastArguments("opencode-args.log", containing: "--file")
+        let files = argv.indices.filter { argv[$0] == "--file" }.map {
+            URL(fileURLWithPath: argv[$0 + 1])
+        }
+        expect(
+            files.count == 2
+                && files.allSatisfy {
+                    $0.lastPathComponent.hasPrefix("blitz-image-") && $0.pathExtension == "jpeg"
+                },
+            "each picture rides as its own --file, named for its type: \(files)")
+        let modes = fixture.read("opencode-files.log").split(separator: "\n").suffix(2)
+        expect(modes == ["600", "600"], "each picture is written 0600 before OpenCode reads it")
+        var removed = !files.isEmpty
+        for file in files {
+            let gone = await fixture.awaitMissing(file)
+            removed = removed && gone
+        }
+        expect(removed, "the pictures are deleted with the turn")
+    }
+
+    private static func anOpenCodeFailureCarriesItsOwnMessage(_ fixture: Fixture) async {
+        let error = await fixture.streamError(kind: .openCode, model: "fails", effort: nil)
+        expect(
+            error?.contains("No provider for fails") == true,
+            "an OpenCode exit that is not clean fails the turn with its stderr: \(error ?? "nil")")
+    }
+
+    private static func openCodeDiscoveryNeedsVersionTwo(_ fixture: Fixture) async {
+        let manager = InstalledAIManager(supportDirectory: fixture.root)
+        await manager.refresh(kind: .openCode).value
+        let status = manager.status(for: .openCode)
+        expect(
+            status.isReady && status.models.map(\.id) == ["provider/model"]
+                && status.models.first?.acceptsImages == true,
+            "OpenCode 2 lists its models through its standalone server")
+        expect(
+            fixture.read("opencode-args.log").contains(#"["api","GET","/api/model","--standalone"]"#),
+            "the catalog comes from the server's model list")
+        setenv("TC_OPENCODE_VERSION", "1.14.2", 1)
+        defer { unsetenv("TC_OPENCODE_VERSION") }
+        await manager.refresh(kind: .openCode).value
+        let old = manager.status(for: .openCode)
+        expect(
+            old.phase == .failed("Blitz needs OpenCode 2. Update OpenCode, then Check Again.")
+                && old.version == "1.14.2" && old.models.isEmpty,
+            "an OpenCode older than 2 fails the check with a message instead of reading signed out")
     }
 
     private static func grokCatalogParsesListedModels() {
@@ -523,7 +589,7 @@ struct InstalledAITests {
             let argv = fixture.lastArguments("claude-args.log")
             return argv.firstIndex(of: "--system-prompt").map { argv[$0 + 1] } ?? ""
         }
-        let allowedAll = "you may call any of them"
+        let allowedAll = "for anything they offer"
         let declineIsFinal = "a call the user declines is final"
         let changesNothing = "nothing may be changed"
         let manual = await boundary(readsOnly: false, webSearch: false)
@@ -531,7 +597,10 @@ struct InstalledAITests {
         expect(
             manual.contains(allowedAll) && manualSearch.contains(allowedAll)
                 && !manual.contains(changesNothing),
-            "outside Plan an armed turn is told it may call any supplied tool")
+            "outside Plan an armed turn is told a supplied tool may do anything it offers")
+        expect(
+            manual.contains("except through them") && manualSearch.contains("except through those"),
+            "and that commands and files are off only outside those tools")
         expect(
             manual.contains(declineIsFinal) && manualSearch.contains(declineIsFinal),
             "and that Blitz may ask first, so a declined call is not retried")
@@ -598,13 +667,15 @@ struct InstalledAITests {
         }
         let config = file("blitz-mcp-\(UUID().uuidString).json", age: 60)
         let prompt = file("blitz-prompt-\(UUID().uuidString).txt", age: 60)
+        let image = file("blitz-image-\(UUID().uuidString).png", age: 60)
         let live = file("blitz-mcp-\(UUID().uuidString).json", age: -60)
         let other = file("notes.txt", age: 60)
         _ = InstalledAIManager(supportDirectory: support)
         let removed = await fixture.awaitMissing(config)
+        let imageRemoved = await fixture.awaitMissing(image)
         expect(
-            removed && !FileManager.default.fileExists(atPath: prompt.path),
-            "a configuration and a prompt left by a turn that never ended are deleted at launch")
+            removed && imageRemoved && !FileManager.default.fileExists(atPath: prompt.path),
+            "a configuration, a prompt and a picture left by a turn that never ended are deleted")
         expect(
             FileManager.default.fileExists(atPath: live.path)
                 && FileManager.default.fileExists(atPath: other.path),
@@ -1029,7 +1100,7 @@ struct InstalledAITests {
             fixture.lastLine("opencode-reader-environment.log") == "from-the-reader",
             "a variable the reader set reaches the tool")
         expect(
-            fixture.lastLine("opencode-environment.log").contains("\"permission\":\"deny\""),
+            fixture.lastLine("opencode-environment.log").contains("\"effect\":\"deny\""),
             "one Blitz sets to keep the tool inside the chat keeps Blitz's value")
     }
 
@@ -1175,7 +1246,8 @@ private final class Fixture {
     func events(
         kind: InstalledAIKind, model: String, effort: String?,
         launch: InstalledAILaunch = InstalledAILaunch(),
-        toolServers: AIToolServerSession? = nil, webSearch: Bool = false
+        toolServers: AIToolServerSession? = nil, webSearch: Bool = false,
+        images: [AIImage] = []
     ) async -> [AIStreamEvent] {
         guard let executable = executables[kind] else { return [] }
         let provider = InstalledCLIProvider(
@@ -1184,7 +1256,7 @@ private final class Fixture {
             toolServers: toolServers)
         do {
             var events: [AIStreamEvent] = []
-            for try await event in provider.stream(request(webSearch: webSearch)) {
+            for try await event in provider.stream(request(webSearch: webSearch, images: images)) {
                 events.append(event)
             }
             return events
@@ -1246,13 +1318,13 @@ private final class Fixture {
         }
     }
 
-    private func request(webSearch: Bool = false) -> AIRequest {
+    private func request(webSearch: Bool = false, images: [AIImage] = []) -> AIRequest {
         AIRequest(
             instructions: "Follow the custom instruction.",
             messages: [
                 AIMessage(role: .user, text: "First question"),
                 AIMessage(role: .assistant, text: "First answer"),
-                AIMessage(role: .user, text: "Final question")
+                AIMessage(role: .user, text: "Final question", images: images)
             ],
             webSearch: webSearch)
     }
@@ -1273,6 +1345,11 @@ private final class Fixture {
     /// The log is appended to, so the newest turn is the last line rather than the first.
     func lastArguments(_ name: String) -> [String] {
         decodeArguments(read(name).split(separator: "\n").last)
+    }
+
+    /// A detached cleanup can append after the turn, so this skips to the turn's own line.
+    func lastArguments(_ name: String, containing flag: String) -> [String] {
+        decodeArguments(read(name).split(separator: "\n").last { decodeArguments($0).contains(flag) })
     }
 
     private func decodeArguments(_ line: Substring?) -> [String] {

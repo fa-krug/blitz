@@ -34,9 +34,6 @@ struct UninstallSearchRoot: Hashable, Sendable {
             base: .userLibrary, relativePath: "Caches", styles: [.bundleID, .displayName]),
         UninstallSearchRoot(
             base: .userLibrary, relativePath: "Logs", styles: [.bundleID, .displayName]),
-        UninstallSearchRoot(base: .userLibrary, relativePath: "Containers", styles: [.bundleID]),
-        UninstallSearchRoot(
-            base: .userLibrary, relativePath: "Group Containers", styles: [.groupContainer]),
         UninstallSearchRoot(
             base: .userLibrary, relativePath: "Application Scripts",
             styles: [.bundleID, .groupContainer]),
@@ -47,7 +44,6 @@ struct UninstallSearchRoot: Hashable, Sendable {
             base: .userLibrary, relativePath: "Saved Application State", styles: [.bundleID]),
         UninstallSearchRoot(base: .userLibrary, relativePath: "HTTPStorages", styles: [.bundleID]),
         UninstallSearchRoot(base: .userLibrary, relativePath: "WebKit", styles: [.bundleID]),
-        UninstallSearchRoot(base: .userLibrary, relativePath: "Cookies", styles: [.bundleID]),
         UninstallSearchRoot(
             base: .userLibrary, relativePath: "Autosave Information", styles: [.bundleID]),
         UninstallSearchRoot(base: .userLibrary, relativePath: "LaunchAgents", styles: [.bundleID]),

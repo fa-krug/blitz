@@ -25,28 +25,30 @@ final class WindowSwitchCoordinator {
     }
 
     func applyEnabled() {
-        appIndex.setCommandsVisible([.switchWindows], settings.navigationEnabled)
+        appIndex.setCommandsVisible(
+            [.switchWindows, .switchWindowsBackwards], settings.navigationEnabled)
         guard !settings.navigationEnabled else { return }
         session.reset()
         if palette.mode == .switchWindows { palette.prepare(mode: .launcher) }
     }
 
-    func show() {
+    func show(backwards: Bool = false) {
         guard settings.navigationEnabled else { return }
         guard Permissions.ensureAccessibility() else {
             Task { await self.reportPermissionFailure() }
             return
         }
-        if paletteCoordinator.isShowing(.switchWindows) { return step() }
+        if paletteCoordinator.isShowing(.switchWindows) { return step(by: backwards ? -1 : 1) }
         disarmSwitchOnRelease()
         paletteCoordinator.togglePalette(mode: .switchWindows)
     }
 
-    /// The first step lands on the window behind the current one, which the list opens on.
-    private func step() {
+    /// The list opens on the current window, so a first step lands behind it, or back on the last.
+    private func step(by offset: Int) {
         let count = session.filtered.count
         guard count > 0 else { return }
-        palette.selection = (palette.selection + 1) % count
+        palette.selection = WindowSwitchOrder.step(
+            from: palette.selection, by: offset, count: count)
         palette.followToken = UUID()
         armSwitchOnRelease()
     }
@@ -122,6 +124,19 @@ final class WindowSwitchCoordinator {
             return core.showMessage("Couldn’t minimize “\(entry.displayTitle)”", tone: .danger)
         }
         session.markMinimized(entry.handle)
+    }
+
+    func hideApplication(_ entry: WindowSwitchEntry) {
+        guard Permissions.ensureAccessibility() else {
+            Task { await self.reportPermissionFailure() }
+            return
+        }
+        guard let element = liveElement(for: entry) else {
+            return core.showMessage("Couldn’t hide \(entry.appName)", tone: .danger)
+        }
+        // Restoring focus would reactivate, and so unhide, an app hidden from in front.
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        if !element.app.hide() { AXWindowAccess.setHidden(true, application: element.application) }
     }
 
     private func liveElement(for entry: WindowSwitchEntry) -> WindowSwitchSweep.Element? {

@@ -185,6 +185,7 @@ P="Blitz/Features/Contacts/Model/ContactToolCatalog.swift \
    Blitz/Features/Notes/Model/NoteToolCatalog.swift \
    Blitz/Features/Clipboard/Model/ClipboardToolCatalog.swift \
    Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+   Blitz/Platform/Images/ImageDerivative.swift \
    Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
    Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
    Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -243,6 +244,7 @@ run agent-wait-test        $A/AgentWait.swift $A/AgentApprovals.swift $A/AgentWa
 # `Q` is the URL detector a drag payload builds its link with, rather than a second one.
 Q=Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift
 run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -250,15 +252,30 @@ run clipboard-test         Blitz/Features/Clipboard/Model/ClipboardStore.swift \
                            Blitz/Features/Clipboard/Model/ColorFormat.swift \
                            Blitz/Features/Clipboard/Model/ColorSpaces.swift \
                            Blitz/Features/Clipboard/Model/ClipDragPayload.swift $Q
-run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q $T
-run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q $T
+run clipboard-search-test  Blitz/Features/Clipboard/Model/*.swift $Q $T \
+                           Blitz/Platform/Images/ImageDerivative.swift
+run paste-sequence-test    Blitz/Features/Clipboard/Model/*.swift $Q $T \
+                           Blitz/Platform/Images/ImageDerivative.swift
 run clipboard-text-test    Blitz/Features/Clipboard/Model/*.swift $Q $T \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Service/ClipboardTextExtractor.swift \
                            Blitz/Features/Clipboard/Service/ClipboardTextIndexer.swift \
                            Blitz/Features/Clipboard/Service/ClipboardTextWorker.swift \
                            Blitz/Platform/ProcessExit.swift
+run clipboard-thumbnail-test Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
+                           Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
+                           Blitz/Features/Clipboard/Model/ColorValue.swift \
+                           Blitz/Features/Clipboard/Model/ColorFormat.swift \
+                           Blitz/Features/Clipboard/Model/ColorSpaces.swift \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Platform/Images/ImageThumbnail.swift \
+                           Blitz/Platform/Images/ThumbnailCache.swift
 run pasteboard-test        Blitz/Platform/PasteboardFiles.swift Blitz/Platform/PasteboardSensitivity.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -270,6 +287,7 @@ run pasteboard-test        Blitz/Platform/PasteboardFiles.swift Blitz/Platform/P
 run index clipboard-file-performance \
                            Blitz/Platform/PasteboardFiles.swift Blitz/Platform/PasteboardSensitivity.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -277,6 +295,11 @@ run index clipboard-file-performance \
                            Blitz/Features/Clipboard/Model/ColorFormat.swift \
                            Blitz/Features/Clipboard/Model/ColorSpaces.swift \
                            Blitz/Features/Clipboard/Service/ClipboardManager.swift
+run index clipboard-thumbnail-performance \
+                           Blitz/Platform/ProcessExit.swift \
+                           Blitz/Platform/Images/ImageThumbnail.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
+                           Blitz/Platform/Images/ThumbnailCache.swift
 run emoji-test             Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Emoji/Model/EmojiGridGeometry.swift \
                            Blitz/Features/Emoji/Model/EmojiKeywords.swift \
@@ -329,6 +352,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -339,6 +363,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run command-escape-tap-test Blitz/Palette/CommandEscapeTap.swift
 run palette-escape-test    Blitz/Palette/PaletteMode.swift \
                            Blitz/Palette/PaletteEscapeAction.swift \
                            Blitz/Palette/CommandEscapeTap.swift \
@@ -351,6 +376,7 @@ run palette-navigation-test Blitz/Palette/PaletteState.swift \
                            Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Emoji/Model/EmojiCatalog.swift \
                            Blitz/Features/Clipboard/Model/ClipboardStore.swift \
+                           Blitz/Platform/Images/ImageDerivative.swift \
                            Blitz/Features/Clipboard/Model/ClipboardRichFormat.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFilter.swift \
                            Blitz/Features/Clipboard/Model/ClipboardFileKind.swift \
@@ -403,6 +429,7 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run hid-key-mapping-test   Blitz/Features/HotKeys/Model/HIDKeyMapping.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
                            Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \
@@ -526,6 +553,10 @@ run custom-command-test    Blitz/Platform/PseudoTerminal.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift \
                            Blitz/Features/CustomCommands/Model/RaycastScriptImport.swift \
                            Blitz/Features/CustomCommands/Service/ShellCommandRunner.swift
+run uninstall-coordinator-test Blitz/Features/Uninstall/Model/UninstallTarget.swift \
+                           Blitz/Features/Uninstall/Model/UninstallPlan.swift \
+                           Blitz/Features/Uninstall/Model/UninstallProtection.swift \
+                           Blitz/Features/Uninstall/UI/UninstallCoordinator.swift
 run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift \
                            Blitz/Features/Uninstall/Model/UninstallSearchRoot.swift \
                            Blitz/Features/Uninstall/Model/UninstallRules.swift \
@@ -854,6 +885,7 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \
@@ -873,6 +905,7 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/JSONValue.swift \

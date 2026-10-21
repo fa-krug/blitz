@@ -22,8 +22,9 @@
 - **Paste Sequentially never promotes, and its walk is frozen at the first press.** `PasteSequence`
   keeps every entry's id, newest first, and resolves each against the live history, so a promotion
   cannot repeat or skip an entry and a deleted one is passed over rather than pasted.
-- **`Model/ClipboardStore.swift` keeps to Foundation plus SQLite3 and no other app source**, so
-  `clipboard-test` can compile it standalone. It uses `isolated deinit` for its SQLite teardown.
+- **`Model/ClipboardStore.swift` keeps to Foundation plus SQLite3, and outside the clipboard's own
+  models to `Platform/Images/ImageDerivative.swift`**, so `clipboard-test` can compile it
+  standalone. It uses `isolated deinit` for its SQLite teardown.
 - A database that cannot be opened is deleted and recreated. That is sound because a history is
   captured rather than authored, and there is no UI for an unavailable clipboard — `QuicklinkStore`
   deliberately does the opposite. It is **not** a licence to treat the file as disposable: it lives in
@@ -101,6 +102,11 @@ the cap, and even a rejected modern file URL suppresses the legacy filenames fal
 re-capturing Blitz's own writes, every write stamps a private `internalType` marker on the
 pasteboard and the poller skips anything carrying it.
 
+A ⌘C Blitz sends to read a selection can't carry that marker, since the other app writes it.
+`pauseCapture()` and `resumeCapture()` bracket that borrow instead: the poller skips every tick in
+between, and the restore's baseline keeps the copy from being recorded once it resumes.
+`TextInjector` refuses a second borrow while one is in flight, so the pause is never nested.
+
 `stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
 `isCapturing` flag that `prepareForBlitzPasteboardMutation` reads — so a paste Blitz performs
 itself does not drain the pasteboard into history either.
@@ -125,7 +131,22 @@ in-memory history).
 
 Image capture (TIFF→PNG re-encode + blob write) runs off the main actor via detached tasks; row
 inserts, original-text search, and pruning stay on the main actor.
-Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG and marker.
+Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG, its file URL
+and marker. The file URL is what a terminal pastes, as the path, since it ignores image data; there
+is deliberately no `.string`, which a rich text field would take over the image.
+
+**Tiles and previews decode a copy, not the blob.** A PNG can't decode partially, so a 64px tile of a
+6K screenshot would cost its full bitmap. The first draw of an owned image has `ClipboardTextHelper`
+write the `ImageDerivative` copy it needs, 256px for a row or 1080px for the preview, to
+`images/.thumbnails/` (excluded from backup); later draws decode those. Without a readable copy — a
+failed or timed-out helper, an original no larger than the copy, or a size past 1080px — the app
+decodes the original itself, unless the tile was scrolled away first. The preview cache is 8 MB, like the rows', since a preview is a copy.
+Copies are made and deleted on one serial `ImageDerivative.queue`, so a copy's delete waits out the
+copy in flight; the blob itself is still deleted at once. The helper's wait runs on that queue, off
+the cooperative pool, with a 10 s deadline and the caller's cancellation. `load` sweeps copies whose
+blob is gone, which a quit before the queue ran can leave. Copies are keyed by the blob's whole file
+name. A restored backup's images are adopted into `images/`, so they get copies too; a Raycast
+import's stay where Raycast keeps them and, like any image outside `images/`, never do.
 
 **A backup reads the whole table, not `items`.** `forEachStoredItem(inDatabaseAt:)` is `nonisolated`
 and opens a second connection, because the resident window stops at 1000 rows while the table is

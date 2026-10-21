@@ -267,6 +267,19 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   search, so `boundedContext` can never separate a stored call from its result.
 - **Every HTTP request uses a private ephemeral `URLSession` with no URL cache.** Provider traffic must
   not create a second credential or response cache on disk.
+- **A refusal shows what the provider said.** `HTTPAIProvider` reads a non-200 body before the turn
+  fails, up to `AIProviderFailure.bodyLimit` (8,000 bytes) and for at most five seconds, and the
+  failed reply is the status's own line with the provider's message under it.
+  `AIProviderFailure.providerMessage` finds that message in OpenAI's shape and its copies',
+  Anthropic's, Gemini's array, vLLM's and OpenRouter's nested `metadata.raw`; a plain-text body is
+  shown as sent, an HTML error page is left out wherever it sits, and a JSON body the cap cut gives up
+  only a message that is still whole. The connection's key, bearer tokens and key-shaped strings are
+  replaced with `[redacted]`, and then the message is cut at `messageLimit` (600 characters). A key
+  under eight characters is redacted only as a whole word, so it cannot eat into a longer one; a
+  local server's placeholder key is redacted like any other. A mid-stream error is treated the same
+  way: the decoder is handed the key, an Anthropic `error` event shows its message under its line,
+  and an OpenAI-compatible one reads through `metadata.raw` too, or says the provider stopped the
+  response when there is no sentence to show.
 - **Wire shapes live in `Model/`, where a harness reaches them.** `ai-provider-test` compiles the
   shipped provider models and pins endpoints, request bodies, stream parsing, persistence repair,
   Codex protocol framing and both CLI routes' MCP launch encodings. Request bodies are
@@ -298,9 +311,10 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   turn whose server is not handed over, or under a managed MCP policy.
   Grok runs with `--deny *`,
   `dontAsk` permissions and a workspace sandbox, and never `--always-approve`, so a user's always-approve
-  config cannot arm tools for this route. OpenCode runs `--pure` with deny-all permissions, disabled
-  sharing and a private working directory. Cursor runs `agent -p --mode ask` with `--trust` against
-  Blitz's private workspace and never `--force` / `--yolo` / `--approve-mcps`; ask mode blocks edits.
+  config cannot arm tools for this route. OpenCode 2 runs `--standalone`, so its private server
+  takes Blitz's inline configuration, as a `blitz` agent whose trailing deny-all rule drops every
+  tool from the request, with sharing and snapshots off and a private working directory. Cursor
+  runs `agent -p --mode ask` with `--trust` against Blitz's private workspace and never `--force` / `--yolo` / `--approve-mcps`; ask mode blocks edits.
   Each deletes the session or chat it created once the child exits, and Blitz never reaches into the
   user's own config to do it. **Only Claude keeps the user's MCP servers out of the process**, through
   `--strict-mcp-config` — whether the config it names is empty or Blitz's own — and even that
@@ -308,17 +322,19 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   on that route the organization's decision; its Providers page says so.
   Grok, OpenCode and Cursor load the global config either way,
   because their configs merge with no opt-out; what refuses the call is `--deny *` for Grok,
-  `permission: deny` for OpenCode and withheld MCP approval for Cursor. Cursor's is the only one resting
-  on an approval prompt rather than an explicit deny, which is why its Providers page says so and the
+  the `blitz` agent's deny-all rule for OpenCode and withheld MCP approval for Cursor. Cursor's is
+  the only one resting on an approval prompt rather than an explicit deny, which is why its Providers page says so and the
   others do not. That is also why none of the three may be handed a server: there is no way to offer
   one without offering the reader's own. Only Claude searches the web, and only on a turn whose
   web-search toggle is on: `--tools WebSearch` hands it that one built-in, never WebFetch. Unarmed,
   `--allowedTools WebSearch` and `--permission-mode dontAsk` replace the deny-all, which would
   outrank the allow, so nothing else runs whatever the reader's default mode; `--max-turns` rises
   to 6 for a search and an answer. Armed, the `--settings` rules add `allow: [WebSearch]` beside the
-  ask rules, and the boundary prompt names WebSearch beside the MCP tools. Only Claude also
-  takes images: every Claude turn is one `--input-format stream-json` user message, the newest
-  question's pictures as base64 `image` blocks beside the framed prompt. Claude also runs with
+  ask rules, and the boundary prompt names WebSearch beside the MCP tools. Only Claude and
+  OpenCode take images: every Claude turn is one `--input-format stream-json` user message, the
+  newest question's pictures as base64 `image` blocks beside the framed prompt. OpenCode gets the
+  same pictures as private `0600` files in the workspace, one `--file` each, and only for a model
+  whose catalog entry lists `image` input. Claude also runs with
   `--thinking-display summarized` — a hidden flag, and the only switch that works: a `-p` run forces
   its display to `omitted` unless one is named explicitly, and the `showThinkingSummaries` setting
   is read only by an interactive session. Without it Sonnet and Opus stream every thinking block
@@ -426,7 +442,7 @@ custom OpenAI-compatible route.
 | Codex | installed `codex app-server` | user's Codex account |
 | Claude | installed `claude -p` | user's Claude login |
 | Grok | installed `grok --prompt-file` | user's Grok login |
-| OpenCode | installed `opencode run` | providers already configured in OpenCode |
+| OpenCode | installed `opencode run --standalone` (OpenCode 2) | providers already configured in OpenCode |
 | Cursor | installed `agent -p --mode ask` | user's Cursor login |
 | OpenAI API | OpenAI Chat Completions | `https://api.openai.com/v1` |
 | Anthropic Claude | Anthropic Messages | `https://api.anthropic.com` |
@@ -443,13 +459,19 @@ Each connection has an ordered, deduplicated list of exact model identifiers. Wh
 Blitz asks the configured provider for the models available to the entered key and uses the result
 to list the models the user can add, which typing filters and ranks. A catalog can run to hundreds,
 so the list shows ten at a time with a Show More row. Selected models stay visible above the list and
-drop out of it. Discovery is debounced,
-cacheless and never persists the typed key. A
+drop out of it. A catalog field Blitz cannot read — a gateway's `"reasoning": true` where OpenRouter
+sends an object — is dropped and the model kept, so one odd entry never empties the list. Discovery is
+debounced, cacheless and never persists the typed key. A
 custom gateway may not implement a model-list endpoint, so exact identifiers can always be entered
-manually. Blitz does not ship or guess an API catalog that can become stale. Codex gets its models
-and reasoning efforts from `model/list`; OpenCode gets identifiers and model-specific variants from
-`opencode models --pure --verbose`. Claude answers an `initialize` control request — written to a
-stream-json `-p` run that then gets no prompt, so no model is called — with its own `/model` list;
+manually. A gateway can also list an incomplete catalog under any preset, so search offers the typed
+identifier ("Use … anyway") whenever no loaded model is named by it exactly, even beside partial
+matches; Return still adds only an exact catalog match (`AIModelDiscovery.exactMatch`, an ID before a
+display name), so a typed prefix never becomes a stored identifier. Blitz does not ship or guess an
+API catalog that can become stale. Codex gets its models and reasoning efforts from `model/list`;
+OpenCode gets identifiers, variants and input modalities from its server's `model.list`, through
+`opencode api GET /api/model --standalone`, and an OpenCode older than 2 fails the check with a
+message rather than reading as signed out. Claude answers an `initialize` control request — written
+to a stream-json `-p` run that then gets no prompt, so no model is called — with its own `/model` list;
 `InstalledAIModel.claudeCatalog` keeps one row per resolved model (dropping `default`, which restates
 another), names each by the version its alias points at today ("Claude Opus 5.5"), and takes each
 one's `supportedEffortLevels`. The version is in `description` before a " · " on an older CLI and in
@@ -463,10 +485,18 @@ and `None`. `takesThinkingField` decides who gets that pair: an OpenAI-shaped pr
 not that preset's own, because a preset pointed away from its own API is a gateway, and a gateway is
 the only destination Blitz can offer the switch to honestly. Picking `None` sends
 `"thinking": {"type": "disabled"}`, which is how DeepSeek and the endpoints that copied its contract
-answer without reasoning first. A vendor API is never offered the pair and so is never sent a field it
-does not define — which matters precisely because the preset alone says nothing about the destination
-when every base URL is editable. Only `None` is ever written, so every other body is the one it always
-was, and the choice rides in `AIModelSelection.effort` like every other route's.
+answer without reasoning first. A vendor API is never offered the pair, nor levels declared while its
+base URL pointed elsewhere, and so is never sent a field it does not define — which matters precisely
+because the preset alone says nothing about the destination when every base URL is editable. A
+gateway's model may also carry levels the reader declares in the connection editor (`minimal`, `low`,
+`medium`, `high`, never inferred), kept between `Default` and `None`; a picked level is sent as
+OpenAI's `reasoning_effort`. OpenRouter is left out at any URL (`takesDeclaredLevels`), because its
+catalog already names each model's levels. Changing a gateway's base URL drops its declarations
+(`dropDeclaredLevels`), since they described the old destination. A chat and a Quick Action keep
+their own effort, so `AIProviderFactory` sends only one the model still offers (`offeredEffort`): an
+unticked level, or one left behind by a changed provider, is dropped rather than sent. With nothing
+declared the only field ever written is the `None` one, so every other body is the one it always was,
+and the choice rides in `AIModelSelection.effort` like every other route's.
 
 ## Provider interface
 
@@ -487,8 +517,8 @@ content transformations without a second factory.
 
 `AIModelOption.groupedCatalog` is the Settings picker catalog for both AI and Quick Actions. Provider
 sections, ordering and model labels therefore cannot drift between the panes. Each route stores its
-own complete `AIModelSelection`, including the selected reasoning effort for installed models and
-OpenRouter models that offer one.
+own complete `AIModelSelection`, including the selected reasoning effort for installed models,
+OpenRouter models that offer one and gateway models.
 
 `AppleIntelligenceProvider` is the only route whose model is a local process. It builds a `Transcript`
 from the turns ahead of the newest user message and streams the rest as the prompt, so a conversation
@@ -514,10 +544,10 @@ while a response streams — an empty composer sends nothing, so the pill never 
 state. While a question waits the field's placeholder is "Answer the question…", and Stop is ⌘K →
 Stop Response (`⌘.`). The header's trailing model
 switcher opens by click or ⌘P, uses the same in-window menu control as Clipboard's type filter and
-changes the chat route for the next message. For installed routes and OpenRouter models whose catalog
-reports the capability, it also shows the supported reasoning efforts and changes the chat effort for
-the next message. Other API routes keep their provider default because their model catalogs expose no
-portable effort contract. Neither change interrupts a response already streaming; stopping one is
+changes the chat route for the next message. For installed routes, OpenRouter models whose catalog
+reports the capability and gateways (`Default`, `None` and any declared levels), it also shows the
+supported reasoning efforts and changes the chat effort for the next message. A vendor API keeps its
+provider default because its model catalog exposes no portable effort contract. Neither change interrupts a response already streaming; stopping one is
 the pill's job, so the header never has to fit a third control beside the switcher.
 
 The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Agent
@@ -926,8 +956,8 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
   rows, the call cap, a custom provider's access without an account, and when a chat's thread is
   resumed and when it starts afresh),
   `installed-ai-test` (Claude/Grok/OpenCode/Cursor flags, prompt
-  framing, streaming and cleanup, and Claude's private MCP configuration with the hosted server's
-  timeout, control channel, round cap and managed-policy branch, an `ask_user` call drawing no row,
+  framing, streaming and cleanup, OpenCode's version gate, picture files and finish on a clean
+  exit, and Claude's private MCP configuration with the hosted server's timeout, control channel, round cap and managed-policy branch, an `ask_user` call drawing no row,
   the boundary a Plan turn is told,
   a reader's variables against Blitz's own, and a set command
   path that runs or fails) and `apple-intelligence-test` (status copy, snapshot deltas,
@@ -958,7 +988,8 @@ the tool that was edited — Codex by stopping its server, which restarts on dem
 commands are never installed by Blitz; Settings links to their own install docs and offers a sign-in
 command to copy. `InstalledAIManager` probes Claude, Grok, OpenCode and Cursor off-main, in parallel.
 Claude's auth status gates an `initialize` control request, and `InstalledAIModel.claudeCatalog` builds
-its model list from the answer. OpenCode's successful model list is both its auth check and catalog.
+its model list from the answer. OpenCode must be version 2 or later; past that, its successful
+model list is both its auth check and catalog, and an empty one reads as signed out.
 Grok's `models` output is the catalog, but a signed-out CLI still exits 0 and prints that catalog under
 "You are not authenticated." — that banner is the auth check, not the exit status. Cursor's
 `status --format json` gates `--list-models`.
@@ -996,7 +1027,8 @@ thread, and a reset, a relaunch or the idle shutdown drops them all; nothing of 
 The runner streams agent-message deltas, plus `item/started` for the reasoning and web-search items
 that feed the bubble's status line. System messages become developer instructions alongside Blitz's
 fixed boundary, which permits only web search when it is on and the MCP tools an armed turn
-supplies, and tells a follow-up to search again rather than ask the reader for a link.
+supplies — for anything they offer, since the shell tool is off by flag — and tells a follow-up to
+search again rather than ask the reader for a link.
 Cancellation interrupts the active turn, including one the server has started but
 not yet named: Stop arms that thread, and whichever of `turn/started` or the `turn/start` response
 names the turn first spends a single `turn/interrupt` on it.
@@ -1017,13 +1049,16 @@ Grok uses `streaming-messages-json` and `--effort`, with `--deny *` so tools can
 user's Grok config is always-approve; it captures the session id, then calls `grok sessions delete`.
 An error result omits `result` and carries the cause in `errors`; that text is the failure, not
 Claude's missing-`result` fallback.
-OpenCode runs pure with an inline deny-all configuration and passes the selected
-model variant through `--variant`; it captures the returned session identifier, then calls
-`opencode session delete` after the process exits. Cursor runs ask mode with `--trust`,
+OpenCode runs `--standalone` with the `blitz` agent from its inline configuration, joins a
+variant to the model as `provider/model#variant`, and passes `--thinking` so reasoning reaches the
+fold; `step_finish` usage carries cache reads and writes, reasoning tokens and cost. `PWD` is the
+workspace, because `run` takes its directory from it ahead of the real one. Its JSON stream has no
+closing line, so its turn finishes on a clean exit once stdout has closed; it captures the session
+identifier, then calls `opencode session delete --standalone`. Cursor runs ask mode with `--trust`,
 `stream-json` and `--stream-partial-output`, never `--force` / `--yolo` / `--approve-mcps`, then removes
 the local chat under `~/.cursor/chats/<workspace>/<session_id>` because the CLI has no delete-chat.
-A turn finishes on its own completion frame; both cleanups run detached after the child exits, so
-housekeeping never holds the composer shut.
+Every other turn finishes on its own completion frame; the cleanups run detached after the child
+exits, so housekeeping never holds the composer shut.
 Cancellation terminates the child process; only one installed-CLI turn can own a runner at a time.
 
 ## Web search and attachments
@@ -1041,7 +1076,7 @@ transport code at all.
 | Codex | thread-scoped `web_search` config | `image` input part | never — the app-server takes no document part | Blitz's servers, added as launch overrides; the reader's own are disabled by name |
 | Claude command | its built-in `WebSearch`, alone: `--tools WebSearch` plus an allow rule | base64 `image` block in its stream-json user message | never | Blitz's servers, through `--strict-mcp-config` and a private config file — an empty one when there are none, and neither flag under a managed MCP policy |
 | Grok command | never | never | never | the global config still loads — `--deny *` refuses the call |
-| OpenCode command | never | never | never | the global config still loads — `permission: deny` refuses the call |
+| OpenCode command | never | a private file per picture, through `--file`, only for models whose catalog lists `image` input | never | the global config still loads — the `blitz` agent's deny-all rule drops every tool |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
 | OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
 | OpenAI | not offered | `image_url` part, assumed supported | `file` part with `filename` and a `file_data` data URL | `tools` + `role: "tool"` turns |
@@ -1210,6 +1245,10 @@ deliberately cannot reach: every installed CLI route prepends its own instructio
 commands or touch files, and never to invoke a tool beyond the MCP tools an armed Codex or Claude
 turn supplies — on a Claude Plan turn, only to look ([Agent](agent.md#routes)). That is a sandbox
 boundary on a local CLI, not Blitz describing itself, and a user switch must not be able to lift it.
+Outside Plan, an armed turn's instruction lets those MCP tools do anything they offer, commands and
+files included: the CLI's own tools are already off by flag (`--tools ""` for Claude,
+`features.shell_tool=false` for Codex) and every call passes consent, so forbidding it there would
+only make the model refuse a server the user chose.
 Nor does it reach Plan's instruction, which is the chat's mode speaking, not a prompt: a Plan turn
 carries it with the switch off ([Plans](#plans)). The memory block is the same: Read Memory and
 the chat's Use Memory are its switches ([Agent](agent.md#memory)).

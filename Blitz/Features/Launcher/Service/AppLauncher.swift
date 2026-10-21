@@ -87,7 +87,7 @@ enum AppLauncher {
     @MainActor
     @discardableResult
     static func quit(bundleID: String, force: Bool = false) -> Bool {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let running = runningApplications(bundleID: bundleID)
         for app in running {
             if force { app.forceTerminate() } else { app.terminate() }
         }
@@ -100,33 +100,38 @@ enum AppLauncher {
     /// A refused quit — a save sheet left standing — relaunches nothing.
     @MainActor
     static func restart(bundleID: String, url: URL) async {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let running = runningApplications(bundleID: bundleID)
         guard !running.isEmpty, await quitAwaitingExit(running) else { return }
         try? await launch(url)
     }
 
-    /// Observes before it terminates, so an instance that exits at once can't outrun the wait.
+    /// True once nothing with the bundle ID is left running, which includes nothing running at all.
+    @MainActor
+    static func quitAwaitingExit(bundleID: String) async -> Bool {
+        await quitAwaitingExit(runningApplications(bundleID: bundleID))
+    }
+
+    @MainActor
+    private static func runningApplications(bundleID: String) -> [NSRunningApplication] {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+    }
+
+    /// Polls rather than observes: workspace exit notifications skip background and menu-bar apps.
     @MainActor
     private static func quitAwaitingExit(_ apps: [NSRunningApplication]) async -> Bool {
-        let center = NSWorkspace.shared.notificationCenter
-        let (exits, continuation) = AsyncStream.makeStream(of: pid_t.self)
-        let observer = center.addObserver(
-            of: NSWorkspace.shared, for: NSWorkspace.DidTerminateApplicationMessage.self
-        ) { continuation.yield($0.application.processIdentifier) }
-        defer { center.removeObserver(observer) }
-
-        var pending = Set(apps.map(\.processIdentifier))
+        guard !Task.isCancelled else { return false }
         for app in apps { app.terminate() }
 
-        let grace = Task {
-            try? await Task.sleep(for: exitGrace); continuation.finish()
+        let deadline = ContinuousClock.now + exitGrace
+        while apps.contains(where: { !$0.isTerminated }) {
+            guard !Task.isCancelled, ContinuousClock.now < deadline else { return false }
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                return false
+            }
         }
-        defer { grace.cancel() }
-        for await pid in exits {
-            pending.remove(pid)
-            if pending.isEmpty { return true }
-        }
-        return false
+        return !Task.isCancelled
     }
 
     /// Finder is never a Quit All target: `terminate()` only makes it relaunch.

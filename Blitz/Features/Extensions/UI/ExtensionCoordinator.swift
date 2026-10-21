@@ -346,6 +346,9 @@ final class ExtensionCoordinator {
     /// True while an OAuth authorization flow is actively awaiting callback.
     var isAuthorizing: Bool { extensions.isAuthorizing }
 
+    /// The visible palette, which a sign-in window is presented over.
+    var paletteWindow: NSWindow? { paletteCoordinator.anchorView?.window }
+
     func closeMainWindow() {
         paletteCoordinator.hidePalette(restoreFocus: false)
     }

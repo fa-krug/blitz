@@ -250,6 +250,24 @@ if (command === "opencode" && args.slice(0, 2).join(" ") === "session delete") {
   process.exit(0);
 }
 
+if (command === "opencode") {
+  if (args.includes("--version")) {
+    console.log(process.env.TC_OPENCODE_VERSION || "2.0.4");
+    process.exit(0);
+  }
+  if (args.slice(0, 3).join(" ") === "api GET /api/model") {
+    console.log(JSON.stringify({
+      location: { directory: process.cwd() },
+      data: [{
+        id: "model", providerID: "provider", name: "Model",
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        variants: [{ id: "high" }],
+      }],
+    }));
+    process.exit(0);
+  }
+}
+
 if (command === "agent") {
   if (args.includes("--version")) {
     console.log("2026.1.0");
@@ -312,7 +330,17 @@ if (model === "oversized-frame") {
   process.exit(0);
 }
 
-if (command === "opencode") {
+if (command === "opencode" && model === "fails") {
+  // v2 reports a failed turn on stderr and exits with no closing line on stdout.
+  fs.writeSync(2, "Error: No provider for fails\n");
+  sleep(100);
+  process.exit(1);
+} else if (command === "opencode") {
+  record("opencode-pwd.log", process.env.PWD ?? "");
+  args.forEach((arg, index) => {
+    if (arg !== "--file") return;
+    record("opencode-files.log", (fs.statSync(args[index + 1]).mode & 0o777).toString(8));
+  });
   console.log(JSON.stringify({ type: "step_start", sessionID: "ses_stub", part: {} }));
   console.log(JSON.stringify({
     type: "text", sessionID: "ses_stub", part: { text: "OpenCode reply" }
