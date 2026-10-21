@@ -243,7 +243,8 @@ struct WindowCommandTests {
         var overlapping = false
         for i in quarters.indices {
             for j in quarters.indices where j > i {
-                if !quarters[i].intersection(quarters[j]).isEmpty { overlapping = true }
+                let shared = quarters[i].intersection(quarters[j])
+                if !shared.isEmpty { overlapping = true }
             }
         }
         expect(!overlapping, "quarters never overlap")

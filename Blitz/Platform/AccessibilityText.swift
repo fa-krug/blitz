@@ -55,7 +55,7 @@ enum AccessibilityText {
             let value,
             CFGetTypeID(value) == AXUIElementGetTypeID()
         else { return nil }
-        let element = value as! AXUIElement
+        let element = unsafeDowncast(value, to: AXUIElement.self)
         AXUIElementSetMessagingTimeout(element, timeout)
         return element
     }

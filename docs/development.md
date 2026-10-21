@@ -157,13 +157,16 @@ already-running server does not re-read `.compile`.
 the generated files and the two off-limits files in `DesignSystem/Scrolling/`. The config sticks to
 rules that catch defects and stays quiet about style, which is the formatter's business. It does not
 lint comments: the comment policy in [standards.md](standards.md#comments) is deliberately not among
-its rules. Two choices worth knowing:
+its rules. Three choices worth knowing:
 
 - `empty_count` is **disabled**. `PaletteRowIndex` has a `count` but no `isEmpty`, so the rule's
   rewrite of `count == 0` to `isEmpty` does not compile on it.
-- `force_try` is an error; `force_cast` only warns, because the AX bridges cast a `CFTypeRef` to
-  `AXUIElement` or `AXValue` after checking its `CFGetTypeID`, and `as?` on a CF type does not
-  compile.
+- `force_try` and `force_cast` are errors. The AX bridges cast a `CFTypeRef` to `AXUIElement` or
+  `AXValue` after checking its `CFGetTypeID` with `unsafeDowncast`, since `as?` on a CF type does
+  not compile.
+- `optional_data_string_conversion` is **disabled**. `String(decoding:as:)` is the deliberate choice
+  for process output, byte-truncated text and fetched pages: one invalid byte becomes U+FFFD
+  instead of losing the whole string.
 
 `line_length` warns at 130 characters, a backstop above the formatter's 110-character code line; a
 comment's own cap is 100. Errors block, warnings do not. No workflow runs this script;
