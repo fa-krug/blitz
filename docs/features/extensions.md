@@ -80,6 +80,9 @@ Two conventions make the Raycast component surface expressible in a tree:
 - **`{"$fn": "<nodeId>:<propName>"}`** — function props become dispatchable handles. The handler table
   is rebuilt on every commit, so a dispatch always reaches the callback from the newest render.
 
+Only the active `__screen` crosses in full: a screen covered by a pushed one keeps its React state but
+arrives as an empty stub, and a commit whose serialized tree matches the last one is not sent at all.
+
 ### Why JavaScriptCore
 
 JavaScriptCore ships with macOS: embedding it costs **zero binary size** and no vendored C. QuickJS
@@ -120,9 +123,10 @@ same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node
 
 Two host-call flavours:
 
-- **Async** (`invoke`) for anything that needs the main actor — clipboard, toasts, window control,
-  `fetch`, `exec`, `oauth`. Swift answers later through `__blitz.settle`, so the JS thread never blocks on the
-  UI.
+- **Async** (`invoke`) for everything else. Swift answers later through `__blitz.settle`, so the JS
+  thread never blocks on the UI. Calls that touch UI state — clipboard, toasts, window control,
+  `oauth` — run on the main actor; `fetch` (except over a Unix socket), `dns` and async `exec` output
+  are answered off it through `performOffMain`, so a large response never encodes on main.
 - **Blocking** (`invokeSync`) for the synchronous Node shims only — `fs.readFileSync`,
   `execSync`, `createHash`, `gunzipSync`. Safe because Swift services these entirely on the JS thread;
   nothing there touches the main actor, so a blocking answer cannot deadlock.

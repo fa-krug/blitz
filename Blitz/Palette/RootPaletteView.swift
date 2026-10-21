@@ -143,10 +143,8 @@ struct RootPaletteView: View {
 
     /// The running command's rendered screen, flattened. `.empty` until the first commit lands.
     private var extensionScreen: ExtensionScreen {
-        guard vm.mode == .extensionCommand, case .rendered(let tree) = extensions.state else {
-            return .empty
-        }
-        return ExtensionScreen(tree: tree, query: vm.query)
+        guard vm.mode == .extensionCommand else { return .empty }
+        return extensions.screen(query: vm.query)
     }
 
     private func handleFormReturn(_ press: KeyPress) -> KeyPress.Result {

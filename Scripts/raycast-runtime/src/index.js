@@ -56,11 +56,18 @@ class Session {
     this.surface = null;
     this.navigationDepth = 1;
     this.navigation = {};
+    this.lastTree = null;
   }
 
   mountView(element) {
     this.surface = new Surface(
-      (tree) => this.host.render(this.id, JSON.stringify(tree)),
+      (tree) => {
+        // An unchanged tree would cost Swift a decode and the palette a full re-render for nothing.
+        const json = JSON.stringify(tree);
+        if (json === this.lastTree) return;
+        this.lastTree = json;
+        this.host.render(this.id, json);
+      },
       (error) => this.fail(error),
       (error) => this.actionFailed(error),
     );

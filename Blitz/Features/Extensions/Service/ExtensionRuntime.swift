@@ -1,12 +1,25 @@
 import Foundation
 import JavaScriptCore
+import Synchronization
 
 /// The JS→Swift seam. Answers are JSON, so nothing non-`Sendable` crosses back to the JS thread.
 @MainActor
 protocol ExtensionHostAPI: AnyObject, Sendable {
     func perform(api: String, method: String, arguments: [RenderValue]) async throws -> String
+    /// A call that never touches UI state, answered without waiting on the main actor; nil defers.
+    nonisolated func performOffMain(
+        api: String, method: String, arguments: [RenderValue]
+    ) async throws -> String?
     /// The context is gone; release anything opened on its behalf.
     func sessionEnded()
+}
+
+extension ExtensionHostAPI {
+    nonisolated func performOffMain(
+        api: String, method: String, arguments: [RenderValue]
+    ) async throws -> String? {
+        nil
+    }
 }
 
 /// Where a running command's UI or failure lands. Every callback arrives on the main actor.
@@ -28,6 +41,8 @@ final class ExtensionRuntime: @unchecked Sendable {
     private var generation = UUID()
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private let nodeShims = ExtensionNodeShims()
+    /// Bumped per tree on the JS thread; a main-actor hop that finds a newer one skips its own.
+    private let renderSequence = Mutex(0)
 
     /// Set once at startup; read on the JS thread, so it is written before the runtime ever boots.
     private nonisolated(unsafe) weak var delegate: ExtensionRuntimeDelegate?
@@ -257,11 +272,17 @@ final class ExtensionRuntime: @unchecked Sendable {
         let arguments = RenderValue.arguments(from: argsJSON)
         let hostAPI = self.hostAPI
         let generation = self.generation
-        hostTasks[callId] = Task { @MainActor [weak self] in
+        hostTasks[callId] = Task { [weak self] in
             guard !Task.isCancelled else { return }
             do {
-                let json = try await hostAPI.perform(
+                let json: String
+                if let answer = try await hostAPI.performOffMain(
                     api: api, method: method, arguments: arguments)
+                {
+                    json = answer
+                } else {
+                    json = try await hostAPI.perform(api: api, method: method, arguments: arguments)
+                }
                 await self?.settle(callId: callId, generation: generation, ok: true, payload: json)
             } catch {
                 await self?.settle(
@@ -309,7 +330,14 @@ final class ExtensionRuntime: @unchecked Sendable {
             report(level: "error", message: "Could not decode the render tree for \(session).")
             return
         }
-        Task { @MainActor in delegate.runtime(self, session: session, didRender: tree) }
+        let sequence = renderSequence.withLock { value in
+            value += 1
+            return value
+        }
+        Task { @MainActor in
+            guard self.renderSequence.withLock({ $0 }) == sequence else { return }
+            delegate.runtime(self, session: session, didRender: tree)
+        }
     }
 
     private func report(level: String, message: String) {

@@ -218,6 +218,7 @@ struct ExtensionInstaller: Sendable {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+        let output = ExtensionPipeDrain(pipe)
 
         // Closing the install stops the child, so a cancelled build can't outlive its workspace.
         var timeout: Task<Void, Never>?
@@ -227,7 +228,7 @@ struct ExtensionInstaller: Sendable {
                 // One resume, whichever of termination and timeout arrives first.
                 let state = ResumeGuard()
                 process.terminationHandler = { finished in
-                    let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
+                    let data = output.wait()
                     guard state.claim() else { return }
                     continuation.resume(
                         returning: CommandResult(
@@ -237,6 +238,8 @@ struct ExtensionInstaller: Sendable {
                 do {
                     try process.run()
                 } catch {
+                    // No child took the write end, so the drain waits on ours.
+                    try? pipe.fileHandleForWriting.close()
                     guard state.claim() else { return }
                     continuation.resume(throwing: error)
                     return
