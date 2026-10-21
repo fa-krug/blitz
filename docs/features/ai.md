@@ -103,7 +103,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   Claude-CLI `thinking_delta`, Codex's reasoning summary — into `ChatMessage.reasoning`, a list of
   `ChatReasoning` blocks. Thinking that resumes after answer text opens a new block pinned at that
   text offset, so `segments` places it where it happened, like a search or a tool call; each block
-  is timed until the answer resumes. The transcript folds each under "Thought for Ns";
+  is timed until the answer resumes. The transcript folds each under "Thought for Ns", drawing
+  `ChatReasoning.displayText` — the stored text without the blank lines a route closes it with;
   `message_thinking` keeps them; `requestMessages` never sends them back. A route that only says
   it is thinking still just shows "Thinking…". How much there is to read is the route's call:
   Claude streams full summaries, while Grok's CLI sends a line or two in the clear and the rest of
@@ -201,8 +202,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
   on-device model tends to drop the fence and write a bare `choices` line over a list, so a
-  label on its own line with nothing but list items after it, to the reply's end, counts too; and
-  `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a waiting
+  label on its own line with nothing but list items after it, to the reply's end, counts too. It
+  sometimes wraps that label in a bare fence of its own and adds a stray one after the list, so the
+  bare fence right on the label and any fence closing or trailing the list go with them, and no
+  empty code box is left behind. A label inside a fence with a language, or any other open code
+  block, is code and stays. `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a waiting
   question's options use too: in the window they rise out of the
   composer, sitting on its top edge until the reader starts typing; in Quick AI they close the
   transcript. A click sends the option as the reader's next message, through the same `send` a
@@ -330,18 +334,22 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   turn armed with a different one relaunches it and ends the other chats' live threads with a
   reason, rather than leaving them waiting on a process that is gone.
 - **Quick AI's lifetime is decided on the way in.** Pop to Root forgets the screen and the query;
-  whether the next summon resumes the transcript is Settings → AI's `Quick AI opens to`, applied in
+  whether the next summon resumes the transcript is Settings → AI's `Opens to`, applied in
   `QuickAICoordinator.applyOpenPolicy` on the way into `.ai`. It is not Pop to Root's job, because
   that fires on every hide, so no chat would survive Escape; and deciding at open time from
   a timestamp leaves one clock instead of two racing over the same state, and a verdict that still
   holds after a relaunch. A reply still streaming is never reset out from under the reader — it was
   asked for — and the transcript is saved regardless, so the old conversation is one ⌘K → Chat
-  History away, and in the window's sidebar. The window has no policy: it reopens on whatever it
-  last showed.
+  History away, and in the window's sidebar. The window follows the same setting: opened from the
+  launcher or its shortcut while closed, it goes through `showWindow(applyingOpenPolicy: true)` and
+  `AIChatSurfacesState.applyWindowOpenPolicy`. A reply still arriving, a half-typed line or staged
+  files are never replaced by a reopen, and a chat Quick AI holds is not taken from it. ⌘J, Chat
+  History's ⌘J and a notification put their chat in the window first and call plain `showWindow`,
+  which never applies the setting, so the chat placed there is the one that opens.
 - **Arriving with a question skips the open policy entirely.** `ask(_:)` — ⇥ from the launcher, and
   the Quick AI fallback row — always starts a new chat and submits the text, because a question asked
   outright is not a summon: resuming a transcript to append an unrelated line to it would be the one
-  reading of `Quick AI opens to` nobody wants. It is `showPalette(mode: .ai)` and `send`, never
+  reading of `Opens to` nobody wants. It is `showPalette(mode: .ai)` and `send`, never
   `show`.
 - **Staged files survive a re-summon; only the typed draft does not.** `applyOpenPolicy` treats a
   pasted-but-unsent attachment as resident state: `Recent Conversation` will not open a saved chat
@@ -350,13 +358,18 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   decode, which is not the same as a half-typed line — that is still dropped by `prepare`.
   ⌘J carries them into the window with the conversation; opening another chat there still disowns
   a state's own, which is the rule they belong to.
-- **`AIConversationOpenPolicy` is the whole rule, and it is pure.** `Recent Conversation` resumes the
+- **`AIConversationOpenPolicy` is the whole rule for both surfaces, and it is pure.** `Recent Conversation` resumes the
   resident transcript, or reopens the newest saved one when nothing is resident, unless it has been
   idle past `Start a new conversation after`; `A New Conversation` always starts fresh. There is no
   third setting for "immediately" because that *is* `A New Conversation` — two controls able to
   express one state would only ever disagree.
 - **History is local and lazy.** Conversation summaries stay in memory while transcripts load from the
   system SQLite database only for the opened chat. Empty chats are never saved.
+- **A failed reply ends on a note saying why, and only the note reads as an error.** A cancel, an
+  error and a reply cut off by a quit each close the reply's text with a last paragraph (`Cancelled`,
+  the error, `Response interrupted.`, which `ChatHistoryStore` adds on load). The transcript hands
+  the markdown renderer `failedFrom`, the first block of that note, so what was written before the
+  stop is never red; a note on its own is the whole text.
 - **A rename and a pin are the reader's, and nothing derived overwrites them.** Both live in
   `conversation_details` beside `conversations`, whose `title` stays the first question: every save
   rewrites that summary, so a rename stored there would be undone by the next turn. A blank rename
@@ -578,7 +591,8 @@ and the Actions menu's own chords, and dies with the window.
   toolbar button whether the click or ⌘K opened it.
 - **Escape closes the window** (`closesOnEscape`), the composer focused or not. An open menu, Find
   in Chat or a rename takes Escape first, and the sidebar clears a non-empty filter before the next
-  Escape closes. Closing keeps the draft and leaves a reply streaming.
+  Escape closes. Closing leaves a reply streaming; the next open follows `Opens to`, except that a
+  chat holding a draft or staged files is kept.
 
 - **Sidebar** (`AIChatSidebarView`): a filter field over a `List` of every saved chat not archived, Pinned
   first and then bucketed by day like Clipboard. The open chat is the selected row; ⌃⇥ / ⌃⇧⇥ open
@@ -794,9 +808,11 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
 - On Codex and on the Claude command, with an MCP server enabled, a question answered with a tool
   shows the same rows the API routes show and the reply continues after them; with MCP off, both
   routes stream exactly as they did before.
-- With `Quick AI opens to: Recent Conversation` and a five-minute window, Escape out and summon again inside
+- With `Opens to: Recent Conversation` and a five-minute window, Escape out and summon again inside
   five minutes resumes the transcript; past it, the composer is empty. Quitting and relaunching still
-  reopens the last conversation. `A New Conversation` is always empty.
+  reopens the last conversation. `A New Conversation` is always empty. The AI Agent window does the
+  same, opened from the launcher: close it with half a line typed and open it again, and the line is
+  still there whichever way the setting points.
 - Setting `Keep conversations` to 7 days drops older unpinned chats from the window's sidebar and
   shrinks `ai-chats.sqlite3`; a pinned one stays. Switching AI off, waiting past a boundary and switching back on prunes nothing
   that was saved before it went off.
@@ -817,6 +833,12 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
   and Save, reopen the chat, and the edit holds; Execute in Auto switches the pill to Auto and sends
   the edited text.
 - Drop a PDF on the pane with a text-only model selected: the HUD refuses it, as a paste would.
+- A long reply streams with the transcript pinned to its end, through a growing composer, a window
+  resize and the chips arriving; scrolling up stops it at once, and Jump to Latest resumes it.
+- A reasoning fold ends on its last line of text, with no empty stretch under it, in both surfaces.
+- A failed reply keeps what was written in the normal colour; only the closing note is red. Quit
+  while a reply streams and reopen the chat: its text is there, closed by "Response interrupted."
+- Move the pointer over a code block's header: an arrow, not an I-beam.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
 - Archive a chat from the sidebar's context menu: it leaves the list, an Archived row with a count
   appears at the bottom, and ⌃⇥ and Quick AI's Chat History skip it. Archive the open chat from ⌘K:
@@ -843,7 +865,8 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
   lists and their search, found by the archive's, never for a pinned chat, surviving a reopen, left
   by a new turn, spared by Delete All, still pruned by retention and cascading with a delete —
   archiving refused while a reply arrives and making a surface start over,
-  `AIToolLoopProvider`, regenerate, the sidebar order ⌃⇥ steps through, the agent scope each chat
+  `AIToolLoopProvider`, regenerate, `ChatReasoning`'s display text, the window's open policy, the
+  sidebar order ⌃⇥ steps through, the agent scope each chat
   starts open and in Manual, `AIChatSurfacesState`'s one-live-place rule, questions — answers from
   chips and text, their place and their context, the paused turn, Stop, leaving and deleting each
   resolving once, one at a time — plans — their place and context, storage, replacement,

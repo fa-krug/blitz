@@ -299,8 +299,8 @@ enum SettingsSearchCatalog {
         .init(.aiDefault, "Default model", keywords: ["llm", "gpt", "claude", "grok"]),
         .init(.aiDefault, "Reasoning effort", keywords: ["thinking", "effort", "deepseek"]),
         .init(
-            .aiConversations, "Quick AI opens to",
-            keywords: ["new chat", "last", "summon", "resume"]),
+            .aiConversations, "Opens to",
+            keywords: ["new chat", "last", "summon", "resume", "window", "quick ai"]),
         .init(
             .aiConversations, "Start a new conversation after",
             keywords: ["idle", "timeout", "fresh"]),

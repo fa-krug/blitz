@@ -740,6 +740,7 @@ run ai-provider-test       Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Settings/AISettingsStore.swift
 run ai-chat-test           Blitz/Features/AI/Model/AIRequest.swift \
                            Blitz/Features/AI/Model/AIConnection.swift \
+                           Blitz/Features/AI/Model/AIConversationOpenPolicy.swift \
                            Blitz/Features/AI/Model/AppleIntelligence.swift \
                            Blitz/Features/AI/Model/AIAttachmentPolicy.swift \
                            Blitz/Features/AI/Model/AIRetention.swift \
