@@ -596,6 +596,10 @@ newer numbers. Age is measured from the persisted `fetchedAt`, not from launch, 
 Blitz never re-fetches a snapshot that is still fresh — a cold start with a same-day cache makes
 zero requests. Offline, the last snapshot keeps answering; with no snapshot at all the card says so
 rather than guessing, and a currency the feed doesn't quote reports `No exchange rate for <CODE>.`
+A money answer sets `CalcResult.isCurrency`, so its card shows when the snapshot was fetched and a
+small refresh button, which goes through `CalculatorCoordinator.refreshExchangeRates()`.
+`CurrencyRateStore.refresh()` fetches at once on the same cacheless session without touching the
+pump, which re-measures age from `completedAt` whenever it wakes.
 The store hands `CalcEngine.evaluate` a finished `CurrencyRates` value — the engine never fetches,
 which is what keeps it Foundation-only and testable. `CalcMemo` keys its memo on the snapshot's
 `fetchedAt` and the region currency, so either changing re-evaluates without diffing every rate.

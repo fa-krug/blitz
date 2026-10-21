@@ -813,6 +813,15 @@ struct CalcTests {
         // Currency ↔ unit is a friendly category error, like Weight ↔ Time
         expectError("10 usd to kg", "Cannot convert Currency to Weight.")
         expectError("10 kg to usd", "Cannot convert Weight to Currency.")
+        // Only a money answer shows when the rates were fetched, an expression's included
+        for (query, expected) in [("20 eur to usd", true), ("$10 + €5", true), ("10 pounds", false)] {
+            check(
+                "\(query) [isCurrency]", expected: "\(expected)",
+                got: evaluate(query).map { "\($0.isCurrency)" } ?? "nil")
+        }
+        check(
+            "20 eur to usd [isCurrency, localized]", expected: "true",
+            got: evaluateLocalized("20 eur to usd", italian).map { "\($0.isCurrency)" } ?? "nil")
         // A known currency the snapshot doesn't quote, and no snapshot at all
         expectError("5 usd to npr", "No exchange rate for NPR.")
         expectErrorWithoutRates(
