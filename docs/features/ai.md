@@ -579,6 +579,17 @@ and the Actions menu's own chords, and dies with the window.
   flashes as source nor jumps from the left to the centre. Only the last segment of a streaming reply
   is mid-stream, an opener the stream has passed stays visible, and a lone `$` is never held back,
   since it may be a price.
+- **Code is coloured by a small lexer, not a dependency.** `SyntaxHighlighter.tokens(in:language:)`
+  (`Features/AI/Model/Syntax*.swift`, Foundation-only) walks a fenced block's UTF-16 once and returns
+  non-overlapping `SyntaxToken`s, which `ChatMarkdownRenderer` paints from `Theme.Colors.Syntax`.
+  `SyntaxLanguage(named:)` maps the fence's name and its usual aliases: Swift, JavaScript,
+  TypeScript, Python, Java, Kotlin, C, C++, Objective-C, C#, Go, Rust, Ruby, PHP, Lua, SQL, shell,
+  Dockerfile, JSON, YAML, TOML and INI through one table-driven `SyntaxGrammar`, and markup,
+  stylesheets and diffs through their own lexers. An unknown language, a fence without one, a
+  block over `SyntaxHighlighter.sizeLimit` (40,000 UTF-16 units) or a failed reply's note stays
+  plain. A streaming block is re-scanned as it grows, so an unclosed string or comment colours to
+  the end of what has arrived. It is a lexer, not a parser: it never rejects input, so what it
+  cannot classify stays plain.
 - **Actions** (⌘K): Quick AI's ⌘K menu for a window, on the same chords — Stop Response (`⌘.`), New
   Chat (`⌘N`), Regenerate (`⌘R`), Copy Last Response (`⇧⌘C`), Remove Attachments, Find in Chat
   (`⌘F`) and AI Settings (`⌥⌘,`) — plus what only a saved chat has: Copy Chat, Pin, Archive (not
@@ -839,6 +850,9 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
 - A failed reply keeps what was written in the normal colour; only the closing note is red. Quit
   while a reply streams and reopen the chat: its text is there, closed by "Response interrupted."
 - Move the pointer over a code block's header: an arrow, not an I-beam.
+- Code blocks are coloured: ask for a snippet each in Swift, Python, shell, JSON, SQL, a diff and
+  HTML; a `diff` shows additions green and removals red, and an unlabelled block stays plain.
+  Switching appearance recolours them without a relaunch.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
 - Archive a chat from the sidebar's context menu: it leaves the list, an Archived row with a count
   appears at the bottom, and ⌃⇥ and Quick AI's Chat History skip it. Archive the open chat from ⌘K:
@@ -860,6 +874,8 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
   shown-model and switched-off-route rules, a tool's override from settings to launch, and the
   agent table's storage and one-off migration),
   `agent-policy-test` (the agent's rules, dialogs and refusals — see [Agent](agent.md#harnesses)),
+  `syntax-highlight-test` (every grammar's tokens, language aliases, the size limit, and that every
+  prefix of a streaming block scans in order and inside its own bounds),
   `ai-chat-test` (`ChatSession`, `MarkdownBlock` with its math delimiters, LaTeX subset and
   mid-stream hold-back, `ChatHistoryStore` with renames, pins and the archive — kept out of the
   lists and their search, found by the archive's, never for a pinned chat, surviving a reopen, left

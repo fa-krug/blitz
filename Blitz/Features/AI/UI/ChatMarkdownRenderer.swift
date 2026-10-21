@@ -380,6 +380,7 @@ struct ChatMarkdownRenderer {
         style.headIndent = 0
         let body = NSMutableAttributedString(
             string: text, attributes: [.font: font, .foregroundColor: textColor(context)])
+        if !context.failed { colorSyntax(of: body, language: language) }
         mark(body, leaf: leaf)
         let start = output.string.length
         body.append(NSAttributedString(string: "\n", attributes: [.font: font]))
@@ -390,6 +391,31 @@ struct ChatMarkdownRenderer {
                 block: box, range: NSRange(location: start, length: body.length), code: text,
                 language: language))
         spacer(after, in: context, into: output)
+    }
+
+    private func colorSyntax(of body: NSMutableAttributedString, language: String?) {
+        var inks: [SyntaxKind: NSColor] = [:]
+        for token in SyntaxHighlighter.tokens(in: body.string, language: language) {
+            let ink = inks[token.kind] ?? NSColor(Self.syntaxColor(token.kind))
+            inks[token.kind] = ink
+            body.addAttribute(.foregroundColor, value: ink, range: token.range)
+        }
+    }
+
+    private static func syntaxColor(_ kind: SyntaxKind) -> Color {
+        switch kind {
+        case .keyword: Theme.Colors.Syntax.keyword
+        case .string: Theme.Colors.Syntax.string
+        case .number: Theme.Colors.Syntax.number
+        case .comment: Theme.Colors.Syntax.comment
+        case .type: Theme.Colors.Syntax.type
+        case .function: Theme.Colors.Syntax.function
+        case .constant: Theme.Colors.Syntax.constant
+        case .attribute: Theme.Colors.Syntax.attribute
+        case .property: Theme.Colors.Syntax.property
+        case .inserted: Theme.Colors.Syntax.inserted
+        case .deleted: Theme.Colors.Syntax.deleted
+        }
     }
 
     /// A block's bottom margin is painted with its fill, so the gap under a code block is a line.

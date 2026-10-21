@@ -804,12 +804,18 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
                            Blitz/Features/AI/Model/MathNode.swift \
                            Blitz/Features/AI/Model/MathSymbolCatalog.swift \
+                           Blitz/Features/AI/Model/SyntaxGrammar.swift \
+                           Blitz/Features/AI/Model/SyntaxHighlighter.swift \
+                           Blitz/Features/AI/Model/SyntaxStructuredLexers.swift \
                            Blitz/Features/AI/UI/ChatTextHighlight.swift \
                            Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
                            Blitz/Features/AI/UI/MathAttachmentCell.swift \
                            Blitz/Features/AI/UI/MathBox.swift \
                            Blitz/Features/AI/UI/MathFont.swift \
                            Blitz/Features/AI/UI/MathLayoutEngine.swift
+run syntax-highlight-test  Blitz/Features/AI/Model/SyntaxGrammar.swift \
+                           Blitz/Features/AI/Model/SyntaxHighlighter.swift \
+                           Blitz/Features/AI/Model/SyntaxStructuredLexers.swift
 run mcp-test               Blitz/Features/Settings/AppSettingsKey.swift \
                            Blitz/Features/AI/Model/AIConnection.swift \
                            Blitz/Features/AI/Model/AppleIntelligence.swift \

@@ -216,6 +216,10 @@ shipped. Light is the same stop with the ink inverted, and is the only column op
 is an `adaptive` pair, not a `ramp`.
 `brand`, `primaryAction`, `destructive`, `success` and `dropGuideArmed` are fixed hues and adapt on
 their own.
+`Theme.Colors.Syntax` holds the code-colouring palette AI Chat paints into a fenced block — `keyword`,
+`string`, `number`, `comment`, `type`, `function`, `constant`, `attribute`, `property`, `inserted`
+and `deleted`. Each is an `adaptive` pair, a bright hue on the dark surface and a deeper one on the
+light, and it is the only place a syntax colour is chosen.
 
 Beyond these, `.secondary`/`.tertiary` foreground styles are fine for SF Symbols (they resolve against
 the environment's appearance). **Selection always beats hover** when a row is both.

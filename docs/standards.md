@@ -89,6 +89,7 @@ fit the table.
 | `Catalog` | Pure static namespace over a built-in list |
 | `Index` | A searchable collection, rebuilt as its inputs change |
 | `Engine` | A pure evaluator: input → output |
+| `Lexer` | Splits text into classified token ranges in one pass; never rejects input |
 | `Policy` | A pure decision — no state, no effects |
 
 `Manager` is the one worth thinking twice about. It means *lifecycle plus policy*, which is a lot for one
