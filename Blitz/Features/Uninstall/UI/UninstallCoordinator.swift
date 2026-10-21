@@ -72,7 +72,9 @@ final class UninstallCoordinator {
 
             session.setTrashing(true)
             // An app still quitting rewrites its saved state and preferences behind the trash.
-            if let bundleID = app.bundleID, await !AppLauncher.quitAwaitingExit(bundleID: bundleID) {
+            if let bundleID = app.bundleID,
+                await !AppLauncher.quitAwaitingExit(bundleID: bundleID, url: app.url)
+            {
                 session.setTrashing(false)
                 await core.showNotice(
                     title: "Nothing Was Moved",

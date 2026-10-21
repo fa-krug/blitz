@@ -142,6 +142,19 @@ run app-name-test          Blitz/Platform/AppDisplayName.swift \
                            Blitz/Platform/BundleLocalization.swift \
                            $L/SearchRelevance.swift
 run favorites-test         $L/FavoriteSlots.swift
+run app-installation-test  $L/SearchRelevance.swift $L/ScriptRomanization.swift \
+                           $L/LauncherMatch.swift $L/EntryNaming.swift $L/LauncherOrder.swift \
+                           $L/LauncherRankingStore.swift $L/LauncherSuggestions.swift $L/SearchScopes.swift \
+                           Blitz/Features/Launcher/Service/AppIndex.swift \
+                           Blitz/Features/Launcher/Service/AppLauncher.swift \
+                           Blitz/Features/Launcher/Service/RunningAppsMonitor.swift \
+                           Blitz/Features/Launcher/Service/FavoritesStore.swift \
+                           Blitz/Features/Launcher/Service/AliasStore.swift \
+                           Blitz/Features/Launcher/Service/VisibilityStore.swift \
+                           Blitz/Features/Launcher/Service/BundleNameCache.swift \
+                           Blitz/Platform/AppDisplayName.swift Blitz/Platform/BundleLocalization.swift \
+                           Blitz/Platform/Images/FileIconStamp.swift Blitz/Platform/Memo.swift \
+                           Blitz/Platform/Signposts.swift Blitz/Platform/NotificationToken.swift
 run apple-shortcut-test    Blitz/Features/AppleShortcuts/Model/AppleShortcut.swift
 run calc-test              Blitz/Features/Calculator/Model/*.swift
 run index calc-performance Blitz/Features/Calculator/Model/*.swift
