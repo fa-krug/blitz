@@ -33,7 +33,7 @@ enum BackupActions {
         let ext = type.preferredFilenameExtension ?? "json"
         panel.nameFieldStringValue = "\(base)-\(dateStamp()).\(ext)"
         panel.canCreateDirectories = true
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -46,7 +46,7 @@ enum BackupActions {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [type]
         panel.allowsMultipleSelection = false
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -215,7 +215,7 @@ enum BackupActions {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         return panel.runModal() == .OK ? panel.url : nil
     }
 

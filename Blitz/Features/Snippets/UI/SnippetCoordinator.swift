@@ -71,7 +71,7 @@ final class SnippetCoordinator {
             return
         }
 
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         Task {
             guard
                 await core.confirm(

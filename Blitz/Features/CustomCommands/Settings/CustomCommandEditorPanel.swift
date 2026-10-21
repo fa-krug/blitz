@@ -188,7 +188,7 @@ struct CustomCommandEditorPanel: View {
                 fileURLWithPath: (workingDirectory as NSString).expandingTildeInPath)
         }
         // Blitz is an accessory app, so the panel opens behind the frontmost app without this.
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         workingDirectory = (url.path as NSString).abbreviatingWithTildeInPath
     }
