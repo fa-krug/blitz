@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 @preconcurrency import IOKit.hidsystem
+import Synchronization
 
 // Snapshot the mutable C global `mach_task_self_`, so actor code never reads it raw.
 private let machTaskSelf = mach_task_self_
@@ -45,37 +46,76 @@ private func hyperKeyEventTapCallback(
 
 /// HID remap of Caps Lock → F18 while it is Hyper. See docs/features/hotkeys.md#the-hyper-key.
 private enum CapsLockRemap {
-    // HID usages: keyboard page 0x07, Caps Lock 0x39, F18 0x6D.
-    private static let mappingOn =
-        #"{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x70000006D}]}"#
-    private static let mappingOff = #"{"UserKeyMapping":[]}"#
+    private static let mapping = HIDKeyMapping.capsLockToF18
 
     // Serial, so rapid on→off→on toggles apply in call order rather than racing.
     private static let queue = DispatchQueue(label: "de.fa-krug.blitz.capslock-remap", qos: .utility)
 
+    /// Whatever Caps Lock pointed at before Blitz took it, handed back on release.
+    private static let displaced = Mutex<[HIDKeyMapping]>([])
+
     static func setEnabled(_ enabled: Bool) {
-        let mapping = enabled ? mappingOn : mappingOff
-        queue.async { apply(mapping) }
+        queue.async {
+            if enabled { install() } else { remove() }
+        }
     }
 
-    /// Synchronous variant for `applicationWillTerminate`, where detached work wouldn't get to run.
+    /// Synchronous variant for `applicationWillTerminate`, queued behind any toggle still pending.
     static func clearBlocking() {
-        apply(mappingOff)
+        queue.sync { remove() }
     }
 
-    private static func apply(_ mapping: String) {
+    private static func install() {
+        let existing = readMappings()
+        displaced.withLock { $0 = mapping.displaced(in: existing) }
+        write(mapping.replacingSource(in: existing))
+    }
+
+    private static func remove() {
+        let original = displaced.withLock { saved in
+            defer { saved = [] }
+            return saved
+        }
+        write(mapping.restoring(original, in: readMappings()))
+    }
+
+    private static func readMappings() -> [HIDKeyMapping] {
+        guard let output = hidutil(["property", "--get", "UserKeyMapping"], readingOutput: true),
+            let mappings = HIDKeyMapping.mappings(fromHIDUtilOutput: output)
+        else {
+            // Empty keeps the key working; the cost is any other remap the next write drops.
+            NSLog("Blitz: hidutil UserKeyMapping unreadable, assuming none")
+            return []
+        }
+        return mappings
+    }
+
+    private static func write(_ mappings: [HIDKeyMapping]) {
+        let argument = HIDKeyMapping.hidutilArgument(for: mappings)
+        _ = hidutil(["property", "--set", argument], readingOutput: false)
+    }
+
+    /// Runs hidutil, returning its stdout (empty unless `readingOutput`), or nil when it failed.
+    private static func hidutil(_ arguments: [String], readingOutput: Bool) -> String? {
         let process = Process()
+        let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
-        process.arguments = ["property", "--set", mapping]
-        process.standardOutput = FileHandle.nullDevice
+        process.arguments = arguments
+        process.standardOutput = readingOutput ? output : FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {
-            try process.runObservingExit().wait()
-            if process.terminationStatus != 0 {
-                NSLog("Blitz: hidutil remap exited %d", process.terminationStatus)
+            let exit = try process.runObservingExit()
+            // Read to EOF before waiting: a full pipe would otherwise hold hidutil short of exiting.
+            let data = readingOutput ? try output.fileHandleForReading.readToEnd() ?? Data() : Data()
+            exit.wait()
+            guard process.terminationStatus == 0 else {
+                NSLog("Blitz: hidutil %@ exited %d", arguments[1], process.terminationStatus)
+                return nil
             }
+            return String(bytes: data, encoding: .utf8)
         } catch {
-            NSLog("Blitz: hidutil caps lock remap failed: %@", error.localizedDescription)
+            NSLog("Blitz: hidutil %@ failed: %@", arguments[1], error.localizedDescription)
+            return nil
         }
     }
 }

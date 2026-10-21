@@ -404,6 +404,7 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run hid-key-mapping-test   Blitz/Features/HotKeys/Model/HIDKeyMapping.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
                            Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \

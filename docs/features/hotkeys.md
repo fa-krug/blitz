@@ -173,10 +173,20 @@ top-row media functions fire *below* the tap, so binding F1 as Hyper would still
 
 The caps-lock toggle — both the LED and the latch — happens below every `CGEventTap`, so no tap can
 suppress it. The key must therefore stop being Caps Lock **at the source**: while Caps Lock serves as
-Hyper, `CapsLockRemap` installs an IOKit `UserKeyMapping` remapping it to **F18**, the same mechanism
-`hidutil` uses. The tap then intercepts F18 in its place. The remap is cleared on unbind and on quit,
-and never survives a reboot. Remaps apply on a serial queue, so rapid on→off→on toggles land in call
-order instead of racing as independent detached tasks and leaving the wrong final state.
+Hyper, `CapsLockRemap` adds an IOKit `UserKeyMapping` entry through `hidutil`, remapping it to
+**F18**. The tap then intercepts F18 in its place. The remap is cleared on unbind and on quit, and
+never survives a reboot. Remaps apply on a serial queue, so rapid on→off→on toggles land in call
+order instead of racing as independent detached tasks and leaving the wrong final state; the
+quit-time clear waits behind any toggle still queued.
+
+`UserKeyMapping` is one system-wide table, shared with other remapping tools and the user's own
+`hidutil` calls, so **every change is a read-modify-write, never an overwrite**. Turning Hyper on keeps
+every entry except one for Caps Lock, which it displaces and remembers in memory. Turning it off
+removes only Blitz's exact Caps Lock → F18 pair and puts the displaced entry back — unless something
+else has re-pointed Caps Lock since, in which case the table is left alone. `hidutil property --get`
+prints `(null)` or an old-style plist whose numbers are decimal strings; `HIDKeyMapping`
+(`HotKeys/Model/`) parses that and owns the merge rules, so `hid-key-mapping-test` covers both without
+a keyboard. Output it cannot read counts as an empty table, which keeps the key working.
 
 Because the remap is asynchronous, there is a fallback for the window before it takes hold: the key
 still arrives as Caps Lock, so the tap rides the modifier path instead. The LED toggles during that
