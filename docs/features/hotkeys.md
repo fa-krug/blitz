@@ -189,7 +189,8 @@ prints `(null)` or an old-style plist whose numbers are decimal strings; `HIDKey
 a keyboard. Output it cannot read counts as an empty table, which keeps the key working.
 
 Because the remap is asynchronous, there is a fallback for the window before it takes hold: the key
-still arrives as Caps Lock, so the tap rides the modifier path instead. The LED toggles during that
+still arrives as Caps Lock, so the tap toggles the hold on each of its `flagsChanged` instead (see
+[Press tracking reads the event](#press-tracking-reads-the-event)). The LED toggles during that
 window — that is un-remapped HID behaviour, not something Blitz can stop.
 
 Once remapped, Caps Lock arrives as **keyDown/keyUp** rather than `flagsChanged`. Both ends are
@@ -202,13 +203,19 @@ bit they are entitled to. A classic `IOHIDSystem` connection reads and drives th
 lock state; it is used only by the explicit Quick Press toggle and the one-time unlatch when the remap
 is installed.
 
-### Press tracking uses toggle semantics
+### Press tracking reads the event
 
-`flagsChanged` does not describe its own direction, so a modifier-style Hyper key is tracked by
-toggling. The obvious alternative — querying `CGEventSource` key state — **races the release**,
-inverting the state machine and breaking Quick Press. A missed release therefore lingers only until
-the watchdog or the next press clears it. Work that posts events or touches IOKit is deferred to the
-next runloop turn rather than run inside the tap callback, where it would risk re-entrancy.
+A `flagsChanged` carries the device bit (`NX_DEVICE…KEYMASK`) of every modifier down at that moment,
+so a modifier Hyper key reads its direction from **its own bit in the event** —
+`HyperKeyPhysicalKey.deviceFlag`: set means it went down, clear means it came up. F18 says the same
+through keyDown versus keyUp, and both feed one `transition(isDown:)`. The direction is never inferred
+from the hold state. It once was, by toggling, and a hold cancelled mid-press — by a tap timeout, a
+session switch or Secure Input — made the next release read as a press, so every later keystroke
+carried the chord until something cancelled the hold again. Querying `CGEventSource` key state
+instead **races the release**. The one toggle left is the window before the Caps Lock remap lands:
+alpha-shift is a latch, not a press, so its event says nothing of direction. Work that posts events
+or touches IOKit is deferred to the next runloop turn rather than run inside the tap callback, where
+it would risk re-entrancy.
 
 The flags OR'd into every rewritten event are the generic ⌃⌥(⇧)⌘ masks **plus the left-side device
 bits** (`NX_DEVICE…KEYMASK`, from `IOLLEvent.h`). Some consumers distinguish sides, and generic-only

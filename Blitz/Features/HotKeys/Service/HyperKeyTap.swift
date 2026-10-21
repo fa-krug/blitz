@@ -140,18 +140,6 @@ final class HyperKeyTap: HealthCheckable {
     /// Marker on events this tap posts, so it never reacts to its own synthetics.
     nonisolated static let syntheticTag: Int64 = 0x5459_4354
 
-    /// Device-level modifier bits from IOLLEvent.h. See docs/features/hotkeys.md#the-hyper-key.
-    private enum DeviceFlag {
-        static let leftControl: UInt64 = 0x0000_0001
-        static let leftShift: UInt64 = 0x0000_0002
-        static let rightShift: UInt64 = 0x0000_0004
-        static let leftCommand: UInt64 = 0x0000_0008
-        static let rightCommand: UInt64 = 0x0000_0010
-        static let leftOption: UInt64 = 0x0000_0020
-        static let rightOption: UInt64 = 0x0000_0040
-        static let rightControl: UInt64 = 0x0000_2000
-    }
-
     private(set) var status: Status = .off
 
     @ObservationIgnored private var settings: AppSettings?
@@ -222,9 +210,10 @@ final class HyperKeyTap: HealthCheckable {
     private var hyperFlagsRaw: UInt64 {
         var raw =
             CGEventFlags([.maskControl, .maskAlternate, .maskCommand]).rawValue
-            | DeviceFlag.leftControl | DeviceFlag.leftOption | DeviceFlag.leftCommand
+            | ModifierDeviceFlag.leftControl | ModifierDeviceFlag.leftOption
+            | ModifierDeviceFlag.leftCommand
         if settings?.hyperKeyIncludesShift ?? true {
-            raw |= CGEventFlags.maskShift.rawValue | DeviceFlag.leftShift
+            raw |= CGEventFlags.maskShift.rawValue | ModifierDeviceFlag.leftShift
         }
         return raw
     }
@@ -238,10 +227,10 @@ final class HyperKeyTap: HealthCheckable {
 
     private static func deviceBits(for flag: CGEventFlags) -> UInt64 {
         switch flag {
-        case .maskControl: return DeviceFlag.leftControl | DeviceFlag.rightControl
-        case .maskShift: return DeviceFlag.leftShift | DeviceFlag.rightShift
-        case .maskAlternate: return DeviceFlag.leftOption | DeviceFlag.rightOption
-        case .maskCommand: return DeviceFlag.leftCommand | DeviceFlag.rightCommand
+        case .maskControl: return ModifierDeviceFlag.leftControl | ModifierDeviceFlag.rightControl
+        case .maskShift: return ModifierDeviceFlag.leftShift | ModifierDeviceFlag.rightShift
+        case .maskAlternate: return ModifierDeviceFlag.leftOption | ModifierDeviceFlag.rightOption
+        case .maskCommand: return ModifierDeviceFlag.leftCommand | ModifierDeviceFlag.rightCommand
         default: return 0
         }
     }
@@ -263,9 +252,10 @@ final class HyperKeyTap: HealthCheckable {
         if keyCode == tapCode {
             return decideHyperKeyEvent(type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
-        // Before the remap takes hold the key is still Caps Lock, so ride the modifier path.
+        // Before the remap takes hold the key is still Caps Lock, a latch with no direction: toggle.
         if key == .capsLock, keyCode == kVK_CapsLock, type == .flagsChanged {
-            return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: true)
+            let flags = transition(isDown: !hyperActive, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control))
         }
         guard hyperActive else { return .pass }
         // Any other key or modifier going down while Hyper is held makes this a combo, not a tap.
@@ -273,40 +263,42 @@ final class HyperKeyTap: HealthCheckable {
         return .rewrite(flags: hyperized(flagsRaw))
     }
 
+    /// docs/features/hotkeys.md#press-tracking-reads-the-event
     private func decideHyperKeyEvent(
         type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
     ) -> Decision {
         if key.tapUsesKeyEvents {
-            // F18 arrives as keyDown/keyUp; convert both ends into flagsChanged transitions.
-            let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
-            switch type {
-            case .keyDown:
-                if isAutorepeat { return .suppress }
-                if !hyperActive { beginHold() }
-                return .rewrite(
-                    flags: hyperized(flagsRaw), keyCode: Int64(kVK_Control), asFlagsChanged: true)
-            case .keyUp:
-                if hyperActive { endHold() }
-                return .rewrite(
-                    flags: flagsRaw & ~strippedFlagsRaw, keyCode: Int64(kVK_Control),
-                    asFlagsChanged: true)
-            default:
-                return .pass
-            }
+            return decideFunctionKeyEvent(type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
         guard type == .flagsChanged else { return .pass }
-        return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: false)
+        return .rewrite(flags: transition(isDown: key.isHeld(in: flagsRaw), flagsRaw: flagsRaw))
     }
 
-    /// docs/features/hotkeys.md#press-tracking-uses-toggle-semantics
-    private func decideModifierTransition(flagsRaw: UInt64, swapKeyCode: Bool) -> Decision {
-        let keyCode: Int64? = swapKeyCode ? Int64(kVK_Control) : nil
-        if !hyperActive {
-            beginHold()
-            return .rewrite(flags: hyperized(flagsRaw), keyCode: keyCode)
+    /// F18 arrives as keyDown/keyUp; both ends become Left Control `flagsChanged` transitions.
+    private func decideFunctionKeyEvent(
+        type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
+    ) -> Decision {
+        let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
+        switch type {
+        case .keyDown:
+            if isAutorepeat { return .suppress }
+            let flags = transition(isDown: true, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        case .keyUp:
+            let flags = transition(isDown: false, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        default:
+            return .pass
         }
-        endHold()
-        return .rewrite(flags: flagsRaw & ~strippedFlagsRaw, keyCode: keyCode)
+    }
+
+    private func transition(isDown: Bool, flagsRaw: UInt64) -> UInt64 {
+        if isDown {
+            if !hyperActive { beginHold() }
+            return hyperized(flagsRaw)
+        }
+        if hyperActive { endHold() }
+        return flagsRaw & ~strippedFlagsRaw
     }
 
     // MARK: - Hold state machine

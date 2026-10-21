@@ -442,6 +442,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - With another `hidutil` key mapping set, switching the Hyper Key to Caps Lock and back, then
   quitting, leaves that mapping in `hidutil property --get UserKeyMapping`; a Caps Lock mapping
   Hyper displaced comes back
+- With a right-side modifier as Hyper, hold it across a fast user switch and back, then release:
+  plain typing afterwards carries no chord
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands
