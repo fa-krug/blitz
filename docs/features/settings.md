@@ -99,8 +99,7 @@ Most panes live in their feature's `Settings/` folder. The ones with no feature 
 - **Appearance** — Theme (`AppAppearance`; `.system` maps to a `nil` `NSApp.appearance` so AppKit
   follows macOS), Interface Size, window mode, favorites in compact mode, following the cursor across
   displays, and dragging the palette.
-- **Permissions** — Accessibility, Full Disk Access, Calendars, Reminders and Contacts. Full Disk
-  Access has no prompt, so its button only opens System Settings. The five statuses are read
+- **Permissions** — Accessibility, Calendars, Reminders and Contacts. The four statuses are read
   together in a `Task.detached`, because each is a round trip to TCC, and polled each second while
   the pane is open, since nothing announces a grant made in System Settings.
 - **Navigation** — the switch for [Switch Windows and Search Menu Bar Items](navigation.md).

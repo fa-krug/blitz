@@ -53,6 +53,9 @@ struct SettingsBackupTest {
             "user ignore patterns ride the settings backup",
             mirrored["fileSearchIgnorePatterns"] == .fileSearchIgnorePatterns)
         check(
+            "removed default ignore patterns ride the settings backup",
+            mirrored["fileSearchRemovedDefaultPatterns"] == .fileSearchRemovedDefaultPatterns)
+        check(
             "screenshot search rides the settings backup",
             mirrored["screenshotSearchEnabled"] == .screenshotSearchEnabled)
         check(

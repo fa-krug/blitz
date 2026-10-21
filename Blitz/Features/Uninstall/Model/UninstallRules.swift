@@ -126,8 +126,38 @@ enum UninstallRules {
         guard path != bundlePath, !isDescendant(path, of: bundlePath),
             !isDescendant(bundlePath, of: path)
         else { return false }
-        return true
+        // Dropped rather than locked: trashing it needs a privacy grant Blitz never asks for.
+        return !isTCCGated(path: path, home: home)
     }
+
+    /// Wider than the current roots, so adding one can't surface a path it can't trash.
+    static func isTCCGated(path: String, home: String) -> Bool {
+        let relative = tccGatedPrefixes.contains { path.hasPrefix(home + "/" + $0) }
+        return relative || path.hasPrefix("/Library/Application Support/com.apple.TCC")
+    }
+
+    /// Measured, never assumed: listing is not the test. See docs/features/uninstall.md.
+    static let tccGatedPrefixes: [String] = [
+        "Library/Containers/",
+        "Library/Group Containers/",
+        "Library/Cookies/",
+        "Library/Safari",
+        "Library/Mail",
+        "Library/Messages",
+        "Library/Calendars",
+        "Library/Suggestions",
+        "Library/HomeKit",
+        "Library/IdentityServices",
+        "Library/Sharing",
+        "Library/Biome",
+        "Library/Trial",
+        "Library/Metadata/CoreSpotlight",
+        "Library/Application Support/AddressBook",
+        "Library/Application Support/CallHistoryDB",
+        "Library/Application Support/com.apple.TCC",
+        "Library/Application Support/MobileSync",
+        "Library/Application Support/com.apple.sharedfilelist"
+    ]
 
     static func isDescendant(_ path: String, of ancestor: String) -> Bool {
         path.hasPrefix(ancestor + "/")

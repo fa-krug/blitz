@@ -32,7 +32,7 @@ final class NotesPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        animationBehavior = .none
+        animationBehavior = .documentWindow
         isReleasedWhenClosed = false
         isRestorable = false
         contentView = content
@@ -72,6 +72,9 @@ final class NotesPanel: NSPanel {
         onEscape?()
     }
 
-    override var canBecomeKey: Bool { acceptsKey }
+    /// Held only while the palette orders out, so a note cannot inherit its key over another app.
+    static var refusesInheritedKey = false
+
+    override var canBecomeKey: Bool { acceptsKey && !Self.refusesInheritedKey }
     override var canBecomeMain: Bool { acceptsMain }
 }

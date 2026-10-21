@@ -173,13 +173,24 @@ top-row media functions fire *below* the tap, so binding F1 as Hyper would still
 
 The caps-lock toggle — both the LED and the latch — happens below every `CGEventTap`, so no tap can
 suppress it. The key must therefore stop being Caps Lock **at the source**: while Caps Lock serves as
-Hyper, `CapsLockRemap` installs an IOKit `UserKeyMapping` remapping it to **F18**, the same mechanism
-`hidutil` uses. The tap then intercepts F18 in its place. The remap is cleared on unbind and on quit,
-and never survives a reboot. Remaps apply on a serial queue, so rapid on→off→on toggles land in call
-order instead of racing as independent detached tasks and leaving the wrong final state.
+Hyper, `CapsLockRemap` adds an IOKit `UserKeyMapping` entry through `hidutil`, remapping it to
+**F18**. The tap then intercepts F18 in its place. The remap is cleared on unbind and on quit, and
+never survives a reboot. Remaps apply on a serial queue, so rapid on→off→on toggles land in call
+order instead of racing as independent detached tasks and leaving the wrong final state; the
+quit-time clear waits behind any toggle still queued.
+
+`UserKeyMapping` is one system-wide table, shared with other remapping tools and the user's own
+`hidutil` calls, so **every change is a read-modify-write, never an overwrite**. Turning Hyper on keeps
+every entry except one for Caps Lock, which it displaces and remembers in memory. Turning it off
+removes only Blitz's exact Caps Lock → F18 pair and puts the displaced entry back — unless something
+else has re-pointed Caps Lock since, in which case the table is left alone. `hidutil property --get`
+prints `(null)` or an old-style plist whose numbers are decimal strings; `HIDKeyMapping`
+(`HotKeys/Model/`) parses that and owns the merge rules, so `hid-key-mapping-test` covers both without
+a keyboard. Output it cannot read counts as an empty table, which keeps the key working.
 
 Because the remap is asynchronous, there is a fallback for the window before it takes hold: the key
-still arrives as Caps Lock, so the tap rides the modifier path instead. The LED toggles during that
+still arrives as Caps Lock, so the tap toggles the hold on each of its `flagsChanged` instead (see
+[Press tracking reads the event](#press-tracking-reads-the-event)). The LED toggles during that
 window — that is un-remapped HID behaviour, not something Blitz can stop.
 
 Once remapped, Caps Lock arrives as **keyDown/keyUp** rather than `flagsChanged`. Both ends are
@@ -192,13 +203,19 @@ bit they are entitled to. A classic `IOHIDSystem` connection reads and drives th
 lock state; it is used only by the explicit Quick Press toggle and the one-time unlatch when the remap
 is installed.
 
-### Press tracking uses toggle semantics
+### Press tracking reads the event
 
-`flagsChanged` does not describe its own direction, so a modifier-style Hyper key is tracked by
-toggling. The obvious alternative — querying `CGEventSource` key state — **races the release**,
-inverting the state machine and breaking Quick Press. A missed release therefore lingers only until
-the watchdog or the next press clears it. Work that posts events or touches IOKit is deferred to the
-next runloop turn rather than run inside the tap callback, where it would risk re-entrancy.
+A `flagsChanged` carries the device bit (`NX_DEVICE…KEYMASK`) of every modifier down at that moment,
+so a modifier Hyper key reads its direction from **its own bit in the event** —
+`HyperKeyPhysicalKey.deviceFlag`: set means it went down, clear means it came up. F18 says the same
+through keyDown versus keyUp, and both feed one `transition(isDown:)`. The direction is never inferred
+from the hold state. It once was, by toggling, and a hold cancelled mid-press — by a tap timeout, a
+session switch or Secure Input — made the next release read as a press, so every later keystroke
+carried the chord until something cancelled the hold again. Querying `CGEventSource` key state
+instead **races the release**. The one toggle left is the window before the Caps Lock remap lands:
+alpha-shift is a latch, not a press, so its event says nothing of direction. Work that posts events
+or touches IOKit is deferred to the next runloop turn rather than run inside the tap callback, where
+it would risk re-entrancy.
 
 The flags OR'd into every rewritten event are the generic ⌃⌥(⇧)⌘ masks **plus the left-side device
 bits** (`NX_DEVICE…KEYMASK`, from `IOLLEvent.h`). Some consumers distinguish sides, and generic-only
@@ -235,6 +252,18 @@ keycaps. `retargetingHyper` is idempotent, which is what makes a settings import
 corruption. Nothing is re-pointed while the Hyper key is `.none` — and the Settings row is disabled
 there, so the toggle cannot move without a chord to mean.
 
+Include Shift costs one chord: macOS consumes ⌃⌥⇧⌘Q as a system shortcut before any app or Carbon sees
+it, so ✦Q can be neither recorded nor fired while it is on.
+
+### Secure Input
+
+While any app holds Secure Input — a password field, a terminal's Secure Keyboard Entry — the tap
+stops seeing key presses; at most a modifier's `flagsChanged` still reaches it. So **Quick Press
+never fires there**: a short hold cannot prove that nothing was pressed in between, and a quick Hyper
+combo would read as a lone press and toggle Caps Lock. And the **recorder reads the Hyper key itself** — F18's keyDown and keyUp, or a modifier key's device bit —
+from `ShortcutCaptureSession.hyperKey`, which `HyperKeyTap` sets whenever it applies a key. Left to
+the tap, a recording made inside Secure Input saved bare F18, or ⌃ plus the key.
+
 ### Lifecycle
 
 Like every keyboard tap it needs the **Accessibility** grant and never prompts for it. A one-second
@@ -250,7 +279,8 @@ The settings recorder (`Features/HotKeys/UI/ShortcutRecorder.swift`) is delibera
 control: the active recorder is `HotKeyManager.recordingAction` state, and keys are captured by local
 NSEvent monitors while both engines are paused. It records combos, double-tapped modifiers and single
 or double Globe taps by feeding its `.flagsChanged` / `.keyDown` monitors into the same pure detectors
-as the global monitor, so recording needs no event tap and no permission.
+as the global monitor, so recording needs no event tap and no permission. Its `.keyUp` monitor only
+tracks the Hyper key's F18 release; see [Secure Input](#secure-input).
 
 Setting `recordingAction` is what starts and stops the capture, so there is exactly **one**
 `ShortcutCaptureSession` (`HotKeys/Service/`) for the app rather than one per row — which is what lets the

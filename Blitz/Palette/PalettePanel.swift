@@ -272,7 +272,7 @@ final class PalettePanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        animationBehavior = .none
+        animationBehavior = .documentWindow
         isReleasedWhenClosed = false
 
         let hosting = NSHostingView(rootView: rootView)
@@ -286,6 +286,15 @@ final class PalettePanel: NSPanel {
     override func resignKey() {
         super.resignKey()
         paletteState?.noteCommandHeld(false)
+    }
+
+    /// A child hidden with its parent skips its next open animation.
+    override func orderOut(_ sender: Any?) {
+        for child in childWindows ?? [] {
+            removeChildWindow(child)
+            child.orderOut(nil)
+        }
+        super.orderOut(sender)
     }
 
     override var canBecomeKey: Bool { true }

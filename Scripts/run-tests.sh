@@ -352,6 +352,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run command-escape-tap-test Blitz/Palette/CommandEscapeTap.swift
 run palette-escape-test    Blitz/Palette/PaletteMode.swift \
                            Blitz/Palette/PaletteEscapeAction.swift \
                            Blitz/Palette/CommandEscapeTap.swift \
@@ -416,6 +417,7 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run hid-key-mapping-test   Blitz/Features/HotKeys/Model/HIDKeyMapping.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
                            Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \

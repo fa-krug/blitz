@@ -1,7 +1,7 @@
 # Uninstall Application
 
-Removes an app _and_ the files it leaves behind — caches, preferences, containers, saved state,
-launch agents. Reached from the launcher's Actions menu (⌘K → **Uninstall Application**) on
+Removes an app _and_ the files it leaves behind — caches, preferences, saved state, launch
+agents. Reached from the launcher's Actions menu (⌘K → **Uninstall Application**) on
 any `.application` entry; it opens the `.uninstall` palette sub-screen scoped to that app.
 
 ## Invariants
@@ -13,12 +13,13 @@ any `.application` entry; it opens the `.uninstall` palette sub-screen scoped to
 - **The deciding half is pure** for `uninstall-test`, with every environment fact injected: the
   scanner hands the rules directory **names**, never URLs, and hands the classifier a
   `PathFacts`.
-- **`UninstallScanner` detects Full Disk Access and never requests it.** The probe,
-  `Permissions.hasFullDiskAccess`, is silent and promptless; this feature asks for no permission and
-  never escalates privilege.
-- **`tccRelativePrefixes` is measured, not assumed.** Probe a location by creating and trashing a
-  throwaway directory there before adding it — *listing* is not the test. `~/Library/Containers`
-  enumerates fine and still refuses the move, while `~/Library/Application Scripts` allows it.
+- **Uninstall is per user.** It searches the user's own `~/Library` plus the system-wide roots in
+  `/Library` and `binDirectories`, and never uses, probes for or asks for Full Disk Access — nor any
+  other permission, and it never escalates privilege.
+- **A TCC-gated path is dropped, never shown locked.** Such folders are not roots, and
+  `isAcceptableCandidate` drops any candidate under `tccGatedPrefixes`. That list is measured, not
+  assumed: probe a location by creating and trashing a throwaway directory there — *listing* is not
+  the test.
 - **A locked candidate can never enter the checked set.** That invariant lives in `UninstallSelection`'s
   one intersection, not in the view.
 - **Discovery never waits on sizing.** `UninstallScanner.discover` publishes the list; the directory
@@ -35,10 +36,10 @@ Same split as `WindowManagement`: a pure half that decides, an impure half that 
 | --- | --- |
 | `Model/UninstallTarget.swift` | `UninstallTarget`, `UninstallEvidence`, `UninstallIdentity` — and every guard rail, applied in `UninstallIdentity.make` |
 | `Model/UninstallSearchRoot.swift` | The root table (where to look, which styles are legal there) and `binDirectories` |
-| `Model/UninstallRules.swift` | Matching, plus `isAcceptableCandidate` |
+| `Model/UninstallRules.swift` | Matching, plus `isAcceptableCandidate` and the TCC-gated exclusion |
 | `Model/UninstallProtection.swift` | `PathFacts` → `UninstallProtection` |
 | `Model/UninstallPlan.swift` | `UninstallCandidate`, `UninstallPlan`, `UninstallSelection` |
-| `Service/UninstallScanner.swift` | **Impure.** `discover` (`contentsOfDirectory`, `lstat`, `Permissions.hasFullDiskAccess`) and `measure` (the directory walks) |
+| `Service/UninstallScanner.swift` | **Impure.** `discover` (`contentsOfDirectory`, `lstat`) and `measure` (the directory walks) |
 | `Service/UninstallRunner.swift` | **Impure.** `trashItem`, and nothing else |
 | `Service/UninstallSession.swift` | `@MainActor` lifecycle behind the screen |
 | `UI/UninstallScreen.swift`, `UI/UninstallView.swift` | The palette screen, list, row and actions menu |
@@ -127,18 +128,16 @@ corrupts the installer's view of the system), `~/Library/Keychains`, `/Library/E
 user-document location. `/usr/local` is reached **only** through `binDirectories`, and only for
 symlinks that resolve into the bundle — never by name, and never recursively.
 
-One root only yields under Full Disk Access:
-`Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments`,
-each app's recent-documents list, named `<bundle id>.sfl3`. Without the grant the listing itself is
-refused, so the root contributes nothing rather than a locked row.
+`~/Library/Containers`, `Group Containers` and `Cookies`, and the recent-documents lists under
+`com.apple.sharedfilelist`, are not roots: macOS refuses to trash them without Full Disk Access.
 
 `UninstallRules.isAcceptableCandidate` is belt and braces over whatever matched: an immediate child of
-its own root, never the home directory or `/`, no relative components, and no overlap with the app
-bundle (which is emitted separately).
+its own root, never the home directory or `/`, no relative components, no overlap with the app
+bundle (which is emitted separately), and nothing under a `tccGatedPrefixes` entry.
 
 ## Locking
 
-`UninstallProtection` is **advisory, not a security boundary** — TCC is evaluated at the syscall, so
+`UninstallProtection` is **advisory, not a security boundary** — the syscall has the final say, so
 it can be wrong in both directions. It exists to gray a row with an honest reason and to skip
 obviously doomed attempts; `UninstallRunner` still reports per-item failure.
 
@@ -149,13 +148,12 @@ Precedence, asserted by the harness:
    `/System/Applications/Books.app`, and it falls out of the facts rather than a hardcoded `/System`
    prefix
 3. `UF_IMMUTABLE` → `.userLocked` (its own case: the user can clear it in Get Info)
-4. a TCC-gated path without Full Disk Access → `.needsFullDiskAccess`
-5. parent not writable → `.parentNotWritable`
-6. sticky parent _and_ not owned by the current user → `.notOwned`
-7. a directory the current user can't write → `.notWritable`
-8. → `.removable`
+4. parent not writable → `.parentNotWritable`
+5. sticky parent _and_ not owned by the current user → `.notOwned`
+6. a directory the current user can't write → `.notWritable`
+7. → `.removable`
 
-Steps 5 to 7 are the whole permission story, and the order is deliberate. Removing a directory entry
+Steps 4 to 6 are the whole permission story, and the order is deliberate. Removing a directory entry
 is governed by write permission on the **enclosing directory**, not by who owns the item: a root-owned
 file inside a folder you can write is yours to remove. Checking ownership first — as an earlier
 revision did — grayed out rows that trash perfectly well. Ownership decides exactly one case, a
@@ -178,30 +176,16 @@ A locked candidate can never enter the checked set. That invariant lives in `Uni
 whose every mutation funnels through one intersection with `plan.removableIDs`, so re-scanning drops
 a row that has since become locked for free.
 
-The TCC list is **measured, not assumed.** A probe that creates and then trashes a throwaway
-directory in each candidate location shows that `~/Library/Containers`, `~/Library/Group Containers`
-and `~/Library/Cookies` refuse the move, and `com.apple.sharedfilelist` refuses even the listing,
-while `~/Library/Application Scripts` and `~/Library/Autosave Information` allow it — which is why
-Books' five `Application Scripts` rows are checkable while the five `Containers` rows beside them are
-locked. Note that _listing_ a directory is not the test: both container roots enumerate fine and
-still refuse the trash. Re-measure before adding an entry.
-
-**Full Disk Access is detected, never requested.** The probe is `Permissions.hasFullDiskAccess()`: it
-opens the per-user `TCC.db`, then the system one at
-`/Library/Application Support/com.apple.TCC/TCC.db`. TCC denies that read _silently_, with no prompt,
-which is what makes it usable under the rule that this feature asks for no permissions. macOS 27 has
-no per-user `TCC.db` at all, so a probe of that file alone reads every grant as "no access" and locks
-every gated row — keep the system path. It runs once per scan, not once per candidate, and can only
-under-report (a per-folder grant reads as "no access"), which just leaves a row locked. Settings ›
-Permissions shows the same status and opens the Full Disk Access pane in System Settings; granting it
-is optional.
+The TCC-gated folders are left out rather than locked because uninstall never uses Full Disk
+Access, so a row there could never be checked; `~/Library/Application Scripts` is not gated
+(measured), which is why Books' scripts still list.
 
 Symlinks are never followed: `lstat`, and no descent when sizing. A symlinked candidate is judged and
 trashed as the link.
 
 ## Sizing
 
-The two halves of a scan differ by three orders of magnitude. Discovery is 36 parallel shallow
+The two halves of a scan differ by three orders of magnitude. Discovery is 34 parallel shallow
 `contentsOfDirectory` listings plus one `lstat` per hit — milliseconds. Sizing is a recursive
 enumerator walk per directory candidate, and `/Applications/Xcode.app` alone is ~9.5 GB. So they are
 two calls, not one: `UninstallSession` publishes `.ready` the moment `discover` returns, then

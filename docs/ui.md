@@ -230,7 +230,7 @@ An extension's own surfaces live in `ExtensionColors` (`Features/Extensions/UI/`
 
 Source: `Palette/PalettePanel.swift`, `Palette/RootPaletteView.swift`.
 
-- **`PalettePanel`** is a borderless `NSPanel`: `isOpaque = false`, `backgroundColor = .clear`, `.palette` level (one above `.modalPanel`, so other apps' open panels never cover it), `hasShadow`, `animationBehavior = .none`. It hosts SwiftUI via `NSHostingView`. `PaletteWindowController` centers it slightly above screen center (`+8%`) and dismisses it on `windowDidResignKey`.
+- **`PalettePanel`** is a borderless `NSPanel`: `isOpaque = false`, `backgroundColor = .clear`, `.palette` level (one above `.modalPanel`, so other apps' open panels never cover it), `hasShadow`, `animationBehavior = .documentWindow`. It hosts SwiftUI via `NSHostingView`. `PaletteWindowController` centers it slightly above screen center (`+8%`) and dismisses it on `windowDidResignKey`.
 - **The results layer fills the whole panel.** The header and bottom bar attach via `.safeAreaInset(edge: .top/.bottom)` as transparent overlays that float _over_ the list. The list underlaps them and dissolves at the edges.
 - **Header** (`headerHeight 44`): a back-chevron _or_ mode glyph, then the plain `TextField` (no border/background). Sub-screens (Clipboard, Calculator History) show the back chevron; the launcher shows a magnifying glass. The search icon aligns horizontally with row content, and the query with the row titles.
 - **Compact keyboard entry:** pressing `↓` in the collapsed launcher expands the results and selects the first row without replacing or defocusing the shared search field.
@@ -439,7 +439,7 @@ Glass is normally for floating controls. The dialog root is the one modal-surfac
 - **A menu's `width` is fixed, never intrinsic**, so it can't jitter as its rows change. Every header menu states its own at its `RootPaletteView.menuContent` case — `menuWidth 276`, or a token of its own where that reads too wide (`clipboardFilterMenuWidth`, `fileSearchFilterMenuWidth`, `emojiCategoryMenuWidth`) — so retuning one never moves another. Native footer menus add 30pt without changing those header widths; extension Actions states its own width inside the feature.
 - **`PopoverMenu`** uses `glassEffect(.regular)` with `menuPanel 16` corners and **no hand-tuned shadow** — Tahoe glass carries its own elevation; adding a drop shadow reads heavy and non-native. A footer menu raises only its attached bottom corner to the controls' 18-point radius, so the two silhouettes meet exactly.
 - Its native search field is a row-height sibling of the scroller, above header menus or below footer menus. It uses an 18pt horizontal inset to align with the visible row glyphs. The top field stays vertically symmetric; the bottom field keeps its 1pt optical lift. Menus omit the adjacent edge dissolve and centre **No Results** in one row when their filtered rows are empty. The 8pt resting list inset belongs to the scroll content, so rows can reach the surface edges without shifting their initial position; hover fills keep the dedicated `menuRow 10` corner.
-- `PopoverMenuRow`: leading glyph, label, trailing shortcut glyph and `menuHover` fill on hover. Menus animate in with opacity and scale from the anchored corner, stretching briefly to 1.003 before settling; `Theme.MenuMotion` owns the entry, settle and exit timings.
+- `PopoverMenuRow`: leading glyph, label, trailing shortcut glyph and `menuHover` fill on hover. Menus open and close with AppKit's native `.documentWindow` animation.
 - The glyph is a `PopoverMenuIcon`: `.symbol` (SF Symbol, `monochrome`, `menuSymbol` — or **red** when `isDestructive`) `.file` (a real app icon via `IconCache`, used by the paste rows to show the paste target) or `.thumbnail` (a picture's own preview, cropped to the slot, used by the chat's staged-file rows) or `.glyph` (a character drawn in the slot, used by the emoji skin-tone rows). `PopoverMenuItem` keeps a `systemImage:` convenience init, so symbol rows read exactly as before.
 - **Every glyph kind shares one square `menuIcon` (20) slot**, which pins one row height. A native SF Symbol uses the dedicated 14pt Medium `menuSymbol` font; file and brand icons keep their own artwork sizing inside the same slot, and a thumbnail fills it.
 - Menu rows use the `md` icon→label gap; the fixed slot adds the remaining optical slack.
@@ -491,10 +491,9 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   `NSHostingView` layer to the same continuous radius, then lets AppKit draw the native window shadow;
   this avoids both the rectangular outline of an unshaped panel and the hard bounds of a SwiftUI blur.
   The launcher's root gains a `dialogDimming` overlay only when it remains visible behind the panel;
-  actions that hide the launcher first do no dimming work. Its fade follows `dialogEnter` / `dialogExit`
-  so both surfaces separate as one transition. Matte button fills come from `controlSurface` /
-  `selection`, while a destructive action uses the destructive tint. The **volume HUD** and **message
-  pill** keep the non-glass panel recipe.
+  actions that hide the launcher first do no dimming work. Its fade follows `dialogEnter` / `dialogExit`.
+  Matte button fills come from `controlSurface` / `selection`, while a destructive action uses the
+  destructive tint. The **volume HUD** and **message pill** keep the non-glass panel recipe.
 - **Layout.** Subject glyph in a low-opacity rounded tile, then title (`panelTitle`) + wrapped
   secondary message (scrolling past `dialogMessageMaxHeight 240`, so a long command never outgrows
   the screen), optional accessory and full-width actions. **A form is a quick add**, so
@@ -518,7 +517,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   **↵ runs the dialog's primary action; Escape cancels**, on every dialog including destructive ones.
   Arrow keys walk the volume slider along the same 5% grid the volume commands use (`DialogPanel`
   reports `.increment` / `.decrement` and `DialogController` applies `VolumeLevel.stepped`, so the
-  panel never learns what a volume step is); click-away resolves as a dismissal (see below).
+  panel never learns what a volume step is); click-away resolves as a dismissal (see below). ↵ that
+  commits an input method's marked text goes to the field and never confirms.
 - **Click-away dismisses, but a form keeps what was typed.** `windowDidResignKey` resolves the dialog
   as its cancel rather than leaving it up: the panel floats at `.dialog` on every Space, so a dialog
   kept open after the user moved to another app would cover that app, keep the palette dimmed, and
@@ -535,17 +535,15 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
 - **Async, not modal.** Presentation is `async` (`withCheckedContinuation`), so there is no nested run
   loop. A held hotkey can't stack dialogs: while one is up, a second request resolves immediately as a
   dismissal, so no re-entrancy flag is needed. The guard is keyed on the live continuation, not on the
-  panel, so a dialog still fading out can't swallow the next one.
+  panel, so a dialog still animating out can't swallow the next one.
 - **A form opens focused.** `DialogController` lays the panel's content out before the panel goes
   key, so a form's first field takes focus as the dialog appears and typing starts there.
-- **Entrance and exit.** A dialog starts 3pt below its final position at 8% opacity. AppKit moves the
-  cached full-panel surface upward over `dialogEnter` (0.12s), with the alpha following the same curve
-  so the fade masks the window's whole-pixel movement and the native shadow travels with the glass.
-  There is no SwiftUI scale: scaling the content inside a full-size shadow produced a transient rim.
-  Exit is an interruptible `fadeOut` over `dialogExit` (0.10s); its handler hides the window only if
-  the alpha is still 0. The
-  continuation resumes **before** that fade, so confirming Restart is never held up by animation.
-  Other borderless surfaces keep the shared `Theme.Duration.enter` / `Theme.Duration.exit` timings.
+- **Entrance and exit.** `DialogPanel` uses `animationBehavior = .documentWindow`, so a dialog opens
+  and closes with the same native bounce as Settings and the launcher. AppKit scales the whole window,
+  shadow included; a SwiftUI scale of the content inside the full-size shadow produced a transient rim.
+  The continuation resumes **before** `orderOut`, so confirming Restart is never held up by animation.
+  The HUDs and room previews keep `PanelTransition`'s fades over `Theme.Duration.enter` /
+  `Theme.Duration.exit`.
 - **Non-activating**, like the palette: the dialog takes key focus for its own keys without pulling app
   focus off whatever the user was in. It sits at `.dialog`, above the palette's `.palette`, and is
   centred on the **cursor's** display with the same slight optical lift the palette uses.
@@ -760,7 +758,8 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   hand-drawn card.
 - **A Settings editor borrows the dialog language, not its job.** `SettingsEditorPresenter` hosts the
   existing form in an activating, transparent child `NSPanel`, with the same `panel 26` Liquid Glass
-  surface, 3pt/8% entrance and matte action buttons. A blocking child covers and dims the whole parent,
+  surface, native `.documentWindow` entrance and matte action buttons. AppKit gives this activating
+  panel no close animation, so it leaves at once. A blocking child covers and dims the whole parent,
   including its titlebar, so a press on it drags the parent; nested editors form one stack owned by the
   Settings-window session. As with a sheet, a drag on an editor's empty space moves the Settings window:
   the surface puts `WindowDragBackground` behind its content, and the panel hands `performDrag(with:)`
@@ -866,7 +865,7 @@ system-drawn and a pane reads exactly as macOS System Settings does.
   paints in one update took the highlight down with it for 100–280 ms.
 - **A pane never asks TCC on the main actor.** A status read is a round trip to TCC — Contacts costs
   ~17 ms every time, Accessibility and Calendars ~45 ms on the first — so the Permissions pane reads
-  all five together in a `Task.detached`, polls that each second while open (nothing announces a
+  all four together in a `Task.detached`, polls that each second while open (nothing announces a
   grant made in System Settings), and opens on the last read in ~65 ms rather than ~280.
 
 ### The window-layout editor

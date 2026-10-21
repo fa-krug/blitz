@@ -31,11 +31,17 @@ enum BundleLocalization {
         guard subtags.contains(where: { $0.count == 4 && $0.allSatisfy(\.isLetter) })
         else { return [] }
         let language = Locale.Language(identifier: tag)
-        guard let code = language.languageCode?.identifier else { return [] }
-        let region =
-            language.region ?? Locale.Language(identifier: language.maximalIdentifier).region
-        return [language.script?.identifier, region?.identifier].compactMap { $0 }
-            .map { "\(code)-\($0)" }
+        guard let code = language.languageCode?.identifier, let script = language.script
+        else { return [] }
+        let scriptForm = "\(code)-\(script.identifier)"
+        let regionForms = [language.region, maximal(scriptForm).region].compactMap { $0 }
+            .map { "\(code)-\($0.identifier)" }
+            .filter { maximal($0).script == script }
+        return [scriptForm] + regionForms
+    }
+
+    private static func maximal(_ identifier: String) -> Locale.Language {
+        Locale.Language(identifier: Locale.Language(identifier: identifier).maximalIdentifier)
     }
 
     /// Every name the bundle carries, preferred language first; `base` ranks with its own language.

@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// The five statuses, read together off the main actor: each read is a round trip to TCC.
+/// The four statuses, read together off the main actor: each read is a round trip to TCC.
 private struct PermissionStatuses: Equatable, Sendable {
     let accessibilityTrusted: Bool
-    let fullDiskAccess: Bool
     let calendar: CalendarAccess
     let reminders: CalendarAccess
     let contacts: CalendarAccess
@@ -11,7 +10,6 @@ private struct PermissionStatuses: Equatable, Sendable {
     nonisolated static func read() -> Self {
         Self(
             accessibilityTrusted: Permissions.isAccessibilityTrusted(),
-            fullDiskAccess: Permissions.hasFullDiskAccess(),
             calendar: Permissions.calendarAccess(), reminders: Permissions.remindersAccess(),
             contacts: Permissions.contactsAccess())
     }
@@ -24,7 +22,6 @@ struct PermissionsSettingsView: View {
     @State private var statuses = Self.lastRead
 
     private var accessibilityTrusted: Bool? { statuses?.accessibilityTrusted }
-    private var fullDiskAccess: Bool? { statuses?.fullDiskAccess }
     private var calendarAccess: CalendarAccess? { statuses?.calendar }
     private var remindersAccess: CalendarAccess? { statuses?.reminders }
     private var contactsAccess: CalendarAccess? { statuses?.contacts }
@@ -60,34 +57,6 @@ struct PermissionsSettingsView: View {
                 }
             } header: {
                 SettingsSectionHeader(.permissionsAccessibility)
-            }
-
-            Section {
-                LabeledContent {
-                    HStack(spacing: Theme.Spacing.lg) {
-                        HStack(spacing: Theme.Spacing.xs) {
-                            Image(systemName: fullDiskAccessStatus.symbol)
-                                .accessibilityHidden(true)
-                            Text(fullDiskAccessStatus.title)
-                        }
-                        .foregroundStyle(fullDiskAccessStatus.tint)
-                        Button(fullDiskAccess == false ? "Grant Access…" : "Open…") {
-                            Permissions.openFullDiskAccessSettings()
-                        }
-                        .help("Opens Privacy & Security › Full Disk Access.")
-                    }
-                } label: {
-                    HStack(spacing: Theme.Spacing.lg) {
-                        PermissionSettingsIcon(path: "/")
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                            SettingsRowTitle(.permissionsFullDiskAccess, "Full Disk Access")
-                            Text("Lets Uninstall remove protected leftovers.")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                SettingsSectionHeader(.permissionsFullDiskAccess)
             }
 
             Section {
@@ -213,18 +182,10 @@ struct PermissionsSettingsView: View {
     private var contactsNeedsPrompt: Bool { contactsAccess == .notDetermined }
 
     private var accessibilityStatus: (title: String, symbol: String, tint: Color) {
-        Self.status(granted: accessibilityTrusted)
-    }
-
-    private var fullDiskAccessStatus: (title: String, symbol: String, tint: Color) {
-        Self.status(granted: fullDiskAccess)
-    }
-
-    private static func status(granted: Bool?) -> (title: String, symbol: String, tint: Color) {
-        switch granted {
+        switch accessibilityTrusted {
         case true?: ("Granted", "checkmark.circle.fill", .green)
         case false?: ("Not granted", "exclamationmark.triangle.fill", .orange)
-        case nil: unread
+        case nil: Self.unread
         }
     }
 

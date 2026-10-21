@@ -10,9 +10,6 @@ struct UninstallTests {
     static let home = "/Users/tester"
     static let ownBundleID = "de.fa-krug.blitz"
     static let ownBundleURL = URL(fileURLWithPath: "/Applications/Blitz.app")
-    static let recentDocuments =
-        "Application Support/com.apple.sharedfilelist/"
-        + "com.apple.LSSharedFileList.ApplicationRecentDocuments"
 
     static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         if condition() {
@@ -134,11 +131,8 @@ struct UninstallTests {
             evidence("com.foo.Bar.savedState", "Saved Application State", app) == .bundleID,
             "a .savedState strips")
         expect(
-            evidence("com.foo.Bar.binarycookies", "Cookies", app) == .bundleID,
+            evidence("com.foo.Bar.binarycookies", "HTTPStorages", app) == .bundleID,
             "a .binarycookies strips")
-        expect(
-            evidence("com.foo.bar.sfl3", recentDocuments, app) == .bundleID,
-            "a recent-documents list strips its .sfl3 and matches case-folded")
         expect(
             evidence("com.foo.Bar.8A1F2C3D-1111-2222-3333-444455556666.plist", "Preferences/ByHost", app)
                 == .bundleID,
@@ -156,19 +150,19 @@ struct UninstallTests {
     static func testGroupContainers() {
         let app = identity(bundleID: "com.foo.Bar")
         expect(
-            evidence("group.com.foo.Bar", "Group Containers", app) == .groupContainer,
+            evidence("group.com.foo.Bar", "Application Scripts", app) == .groupContainer,
             "a group. prefix is stripped")
         expect(
-            evidence("ABCDE12345.com.foo.Bar", "Group Containers", app) == .groupContainer,
+            evidence("ABCDE12345.com.foo.Bar", "Application Scripts", app) == .groupContainer,
             "a Team ID prefix is stripped")
         expect(
-            evidence("ABCDE12345.group.com.foo.Bar", "Group Containers", app) == .groupContainer,
+            evidence("ABCDE12345.group.com.foo.Bar", "Application Scripts", app) == .groupContainer,
             "both prefixes are stripped")
         expect(
-            evidence("group.com.foo.BarExtra", "Group Containers", app) == nil,
+            evidence("group.com.foo.BarExtra", "Application Scripts", app) == nil,
             "a near-miss after stripping is still a miss")
         expect(
-            evidence("notateamid.com.foo.Bar", "Group Containers", app) == nil,
+            evidence("notateamid.com.foo.Bar", "Application Scripts", app) == nil,
             "an arbitrary prefix is not a Team ID")
         expect(
             evidence("group.com.foo.Bar", "Preferences", app) == nil,
@@ -366,6 +360,20 @@ struct UninstallTests {
         expect(
             !acceptable(support + "/../../../etc"),
             "relative components are rejected")
+        let scripts = home + "/Library/Application Scripts"
+        expect(
+            UninstallRules.isAcceptableCandidate(
+                path: scripts + "/com.foo.Bar", rootPath: scripts, home: home, bundlePath: bundle),
+            "Application Scripts is NOT TCC-gated — measured, and it is why Books' scripts are listed")
+        expect(
+            !acceptable(support + "/AddressBook") && !acceptable(support + "/com.apple.TCC")
+                && !acceptable(support + "/com.apple.sharedfilelist"),
+            "a TCC-gated child of a remaining root is dropped, never listed as a locked row")
+        expect(
+            !UninstallRules.isAcceptableCandidate(
+                path: "/Library/Application Support/com.apple.TCC",
+                rootPath: "/Library/Application Support", home: home, bundlePath: bundle),
+            "so is the system TCC folder")
         expect(
             !UninstallRules.isAcceptableCandidate(
                 path: bundle, rootPath: "/Applications", home: home, bundlePath: bundle),
@@ -386,15 +394,8 @@ struct UninstallTests {
     // MARK: - Protection
 
     static func testProtection() {
-        let environment = UninstallEnvironment(home: home, hasFullDiskAccess: false)
-        let withFDA = UninstallEnvironment(home: home, hasFullDiskAccess: true)
-
-        func classify(
-            _ facts: PathFacts, _ env: UninstallEnvironment = environment
-        )
-            -> UninstallProtection
-        {
-            UninstallProtectionRules.classify(facts, environment: env)
+        func classify(_ facts: PathFacts) -> UninstallProtection {
+            UninstallProtectionRules.classify(facts)
         }
 
         expect(
@@ -449,16 +450,8 @@ struct UninstallTests {
                 == .removable,
             "an unwritable file still trashes — only a directory needs its own write bit")
 
-        let container = PathFacts(path: home + "/Library/Containers/com.foo.Bar")
-        expect(
-            classify(container) == .needsFullDiskAccess,
-            "a container without Full Disk Access is locked, never attempted")
-        expect(
-            classify(container, withFDA) == .removable,
-            "the same container is removable once Full Disk Access is granted")
-
         let everything = PathFacts(
-            path: home + "/Library/Containers/com.foo.Bar", volumeIsReadOnly: true,
+            path: "/Library/Caches/com.foo.Bar", volumeIsReadOnly: true,
             isSystemRestricted: true, isUserImmutable: true, isDirectory: true, isWritable: false,
             isOwnedByCurrentUser: false, parentIsWritable: false, parentIsSticky: true)
         expect(
@@ -468,26 +461,6 @@ struct UninstallTests {
         expect(
             UninstallProtection.allCases.allSatisfy { ($0.lockReason == nil) == $0.isRemovable },
             "every case except .removable carries a lock reason, and .removable carries none")
-
-        expect(
-            UninstallProtectionRules.isTCCProtected(
-                path: home + "/Library/Group Containers/group.com.foo.Bar", home: home),
-            "group containers are TCC-gated")
-        expect(
-            !UninstallProtectionRules.isTCCProtected(
-                path: home + "/Library/Preferences/com.foo.Bar.plist", home: home),
-            "preferences are not TCC-gated")
-        expect(
-            UninstallProtectionRules.isTCCProtected(
-                path: home + "/Library/" + recentDocuments + "/com.foo.bar.sfl3", home: home),
-            "recent-documents lists are TCC-gated — measured: listing them needs Full Disk Access")
-        expect(
-            !UninstallProtectionRules.isTCCProtected(
-                path: home + "/Library/Application Scripts/com.foo.Bar", home: home),
-            "Application Scripts is NOT TCC-gated — measured, and it is why Books' scripts are removable")
-        expect(
-            classify(PathFacts(path: home + "/Library/Application Scripts/com.foo.Bar")) == .removable,
-            "so those rows are checkable while the containers beside them stay locked")
     }
 
     // MARK: - Plan and selection
@@ -664,10 +637,9 @@ struct UninstallTests {
             "a system root ignores the home directory")
         // A child of these is a bundle ID, so a name match there is a false positive.
         let bundleIDOnly: Set<String> = [
-            "Preferences", "Preferences/ByHost", "Containers", "Group Containers",
-            "Application Scripts", "Saved Application State", "HTTPStorages", "WebKit", "Cookies",
-            "Autosave Information", "LaunchAgents", "LaunchDaemons", "PrivilegedHelperTools",
-            recentDocuments
+            "Preferences", "Preferences/ByHost", "Application Scripts", "Saved Application State",
+            "HTTPStorages", "WebKit", "Autosave Information", "LaunchAgents", "LaunchDaemons",
+            "PrivilegedHelperTools"
         ]
         expect(
             roots.filter { bundleIDOnly.contains($0.relativePath) }
@@ -679,6 +651,19 @@ struct UninstallTests {
         expect(
             !roots.contains { $0.relativePath.contains("receipts") || $0.relativePath == "Keychains" },
             "receipts and keychains stay out of scope")
+        let tccGated = [
+            "Containers", "Group Containers", "Cookies",
+            "Application Support/com.apple.sharedfilelist/"
+                + "com.apple.LSSharedFileList.ApplicationRecentDocuments"
+        ]
+        expect(
+            !roots.contains { $0.base == .userLibrary && tccGated.contains($0.relativePath) },
+            "TCC-gated per-user folders are not searched — uninstall stays per user, no grant asked")
+        expect(
+            roots.allSatisfy {
+                !UninstallRules.isTCCGated(path: $0.path(home: home) + "/x", home: home)
+            },
+            "no remaining root lists its children from inside a TCC-gated folder")
     }
 
     static func main() {

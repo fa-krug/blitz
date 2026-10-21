@@ -344,9 +344,7 @@ final class ExtensionNodeShims: @unchecked Sendable {
     /// FileManager's nil read hides the errno, so reopen the path to learn why it failed.
     private func readError(_ syscall: String, _ path: String) -> ShimError {
         let descriptor = Darwin.open(path, Self.probeFlags)
-        guard descriptor >= 0 else {
-            return errno == ENOENT ? .noEntry(path, syscall) : fileError(syscall, path)
-        }
+        guard descriptor >= 0 else { return pathError(syscall, path) }
         defer { Darwin.close(descriptor) }
         var status = Darwin.stat()
         let isDirectory =
@@ -356,6 +354,10 @@ final class ExtensionNodeShims: @unchecked Sendable {
         return .noEntry(path, syscall)
     }
 
+    private func pathError(_ syscall: String, _ path: String) -> ShimError {
+        errno == ENOENT ? .noEntry(path, syscall) : fileError(syscall, path)
+    }
+
     private static let errorNames: [Int32: String] = [
         EACCES: "EACCES", EBADF: "EBADF", EEXIST: "EEXIST", EISDIR: "EISDIR", EMFILE: "EMFILE",
         EINVAL: "EINVAL", ENOENT: "ENOENT", ENOSPC: "ENOSPC", ENOTDIR: "ENOTDIR", EPERM: "EPERM",
@@ -363,26 +365,24 @@ final class ExtensionNodeShims: @unchecked Sendable {
     ]
 
     private func stat(path: String, followLinks: Bool) throws -> [String: Any] {
-        let target =
-            followLinks ? URL(fileURLWithPath: path).resolvingSymlinksInPath().path : path
-        guard let attributes = try? fileManager.attributesOfItem(atPath: target) else {
-            throw readError("stat", path)
-        }
+        var status = Darwin.stat()
+        let flags = followLinks ? 0 : AT_SYMLINK_NOFOLLOW
+        guard fstatat(AT_FDCWD, path, &status, flags) == 0 else { throw pathError("stat", path) }
 
-        let type = attributes[.type] as? FileAttributeType
-        func milliseconds(_ key: FileAttributeKey) -> Double {
-            ((attributes[key] as? Date)?.timeIntervalSince1970 ?? 0) * 1000
+        let type = status.st_mode & S_IFMT
+        func milliseconds(_ time: timespec) -> Double {
+            Double(time.tv_sec) * 1000 + Double(time.tv_nsec) / 1_000_000
         }
         return [
-            "size": (attributes[.size] as? NSNumber)?.doubleValue ?? 0,
-            "mode": (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0,
-            "mtimeMs": milliseconds(.modificationDate),
-            "atimeMs": milliseconds(.modificationDate),
-            "ctimeMs": milliseconds(.creationDate),
-            "birthtimeMs": milliseconds(.creationDate),
-            "_isFile": type == .typeRegular,
-            "_isDirectory": type == .typeDirectory,
-            "_isSymbolicLink": type == .typeSymbolicLink
+            "size": Double(status.st_size),
+            "mode": Int(status.st_mode),
+            "mtimeMs": milliseconds(status.st_mtimespec),
+            "atimeMs": milliseconds(status.st_atimespec),
+            "ctimeMs": milliseconds(status.st_ctimespec),
+            "birthtimeMs": milliseconds(status.st_birthtimespec),
+            "_isFile": type == S_IFREG,
+            "_isDirectory": type == S_IFDIR,
+            "_isSymbolicLink": type == S_IFLNK
         ]
     }
 

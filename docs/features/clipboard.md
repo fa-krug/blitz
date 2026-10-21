@@ -101,6 +101,11 @@ the cap, and even a rejected modern file URL suppresses the legacy filenames fal
 re-capturing Blitz's own writes, every write stamps a private `internalType` marker on the
 pasteboard and the poller skips anything carrying it.
 
+A ⌘C Blitz sends to read a selection can't carry that marker, since the other app writes it.
+`pauseCapture()` and `resumeCapture()` bracket that borrow instead: the poller skips every tick in
+between, and the restore's baseline keeps the copy from being recorded once it resumes.
+`TextInjector` refuses a second borrow while one is in flight, so the pause is never nested.
+
 `stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
 `isCapturing` flag that `prepareForBlitzPasteboardMutation` reads — so a paste Blitz performs
 itself does not drain the pasteboard into history either.
@@ -125,7 +130,9 @@ in-memory history).
 
 Image capture (TIFF→PNG re-encode + blob write) runs off the main actor via detached tasks; row
 inserts, original-text search, and pruning stay on the main actor.
-Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG and marker.
+Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG, its file URL
+and marker. The file URL is what a terminal pastes, as the path, since it ignores image data; there
+is deliberately no `.string`, which a rich text field would take over the image.
 
 **A backup reads the whole table, not `items`.** `forEachStoredItem(inDatabaseAt:)` is `nonisolated`
 and opens a second connection, because the resident window stops at 1000 rows while the table is

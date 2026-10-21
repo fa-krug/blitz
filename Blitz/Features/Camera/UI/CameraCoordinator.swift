@@ -65,9 +65,9 @@ final class CameraCoordinator {
         scanTask?.cancel()
         scanTask = nil
         let closingSession = session
-        // The camera goes with the panel, not before it: tearing it down mid-fade blanks the feed.
-        closing.fadeOut(duration: Theme.Duration.exit) { [weak self] in
-            // Unless a panel raised inside the fade already owns this camera.
+        // The camera goes with the panel, not before it: tearing it down mid-close blanks the feed.
+        closing.orderOutAnimated { [weak self] in
+            // Unless a panel raised inside the close already owns this camera.
             guard let self, !(session === closingSession && (opening || panel != nil)) else {
                 return
             }
@@ -152,9 +152,7 @@ final class CameraCoordinator {
         self.panel = panel
         panel.centerOnCursorScreen()
         // Non-activating like the palette: key focus without pulling the user out of their app.
-        panel.fadeIn(duration: Theme.Duration.enter) {
-            panel.makeKeyAndOrderFront(nil)
-            panel.orderFrontRegardless()
-        }
+        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
     }
 }
