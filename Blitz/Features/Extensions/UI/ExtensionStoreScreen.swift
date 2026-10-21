@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Raycast Store in the palette: popular until a query, ↵ installs, ⌘↵ shows details.
+/// The Raycast Store in the palette: popular until a query, ↵ shows details, ⌘↵ installs.
 struct ExtensionStoreScreen: PaletteScreen {
     let session: ExtensionStoreSession
     let extensions: ExtensionManager
@@ -17,8 +17,13 @@ struct ExtensionStoreScreen: PaletteScreen {
     }
 
     var primaryActionTitle: String {
-        listing(at: vm.selection).flatMap(installed) == nil ? "Install Extension" : "Configure Extension"
+        guard session.detail != nil else { return "Show Details" }
+        return listing(at: vm.selection).flatMap(installed) == nil
+            ? "Install Extension" : "Configure Extension"
     }
+
+    /// The detail page has nothing further to open, so its ↵ is the install ⌘↵ runs from the list.
+    private var installKey: String { session.detail == nil ? "⌘↵" : "↵" }
 
     private func listing(at selection: Int) -> ExtensionListing? {
         rows.indices.contains(selection) ? rows[selection] : nil
@@ -31,7 +36,7 @@ struct ExtensionStoreScreen: PaletteScreen {
 
     func hasPrimaryAction(at selection: Int) -> Bool {
         guard let listing = listing(at: selection) else { return false }
-        return !session.isInstalling(listing)
+        return session.detail == nil || !session.isInstalling(listing)
     }
 
     func hasActions(at selection: Int) -> Bool { actions(at: selection) != nil }
@@ -39,10 +44,17 @@ struct ExtensionStoreScreen: PaletteScreen {
     func actions(at selection: Int) -> PopoverMenuContent? {
         guard let listing = listing(at: selection) else { return nil }
         var items: [PopoverMenuItem] = []
+        if session.detail == nil {
+            items.append(
+                PopoverMenuItem(title: "Show Details", systemImage: "info.circle", shortcut: "↵") {
+                    showDetail(at: selection)
+                })
+        }
         if let owner = installed(listing) {
             items.append(
                 PopoverMenuItem(
-                    title: "Configure Extension", systemImage: "slider.horizontal.3", shortcut: "↵"
+                    title: "Configure Extension", systemImage: "slider.horizontal.3",
+                    shortcut: installKey
                 ) {
                     core.extensionCoordinator.showExtensionSettings(for: owner)
                 })
@@ -52,34 +64,35 @@ struct ExtensionStoreScreen: PaletteScreen {
             items.append(
                 PopoverMenuItem(
                     title: isInstalled ? "Reinstall Extension" : "Install Extension",
-                    systemImage: "arrow.down.circle", shortcut: isInstalled ? nil : "↵"
+                    systemImage: "arrow.down.circle", shortcut: isInstalled ? nil : installKey
                 ) {
                     core.extensionCoordinator.installFromStore(listing)
-                })
-        }
-        if session.detail == nil {
-            items.append(
-                PopoverMenuItem(title: "Show Details", systemImage: "info.circle", shortcut: "⌘↵") {
-                    showDetail(at: selection)
                 })
         }
         return items.isEmpty ? nil : PopoverMenuContent(header: listing.title, items: items)
     }
 
     func activate(at selection: Int) {
+        if session.detail == nil {
+            showDetail(at: selection)
+        } else {
+            installOrConfigure(at: selection)
+        }
+    }
+
+    func secondary(at selection: Int) -> Bool {
+        guard listing(at: selection) != nil else { return false }
+        installOrConfigure(at: selection)
+        return true
+    }
+
+    private func installOrConfigure(at selection: Int) {
         guard let listing = listing(at: selection), !session.isInstalling(listing) else { return }
         if let owner = installed(listing) {
             core.extensionCoordinator.showExtensionSettings(for: owner)
         } else {
             core.extensionCoordinator.installFromStore(listing)
         }
-    }
-
-    /// ⌘↵ opens the extension's store page; on that page there is nothing further to open.
-    func secondary(at selection: Int) -> Bool {
-        guard session.detail == nil, listing(at: selection) != nil else { return false }
-        showDetail(at: selection)
-        return true
     }
 
     private func showDetail(at selection: Int) {

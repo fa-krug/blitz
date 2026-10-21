@@ -562,11 +562,11 @@ the jump came from. Leaving a page for the list scrolls it back to that extensio
 ## The Store screen
 
 **Extension Store** is the same store search in the palette, so an extension installs without
-leaving it. With nothing typed it lists **Popular**; typing searches; ↵ on a result installs it, or
-opens its Settings page once it is here; ⌘K adds Reinstall and Show Details. `ExtensionStoreSession`
-(`Service/`, on `AppCore`) holds one debounced listing and the progress of every install it started,
-through the same `ExtensionStoreClient` — a private `.ephemeral` session — and
-`ExtensionManager.install(_:onProgress:)` the Settings panel uses.
+leaving it. With nothing typed it lists **Popular**; typing searches; ↵ on a result opens its store
+page, and ⌘↵ installs it straight from the list, or opens its Settings page once it is here; ⌘K
+adds Reinstall. `ExtensionStoreSession` (`Service/`, on `AppCore`) holds one debounced listing and
+the progress of every install it started, through the same `ExtensionStoreClient` — a private
+`.ephemeral` session — and `ExtensionManager.install(_:onProgress:)` the Settings panel uses.
 
 **Popular is the store's own front page, not a sort.** The search endpoint
 (`frontend_api/extensions/search`) ignores every `sort`/`order`/`order_by` spelling tried and returns
@@ -577,15 +577,15 @@ ranking, no cache. Both endpoints serve ten a page and report `total_results`, s
 page from the end fetches the next one, by the same trigger rule a command's `pagination` uses. The
 order is live, so a later page can repeat an entry and is de-duplicated by id.
 
-**⌘↵ (or Show Details) opens an extension's store page** as a sub-state of the same screen: icon,
+**↵ (or a click) opens an extension's store page** as a sub-state of the same screen: icon,
 author, installs, commands, categories, a downsampled screenshot strip, the README and the newest
 changelog entry. A search result carries neither screenshots nor a changelog, so the page also asks
 `api/v1/extensions/<handle>/<name>`, alongside the README. The store links the README as GitHub's HTML
 tree view; `ExtensionStoreReadme` rewrites it to `raw.githubusercontent.com` and resolves its relative
 images against `readme_assets_path` (whose doubled trailing slash it drops), then
-`ExtensionMarkdownView` renders it. ↵ installs from the page; Escape, a bare backspace and the back
-chevron return to the row it was opened from, with the query that found it intact — they are
-handled at the panel, ahead of Escape clearing the query. Typing a new query closes the page.
+`ExtensionMarkdownView` renders it. ↵ and ⌘↵ both install from the page; Escape, a bare backspace
+and the back chevron return to the row it was opened from, with the query that found it intact —
+they are handled at the panel, ahead of Escape clearing the query. Typing a new query closes the page.
 An install outlives the screen: leaving drops the search, never a download, and a HUD says when
 the commands have arrived. A progress step that lands after its install ended is dropped, or it
 would bring the row's spinner back for good.
