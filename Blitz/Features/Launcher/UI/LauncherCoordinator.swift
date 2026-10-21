@@ -165,7 +165,8 @@ final class LauncherCoordinator {
         case .application:
             Task {
                 do {
-                    try await AppLauncher.launch(app.url)
+                    // The selected copy, never whichever version of the app is running already.
+                    try await AppLauncher.launch(app.url, allowsRunningApplicationSubstitution: false)
                 } catch {
                     core.reportOpenFailure(
                         app.name, symbol: "app.dashed", reason: error.localizedDescription)
@@ -379,7 +380,7 @@ final class LauncherCoordinator {
     /// Quits the app behind an entry; a no-op (palette stays put) when it isn't running.
     func quit(_ app: AppEntry, force: Bool = false) {
         guard app.kind == .application, let bundleID = app.bundleID else { return }
-        quit(bundleID: bundleID, force: force)
+        quit(bundleID: bundleID, url: app.url, force: force)
     }
 
     // MARK: - Chat tools
@@ -404,11 +405,16 @@ final class LauncherCoordinator {
         }
     }
 
-    /// Switch Windows quits through here too: its rows carry a bundle ID, not an `AppEntry`.
-    func quit(bundleID: String, force: Bool = false) {
+    /// Switch Windows quits through here too, with no `url`: every instance of the bundle.
+    func quit(bundleID: String, url: URL? = nil, force: Bool = false) {
         // Nothing here takes focus, so hand it back unless that app is on its way out.
-        let quittingPreviousApp = windowController.previousApp?.bundleIdentifier == bundleID
-        guard AppLauncher.quit(bundleID: bundleID, force: force) else { return }
+        let previous = windowController.previousApp
+        let quittingPreviousApp =
+            url.map {
+                previous?.bundleURL?.resolvingSymlinksInPath().standardizedFileURL
+                    == $0.resolvingSymlinksInPath().standardizedFileURL
+            } ?? (previous?.bundleIdentifier == bundleID)
+        guard AppLauncher.quit(bundleID: bundleID, url: url, force: force) else { return }
         paletteCoordinator.hidePalette(restoreFocus: !quittingPreviousApp)
     }
 }

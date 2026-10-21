@@ -228,7 +228,8 @@ trade); the two Finder actions hand focus to Finder and so hide the palette. Sho
 route and drives Finder over Apple events, which raises the system Automation prompt on first use.
 
 `UninstallCoordinator.performUninstall()` is the one funnel, so neither ↵ nor the menu row can skip the
-confirmation. After confirmation it checks the app again and **waits for it to exit** before
+confirmation. After confirmation it checks the app again and **waits for it to exit** —
+`AppLauncher.quitAwaitingExit(bundleID:url:)`, scoped to the bundle's own path — before
 trashing anything — an app still quitting writes its saved state and preferences back behind the
 trash. If it hasn't exited within `AppLauncher`'s grace period (a save sheet left standing), nothing
 is moved and a notice says so. The wait polls `NSRunningApplication.isTerminated`, since workspace

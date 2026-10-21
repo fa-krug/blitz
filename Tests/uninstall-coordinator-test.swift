@@ -26,8 +26,12 @@ struct UninstallCoordinatorTests {
                 }
                 expect(core.finished, "the operation completes")
                 expect(
-                    AppLauncher.quitRequests == (confirmed ? [session.app?.bundleID] : []),
+                    AppLauncher.quitRequests.count == (confirmed ? 1 : 0),
                     "confirmation rechecks the app even when the scan and monitor say it is stopped")
+                if let request = AppLauncher.quitRequests.first {
+                    expect(request.0 == session.app?.bundleID, "quit uses the selected bundle ID")
+                    expect(request.1 == session.app?.url, "quit uses the selected installation")
+                }
                 expect(
                     UninstallRunner.moved == (confirmed && quitSucceeded ? session.selectedCandidates : []),
                     "only a confirmed uninstall whose quit succeeds reaches the runner")
@@ -83,10 +87,10 @@ final class UninstallSession {
 @MainActor
 enum AppLauncher {
     static var quitSucceeded = true
-    static var quitRequests: [String?] = []
+    static var quitRequests: [(String, URL)] = []
 
-    static func quitAwaitingExit(bundleID: String) async -> Bool {
-        quitRequests.append(bundleID)
+    static func quitAwaitingExit(bundleID: String, url: URL) async -> Bool {
+        quitRequests.append((bundleID, url))
         await Task.yield()
         return quitSucceeded
     }

@@ -1,7 +1,25 @@
 # App launcher & root search
 
-`AppIndex.scan()` runs off-main, enumerates the user's search scopes, and dedups by bundle ID (the
-earliest scope wins; within one folder, the newest `CFBundleShortVersionString` does).
+`AppIndex.scan()` runs off-main, enumerates the user's search scopes, and keeps every distinct
+installation: an entry's id is its symlink-resolved path, so a bundle two scopes (or a symlink) reach
+is indexed once. Copies that share a bundle ID all stay in launcher search; `AppIndex.apps`, which
+Settings, the app pickers and the chat tools read, keeps one **primary installation** per bundle ID
+(the earliest scope wins; within one folder, the newest `CFBundleShortVersionString` does).
+
+Copies share everything keyed by bundle ID — alias, visibility, ranking, favorite and global
+shortcut — and each copy's `primaryInstallationID` names the primary. Favorites and Suggestions show
+the primary while the other copies stay in the rest of the list. `AppIndex.matches`, behind the app
+picker, maps a matched copy back to its primary, and so does a copy's Configure Command. When names
+collide, the subtitle carries the version, plus the folder when the versions match or one is missing;
+an app alone keeps none. ↵ opens
+the selected path with `allowsRunningApplicationSubstitution` off, so a different running version
+can't stand in for it, and Restart reopens that same path; bundle-ID launches such as Window Layouts
+keep the system's substitution. Uninstall is not offered while copies share a bundle ID, since their
+support files and preferences are shared too.
+
+`./Scripts/run-tests.sh app-installation-test` covers the index and the app-wide preferences.
+`BLITZ_TEST_APP_LAUNCH=1` (or `--launch`) adds native fixture apps that check launch, quit and restart
+per path; checks that need workspace notifications report as skipped when the session gets none.
 
 ## Invariants
 
@@ -63,9 +81,9 @@ prevent cycles.
 
 Within one folder, bundles are listed newest `CFBundleShortVersionString` first, compared as numbers
 so `26.6` outranks `9.4`. A tie or an unreadable version falls back to Finder's name order. Because
-the scan keeps a bundle ID's first copy, two Xcodes in `/Applications` resolve to the newest, every
-scan, and the embedded apps follow their parent. Scope order still comes first: listing an older
-copy as its own earlier scope pins it.
+a bundle ID's first copy is its primary, the newest of two Xcodes in `/Applications` represents the
+app in Settings and Favorites, every scan, and the embedded apps follow their parent. Scope order
+still comes first: listing an older copy as its own earlier scope pins it. Search keeps every copy.
 
 The defaults cover `/Applications` and `/System/Applications` plus their `Utilities` folders,
 `/System/Library/CoreServices/Applications`, the cryptex apps under
@@ -247,8 +265,8 @@ from its own Info.plist.
 
 A renamed bundle is the other half. A Finder rename never touches `CFBundleDisplayName`, so the
 on-disk basename is indexed as an alternate title — rename `Slack.app` to `Work Chat.app` and both find
-it. Duplicate copies dedupe by bundle id, and the losing copy lends its file name to the winner
-rather than being dropped whole.
+it. Each installed copy keeps its own names and URL, so a renamed copy never lends its name to a
+different installation.
 
 ### Subtitles
 
@@ -876,18 +894,20 @@ running dot and the availability of the running-only actions:
   running, also bound to **⌃⇧Q** on the selected row. The chord guard mirrors the menu row's
   condition (an `.application` entry that `RunningAppsMonitor` reports running) so the key never
   swallows a press it won't act on, and it's skipped in the compact bar, which shows no selection.
-  `AppLauncher.quit(bundleID:)` terminates every instance of the bundle and reports whether
-  anything was running; the palette only dismisses when something was, and it restores focus unless
-  the app it just quit _was_ `previousApp`.
+  `AppLauncher.quit(bundleID:url:)` terminates the instances running from the selected path (a nil
+  `url`, which Switch Windows passes, means every instance) and reports whether anything was
+  running; the palette only dismisses when something was, and it restores focus unless the app it
+  just quit _was_ `previousApp`. `RunningAppsMonitor.isRunning` is per path too, so a second copy of
+  a running app shows no dot.
 - **Force Quit Application** — the row below it and **⌃⌥⇧Q**, on the same guard and
-  the same dismissal. `AppLauncher.quit(bundleID:force:)` sends `forceTerminate()` instead, so the
+  the same dismissal. `AppLauncher.quit(bundleID:url:force:)` sends `forceTerminate()` instead, so the
   app gets no chance to save or refuse.
 - **Restart Application** — the row above Quit and **⌘R**, on the same guard: all three chords resolve
   their target through `LauncherScreen.runningApplication(at:)`, the single place that condition
-  lives. `AppLauncher.restart(bundleID:url:)` snapshots the running instances, terminates them,
-  then reopens the bundle once every one reads `isTerminated`, polled every 50 ms: workspace exit
-  notifications skip background and menu-bar apps. Uninstall waits on the same poll through
-  `quitAwaitingExit(bundleID:)`. The wait is bounded by a five-second grace: a quit an app refuses, or one sitting behind a save sheet the
+  lives. `AppLauncher.restart(bundleID:url:)` snapshots the instances at the selected path,
+  terminates them, then reopens that path once every one reads `isTerminated`, polled every 50 ms:
+  workspace exit notifications skip background and menu-bar apps. Uninstall waits on the same poll
+  through `quitAwaitingExit(bundleID:url:)`. The wait is bounded by a five-second grace: a quit an app refuses, or one sitting behind a save sheet the
   user leaves standing, relaunches nothing and leaves that app running. The palette dismisses the
   moment the quit is asked for and never restores focus — either the relaunch takes it, or the app
   that refused the quit is the one asking for it.

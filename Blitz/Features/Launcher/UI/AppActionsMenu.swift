@@ -91,7 +91,8 @@ enum AppActionsMenu {
                     core.launcherCoordinator.quit(app, force: true)
                 })
         }
-        if app.kind == .application {
+        // Copies sharing a bundle ID share its support files and preferences too.
+        if app.kind == .application, app.primaryInstallationID == nil {
             items.append(
                 PopoverMenuItem(
                     title: "Uninstall Application", systemImage: "trash", startsSection: true,

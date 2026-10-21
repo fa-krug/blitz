@@ -4,9 +4,10 @@ enum AppLauncher {
 
     /// Throws what Launch Services refused, so a caller whose palette already hid can say why.
     @MainActor
-    static func launch(_ url: URL) async throws {
-        _ = try await NSWorkspace.shared.openApplication(
-            at: url, configuration: NSWorkspace.OpenConfiguration())
+    static func launch(_ url: URL, allowsRunningApplicationSubstitution: Bool = true) async throws {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.allowsRunningApplicationSubstitution = allowsRunningApplicationSubstitution
+        _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     /// Hands the URL to whatever the system registers for its scheme, e.g. the default browser.
@@ -83,11 +84,11 @@ enum AppLauncher {
         }
     }
 
-    /// Quits every instance; only an unforced quit lets unsaved work put up its sheet.
+    /// A nil `url` quits every instance; only an unforced quit lets unsaved work put up its sheet.
     @MainActor
     @discardableResult
-    static func quit(bundleID: String, force: Bool = false) -> Bool {
-        let running = runningApplications(bundleID: bundleID)
+    static func quit(bundleID: String, url: URL? = nil, force: Bool = false) -> Bool {
+        let running = runningApplications(bundleID: bundleID, at: url)
         for app in running {
             if force { app.forceTerminate() } else { app.terminate() }
         }
@@ -100,20 +101,25 @@ enum AppLauncher {
     /// A refused quit — a save sheet left standing — relaunches nothing.
     @MainActor
     static func restart(bundleID: String, url: URL) async {
-        let running = runningApplications(bundleID: bundleID)
-        guard !running.isEmpty, await quitAwaitingExit(running) else { return }
-        try? await launch(url)
+        let target = url.resolvingSymlinksInPath().standardizedFileURL
+        let running = runningApplications(bundleID: bundleID, at: target)
+        guard !running.isEmpty, !Task.isCancelled, await quitAwaitingExit(running), !Task.isCancelled
+        else { return }
+        try? await launch(target, allowsRunningApplicationSubstitution: false)
     }
 
-    /// True once nothing with the bundle ID is left running, which includes nothing running at all.
+    /// True once nothing from that bundle at that path is left running, including nothing at all.
     @MainActor
-    static func quitAwaitingExit(bundleID: String) async -> Bool {
-        await quitAwaitingExit(runningApplications(bundleID: bundleID))
+    static func quitAwaitingExit(bundleID: String, url: URL) async -> Bool {
+        await quitAwaitingExit(runningApplications(bundleID: bundleID, at: url))
     }
 
+    /// Another installed copy shares the bundle ID, so only the bundle's own path names an instance.
     @MainActor
-    private static func runningApplications(bundleID: String) -> [NSRunningApplication] {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+    private static func runningApplications(bundleID: String, at url: URL?) -> [NSRunningApplication] {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        guard let target = url?.resolvingSymlinksInPath().standardizedFileURL else { return running }
+        return running.filter { $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == target }
     }
 
     /// Polls rather than observes: workspace exit notifications skip background and menu-bar apps.
