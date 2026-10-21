@@ -134,7 +134,10 @@ struct AIConnectionEditorPanel: View {
         }
         .onChange(of: modelQuery) { visibleModelCount = Self.modelPageSize }
         .onChange(of: key) { discoveryRevision += 1 }
-        .onChange(of: connection.baseURL) { discoveryRevision += 1 }
+        .onChange(of: connection.baseURL) {
+            connection.dropDeclaredLevels()
+            discoveryRevision += 1
+        }
         .onChange(of: connection.provider) { oldProvider, newProvider in
             if connection.baseURL.isEmpty || connection.baseURL == oldProvider.defaultBaseURL {
                 connection.baseURL = newProvider.defaultBaseURL
@@ -197,21 +200,23 @@ struct AIConnectionEditorPanel: View {
     private func modelSearchResults(_ models: [AIModelDiscovery.Model]) -> some View {
         let query = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = matchingModels(in: models)
+        let isQueryAdded = connection.models.contains {
+            $0.caseInsensitiveCompare(query) == .orderedSame
+        }
+        // A gateway can list dated builds but accept a short alias that a listed ID contains.
+        let offersTypedID =
+            !query.isEmpty && !isQueryAdded
+            && AIModelDiscovery.exactMatch(models, query: query) == nil
         if matches.isEmpty {
             if query.isEmpty {
                 Label("Every available model is added.", systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
-            } else if connection.models.contains(where: {
-                $0.caseInsensitiveCompare(query) == .orderedSame
-            }) {
+            } else if isQueryAdded {
                 Label("This model is already added.", systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
             } else {
                 Label("No available model matches this key.", systemImage: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                if connection.provider == .openAICompatible {
-                    Button("Use “\(query)” anyway") { addModel(query) }
-                }
             }
         } else {
             ForEach(matches.prefix(visibleModelCount)) { model in
@@ -246,6 +251,9 @@ struct AIConnectionEditorPanel: View {
                 }
             }
         }
+        if offersTypedID {
+            Button("Use “\(query)” anyway") { addModel(query) }
+        }
     }
 
     private var manualModelField: some View {
@@ -264,13 +272,46 @@ struct AIConnectionEditorPanel: View {
 
     private func selectedModelRow(_ model: String) -> some View {
         LabeledContent(model) {
-            Button {
-                removeModel(model)
-            } label: {
-                Image(systemName: "minus.circle").foregroundStyle(.red)
+            HStack(spacing: Theme.Spacing.md) {
+                if connection.takesDeclaredLevels { reasoningLevelsMenu(model) }
+                Button {
+                    removeModel(model)
+                } label: {
+                    Image(systemName: "minus.circle").foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(model)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove \(model)")
+        }
+    }
+
+    private func reasoningLevelsMenu(_ model: String) -> some View {
+        let declared = connection.declaredLevels(for: model)
+        return Menu {
+            ForEach(AIConnection.ReasoningOptions.ladder, id: \.self) { level in
+                Toggle(
+                    level.capitalized,
+                    isOn: Binding(
+                        get: { declared.contains(level) },
+                        set: { isOn in
+                            var levels = declared
+                            if isOn { levels.insert(level) } else { levels.remove(level) }
+                            connection.declareLevels(levels, for: model)
+                        }))
+            }
+        } label: {
+            Text(declaredLevelsTitle(declared)).font(.caption)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("Reasoning levels for \(model)")
+    }
+
+    private func declaredLevelsTitle(_ declared: Set<String>) -> String {
+        switch declared.count {
+        case 0: return "Reasoning levels"
+        case 1: return "1 level"
+        default: return "\(declared.count) levels"
         }
     }
 
@@ -306,13 +347,7 @@ struct AIConnectionEditorPanel: View {
     }
 
     private func addExactMatch(from models: [AIModelDiscovery.Model]) {
-        let query = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard
-            let match = models.first(where: {
-                $0.id.caseInsensitiveCompare(query) == .orderedSame
-                    || $0.name.caseInsensitiveCompare(query) == .orderedSame
-            })
-        else { return }
+        guard let match = AIModelDiscovery.exactMatch(models, query: modelQuery) else { return }
         addModel(match)
     }
 

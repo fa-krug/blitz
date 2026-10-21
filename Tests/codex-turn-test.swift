@@ -261,6 +261,9 @@ struct CodexTurnTests {
                     instructions.contains("Never execute commands, read local files"),
                     "\(label): local access stays forbidden")
                 expect(
+                    instructions.contains("for anything they offer") == hasTools,
+                    "\(label): an armed turn may use its MCP tools for anything they offer")
+                expect(
                     instructions.contains("Never invoke tools") == (!search && !hasTools),
                     "\(label): only a turn with no tools forbids every tool")
                 expect(

@@ -128,6 +128,14 @@ enum AIModelDiscovery {
             .map(\.element)
     }
 
+    static func exactMatch(_ models: [Model], query: String) -> Model? {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return nil }
+        // An ID outranks a display name, as in search, so Return adds the top row.
+        return models.first { $0.id.caseInsensitiveCompare(query) == .orderedSame }
+            ?? models.first { $0.name.caseInsensitiveCompare(query) == .orderedSame }
+    }
+
     private static func catalogURL(
         provider: AIProviderKind, baseURL: URL, usesNativeGemini: Bool
     ) -> URL? {
@@ -217,6 +225,17 @@ enum AIModelDiscovery {
             enum CodingKeys: String, CodingKey {
                 case id, name, architecture, reasoning
                 case displayName = "display_name"
+            }
+
+            // A shape we cannot read is dropped, never the entry.
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                id = try container.decode(String.self, forKey: .id)
+                name = try? container.decodeIfPresent(String.self, forKey: .name)
+                displayName = try? container.decodeIfPresent(String.self, forKey: .displayName)
+                architecture = try? container.decodeIfPresent(
+                    Architecture.self, forKey: .architecture)
+                reasoning = try? container.decodeIfPresent(Reasoning.self, forKey: .reasoning)
             }
         }
 
