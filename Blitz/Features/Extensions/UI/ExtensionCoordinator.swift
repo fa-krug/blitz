@@ -66,7 +66,7 @@ final class ExtensionCoordinator {
             return
         }
 
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         Task {
             guard
                 await core.confirm(
@@ -199,7 +199,7 @@ final class ExtensionCoordinator {
 
     func confirmUninstall(_ owner: InstalledExtension) {
         paletteCoordinator.hidePalette(restoreFocus: false)
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         Task {
             guard
                 await core.confirm(
@@ -375,7 +375,7 @@ final class ExtensionCoordinator {
 
     /// The dialog outranks the palette, so a view command keeps its screen behind it.
     func confirmExtensionAlert(_ alert: ExtensionAlert) async -> Bool {
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         return await core.confirm(
             title: alert.title, message: alert.message,
             symbol: alert.isDestructive ? "exclamationmark.triangle" : "questionmark.circle",

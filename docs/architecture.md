@@ -152,8 +152,11 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
   unreliable for accessory apps, so this is deliberate. Their lifecycles are independent of the
   palette's in both directions. Every `AppWindowController` window is `.moveToActiveSpace`: a
   raise from the palette brings it to the current Space, since Blitz's activation never switches
-  Spaces to reach a window left on another. Onboarding opens by itself once, on first launch; the
-  Show Welcome Tour command and Settings ▸ General ▸ Welcome Tour reopen it through `showOnboarding()`.
+  Spaces to reach a window left on another. Every raise activates through
+  `NSApp.activateOverFrontmost()` (`Platform/AppActivation.swift`), never a bare `NSApp.activate()`,
+  which macOS refuses while another app is frontmost, as it is after a global shortcut. Onboarding
+  opens by itself once, on first launch; the Show Welcome Tour command and Settings ▸ General ▸
+  Welcome Tour reopen it through `showOnboarding()`.
   Settings is the one window **hidden rather than torn down on close** (`keepsContentWhenClosed`):
   rebuilding its split, sidebar and toolbar costs ~200 ms per open, so a reopen keeps them and only
   restarts the session. `SettingsCoordinator.showSettings` calls
@@ -225,8 +228,9 @@ Blitz/
                     Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
                     AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
-                    HealthTicker, Memo, ActivationPolicy, ProcessExit, AccessibilityText,
-                    ExternalAppMonitor, PasteboardSensitivity, Images/, Compression/
+                    HealthTicker, Memo, ActivationPolicy, AppActivation, ProcessExit,
+                    AccessibilityText, ExternalAppMonitor, PasteboardSensitivity, Images/,
+                    Compression/
   Resources/        RaycastRuntime.generated.js (the embedded extension runtime), EmojiKeywords/
   Palette/          the palette shell: PalettePanel, PaletteWindowController, RootPaletteView,
                     the PaletteScreen protocol, PaletteCoordinator, PaletteState, PaletteMode,

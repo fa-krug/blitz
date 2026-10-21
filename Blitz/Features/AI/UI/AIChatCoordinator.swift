@@ -208,7 +208,7 @@ final class AIChatCoordinator {
         let panel = NSSavePanel()
         // A title may hold a slash or a colon, neither of which a file name can.
         panel.nameFieldStringValue = markdown.title.replacing(/[\/:]/, with: "-") + ".md"
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try Data(markdown.text.utf8).write(to: url, options: .atomic)
@@ -1191,7 +1191,7 @@ final class AIChatCoordinator {
         panel.allowsMultipleSelection = true
         panel.prompt = "Attach"
         panel.message = "Choose images, PDFs or text files to send with your next message."
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         guard panel.runModal() == .OK else { return }
         attach(files: panel.urls, to: chat)
     }

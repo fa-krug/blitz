@@ -204,9 +204,9 @@ final class AppWindowController: NSObject, NSWindowDelegate {
 
     private func raise(_ window: NSWindow) {
         if window.isMiniaturized { window.deminiaturize(nil) }
-        NSApp.activate()
+        NSApp.activateOverFrontmost()
         window.makeKeyAndOrderFront(nil)
-        // `NSApp.activate` is async, so re-assert next turn — never onto a window closed since.
+        // Activation is async, so re-assert next turn — never onto a window closed since.
         DispatchQueue.main.async { [weak self, weak window] in
             guard let window, let self, self.window === window, self.isShown else { return }
             window.makeKeyAndOrderFront(nil)
