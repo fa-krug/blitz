@@ -78,6 +78,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     @ObservationIgnored private var backgroundTask: Task<Void, Never>?
     @ObservationIgnored private var nextToastID = 1
     @ObservationIgnored private var paginationLatch = ExtensionPagination.Latch()
+    @ObservationIgnored private var treeRevision = 0
+    @ObservationIgnored private var screenMemo: (revision: Int, query: String, screen: ExtensionScreen)?
     @ObservationIgnored private var lastOAuthExtensionName: String?
     @ObservationIgnored private var lastLaunch: ExtensionLaunch?
     /// What the foreground command logged, for Copy Error.
@@ -513,6 +515,10 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         let supportPath = ExtensionCatalog.supportPath(for: owner.manifest.name)
         try? FileManager.default.createDirectory(at: supportPath, withIntermediateDirectories: true)
 
+        // Reading a few hundred KB of bundle is IO: off the main actor, and alongside the boot.
+        let read = Task.detached(priority: .userInitiated) {
+            (try? String(contentsOf: bundle, encoding: .utf8)) ?? ""
+        }
         do {
             // No-op while a context is already up; after `stop()` this builds a fresh one.
             try await runtime.boot(config: .current(supportDirectory: supportPath))
@@ -521,10 +527,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             return
         }
 
-        // Reading a few hundred KB of bundle is IO; keep it off the main actor.
-        let code = await Task.detached(priority: .userInitiated) {
-            (try? String(contentsOf: bundle, encoding: .utf8)) ?? ""
-        }.value
+        let code = await read.value
         guard !code.isEmpty else {
             fail(
                 ExtensionFailure(
@@ -937,6 +940,15 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         return storage.accessoryValue(extension: name, key: key)
     }
 
+    /// The rendered tree flattened for `query`; the palette reads it many times per update.
+    func screen(query: String) -> ExtensionScreen {
+        guard case .rendered(let tree) = state else { return .empty }
+        if let memo = screenMemo, memo.revision == treeRevision, memo.query == query { return memo.screen }
+        let screen = ExtensionScreen(tree: tree, query: query)
+        screenMemo = (treeRevision, query, screen)
+        return screen
+    }
+
     /// Pops the extension's stack; false when there is nothing to pop and the palette should close.
     func popNavigation() async -> Bool {
         guard let sessionID, navigationDepth > 1 else { return false }
@@ -951,6 +963,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
 
     func runtime(_ runtime: ExtensionRuntime, session: String, didRender tree: RenderTree) {
         guard session == sessionID else { return }
+        treeRevision += 1
         state = .rendered(tree)
         navigationDepth = tree.depth
         seedSearchBarAccessory(in: tree)

@@ -1,7 +1,7 @@
 // A Buffer subset over Uint8Array — enough for the encode/decode and binary-parse work bundles do.
 // Anything stream-shaped is deliberately absent; see docs/extensions.md for the supported surface.
 
-import { base64ToBytes, bytesToBase64, utf8Decode, utf8Encode } from "./polyfills.js";
+import { base64ToBytes, bytesToBase64, unitsToString, utf8Decode, utf8Encode } from "./polyfills.js";
 
 function hexToBytes(text) {
   const clean = String(text).replace(/[^0-9a-fA-F]/g, "");
@@ -23,9 +23,7 @@ function latin1ToBytes(text) {
 }
 
 function bytesToLatin1(bytes) {
-  let out = "";
-  for (const byte of bytes) out += String.fromCharCode(byte);
-  return out;
+  return unitsToString(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
 }
 
 function normalizeEncoding(encoding) {

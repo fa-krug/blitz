@@ -685,80 +685,120 @@ if (!g.MessageChannel) {
 // ─── Text encoding / base64 ─────────────────────────────────────────
 
 export function utf8Encode(text) {
-  const out = [];
+  const out = new Uint8Array(text.length * 3);
+  let length = 0;
   for (let i = 0; i < text.length; i++) {
     let code = text.codePointAt(i);
     if (code > 0xffff) i++;
-    if (code < 0x80) out.push(code);
-    else if (code < 0x800) out.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
-    else if (code < 0x10000)
-      out.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
-    else
-      out.push(
-        0xf0 | (code >> 18),
-        0x80 | ((code >> 12) & 0x3f),
-        0x80 | ((code >> 6) & 0x3f),
-        0x80 | (code & 0x3f),
-      );
+    if (code < 0x80) out[length++] = code;
+    else if (code < 0x800) {
+      out[length++] = 0xc0 | (code >> 6);
+      out[length++] = 0x80 | (code & 0x3f);
+    } else if (code < 0x10000) {
+      out[length++] = 0xe0 | (code >> 12);
+      out[length++] = 0x80 | ((code >> 6) & 0x3f);
+      out[length++] = 0x80 | (code & 0x3f);
+    } else {
+      out[length++] = 0xf0 | (code >> 18);
+      out[length++] = 0x80 | ((code >> 12) & 0x3f);
+      out[length++] = 0x80 | ((code >> 6) & 0x3f);
+      out[length++] = 0x80 | (code & 0x3f);
+    }
   }
-  return new Uint8Array(out);
+  // A copy, not a view: callers hand `.buffer` on, and it must not carry the slack.
+  return out.slice(0, length);
 }
 
 export function utf8Decode(bytes) {
-  let out = "";
+  // A truncated four-byte lead at the very end is the one way to emit more units than bytes.
+  const units = new Uint16Array(bytes.length + 1);
+  let length = 0;
   for (let i = 0; i < bytes.length; ) {
     const byte = bytes[i++];
-    if (byte < 0x80) out += String.fromCharCode(byte);
-    else if (byte < 0xe0) out += String.fromCharCode(((byte & 0x1f) << 6) | (bytes[i++] & 0x3f));
+    let code;
+    if (byte < 0x80) code = byte;
+    else if (byte < 0xe0) code = ((byte & 0x1f) << 6) | (bytes[i++] & 0x3f);
     else if (byte < 0xf0)
-      out += String.fromCharCode(
-        ((byte & 0x0f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f),
-      );
+      code = ((byte & 0x0f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f);
     else {
-      const code =
+      code =
         ((byte & 0x07) << 18) |
         ((bytes[i++] & 0x3f) << 12) |
         ((bytes[i++] & 0x3f) << 6) |
         (bytes[i++] & 0x3f);
-      out += String.fromCodePoint(code);
+      if (code > 0x10ffff) code = 0xfffd;
+    }
+    if (code > 0xffff) {
+      code -= 0x10000;
+      units[length++] = 0xd800 | (code >> 10);
+      units[length++] = 0xdc00 | (code & 0x3ff);
+    } else {
+      units[length++] = code;
+    }
+  }
+  return unitsToString(units, length);
+}
+
+/// Bounded `fromCharCode.apply` slices: per-character appends are slow, one huge apply overflows.
+export function unitsToString(units, length = units.length) {
+  const chunk = 0x2000;
+  if (length <= chunk) return String.fromCharCode.apply(null, units.subarray(0, length));
+  const parts = [];
+  for (let i = 0; i < length; i += chunk) {
+    parts.push(String.fromCharCode.apply(null, units.subarray(i, Math.min(i + chunk, length))));
+  }
+  return parts.join("");
+}
+
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_CODES = Uint8Array.from(B64, (char) => char.charCodeAt(0));
+const B64_VALUES = new Int8Array(128).fill(-1);
+for (let i = 0; i < B64.length; i++) B64_VALUES[B64.charCodeAt(i)] = i;
+const PAD = 0x3d;
+
+export function bytesToBase64(bytes) {
+  const length = bytes.length;
+  const out = new Uint8Array(Math.ceil(length / 3) * 4);
+  let o = 0;
+  for (let i = 0; i < length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < length ? bytes[i + 1] : undefined;
+    const c = i + 2 < length ? bytes[i + 2] : undefined;
+    out[o++] = B64_CODES[a >> 2];
+    out[o++] = B64_CODES[((a & 3) << 4) | ((b ?? 0) >> 4)];
+    out[o++] = b === undefined ? PAD : B64_CODES[((b & 15) << 2) | ((c ?? 0) >> 6)];
+    out[o++] = c === undefined ? PAD : B64_CODES[c & 63];
+  }
+  return unitsToString(out, o);
+}
+
+/// Anything outside the alphabet, padding and line breaks included, is skipped.
+export function base64ToBytes(text) {
+  const input = String(text);
+  let digits = 0;
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code < 128 && B64_VALUES[code] >= 0) digits++;
+  }
+  const out = new Uint8Array((digits * 3) >> 2);
+  let outIndex = 0;
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    const value = code < 128 ? B64_VALUES[code] : -1;
+    if (value < 0) continue;
+    buffer = ((buffer << 6) | value) & 0xffffff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[outIndex++] = (buffer >> bits) & 0xff;
     }
   }
   return out;
 }
 
-const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-export function bytesToBase64(bytes) {
-  let out = "";
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i];
-    const b = bytes[i + 1];
-    const c = bytes[i + 2];
-    out += B64[a >> 2];
-    out += B64[((a & 3) << 4) | ((b ?? 0) >> 4)];
-    out += b === undefined ? "=" : B64[((b & 15) << 2) | ((c ?? 0) >> 6)];
-    out += c === undefined ? "=" : B64[c & 63];
-  }
-  return out;
-}
-
-export function base64ToBytes(text) {
-  const clean = String(text).replace(/[^A-Za-z0-9+/]/g, "");
-  const out = new Uint8Array((clean.length * 3) >> 2);
-  let outIndex = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const a = B64.indexOf(clean[i]);
-    const b = B64.indexOf(clean[i + 1]);
-    const c = B64.indexOf(clean[i + 2]);
-    const d = B64.indexOf(clean[i + 3]);
-    out[outIndex++] = (a << 2) | (b >> 4);
-    if (c >= 0) out[outIndex++] = ((b & 15) << 4) | (c >> 2);
-    if (d >= 0) out[outIndex++] = ((c & 3) << 6) | d;
-  }
-  return out.subarray(0, outIndex);
-}
-
-if (!g.atob) g.atob = (text) => String.fromCharCode(...base64ToBytes(text));
+if (!g.atob) g.atob = (text) => unitsToString(base64ToBytes(text));
 if (!g.btoa) {
   g.btoa = (text) => {
     const bytes = new Uint8Array(text.length);

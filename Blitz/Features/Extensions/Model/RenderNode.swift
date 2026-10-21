@@ -200,7 +200,7 @@ struct RenderNode: Sendable, Hashable, Identifiable {
     }
 }
 
-/// The root the runtime pushes after every commit: one `__screen` per stack entry.
+/// The root the runtime pushes after each changing commit: one `__screen` per stack entry.
 struct RenderTree: Sendable, Equatable {
     let screens: [RenderNode]
 

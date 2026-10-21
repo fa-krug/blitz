@@ -158,6 +158,27 @@ final class ExtensionFetcher: Sendable {
     }
 }
 
+/// Reads a pipe to EOF on a worker, so a child never stalls on a full one nobody is reading yet.
+final class ExtensionPipeDrain: Sendable {
+    private let bytes = Mutex(Data())
+    private let finished = DispatchSemaphore(value: 0)
+
+    init(_ pipe: Pipe) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
+            self.bytes.withLock { $0 = data }
+            self.finished.signal()
+        }
+    }
+
+    /// Blocks until every writer has closed its end.
+    func wait() -> Data {
+        finished.wait()
+        finished.signal()
+        return bytes.withLock { $0 }
+    }
+}
+
 /// `ExtensionNodeShims` launches a child on the JS thread; `wait` collects it off that thread.
 enum ExtensionAsyncProcess {
     enum ProcessError: LocalizedError {
@@ -176,8 +197,9 @@ enum ExtensionAsyncProcess {
         func collect(timeout: Double?) -> [String: Any] {
             var watchdog: DispatchSourceTimer?
             if let timeout, timeout > 0 { watchdog = terminationWatchdog(after: timeout / 1000) }
-            let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-            let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+            let errors = ExtensionPipeDrain(stderr)
+            let outData = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()
+            let errData = errors.wait()
             exit.wait()
             watchdog?.cancel()
 

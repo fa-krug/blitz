@@ -172,8 +172,16 @@ export class Surface {
 
   flush() {
     this.handlers.clear();
-    const children = this.container.children.map((child) => this.serialize(child)).filter(Boolean);
+    const children = this.container.children.map((child) => this.serializeScreen(child)).filter(Boolean);
     this.onTree({ children });
+  }
+
+  /// Swift renders only the active screen; a covered one keeps its React state but crosses as a stub.
+  serializeScreen(node) {
+    if (node.type === "__screen" && node.props.active === false) {
+      return { id: node.id, type: node.type, props: { active: false }, children: [] };
+    }
+    return this.serialize(node);
   }
 
   /// A throwing handler is the action's failure, not the screen's: the tree it rendered stays up.

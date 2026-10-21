@@ -153,6 +153,24 @@ final class ExtensionHostBridge: ExtensionHostAPI {
         return ExtensionRuntime.jsonString(from: value)
     }
 
+    /// Multi-MB bodies would otherwise be JSON-encoded on main while the user types.
+    nonisolated func performOffMain(
+        api: String, method: String, arguments: [RenderValue]
+    ) async throws -> String? {
+        let value: Any?
+        switch api {
+        // A socket failure toasts once per path, which is main-actor state.
+        case "fetch" where arguments.first?.objectValue?["socketPath"]?.stringValue?.isEmpty ?? true:
+            value = try await fetcher.request(arguments.first)
+        case "dns": value = await ExtensionNameResolver.resolve(arguments.first)
+        case "proc" where method == "read": value = try await ExtensionAsyncProcess.read(arguments)
+        case "proc" where method == "wait":
+            value = try await ExtensionAsyncProcess.wait(arguments.first)
+        default: return nil
+        }
+        return ExtensionRuntime.jsonString(from: value)
+    }
+
     private func dispatch(api: String, method: String, arguments: [RenderValue]) async throws -> Any? {
         switch api {
         case "clipboard": return try clipboard(method: method, arguments: arguments)

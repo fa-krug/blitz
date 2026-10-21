@@ -13,6 +13,13 @@ struct ExtensionBootConfig: Sendable {
     var totalMemory: Double
     var environmentVariables: [String: String]
 
+    /// What Node's `os.hostname()` reads; `ProcessInfo.hostName` can block on a DNS lookup.
+    private static func systemHostname() -> String {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count) == 0 else { return "localhost" }
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
     static func current(supportDirectory: URL) -> ExtensionBootConfig {
         let info = ProcessInfo.processInfo
         var arch = "arm64"
@@ -29,7 +36,7 @@ struct ExtensionBootConfig: Sendable {
         return ExtensionBootConfig(
             arch: arch,
             release: info.operatingSystemVersionString,
-            hostname: info.hostName,
+            hostname: systemHostname(),
             username: NSUserName(),
             shell: info.environment["SHELL"] ?? "/bin/zsh",
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser.path,

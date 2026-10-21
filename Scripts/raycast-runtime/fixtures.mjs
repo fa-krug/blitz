@@ -183,6 +183,36 @@ export default function Command() {
 }
 `;
 
+const batchedSource = `
+import { Detail, ActionPanel, Action } from "@raycast/api";
+import { useEffect, useState } from "react";
+
+export default function Command() {
+  const [parts, setParts] = useState(["loading"]);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    (async () => {
+      await null;
+      setParts(["a"]);
+      await null;
+      setParts((current) => [...current, "b"]);
+      await null;
+      setParts((current) => [...current, "c"]);
+    })();
+  }, []);
+  return (
+    <Detail
+      markdown={parts.join(" ")}
+      actions={
+        <ActionPanel>
+          <Action title="Rerender" onAction={() => setTick((tick) => tick + 1)} />
+        </ActionPanel>
+      }
+    />
+  );
+}
+`;
+
 const nodeSource = `
 import path from "node:path";
 import os from "node:os";
@@ -218,6 +248,10 @@ export default function Command() {
     Buffer.from("hello").toString("base64"),
     Buffer.from("aGVsbG8=", "base64").toString("utf8"),
     new TextDecoder().decode(new TextEncoder().encode("héllo")),
+    String(Buffer.from(Buffer.from("😀 日本 é".repeat(5000)).toString("base64"), "base64").toString() === "😀 日本 é".repeat(5000)),
+    String(atob(btoa("x".repeat(200000))).length),
+    Buffer.from("aGV\\nsbG8", "base64").toString(),
+    String(new TextEncoder().encode("😀").buffer.byteLength),
     fileURLToPath("file:///Applications/Blitz%20Beta.app"),
     fileURLToPath(new URL("file:///tmp/%ED%95%9C%EA%B8%80.txt")),
     fileURLToPath("file://localhost/tmp/a?query=ignored#fragment"),
@@ -1028,12 +1062,23 @@ export async function runFixtures() {
     check("two screens after push", screens.length === 2, String(screens.length));
     check("the pushed screen is active", screens[1].props.active === true);
     check("the first screen is inactive but mounted", screens[0].props.active === false);
+    check("the covered screen crosses as a stub", screens[0].children.length === 0);
     check("navigation depth reported", harness.state.navigationDepth === 2, String(harness.state.navigationDepth));
 
     harness.call('__blitz.popNavigation("s1")');
     await wait();
     screens = harness.state.trees.at(-1).children.filter((child) => child.type === "__screen");
     check("one screen after pop", screens.length === 1, String(screens.length));
+    check("the uncovered screen renders in full", !!findNode(harness.state.trees.at(-1), "List.Item"));
+  });
+
+  await run("Batched and unchanged renders", batchedSource, "view", async (harness) => {
+    const titles = harness.state.trees.map((tree) => findNode(tree, "Detail")?.props.markdown);
+    check("updates across awaits arrive as one render", titles.join("|") === "loading|a b c", titles.join("|"));
+    const before = harness.state.trees.length;
+    harness.dispatch("s1", findNode(harness.state.trees.at(-1), "Action").props.onAction.$fn);
+    await wait();
+    check("an unchanged tree is not sent again", harness.state.trees.length === before);
   });
 
   await run("Node shims and web globals", nodeSource, "view", async (harness) => {
@@ -1054,6 +1099,10 @@ export async function runFixtures() {
       "aGVsbG8=",
       "hello",
       "héllo",
+      "true",
+      "200000",
+      "hello",
+      "4",
       "/Applications/Blitz Beta.app",
       "/tmp/한글.txt",
       "/tmp/a",
