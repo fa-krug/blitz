@@ -20,7 +20,6 @@ struct CameraPreviewView: View {
         .background(Theme.Colors.panelScrim)
         .background(GlassEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.dialog, style: .continuous))
-        .panelEntrance()
     }
 
     private var footer: some View {

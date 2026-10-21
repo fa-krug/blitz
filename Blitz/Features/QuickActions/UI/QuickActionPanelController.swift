@@ -66,10 +66,8 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         self.panel = panel
         placeAtCursor(panel)
         // Non-activating like the palette: key focus without pulling the reader out of their app.
-        panel.fadeIn(duration: Theme.Duration.enter) {
-            panel.makeKeyAndOrderFront(nil)
-            panel.orderFrontRegardless()
-        }
+        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
     }
 
     /// Silent: the owner is the one tearing it down, so nothing is reported back.
@@ -84,7 +82,7 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         onDismiss = nil
         closing.delegate = nil
         closing.onKey = nil
-        closing.fadeOut(duration: Theme.Duration.exit)
+        closing.orderOut(nil)
     }
 
     /// The reader closed it, so the owner must stop the reply streaming into a panel nobody sees.
