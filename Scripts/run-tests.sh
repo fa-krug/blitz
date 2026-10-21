@@ -553,6 +553,10 @@ run custom-command-test    Blitz/Platform/PseudoTerminal.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift \
                            Blitz/Features/CustomCommands/Model/RaycastScriptImport.swift \
                            Blitz/Features/CustomCommands/Service/ShellCommandRunner.swift
+run uninstall-coordinator-test Blitz/Features/Uninstall/Model/UninstallTarget.swift \
+                           Blitz/Features/Uninstall/Model/UninstallPlan.swift \
+                           Blitz/Features/Uninstall/Model/UninstallProtection.swift \
+                           Blitz/Features/Uninstall/UI/UninstallCoordinator.swift
 run uninstall-test         Blitz/Features/Uninstall/Model/UninstallTarget.swift \
                            Blitz/Features/Uninstall/Model/UninstallSearchRoot.swift \
                            Blitz/Features/Uninstall/Model/UninstallRules.swift \

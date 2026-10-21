@@ -108,7 +108,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | hotkeys and deeplinks | `hotkey-test`, `hid-key-mapping-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
-| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-test` |
+| quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-*` |
 | AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
@@ -497,6 +497,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Rows appear with no loading copy at any point; folder sizes fill in behind them and totals climb
 - Locked rows cannot be checked; filtering by name works
 - Confirming moves items to the Trash and they are **recoverable from it**
+- A running app exits before any files move, including a menu-bar app
+- An app that refuses to quit leaves every item in place after the grace period and says so
+- No `Containers`, `Group Containers`, `Cookies` or recent-documents rows appear, even for an
+  App Store app, and nothing asks for Full Disk Access; `/usr/local/bin` rows stay locked
 - Escaping mid-scan cancels promptly with no spinner left behind
 - Hiding and immediately restoring the screen never strands an in-flight file icon as a placeholder
 
