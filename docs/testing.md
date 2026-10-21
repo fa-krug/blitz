@@ -105,7 +105,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | window management, layouts and rooms | `window-*`, `space-gesture-test`, `mac-tool-test` |
 | calculator, calendar, reminders, contacts | `calc-test`, `calendar-test`, `reminders-test`, `contacts-test`, `personal-tool-test` |
 | emoji and dictionary | `emoji-*`, `dictionary-test` |
-| hotkeys and deeplinks | `hotkey-test`, `deeplink-test` |
+| hotkeys and deeplinks | `hotkey-test`, `hid-key-mapping-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-test` |
@@ -439,6 +439,13 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Recording captures a shortcut, and the old binding does not fire while recording
 - A conflicting binding is rejected and names its current owner
 - A double-tap binding fires; Hyper Key remaps and its status dot is green
+- With another `hidutil` key mapping set, switching the Hyper Key to Caps Lock and back, then
+  quitting, leaves that mapping in `hidutil property --get UserKeyMapping`; a Caps Lock mapping
+  Hyper displaced comes back
+- With a right-side modifier as Hyper, hold it across a fast user switch and back, then release:
+  plain typing afterwards carries no chord
+- With Secure Input held, record Hyper+J with Caps Lock and with a right-side modifier as Hyper:
+  both save ✦J, never F18 or ⌃J, and a quick Hyper+J leaves Caps Lock off
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands
