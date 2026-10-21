@@ -40,7 +40,7 @@ final class FileSearchSession {
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         self.homeDirectory = homeDirectory
         policy = FileSearchPolicy(
-            scopes: FileSearchScope.defaultScopes, ignorePatterns: [],
+            scopes: FileSearchScope.defaultScopes, ignorePatterns: FileSearchIgnoreList.defaults,
             homeDirectory: homeDirectory)
         debounce = .milliseconds(120)
         searchOperation = { query, filter, policy in

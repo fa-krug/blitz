@@ -14,6 +14,6 @@ struct FileSearchPolicy: Sendable, Equatable {
         let roots = FileSearchScope.roots(for: scopes, homeDirectory: homeDirectory)
         directRoots = roots.filter { $0.path != home }
         includesHome = roots.count != directRoots.count
-        ignore = FileSearchIgnoreList(patterns: FileSearchIgnoreList.defaults + ignorePatterns)
+        ignore = FileSearchIgnoreList(patterns: ignorePatterns)
     }
 }

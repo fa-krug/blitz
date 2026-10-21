@@ -30,8 +30,9 @@ feature is enabled in Settings.
   visible children plus the two cloud-storage roots instead. A user who adds a folder under `~/Library`
   by hand gets what they asked for.
 - **The shipped ignore rules are compiled in and never persisted.** `fileSearchIgnorePatterns` stores
-  only what the user added, so changing `FileSearchIgnoreList.defaults` reaches installs that already
-  ran. The consequence is that the shipped six cannot be switched off.
+  only what the user added and `fileSearchRemovedDefaultPatterns` only the shipped rules they removed,
+  so changing `FileSearchIgnoreList.defaults` reaches installs that already ran. Every row can be
+  removed, and **Restore Defaults** clears both lists.
 - **File Search is off by default, and off means no entry point or Spotlight work.** A nonempty query
   on that screen is the first operation that searches, and the global shortcut no-ops while the
   feature switch is off.
@@ -128,9 +129,22 @@ cheap enough to run against every candidate:
 | no `/`, has `*` `?` `[` | any path component, via `fnmatch` | `*.tmp` |
 | contains `/` | the whole absolute path, via `fnmatch` | `**/[Cc]ache/**` |
 
+The defaults are build output and dependency folders (`node_modules`, `DerivedData`, `build`,
+`dist`, `target`, `Pods`) and the Photos library (`*.photoslibrary`), whose contents are Photos'
+own rather than files to open. There is deliberately no `.git`, `.venv`, `~/.Trash` or
+`~/Library/Caches` default: a dot-prefixed component is dropped structurally and a home scope never
+reaches `~/Library`, so such a row could be removed without anything changing.
+
+The pane lists `FileSearchIgnoreList.patterns(added:removedDefaults:)`: the defaults the user kept,
+then what they added. Adding a removed default takes it off the removed list rather than storing it
+twice, and a default repeated in `fileSearchIgnorePatterns` is ignored, so a shipped rule has one
+switch. `FileSearchPolicy` applies exactly the list it is handed.
+
 `fnmatch` runs with `FNM_CASEFOLD` and deliberately **without** `FNM_PATHNAME`, so `*` spans `/` and a
 `**/…/**` pattern behaves as written. Patterns are stored pre-terminated as `ContiguousArray<CChar>`, so
 the hot path never re-encodes a `String` into a temporary C buffer.
+A path pattern with no metacharacter first compares its last component with the
+candidate's own name, so the whole-path `fnmatch` runs only for a candidate that could match.
 
 Bare `*` name globs are also pushed into the Spotlight expression as `kMDItemFSName != "…"cd` clauses, so
 ignored files cannot consume the 1,000-candidate cap. Only that shape is pushed: Spotlight reads `?` and
