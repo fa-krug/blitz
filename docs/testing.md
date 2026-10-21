@@ -444,6 +444,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   Hyper displaced comes back
 - With a right-side modifier as Hyper, hold it across a fast user switch and back, then release:
   plain typing afterwards carries no chord
+- With Secure Input held, record Hyper+J with Caps Lock and with a right-side modifier as Hyper:
+  both save ✦J, never F18 or ⌃J, and a quick Hyper+J leaves Caps Lock off
 - Every binding survives quit and relaunch
 - `Enable Commands` off leaves every pane-owned command listed, searchable and firing — Notes,
   Clipboard, Emoji, File Search, Snippets, Quicklinks, Calendar, AI and the two layout commands

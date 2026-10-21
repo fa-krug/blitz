@@ -389,6 +389,7 @@ final class AppCore {
             supportReminders.start()
 
             hyperKeyTap.healthTicker = healthTicker
+            hyperKeyTap.capture = hotKeys.capture
             hotKeys.modifierTapMonitor.healthTicker = healthTicker
             snippetListener.healthTicker = healthTicker
 

@@ -150,6 +150,7 @@ final class HyperKeyTap: HealthCheckable {
     @ObservationIgnored private var hidConnect: io_connect_t = IO_OBJECT_NULL
 
     @ObservationIgnored weak var healthTicker: HealthTicker?
+    @ObservationIgnored weak var capture: ShortcutCaptureSession?
 
     /// Mirror of `settings.hyperKey`; the toggles are read live, so nothing goes stale.
     @ObservationIgnored private var key: HyperKeyPhysicalKey = .none
@@ -322,6 +323,8 @@ final class HyperKeyTap: HealthCheckable {
     }
 
     private func fireQuickPress(_ action: HyperKeyQuickPress, for key: HyperKeyPhysicalKey) {
+        // Secure Input hides the key that made this press a chord, so a short hold proves nothing.
+        guard !IsSecureEventInputEnabled() else { return }
         switch action {
         case .none:
             break
@@ -345,6 +348,7 @@ final class HyperKeyTap: HealthCheckable {
         cancelHold()
         let wasCapsLock = key == .capsLock
         key = newKey
+        capture?.hyperKey = newKey
         if newKey == .capsLock {
             // Remapping takes the key's own function away, so unlatch the lock first.
             setCapsLockState(false)

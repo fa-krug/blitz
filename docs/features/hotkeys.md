@@ -252,6 +252,18 @@ keycaps. `retargetingHyper` is idempotent, which is what makes a settings import
 corruption. Nothing is re-pointed while the Hyper key is `.none` — and the Settings row is disabled
 there, so the toggle cannot move without a chord to mean.
 
+Include Shift costs one chord: macOS consumes ⌃⌥⇧⌘Q as a system shortcut before any app or Carbon sees
+it, so ✦Q can be neither recorded nor fired while it is on.
+
+### Secure Input
+
+While any app holds Secure Input — a password field, a terminal's Secure Keyboard Entry — the tap
+stops seeing key presses; at most a modifier's `flagsChanged` still reaches it. So **Quick Press
+never fires there**: a short hold cannot prove that nothing was pressed in between, and a quick Hyper
+combo would read as a lone press and toggle Caps Lock. And the **recorder reads the Hyper key itself** — F18's keyDown and keyUp, or a modifier key's device bit —
+from `ShortcutCaptureSession.hyperKey`, which `HyperKeyTap` sets whenever it applies a key. Left to
+the tap, a recording made inside Secure Input saved bare F18, or ⌃ plus the key.
+
 ### Lifecycle
 
 Like every keyboard tap it needs the **Accessibility** grant and never prompts for it. A one-second
@@ -267,7 +279,8 @@ The settings recorder (`Features/HotKeys/UI/ShortcutRecorder.swift`) is delibera
 control: the active recorder is `HotKeyManager.recordingAction` state, and keys are captured by local
 NSEvent monitors while both engines are paused. It records combos, double-tapped modifiers and single
 or double Globe taps by feeding its `.flagsChanged` / `.keyDown` monitors into the same pure detectors
-as the global monitor, so recording needs no event tap and no permission.
+as the global monitor, so recording needs no event tap and no permission. Its `.keyUp` monitor only
+tracks the Hyper key's F18 release; see [Secure Input](#secure-input).
 
 Setting `recordingAction` is what starts and stops the capture, so there is exactly **one**
 `ShortcutCaptureSession` (`HotKeys/Service/`) for the app rather than one per row — which is what lets the
