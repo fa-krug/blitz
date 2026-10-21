@@ -144,7 +144,7 @@ Two host-call flavours:
 | `Service/ExtensionWebSocketBridge.swift` | `URLSessionWebSocketTask` connections, opened and read from JS |
 | `Service/ExtensionNameResolver.swift` | `getaddrinfo`, which is how a `.local` name resolves |
 | `Service/ExtensionOAuthKeychain.swift` | secure OAuth token storage backed by macOS Keychain |
-| `Service/ExtensionOAuthSession.swift` | PKCE state tracking, browser launch, and callback redirect resolution |
+| `Service/ExtensionOAuthSession.swift` | the browser step of a sign-in (`ASWebAuthenticationSession`) and redirect parsing |
 | `Service/ExtensionStorage.swift` | per-extension `LocalStorage`, `Cache` and preference values (one JSON file each) |
 | `Service/ExtensionCommandMetadataStore.swift` | every command's subtitle override, refresh bookkeeping and menu-bar state, in one small file |
 | `Service/ExtensionCatalog.swift` | discovery on disk, install, uninstall, import-from-Raycast |
@@ -732,7 +732,8 @@ scoped install matches by `owner/extension` first and falls back to the bare slu
 keep working. Anything else on a claimed scheme just reopens the palette, and an unknown command says
 so rather than failing silently. `ExtensionDeepLink` owns the claimed schemes and the parsing,
 covered by `Tests/ext-test.swift`; an extension's own `open("raycast://…")` resolves through the same
-`ExtensionManager.resolve(_:)` instead of launching Raycast.
+`ExtensionManager.resolve(_:)` instead of launching Raycast. The app registers only `raycast` and
+`blitz` with macOS; `com.raycast` and `raycastinternal` are claimed for an extension's own `open` alone.
 
 A command row's **Copy Deeplink** (⇧⌘C) hands out the `blitz://extensions/<name>/<command>` form,
 built by `ExtensionDeepLink.url(extensionName:commandName:)` from the entry id, so a scoped
@@ -806,19 +807,28 @@ tokens in the login Keychain (service `de.fa-krug.blitz.extensions.oauth`, `kSec
 scoped per extension and dropped on uninstall.
 
 The redirect address belongs to the extension author's OAuth app registration, so Blitz cannot choose
-it — it can only be there to catch it. **Blitz therefore claims `raycast`, `com.raycast` and `blitz`
-as URL schemes**, which is what makes all three of Raycast's redirect methods land back in the app:
+it — it can only be there to catch it. **The browser step runs in `ASWebAuthenticationSession`**
+(`ExtensionOAuthSession`), which intercepts the redirect's scheme inside its own window, so an
+installed Raycast never sees the link and Blitz claims no URL scheme for sign-in. JS names the scheme
+to wait for as `authorize`'s third bridge argument:
 
-| `RedirectMethod` | Registered address | How it returns |
+| `RedirectMethod` | Registered address | Scheme the window waits for |
 | --- | --- | --- |
-| `App` | `raycast://oauth?package_name=Extension` | straight to Blitz, no server |
-| `AppURI` | `com.raycast:/oauth?package_name=Extension` | straight to Blitz, no server |
-| `Web` | `https://raycast.com/redirect?packageName=Extension` | through Raycast's page, which reopens a claimed scheme |
+| `App` | `raycast://oauth?package_name=Extension` | `raycast` |
+| `AppURI` | `com.raycast:/oauth?package_name=Extension` | `com.raycast` |
+| `Web` | `https://raycast.com/redirect?packageName=Extension` | `raycast` — Raycast's page forwards there |
 
-Claiming `raycast` means an installed Raycast competes with Blitz for those links and macOS picks the
-winner. That is a deliberate trade: without it, `App` redirects have nowhere to land. `Web` additionally
-depends on a page Raycast can change at any time — `ExtensionOAuthSession` times out after five minutes so
-a redirect that never arrives cannot wedge the palette.
+An `extraParameters.redirect_uri` on a custom scheme waits for that scheme instead. Raycast's page
+can drop `state`, so only a returned `state` is checked against the request's. The session shares the
+browser's cookies (`prefersEphemeralWebBrowserSession = false`), so a provider the user is already
+signed in to skips its login page.
+
+Only a command the user opened can sign in: the bridge refuses a background launch, and a second
+sign-in while one is open. While the window is up the palette may hide, but Pop to Root Search holds
+off — resetting would stop the command and so cancel the sign-in — and summoning the palette returns
+to the waiting command. When the redirect lands, or the user closes the window, `ExtensionManager`
+brings the palette back to the command; a menu-bar command's sign-in does not. Stopping the command
+closes the window, and nothing waits on a timer.
 
 **`raycast://` URLs** — extensions address Raycast by scheme; the most common is a bare
 `open("raycast://")` to bring the window back after something stole focus (1Password's auth flow does
@@ -953,7 +963,6 @@ OAuth extensions it excluded are not counted yet — re-measure before quoting t
 
 | Gap | Why |
 | --- | --- |
-| **Raycast's PKCE proxy (`oauth.raycast.com`)** | Extensions whose provider has no PKCE support exchange tokens through Raycast's proxy. `OAuth.PKCEClient` works; a provider that needs that proxy still fails. |
 | **`AI`, `BrowserExtension`, `WindowManagement`** | Raycast services with no local equivalent. Importing them works; calling one throws with a clear reason. |
 | **A WebSocket to a host with a certificate macOS distrusts** | `ws`'s `rejectUnauthorized: false` is ignored — URLSession validates the chain either way. |
 | **Aborting a `fetch` already in flight** | `AbortSignal` is complete — `timeout`, `abort` and `any` included — and `fetch` checks it on both sides of the host call, so a caller gets its `AbortError`. The request itself still runs to completion: the signal isn't carried across the bridge, so nothing cancels the `URLSessionTask`. A timeout bounds the caller, not the network. |

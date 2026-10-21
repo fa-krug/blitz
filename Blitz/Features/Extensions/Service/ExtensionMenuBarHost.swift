@@ -8,7 +8,7 @@ final class ExtensionMenuBarHost: ExtensionHostContext {
     private var isInteractive: Bool
     private weak var manager: ExtensionManager?
     private weak var coordinator: ExtensionCoordinator?
-    private let oauth = ExtensionOAuthSession()
+    private var oauth: ExtensionOAuthSession?
 
     init(
         owner: InstalledExtension, command: ExtensionCommand, launchType: ExtensionLaunchType,
@@ -28,7 +28,12 @@ final class ExtensionMenuBarHost: ExtensionHostContext {
     var pasteTarget: NSRunningApplication? { NSWorkspace.shared.frontmostApplication }
     var applicationURLs: [URL] { coordinator?.applicationURLs ?? [] }
 
-    func stop() { oauth.cancel() }
+    var isAuthorizing: Bool { oauth != nil }
+
+    func stop() {
+        oauth?.cancel()
+        oauth = nil
+    }
     func enableInteraction() { isInteractive = true }
     func closeMainWindow(clearRootSearch: Bool) {}
     func reopenPalette() { coordinator?.reopenPalette(hasRunningCommand: false) }
@@ -67,8 +72,10 @@ final class ExtensionMenuBarHost: ExtensionHostContext {
 
     func authorizeOAuth(options: ExtensionOAuthAuthorizeOptions) async throws -> ExtensionOAuthAuthorizeResult
     {
-        guard isInteractive else { throw ExtensionHostError.unsupported("Background authorization") }
-        return try await oauth.authorize(options: options)
+        let session = ExtensionOAuthSession(anchor: nil)
+        oauth = session
+        defer { if oauth === session { oauth = nil } }
+        return try await session.authorize(options: options)
     }
 
     func getOAuthTokens(providerId: String) -> String? {
