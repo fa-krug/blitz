@@ -165,7 +165,7 @@ Notes adds `noteWindow 520×420` (opening size on a first run only), `noteWindow
 
 The AI Agent window adds `aiChatWindow 960×660` (opening size), `aiChatWindowMinimum 680×440`, a
 sidebar of `aiChatSidebarMinimum 240`–`aiChatSidebarMaximum 340`, `aiChatDetailMinimum 440`,
-`aiChatReadingWidth 760` for the transcript and composer column, `aiChatComposerMaxHeight 180`, and
+`aiChatReadingWidth 960` for the transcript and composer column, `aiChatComposerMaxHeight 180`, and
 `chatContextGauge 14` for the composer's context ring, `chatContextCard 300` for the card it raises
 on hover, and `chatPlanEditor 280` for a plan's editor, past which its Markdown scrolls.
 
@@ -343,7 +343,8 @@ capsules, each wrapped row centred, that rise out of the composer's top edge, ea
 `ChatChoiceChip` — a glyph then the option — which a waiting question's options use too, left-aligned
 on its card. The capsule is `chatChip()`: `frosted(in: Capsule())` padded `spacing.xl` either side.
 A source chip under a cited reply is the same capsule led by a `chatSourceBadge 18` number disc in
-`controlSurface`, which `chatChip(leadsWithBadge: true)` pulls in to `spacing.sm`. A sidebar row whose chat waits on the reader trades
+`controlSurface`, which `chatChip(leadsWithBadge: true)` pulls in to `spacing.sm`. Jump to Latest is
+a `chatJumpToLatest 30` arrow disc at the transcript's bottom edge. A sidebar row whose chat waits on the reader trades
 its spinner for the wait's symbol in `Colors.warning`. While anything is archived, the sidebar's foot
 is an **Archived** row under a divider — `archivebox`, the title and the count in secondary, hover
 in `Colors.rowHover` at `Radius.row` as the rows have — and choosing it swaps the list for
@@ -356,7 +357,10 @@ chevron. Find marks words in `Colors.findMatch` / `findCurrent`, the system yell
 `findCurrentInk` black on the solid one in both appearances. Transcript lines sit
 `spacing.chatLine 4` apart on both surfaces. The transcript itself is the palette's `ChatTranscriptView` with
 `surface: .window`, which leaves out `edgeDissolve` and `thinScrollbar` — both are measured against
-the palette's bars — and caps the column at `aiChatReadingWidth`, centred.
+the palette's bars — and caps the column at `aiChatReadingWidth`, centred. Its gutter sits outside
+that cap, as the composer's does, so a reply, its code blocks and the composer share both edges; a
+window reply takes no inset of its own, while the palette keeps `spacing.sm` to line up with its
+header's chevron.
 
 ---
 

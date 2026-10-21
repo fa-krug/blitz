@@ -214,13 +214,14 @@ enum Theme {
         static let aiChatSearchField: CGFloat = 28
         static let aiChatDetailMinimum: CGFloat = 440
         /// The transcript and composer column; past this a line of prose stops being readable.
-        static let aiChatReadingWidth: CGFloat = 760
+        static let aiChatReadingWidth: CGFloat = 960
         /// The composer grows with its text up to this, then scrolls inside itself.
         static let aiChatComposerMaxHeight: CGFloat = 180
         static let chatContextGauge: CGFloat = 14
         /// A source chip's title before it middle-truncates, so three chips share a row.
         static let chatSourceTitle: CGFloat = 200
         static let chatSourceBadge: CGFloat = 18
+        static let chatJumpToLatest: CGFloat = 30
         /// The context card's width: a label column and a value one, with room for a model name.
         static let chatContextCard: CGFloat = 300
         /// A plan being edited in its card; past this the Markdown scrolls inside the editor.
