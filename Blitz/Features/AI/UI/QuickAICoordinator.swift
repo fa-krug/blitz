@@ -42,7 +42,8 @@ final class QuickAICoordinator {
             show()
             return
         }
-        chat.startNewChat()
+        // What the launcher shows staged beside the question goes out with it.
+        chat.startNewChat(keepingAttachments: true)
         paletteCoordinator.showPalette(mode: .ai)
         send(prompt)
     }
@@ -52,11 +53,12 @@ final class QuickAICoordinator {
         if palette.mode == .ai || palette.mode == .aiHistory { palette.prepare(mode: .launcher) }
     }
 
-    /// A file pasted at the launcher belongs in Quick AI, never in a search for its name.
+    /// Staged for Quick AI, never searched for by name; the launcher stays up so ⇥ can ask.
     func attachPastedFileFromLauncher(files: [URL]) -> Bool {
-        guard settings.aiEnabled, !files.isEmpty else { return false }
-        show()
-        return attachPastedFile(files: files)
+        guard settings.aiEnabled, attachPastedFile(files: files) else { return false }
+        // The compact bar has no room for the pill, so a paste opens the list it sits over.
+        paletteCoordinator.expandFromCompact()
+        return true
     }
 
     func attachPastedFile(files: [URL]) -> Bool {

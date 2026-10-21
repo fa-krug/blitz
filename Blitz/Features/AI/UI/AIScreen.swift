@@ -187,7 +187,7 @@ private struct AIChatView: View {
 }
 
 /// Every staged file in one pill: the newest's glyph, a count of the rest, all names on hover.
-private struct AttachmentsPill: View {
+struct AttachmentsPill: View {
     @Environment(\.metrics) private var metrics
     let attachments: [ChatAttachment]
     let onOpen: () -> Void

@@ -759,6 +759,14 @@ struct RootPaletteView: View {
                 // Given room last: at the default priority it would split it with the field.
                 Spacer(minLength: 0).layoutPriority(-1)
             }
+            // Beside the hint, since ⇥ is what sends them: Quick AI's own staged files, shared.
+            if !isCollapsed, vm.mode == .launcher, settings.aiEnabled,
+                !quickAI.pendingAttachments.isEmpty
+            {
+                headerGutter(width: metrics.spacing.md)
+                AttachmentsPill(
+                    attachments: quickAI.pendingAttachments, onOpen: toggleAIAttachments)
+            }
             if tabOpensChat(accessory: accessory) {
                 headerGutter(width: metrics.spacing.md)
                 quickAITabHint
