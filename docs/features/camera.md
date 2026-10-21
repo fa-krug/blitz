@@ -15,8 +15,8 @@ and footer are all that stay in [calendar.md](calendar.md).
 - **The camera settles before the panel opens, and stops after it closes.** `start()` resolves access
   and blocks on `startRunning` first, then hands a settled `Feed` up — so the first frame is live
   video rather than a stage swapped out from under the user, and the TCC prompt never takes key from
-  a panel already up. `stop()` runs from the fade-out's completion, so the camera light never
-  outlives the panel but is never torn down under a visible one either. It also drops the
+  a panel already up. `stop()` runs once AppKit's close animation has left the screen, so the camera
+  light never outlives the panel but is never torn down under a visible one either. It also drops the
   `AVCaptureSession`, so every open builds its own: a reused session with no output of its own — the
   preview's — restarts to a black stage.
 - **Escape, click-away and the shot all end the same way.** Every route goes through
@@ -64,13 +64,13 @@ the whole cost of being able to take a photo, and it is paid only by the command
 takes `.high`, enough pixels for a code held at arm's length, and adds an `AVCaptureVideoDataOutput`
 that discards late frames and feeds a `QRCodeMonitor`. The monitor hands each reader a fresh
 `codes()` stream, because a cancelled `for await` ends its stream for good — a scan reopened inside
-the fade reuses the running session but never the stream the closed panel cancelled.
+the close animation reuses the running session but never the stream the closed panel cancelled.
 
 `CameraCoordinator` keeps one session per mode — `.photo` on the `.capture` session, `.scan` on the
 `.scan` one — because a purpose is fixed when the session is configured. `close()` stops the session
-the closing panel used once the fade ends, unless a panel opened meanwhile is on that same session —
-so switching mode inside the fade cannot leave a camera running, nor stop one under a live panel. The
-newest code read wins: aiming at a second one replaces the first without reopening.
+the closing panel used once the close animation ends, unless a panel opened meanwhile is on that same
+session — so switching mode inside the animation cannot leave a camera running, nor stop one under a
+live panel. The newest code read wins: aiming at a second one replaces the first without reopening.
 
 `CameraCoordinator` is `@Observable` and the view reads it directly, so toggling Mirror re-renders
 through Observation rather than through a hand-reassigned `rootView`. `mirrored` lives on the

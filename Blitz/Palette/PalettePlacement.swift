@@ -91,18 +91,6 @@ enum MenuPanelCorner {
     case bottomTrailing
     case belowHeaderTrailing
 
-    var layerAnchor: CGPoint {
-        switch self {
-        case .bottomLeading: CGPoint(x: 0, y: 0)
-        case .bottomTrailing: CGPoint(x: 1, y: 0)
-        case .belowHeaderTrailing: CGPoint(x: 1, y: 1)
-        }
-    }
-
-    func layerPosition(in size: CGSize) -> CGPoint {
-        CGPoint(x: size.width * layerAnchor.x, y: size.height * layerAnchor.y)
-    }
-
     func frame(
         contentSize: CGSize, parentFrame: CGRect, inset: CGFloat, headerExtent: CGFloat
     ) -> CGRect {
@@ -120,14 +108,5 @@ enum MenuPanelCorner {
                     y: parentFrame.maxY - headerExtent - contentSize.height)
             }
         return CGRect(origin: origin, size: contentSize)
-    }
-
-    func scaledFrame(_ frame: CGRect, by scale: CGFloat) -> CGRect {
-        let size = CGSize(width: frame.width * scale, height: frame.height * scale)
-        let anchor = layerAnchor
-        let origin = CGPoint(
-            x: frame.minX - (size.width - frame.width) * anchor.x,
-            y: frame.minY - (size.height - frame.height) * anchor.y)
-        return CGRect(origin: origin, size: size)
     }
 }

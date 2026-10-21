@@ -33,8 +33,7 @@ final class DialogPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        // Suppresses AppKit's own window animation; `fadeIn`/`fadeOut` replace it.
-        animationBehavior = .none
+        animationBehavior = .documentWindow
         isReleasedWhenClosed = false
         content.wantsLayer = true
         content.layer?.cornerRadius = cornerRadius

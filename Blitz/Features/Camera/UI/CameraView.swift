@@ -22,7 +22,6 @@ struct CameraView: View {
         .background(Theme.Colors.panelScrim)
         .background(GlassEffectView())
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.dialog, style: .continuous))
-        .panelEntrance()
     }
 
     private var isLive: Bool {

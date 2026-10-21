@@ -741,8 +741,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   starts on the camera switched to
 - Scan QR Code shows the hint until a code is in frame; a URL code offers Open on ↵ and Copy beside
   it, a plain-text or `WIFI:` code offers only Copy, and either action closes the panel
-- Aiming at a second code replaces the first; closing a scan and opening Open Camera inside the fade
-  leaves no camera light behind once both panels are gone
+- Aiming at a second code replaces the first; closing a scan and opening Open Camera inside the close
+  animation leaves no camera light behind once both panels are gone
 
 ### Reminders
 
