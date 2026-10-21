@@ -881,7 +881,9 @@ the whole Search Recent Projects command down.
 
 A failed `readFile`, `readdir` or `stat` reports the path's real errno — `EPERM` or `EACCES` for a
 read macOS denies, `ENOTDIR`, `EISDIR` — rather than `ENOENT` for everything, so Browser Bookmarks
-can tell a browser profile it may not read from one that is not installed.
+can tell a browser profile it may not read from one that is not installed. `stat` and `lstat` are
+one `fstatat`, so `atime`, `ctime` and `birthtime` are each the real one and `mode` carries the
+file-type bits, as in Node.
 
 A bundle that ships its own HTTP client rather than calling `fetch` — node-fetch travels inside
 `@raycast/utils`, and axios has a Node adapter — reaches the network through `http.request`, so the
