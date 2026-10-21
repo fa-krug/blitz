@@ -35,6 +35,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case webSearchEngine = "fallbacks.webSearchEngine"
     case aiEnabled = "ai.enabled"
     case aiWebSearch = "ai.webSearch"
+    case aiChoices = "ai.choices"
     case aiSystemPrompt = "ai.systemPrompt"
     case aiSystemPromptEnabled = "ai.systemPromptEnabled"
     case aiRetention = "ai.retentionDays"

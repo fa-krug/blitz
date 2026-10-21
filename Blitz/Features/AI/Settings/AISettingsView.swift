@@ -150,6 +150,10 @@ struct AISettingsView: View {
                     SettingsRowTitle(.aiConversations, "Start a new conversation after")
                 }
             }
+            Toggle(isOn: $settings.choicesEnabled) {
+                SettingsRowTitle(.aiConversations, "Suggested replies")
+                Text("Next steps the model offers as buttons after a reply.")
+            }
             Picker(selection: $settings.retention) {
                 ForEach(AIRetention.allCases) { Text($0.title).tag($0) }
             } label: {

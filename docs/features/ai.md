@@ -47,10 +47,13 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 - **Every request carries Blitz's own preamble, and the user's text goes after it.**
   `AIInstructions.compose` builds `AIRequest.instructions`: the preamble
   `AIChatCoordinator.preamble(for:)` assembles, then whatever Settings → AI holds.
-  `AIPreamble.text(for:environment:)` joins up to three parts, each paid only where it applies:
-  - **The core** says who the model is, how a reply renders (choices, linked sources), that what
-    changes may be stale, and what Blitz is. Apple Intelligence gets `AIPreamble.onDevice`, a brief
-    of it, since its window holds the prompt, history and reply together.
+  `AIPreamble.text(for:environment:)` joins up to four parts, each paid only where it applies:
+  - **The core** says who the model is, how a reply renders (linked sources), that what changes may
+    be stale, and what Blitz is. Apple Intelligence gets `AIPreamble.onDevice`, a brief of it, since
+    its window holds the prompt, history and reply together.
+  - **The choices part** (`AIPreamble.choices`, or the briefer `onDeviceChoices`) describes the
+    fence a reply's suggested replies come in, and rides only while Suggested replies is on
+    (`Turn.offersChoices`).
   - **The agent half** rides only on a turn offered tools — the route takes them and the tools menu
     is on — and names `ask_user` only where it is offered. It covers working with the gate (never
     ask in chat for a permission a dialog asks; a declined call is final and never routed around),
@@ -202,18 +205,21 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
 - **A reply can end on choices, and a choice is only ever a message.** The preamble lets the model
   close a reply with a fenced `choices` block, one option per line. `ChatChoices.split` lifts the
   fence out of the prose (an unclosed one mid-stream too, so it never flashes as code). Apple's
-  on-device model tends to drop the fence and write a bare `choices` line over a list, so a
-  label on its own line with nothing but list items after it, to the reply's end, counts too. It
-  sometimes wraps that label in a bare fence of its own and adds a stray one after the list, so the
-  bare fence right on the label and any fence closing or trailing the list go with them, and no
-  empty code box is left behind. A label inside a fence with a language, or any other open code
-  block, is code and stays. `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a waiting
-  question's options use too — each wrapped row centred (`ChatFlowLayout(centersRows:)`): in the window they rise out of the
-  composer, sitting on its top edge until the reader starts typing; in Quick AI they close the
-  transcript. A click sends the option as the reader's next message, through the same `send` a
-  typed one takes. Older replies lose their chips, since only the last question is still open. It is text in, text out, so it
-  works on every route — and not at all with the system prompt switched off, which drops the
-  preamble that describes it.
+  on-device model tends to drop the fence and write a bare `choices` line over a list, so a label on
+  its own line with nothing but list items after it, to the reply's end, counts too. It sometimes
+  wraps that label in a bare fence of its own and adds a stray one after the list, so the bare fence
+  right on the label and any fence closing or trailing the list go with them, and no empty code box
+  is left behind. A label inside a fence with a language, or any other open code block, is code and
+  stays. `ChatSuggestionChips` draws the options as `ChatChoiceChip` glass capsules — the chip a
+  waiting question's options use too — in a leading-aligned `ChatFlowLayout`: in the window they
+  rise out of the composer, sitting on its top edge until the reader starts typing; in Quick AI they
+  close the transcript. A click sends the option as the reader's next message, through the same
+  `send` a typed one takes. Older replies lose their chips, since only the last question is still
+  open. It is text in, text out, so it works on every route — and not at all with the system prompt
+  switched off, which drops the preamble that describes it. Settings → AI → Suggested replies
+  (`aiChoices`, on by default) turns them off on purpose: `AIPreamble.Turn.offersChoices` leaves
+  `AIPreamble.choices` (or its on-device `onDeviceChoices`) out, so no turn asks for them, and
+  neither surface draws chips. A fence a model writes anyway is still lifted out of the prose.
 - **Token usage belongs to the reply that reported it.** `AIUsage` carries input, output, cached
   prompt and thinking tokens, and the model's window and cost where a route says them — Claude's CLI
   reports all of it, the Anthropic API its cache, OpenAI-shaped routes their reasoning tokens and
@@ -359,11 +365,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   decode, which is not the same as a half-typed line — that is still dropped by `prepare`.
   ⌘J carries them into the window with the conversation; opening another chat there still disowns
   a state's own, which is the rule they belong to.
-- **`AIConversationOpenPolicy` is the whole rule for both surfaces, and it is pure.** `Recent Conversation` resumes the
-  resident transcript, or reopens the newest saved one when nothing is resident, unless it has been
-  idle past `Start a new conversation after`; `A New Conversation` always starts fresh. There is no
-  third setting for "immediately" because that *is* `A New Conversation` — two controls able to
-  express one state would only ever disagree.
+- **`AIConversationOpenPolicy` is the whole rule for both surfaces, and it is pure.** `Recent
+  Conversation` resumes the resident transcript, or reopens the newest saved one when nothing is
+  resident, unless it has been idle past `Start a new conversation after`; `A New Conversation`
+  always starts fresh. There is no third setting for "immediately" because that *is* `A New
+  Conversation` — two controls able to express one state would only ever disagree.
 - **History is local and lazy.** Conversation summaries stay in memory while transcripts load from the
   system SQLite database only for the opened chat. Empty chats are never saved.
 - **A failed reply ends on a note saying why, and only the note reads as an error.** A cancel, an
@@ -644,9 +650,9 @@ and the Actions menu's own chords, and dies with the window.
 - **Transcript**: `ChatTranscriptView` with `surface: .window`, which drops the palette's edge
   dissolve and thin scrollbar (both are measured against the palette's bars) and centres the column
   at `aiChatReadingWidth`, its gutter outside that cap as the composer's is, so both share one
-  column; a window reply takes no inset of its own. The last finished reply offers Regenerate beside Copy: `AIChatState`
-  drops only a trailing reply and asks again with the question and its attachments, of whichever
-  model is selected now.
+  column; a window reply takes no inset of its own. The last finished reply offers Regenerate beside
+  Copy: `AIChatState` drops only a trailing reply and asks again with the question and its
+  attachments, of whichever model is selected now.
 - **Composer** (`AIChatDetailView`): one pane of untinted Liquid Glass, stacked under the transcript
   rather than floated over it, with glass capsules for its menus, the glass on a background layer.
   The title bar keeps the system's own band, as a native document window's does.
@@ -870,11 +876,14 @@ twenty-first and `AgentMemoryCoordinator` ([Agent](agent.md#memory)) the twenty-
 - Full screen and a narrow window: a reply, its code blocks, the chips and the composer share the
   same left and right edges, the user's bubble ends on the right one, and the column grows to
   `aiChatReadingWidth` before the gutters widen.
-- Suggested replies are centred glass capsules, and when they wrap each row is centred. Source chips
-  under a cited reply match them, the number first in its own disc.
-- Code blocks have rounded corners in Dark and Light, and are coloured: ask for a snippet each in Swift, Python, shell, JSON, SQL, a diff and
-  HTML; a `diff` shows additions green and removals red, and an unlabelled block stays plain.
-  Switching appearance recolours them without a relaunch.
+- Suggested replies are leading-aligned glass capsules, and wrapped rows start at the same edge.
+  Source chips under a cited reply match them, the number first in its own disc.
+- Turn Settings → AI → Suggested replies off: a reply that would have offered next steps ends
+  without chips in Quick AI and the window, and turning it back on brings them back from the next
+  reply.
+- Code blocks have rounded corners in Dark and Light, and are coloured: ask for a snippet each in
+  Swift, Python, shell, JSON, SQL, a diff and HTML; a `diff` shows additions green and removals
+  red, and an unlabelled block stays plain. Switching appearance recolours them without a relaunch.
 - ⌃⇥ steps down the sidebar and wraps from the last chat to the first pinned one; ⌃⇧⇥ goes back.
 - Archive a chat from the sidebar's context menu: it leaves the list, an Archived row with a count
   appears at the bottom, and ⌃⇥ and Quick AI's Chat History skip it. Archive the open chat from ⌘K:
@@ -1205,24 +1214,26 @@ Nor does it reach Plan's instruction, which is the chat's mode speaking, not a p
 carries it with the switch off ([Plans](#plans)). The memory block is the same: Read Memory and
 the chat's Use Memory are its switches ([Agent](agent.md#memory)).
 
-`mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md).
-`aiConnections`, `aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt` and
-`aiSystemPromptEnabled` are deliberately excluded from settings backups. The first is meaningless
-without machine-local Keychain items; the two models name an external destination and must not
-silently redirect AI traffic after an import; the last two are standing instructions and the switch that sends them, both of which change every
-answer and must not arrive on another Mac unread. `aiRetention`, `aiOpensTo` and `aiNewChatAfter`
-join them: all three are decisions about conversations that never leave the Mac that had them, and
-an import must not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it
-limits what a tool-driven reply may spend, and an import must not raise that unasked.
-`aiNotifyWhenWaiting`, Settings → AI → Agent → **Notify when the agent is waiting**
-([Agent](agent.md#notifications)), stays behind with the rest of the AI setup, though as an
-ordinary preference it has a `settings.json` key, `ai.notifyWhenWaiting`.
-`aiAgentRules` decides which tools a model may call, from the calendar to the shell; a table that
-grants capabilities travels in neither a backup nor `settings.json`, and the three keys it was
-migrated from stay excluded beside it ([Agent](agent.md#settings-and-storage)). The agent's memories
-are no preference at all: `agent-memory.json` is personal data every turn sends, so no backup
-category and no `settings.json` key carries it ([Agent](agent.md#memory)).
-`aiShownModels` and `aiDisabledRoutes` name this Mac's own tools, connections and their models, which
-another Mac may not have. `aiInstalledOverrides` names a command to run and the variables to run it
-with, and an import must never decide which program a Mac launches. None of the three has a
-`settings.json` key, for the same reasons: they are machine state, and the last grants a capability.
+`mcpEnabled` and `mcpServers` are excluded for the reasons in [mcp.md](mcp.md). `aiConnections`,
+`aiDefaultModel`, `aiSmartReminderModel`, `aiSystemPrompt`, `aiSystemPromptEnabled` and `aiChoices`
+are deliberately excluded from settings backups. The first is meaningless without machine-local
+Keychain items; the two models name an external destination and must not silently redirect AI
+traffic after an import; the next two are standing instructions and the switch that sends them, both
+of which change every answer and must not arrive on another Mac unread, and `aiChoices` changes the
+instructions every turn carries in the same way, though as an ordinary preference it has a
+`settings.json` key, `ai.choices`. `aiRetention`, `aiOpensTo` and `aiNewChatAfter` join them: all
+three are decisions about conversations that never leave the Mac that had them, and an import must
+not arrive carrying an instruction to delete them. `aiToolRounds` stays behind too: it limits what a
+tool-driven reply may spend, and an import must not raise that unasked. `aiNotifyWhenWaiting`,
+Settings → AI → Agent → **Notify when the agent is waiting** ([Agent](agent.md#notifications)),
+stays behind with the rest of the AI setup, though as an ordinary preference it has a
+`settings.json` key, `ai.notifyWhenWaiting`. `aiAgentRules` decides which tools a model may call,
+from the calendar to the shell; a table that grants capabilities travels in neither a backup nor
+`settings.json`, and the three keys it was migrated from stay excluded beside it
+([Agent](agent.md#settings-and-storage)). The agent's memories are no preference at all:
+`agent-memory.json` is personal data every turn sends, so no backup category and no `settings.json`
+key carries it ([Agent](agent.md#memory)). `aiShownModels` and `aiDisabledRoutes` name this Mac's
+own tools, connections and their models, which another Mac may not have. `aiInstalledOverrides`
+names a command to run and the variables to run it with, and an import must never decide which
+program a Mac launches. None of the three has a `settings.json` key, for the same reasons: they are
+machine state, and the last grants a capability.

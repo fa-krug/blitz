@@ -484,7 +484,8 @@ final class AIChatCoordinator {
             isOnDevice: model?.isOnDevice == true,
             offersTools: capabilities(for: chat).tools && chat.agentScope.isEnabled,
             asksUser: model?.reachesBlitzTools == true
-                && AgentPolicy.isOffered(.askUser, scope: chat.agentScope))
+                && AgentPolicy.isOffered(.askUser, scope: chat.agentScope),
+            offersChoices: core.aiSettings.choicesEnabled)
         let environment = AIPreamble.environment(
             now: Date(), calendar: .current, system: ProcessInfo.processInfo.operatingSystemVersion)
         return AIPreamble.text(for: turn, environment: environment)

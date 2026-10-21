@@ -58,19 +58,28 @@ struct AIInstructionsTest {
             "the core refuses to guess another launcher's numbers",
             core.contains("no measurements for any other launcher"))
         check(
-            "the core offers choices and asks for links with their URLs",
-            core.contains("```choices") && core.contains("never write a link without a url"))
+            "the core asks for links with their URLs and leaves choices to their own part",
+            core.contains("never write a link without a url") && !core.contains("```choices"))
+        check(
+            "both choice parts describe the fence a reply's options come in",
+            AIPreamble.choices.contains("```choices") && AIPreamble.onDeviceChoices.contains("```choices"))
         check(
             "the core answers in the user's language and treats what changes as possibly stale",
             core.contains("language the user writes in") && core.contains("out of date"))
         // Every line is billed on every turn, so the preamble has to stay a preamble.
-        check("the core stays short", AIPreamble.core.count < 2_200)
+        check("the core stays short", (AIPreamble.core + AIPreamble.choices).count < 2_200)
 
         let environment = "Today is Thursday 2026-10-15."
         let chat = AIPreamble.text(for: AIPreamble.Turn(), environment: environment)
         check(
             "a turn without tools carries the core and the environment, and no agent half",
             chat == AIPreamble.core + "\n\n" + environment)
+
+        let choosing = AIPreamble.text(
+            for: AIPreamble.Turn(offersChoices: true), environment: environment)
+        check(
+            "suggested replies on add the choices part between the core and the environment",
+            choosing == AIPreamble.core + "\n\n" + AIPreamble.choices + "\n\n" + environment)
 
         let agent = AIPreamble.text(
             for: AIPreamble.Turn(offersTools: true, asksUser: true), environment: environment)
@@ -102,10 +111,17 @@ struct AIInstructionsTest {
         check(
             "the on-device route gets the core in brief",
             onDevice == AIPreamble.onDevice + "\n\n" + environment
-                && AIPreamble.onDevice.contains("Blitz")
-                && AIPreamble.onDevice.contains("```choices"))
+                && AIPreamble.onDevice.contains("Blitz"))
+        let onDeviceChoosing = AIPreamble.text(
+            for: AIPreamble.Turn(isOnDevice: true, offersChoices: true), environment: environment)
+        check(
+            "and its choices in brief too",
+            onDeviceChoosing
+                == AIPreamble.onDevice + "\n\n" + AIPreamble.onDeviceChoices + "\n\n" + environment)
         // The on-device window holds the prompt, its history and the reply together.
-        check("and it stays far inside that window", AIPreamble.onDevice.utf8.count < 500)
+        check(
+            "and it stays far inside that window",
+            (AIPreamble.onDevice + AIPreamble.onDeviceChoices).utf8.count < 500)
 
         var berlin = Calendar(identifier: .gregorian)
         berlin.timeZone = TimeZone(identifier: "Europe/Berlin")!

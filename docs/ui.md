@@ -332,35 +332,34 @@ AI Agent is a titled window built the way Settings is, not a palette sibling lik
 `NSSplitViewController` whose sidebar item takes the system sidebar material, a unified toolbar with
 an inline title, and native `List`, `Menu` and context menus. Nothing about it scales with Interface
 Size. The composer is untinted Liquid Glass at `Radius.dialog`, stacked under the transcript so
-nothing scrolls behind it, with `.glass` capsules for its model and mode menus,
-and its glass on a background layer rather than the box. The mode pill alone changes shape with its
-value: in Auto, `modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.warning`, since its
-calls run with no dialog. The title bar keeps the system's own toolbar band, as any document
-window's does. The context card the gauge raises on hover is glass over a solid
-`windowBackgroundColor`, because it rises over transcript text, and sits in the transcript's own
-frame at its bottom edge, so no window size can push it off screen. A reply's choices are frosted
-capsules, each wrapped row centred, that rise out of the composer's top edge, each a
-`ChatChoiceChip` — a glyph then the option — which a waiting question's options use too, left-aligned
-on its card. The capsule is `chatChip()`: `frosted(in: Capsule())` padded `spacing.xl` either side.
-A source chip under a cited reply is the same capsule led by a `chatSourceBadge 18` number disc in
-`controlSurface`, which `chatChip(leadsWithBadge: true)` pulls in to `spacing.sm`. Jump to Latest is
-a `chatJumpToLatest 30` arrow disc at the transcript's bottom edge. A sidebar row whose chat waits on the reader trades
-its spinner for the wait's symbol in `Colors.warning`. While anything is archived, the sidebar's foot
-is an **Archived** row under a divider — `archivebox`, the title and the count in secondary, hover
-in `Colors.rowHover` at `Radius.row` as the rows have — and choosing it swaps the list for
-`AIChatArchiveList` under a back chevron and an "Archived" headline, the search field kept between
-them; archived rows show the day they were last active in secondary caption type. `ChatQuestionCard` and `ChatPlanCard` are
-cards in the transcript, `cardFill` under a `cardStroke` at `Radius.row`: the question with its
-chips, then its answer as plain capsules; the plan as rendered Markdown with **Edit** and `.glass`
-**Execute in Auto** beside the `.glassProminent` **Execute**, a replaced plan folded behind a
-chevron. Find marks words in `Colors.findMatch` / `findCurrent`, the system yellow, with
-`findCurrentInk` black on the solid one in both appearances. Transcript lines sit
-`spacing.chatLine 4` apart on both surfaces. The transcript itself is the palette's `ChatTranscriptView` with
-`surface: .window`, which leaves out `edgeDissolve` and `thinScrollbar` — both are measured against
-the palette's bars — and caps the column at `aiChatReadingWidth`, centred. Its gutter sits outside
-that cap, as the composer's does, so a reply, its code blocks and the composer share both edges; a
-window reply takes no inset of its own, while the palette keeps `spacing.sm` to line up with its
-header's chevron.
+nothing scrolls behind it, with `.glass` capsules for its model and mode menus, and its glass on a
+background layer rather than the box. The mode pill alone changes shape with its value: in Auto,
+`modePill(isTinted:)` makes it `.glassProminent` tinted `Colors.warning`, since its calls run with
+no dialog. The title bar keeps the system's own toolbar band, as any document window's does. The
+context card the gauge raises on hover is glass over a solid `windowBackgroundColor`, because it
+rises over transcript text, and sits in the transcript's own frame at its bottom edge, so no window
+size can push it off screen. A reply's choices are frosted capsules in leading-aligned rows that
+rise out of the composer's top edge, each a `ChatChoiceChip` — a glyph then the option — which a
+waiting question's options use too. The capsule is `chatChip()`: `frosted(in: Capsule())` padded
+`spacing.xl` either side. A source chip under a cited reply is the same capsule led by a
+`chatSourceBadge 18` number disc in `controlSurface`, which `chatChip(leadsWithBadge: true)` pulls
+in to `spacing.sm`. Jump to Latest is a `chatJumpToLatest 30` arrow disc at the transcript's bottom
+edge. A sidebar row whose chat waits on the reader trades its spinner for the wait's symbol in
+`Colors.warning`. While anything is archived, the sidebar's foot is an **Archived** row under a
+divider — `archivebox`, the title and the count in secondary, hover in `Colors.rowHover` at
+`Radius.row` as the rows have — and choosing it swaps the list for `AIChatArchiveList` under a back
+chevron and an "Archived" headline, the search field kept between them; archived rows show the day
+they were last active in secondary caption type. `ChatQuestionCard` and `ChatPlanCard` are cards in
+the transcript, `cardFill` under a `cardStroke` at `Radius.row`: the question with its chips, then
+its answer as plain capsules; the plan as rendered Markdown with **Edit** and `.glass` **Execute in
+Auto** beside the `.glassProminent` **Execute**, a replaced plan folded behind a chevron. Find marks
+words in `Colors.findMatch` / `findCurrent`, the system yellow, with `findCurrentInk` black on the
+solid one in both appearances. Transcript lines sit `spacing.chatLine 4` apart on both surfaces. The
+transcript itself is the palette's `ChatTranscriptView` with `surface: .window`, which leaves out
+`edgeDissolve` and `thinScrollbar` — both are measured against the palette's bars — and caps the
+column at `aiChatReadingWidth`, centred. Its gutter sits outside that cap, as the composer's does,
+so a reply, its code blocks and the composer share both edges; a window reply takes no inset of its
+own, while the palette keeps `spacing.sm` to line up with its header's chevron.
 
 ---
 

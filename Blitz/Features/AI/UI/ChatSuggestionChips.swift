@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// A reply's choices as the next thing to say: centred glass capsules that send themselves.
+/// A reply's choices as the next thing to say: glass capsules that send themselves.
 struct ChatSuggestionChips: View {
     @Environment(\.metrics) private var metrics
     let choices: [String]
     let onChoose: (String) -> Void
 
     var body: some View {
-        ChatFlowLayout(spacing: metrics.spacing.sm, centersRows: true) {
+        ChatFlowLayout(spacing: metrics.spacing.sm) {
             ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
                 ChatChoiceChip(title: choice, symbol: "arrow.turn.down.right") {
                     onChoose(choice)
@@ -71,15 +71,13 @@ extension View {
 /// Chips left to right, wrapping when the row is full.
 struct ChatFlowLayout: Layout {
     let spacing: CGFloat
-    var centersRows = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
         let rows = arrange(subviews, width: width)
         let widest = rows.map(\.width).max() ?? 0
         let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(rows.count - 1, 0))
-        let claimed = centersRows && width.isFinite ? width : min(widest, width)
-        return CGSize(width: claimed, height: height)
+        return CGSize(width: min(widest, width), height: height)
     }
 
     func placeSubviews(
@@ -87,7 +85,7 @@ struct ChatFlowLayout: Layout {
     ) {
         var y = bounds.minY
         for row in arrange(subviews, width: bounds.width) {
-            var x = centersRows ? bounds.minX + (bounds.width - row.width) / 2 : bounds.minX
+            var x = bounds.minX
             for index in row.indices {
                 let size = fitted(subviews[index], width: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
