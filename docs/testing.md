@@ -460,8 +460,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Confirming moves items to the Trash and they are **recoverable from it**
 - A running app exits before any files move, including a menu-bar app
 - An app that refuses to quit leaves every item in place after the grace period and says so
-- Settings ▸ Permissions shows Full Disk Access and opens its privacy pane; with it granted,
-  `Containers` and recent-documents rows become selectable while `/usr/local/bin` rows stay locked
+- No `Containers`, `Group Containers`, `Cookies` or recent-documents rows appear, even for an
+  App Store app, and nothing asks for Full Disk Access; `/usr/local/bin` rows stay locked
 - Escaping mid-scan cancels promptly with no spinner left behind
 - Hiding and immediately restoring the screen never strands an in-flight file icon as a placeholder
 

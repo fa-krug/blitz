@@ -27,8 +27,6 @@ enum UninstallScanner {
     ) async throws -> UninstallPlan {
         try await Signposts.interval("UninstallScanner.discover") {
             let home = NSHomeDirectory()
-            let environment = UninstallEnvironment(
-                home: home, hasFullDiskAccess: Permissions.hasFullDiskAccess())
             guard
                 let identity = UninstallIdentity.make(
                     target: target, otherAppNames: otherAppNames, otherBundleIDs: otherBundleIDs,
@@ -37,7 +35,7 @@ enum UninstallScanner {
 
             let bundlePath = target.bundleURL.standardizedFileURL.path
             let bundle = row(
-                path: bundlePath, evidence: .bundle, environment: environment,
+                path: bundlePath, evidence: .bundle, home: home,
                 displayName: target.bundleURL.deletingPathExtension().lastPathComponent)
 
             var buckets = [[UninstallCandidate]](repeating: [], count: roots.count)
@@ -48,7 +46,7 @@ enum UninstallScanner {
                         return (
                             index,
                             rows(
-                                in: root, identity: identity, environment: environment,
+                                in: root, identity: identity, home: home,
                                 bundlePath: bundlePath)
                         )
                     }
@@ -59,7 +57,7 @@ enum UninstallScanner {
 
             let gathered =
                 [bundle].compactMap { $0 } + buckets.flatMap { $0 }
-                + (try binRows(environment: environment, bundlePath: bundlePath))
+                + (try binRows(home: home, bundlePath: bundlePath))
 
             // One pass, in gathered order: a `Set` shared across tasks is what would race.
             var seen = Set<String>()
@@ -101,9 +99,9 @@ enum UninstallScanner {
 
     private static func rows(
         in root: UninstallSearchRoot, identity: UninstallIdentity,
-        environment: UninstallEnvironment, bundlePath: String
+        home: String, bundlePath: String
     ) -> [UninstallCandidate] {
-        let rootPath = root.path(home: environment.home)
+        let rootPath = root.path(home: home)
         guard let names = childNames(of: rootPath) else { return [] }
         // One stat per root, not per row.
         let parent = parentFacts(of: rootPath)
@@ -112,20 +110,15 @@ enum UninstallScanner {
                 let path = (rootPath + "/" + match.name as NSString).standardizingPath
                 guard
                     UninstallRules.isAcceptableCandidate(
-                        path: path, rootPath: rootPath, home: environment.home,
+                        path: path, rootPath: rootPath, home: home,
                         bundlePath: bundlePath)
                 else { return nil }
-                return row(
-                    path: path, evidence: match.evidence, environment: environment, parent: parent)
+                return row(path: path, evidence: match.evidence, home: home, parent: parent)
             }
     }
 
     /// Serial: four directories of cheap symlink reads, and nothing here needs a walk.
-    private static func binRows(
-        environment: UninstallEnvironment, bundlePath: String
-    ) throws
-        -> [UninstallCandidate]
-    {
+    private static func binRows(home: String, bundlePath: String) throws -> [UninstallCandidate] {
         var rows: [UninstallCandidate] = []
         for directory in UninstallSearchRoot.binDirectories {
             try Task.checkCancellation()
@@ -142,7 +135,7 @@ enum UninstallScanner {
                     ? target : (rootPath as NSString).appendingPathComponent(target)
                 guard UninstallRules.isBundleSymlink(target: resolved, bundlePath: bundlePath),
                     let row = row(
-                        path: path, evidence: .binSymlink, environment: environment, parent: parent)
+                        path: path, evidence: .binSymlink, home: home, parent: parent)
                 else { continue }
                 rows.append(row)
             }
@@ -156,11 +149,11 @@ enum UninstallScanner {
     }
 
     private static func row(
-        path: String, evidence: UninstallEvidence, environment: UninstallEnvironment,
+        path: String, evidence: UninstallEvidence, home: String,
         displayName: String? = nil, parent: ParentFacts? = nil
     ) -> UninstallCandidate? {
         guard let scanned = inspect(path, parent: parent) else { return nil }
-        let protection = UninstallProtectionRules.classify(scanned.facts, environment: environment)
+        let protection = UninstallProtectionRules.classify(scanned.facts)
         guard protection != .missing else { return nil }
         // A symlink is trashed as the link, so it never costs more than its own bytes.
         let walkable = scanned.facts.isDirectory && !scanned.facts.isSymbolicLink
@@ -168,7 +161,7 @@ enum UninstallScanner {
             path: path,
             name: displayName ?? (path as NSString).lastPathComponent,
             locationLabel: UninstallRules.abbreviate(
-                (path as NSString).deletingLastPathComponent, home: environment.home),
+                (path as NSString).deletingLastPathComponent, home: home),
             evidence: evidence,
             isDirectory: scanned.facts.isDirectory,
             size: walkable ? nil : MeasuredSize(bytes: scanned.byteSize),
