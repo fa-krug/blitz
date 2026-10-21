@@ -951,7 +951,8 @@ thread, and a reset, a relaunch or the idle shutdown drops them all; nothing of 
 The runner streams agent-message deltas, plus `item/started` for the reasoning and web-search items
 that feed the bubble's status line. System messages become developer instructions alongside Blitz's
 fixed boundary, which permits only web search when it is on and the MCP tools an armed turn
-supplies, and tells a follow-up to search again rather than ask the reader for a link.
+supplies — for anything they offer, since the shell tool is off by flag — and tells a follow-up to
+search again rather than ask the reader for a link.
 Cancellation interrupts the active turn, including one the server has started but
 not yet named: Stop arms that thread, and whichever of `turn/started` or the `turn/start` response
 names the turn first spends a single `turn/interrupt` on it.
@@ -1165,6 +1166,10 @@ deliberately cannot reach: every installed CLI route prepends its own instructio
 commands or touch files, and never to invoke a tool beyond the MCP tools an armed Codex or Claude
 turn supplies — on a Claude Plan turn, only to look ([Agent](agent.md#routes)). That is a sandbox
 boundary on a local CLI, not Blitz describing itself, and a user switch must not be able to lift it.
+Outside Plan, an armed turn's instruction lets those MCP tools do anything they offer, commands and
+files included: the CLI's own tools are already off by flag (`--tools ""` for Claude,
+`features.shell_tool=false` for Codex) and every call passes consent, so forbidding it there would
+only make the model refuse a server the user chose.
 Nor does it reach Plan's instruction, which is the chat's mode speaking, not a prompt: a Plan turn
 carries it with the switch off ([Plans](#plans)). The memory block is the same: Read Memory and
 the chat's Use Memory are its switches ([Agent](agent.md#memory)).

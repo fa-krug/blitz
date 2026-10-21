@@ -1105,8 +1105,9 @@ Each route honours the mode where it decides what to offer:
   every Plan turn. Consent then weighs each call by that list, as [the gate](#the-gate-and-its-dialogs)
   says. The CLI's own boundary follows the mode too: an armed Plan turn
   (`AIToolServerSession.readsOnly`) is told the supplied tools may only read, investigate, ask the
-  user or write the plan and that nothing may be changed, where any other armed turn is told it may
-  call any supplied tool, though Blitz may ask the user first and a declined call is final.
+  user or write the plan and that nothing may be changed, where any other armed turn is told a
+  supplied tool may do anything it offers, commands and files included, though Blitz may ask the
+  user first and a declined call is final.
   Consent enforces Plan either way; the wording only keeps the boundary from contradicting Plan's
   instruction.
 - **Codex.** No mode pill, so always Manual; it reaches neither `ask_user` nor `write_plan`.
@@ -1202,9 +1203,9 @@ Each route honours the mode where it decides what to offer:
   list); the scope per chat, open, in Manual and without grants on a new or deleted chat;
   requests held off screen, let go on screen and declined exactly once by Stop, a cancelled task,
   a delete or the turn's end; `awaiting` derived from the turn; and which surface holds a chat.
-- `installed-ai-test` — the Claude command's boundary: an armed turn outside Plan is told it may
-  call any supplied tool and that a declined call is final, and a Plan turn that nothing may be
-  changed, search or not.
+- `installed-ai-test` — the Claude command's boundary: an armed turn outside Plan is told a
+  supplied tool may do anything it offers and that a declined call is final, and a Plan turn that
+  nothing may be changed, search or not.
 - `mcp-test` — `MCPTool.isReadOnly` from a plain `true` hint alone, and the `AgentCall` built from a
   listing, a CLI's call and a whole server.
 - `calendar-test` and `reminders-test` — read and write halves offered independently, and the
