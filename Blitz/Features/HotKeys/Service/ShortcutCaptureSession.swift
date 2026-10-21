@@ -16,7 +16,14 @@ final class ShortcutCaptureSession {
     private(set) var awaitingSecondGlobe = false
     private(set) var conflict: Conflict?
 
+    /// The applied Hyper key, read here too because Secure Input hides keystrokes from the tap.
+    @ObservationIgnored var hyperKey: HyperKeyPhysicalKey = .none {
+        didSet { if hyperKey != oldValue { hyperKeyDown = false } }
+    }
+    @ObservationIgnored private var hyperKeyDown = false
+
     private static let conflictDwell: Duration = .seconds(1.5)
+    private static let chordModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
 
     @ObservationIgnored private var monitors: [Any] = []
     @ObservationIgnored private var resignObserver: NSObjectProtocol?
@@ -29,7 +36,7 @@ final class ShortcutCaptureSession {
 
     func start(action: HotKeyAction, hotKeys: HotKeyManager) {
         stop()
-        heldModifiers = NSEvent.modifierFlags.intersection([.command, .option, .control, .shift])
+        heldModifiers = NSEvent.modifierFlags.intersection(Self.chordModifiers)
 
         // Main-thread handlers that predate actor annotations; only Sendable pieces cross in.
         if let monitor = NSEvent.addLocalMonitorForEvents(
@@ -51,6 +58,17 @@ final class ShortcutCaptureSession {
         }
 
         if let monitor = NSEvent.addLocalMonitorForEvents(
+            matching: .keyUp,
+            handler: { [weak self] event in
+                let keyCode = Int(event.keyCode)
+                MainActor.assumeIsolated { self?.handleKeyUp(keyCode: keyCode) }
+                return event
+            })
+        {
+            monitors.append(monitor)
+        }
+
+        if let monitor = NSEvent.addLocalMonitorForEvents(
             matching: .flagsChanged,
             handler: { [weak self, weak hotKeys] event in
                 let all = event.modifierFlags
@@ -61,7 +79,7 @@ final class ShortcutCaptureSession {
                 let timestamp = event.timestamp
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.heldModifiers = flags
+                    self.heldModifiers = self.hyperized(all).intersection(Self.chordModifiers)
                     if keyCode == kVK_Function { self.heldGlobe = all.contains(.function) }
                     guard let hotKeys else { return }
                     self.handleModifiers(
@@ -109,6 +127,7 @@ final class ShortcutCaptureSession {
         conflict = nil
         heldModifiers = []
         heldGlobe = false
+        hyperKeyDown = false
         detector.reset()
         globeDetector.cancel()
         activeRecorderView = nil
@@ -135,9 +154,14 @@ final class ShortcutCaptureSession {
         _ = detector.handle(.otherInput, at: timestamp)
         cancelGlobeCommit()
         globeDetector.cancel()
+        if isHyperKey(keyCode) {
+            hyperKeyDown = true
+            heldModifiers = hyperized(flags).intersection(Self.chordModifiers)
+            return
+        }
 
         // F-keys also carry `.function`; only the physical Globe press makes it a modifier.
-        let flags = heldGlobe ? flags.union(.function) : flags.subtracting(.function)
+        let flags = hyperized(heldGlobe ? flags.union(.function) : flags.subtracting(.function))
         let bareKey = flags.isDisjoint(with: [.command, .option, .control, .shift, .function])
 
         if bareKey, keyCode == kVK_Escape {
@@ -153,6 +177,25 @@ final class ShortcutCaptureSession {
         // Not a bindable combo (e.g. a bare letter): swallow it and keep recording.
         guard let shortcut = KeyShortcut(keyCode: keyCode, modifierFlags: flags) else { return }
         commit(.combo(shortcut), action: action, hotKeys: hotKeys)
+    }
+
+    private func handleKeyUp(keyCode: Int) {
+        guard isHyperKey(keyCode) else { return }
+        hyperKeyDown = false
+        heldModifiers = NSEvent.modifierFlags.intersection(Self.chordModifiers)
+    }
+
+    /// F18 only: a modifier Hyper key's direction is its device bit, read in `hyperized`.
+    private func isHyperKey(_ keyCode: Int) -> Bool {
+        hyperKey.tapUsesKeyEvents && keyCode == hyperKey.tapKeyCode
+    }
+
+    private func hyperized(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
+        guard let chord = KeyShortcut.displayedHyperChord(),
+            hyperKeyDown || hyperKey.isHeld(in: UInt64(flags.rawValue))
+        else { return flags }
+        let own = hyperKey.ownFlag.map { NSEvent.ModifierFlags(rawValue: UInt($0.rawValue)) } ?? []
+        return flags.subtracting(own).union(chord)
     }
 
     private func handleModifiers(

@@ -11,14 +11,15 @@ struct FileSearchPerformance {
             (
                 "shipped",
                 FileSearchPolicy(
-                    scopes: FileSearchScope.defaultScopes, ignorePatterns: [],
-                    homeDirectory: homeDirectory)
+                    scopes: FileSearchScope.defaultScopes,
+                    ignorePatterns: FileSearchIgnoreList.defaults, homeDirectory: homeDirectory)
             ),
             (
                 "+patterns",
                 FileSearchPolicy(
                     scopes: FileSearchScope.defaultScopes,
-                    ignorePatterns: ["*.tmp", "*.log", "**/[Cc]ache/**", "**/Logs/**", "vendor"],
+                    ignorePatterns: FileSearchIgnoreList.defaults
+                        + ["*.tmp", "*.log", "**/[Cc]ache/**", "**/Logs/**", "vendor"],
                     homeDirectory: homeDirectory)
             )
         ]

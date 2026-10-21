@@ -59,6 +59,7 @@ struct DoubleTapDetectorTests {
         layoutCharacters()
         hyperChord()
         hyperRetargeting()
+        hyperKeyDirection()
         spelling()
         spotlightShortcut()
         globeTap()
@@ -476,6 +477,27 @@ struct DoubleTapDetectorTests {
                     shortcut.retargetingHyper(includesShift: includesShift) == shortcut,
                     "\(KeyShortcut.modifierSymbols(from: flags).joined()) is not a Hyper chord")
             }
+        }
+    }
+
+    static func hyperKeyDirection() {
+        let modifierKeys: [HyperKeyPhysicalKey] = [.rightControl, .rightShift, .rightOption, .rightCommand]
+        for key in modifierKeys {
+            guard let bit = key.deviceFlag, let own = key.ownFlag?.rawValue else {
+                expect(false, "\(key) has a device bit and a generic flag")
+                continue
+            }
+            expect(key.isHeld(in: own | bit), "\(key) reads as down while its device bit is set")
+            expect(!key.isHeld(in: own), "\(key) reads as up when only its left twin holds the flag")
+        }
+        expect(
+            Set(modifierKeys.compactMap(\.deviceFlag)).count == modifierKeys.count,
+            "each modifier key has its own device bit")
+        expect(
+            !HyperKeyPhysicalKey.rightControl.isHeld(in: ModifierDeviceFlag.leftControl),
+            "Right Control's bit is not Left Control's")
+        for key in [HyperKeyPhysicalKey.none, .capsLock] {
+            expect(key.deviceFlag == nil && !key.isHeld(in: .max), "\(key) has no device bit")
         }
     }
 

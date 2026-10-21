@@ -510,9 +510,10 @@ width; their hover keeps the shared 10pt menu-row corner.
 
 A menu is **not** an overlay inside the palette: `MenuPanelController` hosts it in a `MenuPanel`, a
 borderless non-activating `NSPanel` added as a **child window** of the palette's, which is what makes
-it follow a palette drag and vanish with it. Glass renders against the desktop rather than inside an
-already-blurred, clipped panel, and no menu can be cropped by `RootPaletteView`'s `clipShape` however
-long it grows. The menu temporarily becomes key so its native `TextField` owns the caret and selection, while
+it follow a palette drag and vanish with it. `PalettePanel.orderOut` detaches every child first,
+because a child ordered out along with its parent skips its next open animation. Glass renders
+against the desktop rather than inside an already-blurred, clipped panel, and no menu can be cropped
+by `RootPaletteView`'s `clipShape` however long it grows. The menu temporarily becomes key so its native `TextField` owns the caret and selection, while
 `MenuPanel` hands navigation and action shortcuts back to `RootPaletteView`. It restores key status
 to the palette when it closes. Resigning to the palette closes only the menu; resigning to another
 app closes the palette as well. That resign is answered a turn later, so it first checks that the
@@ -526,13 +527,13 @@ The panel is a second SwiftUI hierarchy, so it observes nothing of `RootPaletteV
 `paletteEnvironment` injects the same stores into both hierarchies so they cannot drift.
 `WindowReader` reports the palette's `NSWindow`, which the menu's frame is placed against.
 
-`PaletteMenuContent` may supply its own host-layer clip path and motion.
-The hosting layer scales inside a canvas sized for the largest frame, anchored to the button or
-header control that opened it, so neither the surface nor its shadow is cropped. AppKit refreshes
-the shadow after layout and display. Native `PopoverMenu` content reads its motion from
-`Theme.MenuMotion`; extension menus supply values owned by `Features/Extensions`, so launcher
-changes cannot silently alter an extension surface. Each extension menu also supplies its own clip
-path; the controller applies it as an opaque value and never reconstructs extension geometry.
+`PaletteMenuContent` may supply its own host-layer clip path. `MenuPanel` uses
+`animationBehavior = .documentWindow`, so every menu opens and closes with AppKit's native window
+animation and has no motion of its own. The close animation keeps drawing the panel after
+`orderOut`, so the controller releases the hosted tree from `orderOutAnimated`, once it is off
+screen; a menu reopened inside that animation keeps its tree. AppKit refreshes the shadow after
+layout and display. Each extension menu supplies its own clip path; the controller applies it as an
+opaque value and never reconstructs extension geometry.
 
 ## Menu-open input freeze
 
@@ -546,7 +547,7 @@ caret, mouse selection and standard editing commands.
   keeps ↑/↓, ↵, Tab and action chords on the menu while leaving text editing, selection and
   clipboard commands to AppKit.
 - The palette window delegate ignores this intentional key transfer. Losing key status to anything
-  else still dismisses the palette, and closing the child restores key status before it fades out.
+  else still dismisses the palette, and closing the child restores key status before it orders out.
 - The caret is hidden by clearing SwiftUI's **own** live field editor's `insertionPointColor`. SwiftUI
   force-casts its field editor to a private subclass, so vending a custom one crashes. The searchable
   menu draws no caret of its own; AppKit draws the caret in its field editor.
@@ -597,10 +598,14 @@ handled in `PalettePanel.sendEvent` before `super` hands the event to the respon
   the responder chain compiles, runs never, and looks like a palette bug. `CommandEscapeTap` takes it
   at the head of the HID stream instead, the one place earlier than the system's own binding, and
   `prepare(mode: .launcher)`s: one chord back to the root search from any depth, window still open.
-  The tap is enabled only while the palette is on screen, watches `keyDown` alone, and declines the
-  chord whenever the panel is not key, so nothing else on the system loses ⌘⎋ to it. It is a
-  modifying tap, so it needs Accessibility — without that grant the chord is simply unavailable,
-  which is the only path this codebase has to it.
+  Each key-focus session owns a modifying `keyDown` tap on its own thread and run loop, so a busy
+  main thread never holds up ordinary typing anywhere on the system. Losing key focus ends the
+  session at once and wakes its worker to remove the source and invalidate the port, and timeout
+  recovery cannot re-enable an ended session. The worker swallows only a bare ⌘⎋ and queues the
+  root-search action on the main actor; a closed session drops that action, even across a reopen,
+  and the action itself checks the panel is still key. So nothing else on the system loses ⌘⎋ to it,
+  and a menu or dialog over the palette lets it through. The tap needs Accessibility — without that
+  grant the chord is unavailable, and the next key-focus session retries the install.
 
 Adding a chord that "does nothing" is almost always one of these — check `sendEvent`, and then
 whether macOS has claimed the chord, before assuming the handler is wrong.
@@ -660,6 +665,12 @@ app:
   stay open and frontmost (used by "paste keeping window open").
 
 Both require the Accessibility permission (`Permissions.ensureAccessibility()`).
+
+Ordering the palette out makes AppKit pass key to the next of our panels that accepts it, and a
+non-activating panel holds the keyboard even while another app is active. So `hide` sets
+`NotesPanel.refusesInheritedKey` around the order-out unless `previousOwnWindow` is still visible:
+over another app the keyboard returns to that app, and a paste or the next keystroke cannot land in an
+open note. Summoned from a note, the note takes key back, so a paste lands there.
 
 The same show also mirrors that app into `PaletteState.pasteTarget` (a `PasteTarget`: localized
 name + bundle path), so Clipboard and Emoji can name it — the footer pill reads "Paste to Notes" and

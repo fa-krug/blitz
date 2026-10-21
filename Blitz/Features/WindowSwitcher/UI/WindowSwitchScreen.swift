@@ -27,11 +27,17 @@ struct WindowSwitchScreen: PaletteScreen {
 
     func secondary(at selection: Int) -> Bool { false }
 
-    /// ⌃⇧Q or ⌃⌥⇧Q — mirrors the Quit and Force Quit rows.
+    /// Mirrors the menu's chorded rows, so ⌃⇧M on a minimized row is no chord at all.
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
-        guard shortcut == .quit || shortcut == .forceQuit, let entry = entry(at: selection)
-        else { return false }
-        core.launcherCoordinator.quit(bundleID: entry.bundleID, force: shortcut == .forceQuit)
+        guard let entry = entry(at: selection) else { return false }
+        let coordinator = core.windowSwitchCoordinator
+        switch shortcut {
+        case .minimizeWindow where !entry.isMinimized: coordinator.minimize(entry)
+        case .hideApp: coordinator.hideApplication(entry)
+        case .quit, .forceQuit:
+            core.launcherCoordinator.quit(bundleID: entry.bundleID, force: shortcut == .forceQuit)
+        default: return false
+        }
         return true
     }
 
@@ -76,15 +82,20 @@ enum WindowSwitchActionsMenu {
         ]
         if !entry.isMinimized {
             items.append(
-                PopoverMenuItem(title: "Minimize Window", systemImage: "minus.square") {
+                PopoverMenuItem(
+                    title: "Minimize Window", systemImage: "minus.square", shortcut: "⌃⇧M"
+                ) {
                     coordinator.minimize(entry)
                 })
         }
         items += [
             PopoverMenuItem(
-                title: "Quit \(entry.appName)", systemImage: "power", startsSection: true,
-                shortcut: "⌃⇧Q"
+                title: "Hide \(entry.appName)", systemImage: "eye.slash", startsSection: true,
+                shortcut: "⌃⇧H"
             ) {
+                coordinator.hideApplication(entry)
+            },
+            PopoverMenuItem(title: "Quit \(entry.appName)", systemImage: "power", shortcut: "⌃⇧Q") {
                 core.launcherCoordinator.quit(bundleID: entry.bundleID)
             },
             PopoverMenuItem(

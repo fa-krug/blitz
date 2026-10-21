@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 @preconcurrency import IOKit.hidsystem
+import Synchronization
 
 // Snapshot the mutable C global `mach_task_self_`, so actor code never reads it raw.
 private let machTaskSelf = mach_task_self_
@@ -45,37 +46,76 @@ private func hyperKeyEventTapCallback(
 
 /// HID remap of Caps Lock → F18 while it is Hyper. See docs/features/hotkeys.md#the-hyper-key.
 private enum CapsLockRemap {
-    // HID usages: keyboard page 0x07, Caps Lock 0x39, F18 0x6D.
-    private static let mappingOn =
-        #"{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x70000006D}]}"#
-    private static let mappingOff = #"{"UserKeyMapping":[]}"#
+    private static let mapping = HIDKeyMapping.capsLockToF18
 
     // Serial, so rapid on→off→on toggles apply in call order rather than racing.
     private static let queue = DispatchQueue(label: "de.fa-krug.blitz.capslock-remap", qos: .utility)
 
+    /// Whatever Caps Lock pointed at before Blitz took it, handed back on release.
+    private static let displaced = Mutex<[HIDKeyMapping]>([])
+
     static func setEnabled(_ enabled: Bool) {
-        let mapping = enabled ? mappingOn : mappingOff
-        queue.async { apply(mapping) }
+        queue.async {
+            if enabled { install() } else { remove() }
+        }
     }
 
-    /// Synchronous variant for `applicationWillTerminate`, where detached work wouldn't get to run.
+    /// Synchronous variant for `applicationWillTerminate`, queued behind any toggle still pending.
     static func clearBlocking() {
-        apply(mappingOff)
+        queue.sync { remove() }
     }
 
-    private static func apply(_ mapping: String) {
+    private static func install() {
+        let existing = readMappings()
+        displaced.withLock { $0 = mapping.displaced(in: existing) }
+        write(mapping.replacingSource(in: existing))
+    }
+
+    private static func remove() {
+        let original = displaced.withLock { saved in
+            defer { saved = [] }
+            return saved
+        }
+        write(mapping.restoring(original, in: readMappings()))
+    }
+
+    private static func readMappings() -> [HIDKeyMapping] {
+        guard let output = hidutil(["property", "--get", "UserKeyMapping"], readingOutput: true),
+            let mappings = HIDKeyMapping.mappings(fromHIDUtilOutput: output)
+        else {
+            // Empty keeps the key working; the cost is any other remap the next write drops.
+            NSLog("Blitz: hidutil UserKeyMapping unreadable, assuming none")
+            return []
+        }
+        return mappings
+    }
+
+    private static func write(_ mappings: [HIDKeyMapping]) {
+        let argument = HIDKeyMapping.hidutilArgument(for: mappings)
+        _ = hidutil(["property", "--set", argument], readingOutput: false)
+    }
+
+    /// Runs hidutil, returning its stdout (empty unless `readingOutput`), or nil when it failed.
+    private static func hidutil(_ arguments: [String], readingOutput: Bool) -> String? {
         let process = Process()
+        let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
-        process.arguments = ["property", "--set", mapping]
-        process.standardOutput = FileHandle.nullDevice
+        process.arguments = arguments
+        process.standardOutput = readingOutput ? output : FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {
-            try process.runObservingExit().wait()
-            if process.terminationStatus != 0 {
-                NSLog("Blitz: hidutil remap exited %d", process.terminationStatus)
+            let exit = try process.runObservingExit()
+            // Read to EOF before waiting: a full pipe would otherwise hold hidutil short of exiting.
+            let data = readingOutput ? try output.fileHandleForReading.readToEnd() ?? Data() : Data()
+            exit.wait()
+            guard process.terminationStatus == 0 else {
+                NSLog("Blitz: hidutil %@ exited %d", arguments[1], process.terminationStatus)
+                return nil
             }
+            return String(bytes: data, encoding: .utf8)
         } catch {
-            NSLog("Blitz: hidutil caps lock remap failed: %@", error.localizedDescription)
+            NSLog("Blitz: hidutil %@ failed: %@", arguments[1], error.localizedDescription)
+            return nil
         }
     }
 }
@@ -100,18 +140,6 @@ final class HyperKeyTap: HealthCheckable {
     /// Marker on events this tap posts, so it never reacts to its own synthetics.
     nonisolated static let syntheticTag: Int64 = 0x5459_4354
 
-    /// Device-level modifier bits from IOLLEvent.h. See docs/features/hotkeys.md#the-hyper-key.
-    private enum DeviceFlag {
-        static let leftControl: UInt64 = 0x0000_0001
-        static let leftShift: UInt64 = 0x0000_0002
-        static let rightShift: UInt64 = 0x0000_0004
-        static let leftCommand: UInt64 = 0x0000_0008
-        static let rightCommand: UInt64 = 0x0000_0010
-        static let leftOption: UInt64 = 0x0000_0020
-        static let rightOption: UInt64 = 0x0000_0040
-        static let rightControl: UInt64 = 0x0000_2000
-    }
-
     private(set) var status: Status = .off
 
     @ObservationIgnored private var settings: AppSettings?
@@ -122,6 +150,7 @@ final class HyperKeyTap: HealthCheckable {
     @ObservationIgnored private var hidConnect: io_connect_t = IO_OBJECT_NULL
 
     @ObservationIgnored weak var healthTicker: HealthTicker?
+    @ObservationIgnored weak var capture: ShortcutCaptureSession?
 
     /// Mirror of `settings.hyperKey`; the toggles are read live, so nothing goes stale.
     @ObservationIgnored private var key: HyperKeyPhysicalKey = .none
@@ -182,9 +211,10 @@ final class HyperKeyTap: HealthCheckable {
     private var hyperFlagsRaw: UInt64 {
         var raw =
             CGEventFlags([.maskControl, .maskAlternate, .maskCommand]).rawValue
-            | DeviceFlag.leftControl | DeviceFlag.leftOption | DeviceFlag.leftCommand
+            | ModifierDeviceFlag.leftControl | ModifierDeviceFlag.leftOption
+            | ModifierDeviceFlag.leftCommand
         if settings?.hyperKeyIncludesShift ?? true {
-            raw |= CGEventFlags.maskShift.rawValue | DeviceFlag.leftShift
+            raw |= CGEventFlags.maskShift.rawValue | ModifierDeviceFlag.leftShift
         }
         return raw
     }
@@ -198,10 +228,10 @@ final class HyperKeyTap: HealthCheckable {
 
     private static func deviceBits(for flag: CGEventFlags) -> UInt64 {
         switch flag {
-        case .maskControl: return DeviceFlag.leftControl | DeviceFlag.rightControl
-        case .maskShift: return DeviceFlag.leftShift | DeviceFlag.rightShift
-        case .maskAlternate: return DeviceFlag.leftOption | DeviceFlag.rightOption
-        case .maskCommand: return DeviceFlag.leftCommand | DeviceFlag.rightCommand
+        case .maskControl: return ModifierDeviceFlag.leftControl | ModifierDeviceFlag.rightControl
+        case .maskShift: return ModifierDeviceFlag.leftShift | ModifierDeviceFlag.rightShift
+        case .maskAlternate: return ModifierDeviceFlag.leftOption | ModifierDeviceFlag.rightOption
+        case .maskCommand: return ModifierDeviceFlag.leftCommand | ModifierDeviceFlag.rightCommand
         default: return 0
         }
     }
@@ -223,9 +253,10 @@ final class HyperKeyTap: HealthCheckable {
         if keyCode == tapCode {
             return decideHyperKeyEvent(type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
-        // Before the remap takes hold the key is still Caps Lock, so ride the modifier path.
+        // Before the remap takes hold the key is still Caps Lock, a latch with no direction: toggle.
         if key == .capsLock, keyCode == kVK_CapsLock, type == .flagsChanged {
-            return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: true)
+            let flags = transition(isDown: !hyperActive, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control))
         }
         guard hyperActive else { return .pass }
         // Any other key or modifier going down while Hyper is held makes this a combo, not a tap.
@@ -233,40 +264,42 @@ final class HyperKeyTap: HealthCheckable {
         return .rewrite(flags: hyperized(flagsRaw))
     }
 
+    /// docs/features/hotkeys.md#press-tracking-reads-the-event
     private func decideHyperKeyEvent(
         type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
     ) -> Decision {
         if key.tapUsesKeyEvents {
-            // F18 arrives as keyDown/keyUp; convert both ends into flagsChanged transitions.
-            let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
-            switch type {
-            case .keyDown:
-                if isAutorepeat { return .suppress }
-                if !hyperActive { beginHold() }
-                return .rewrite(
-                    flags: hyperized(flagsRaw), keyCode: Int64(kVK_Control), asFlagsChanged: true)
-            case .keyUp:
-                if hyperActive { endHold() }
-                return .rewrite(
-                    flags: flagsRaw & ~strippedFlagsRaw, keyCode: Int64(kVK_Control),
-                    asFlagsChanged: true)
-            default:
-                return .pass
-            }
+            return decideFunctionKeyEvent(type: type, flagsRaw: flagsRaw, isAutorepeat: isAutorepeat)
         }
         guard type == .flagsChanged else { return .pass }
-        return decideModifierTransition(flagsRaw: flagsRaw, swapKeyCode: false)
+        return .rewrite(flags: transition(isDown: key.isHeld(in: flagsRaw), flagsRaw: flagsRaw))
     }
 
-    /// docs/features/hotkeys.md#press-tracking-uses-toggle-semantics
-    private func decideModifierTransition(flagsRaw: UInt64, swapKeyCode: Bool) -> Decision {
-        let keyCode: Int64? = swapKeyCode ? Int64(kVK_Control) : nil
-        if !hyperActive {
-            beginHold()
-            return .rewrite(flags: hyperized(flagsRaw), keyCode: keyCode)
+    /// F18 arrives as keyDown/keyUp; both ends become Left Control `flagsChanged` transitions.
+    private func decideFunctionKeyEvent(
+        type: CGEventType, flagsRaw: UInt64, isAutorepeat: Bool
+    ) -> Decision {
+        let flagsRaw = flagsRaw & ~Self.functionKeyFlagRaw
+        switch type {
+        case .keyDown:
+            if isAutorepeat { return .suppress }
+            let flags = transition(isDown: true, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        case .keyUp:
+            let flags = transition(isDown: false, flagsRaw: flagsRaw)
+            return .rewrite(flags: flags, keyCode: Int64(kVK_Control), asFlagsChanged: true)
+        default:
+            return .pass
         }
-        endHold()
-        return .rewrite(flags: flagsRaw & ~strippedFlagsRaw, keyCode: keyCode)
+    }
+
+    private func transition(isDown: Bool, flagsRaw: UInt64) -> UInt64 {
+        if isDown {
+            if !hyperActive { beginHold() }
+            return hyperized(flagsRaw)
+        }
+        if hyperActive { endHold() }
+        return flagsRaw & ~strippedFlagsRaw
     }
 
     // MARK: - Hold state machine
@@ -290,6 +323,8 @@ final class HyperKeyTap: HealthCheckable {
     }
 
     private func fireQuickPress(_ action: HyperKeyQuickPress, for key: HyperKeyPhysicalKey) {
+        // Secure Input hides the key that made this press a chord, so a short hold proves nothing.
+        guard !IsSecureEventInputEnabled() else { return }
         switch action {
         case .none:
             break
@@ -313,6 +348,7 @@ final class HyperKeyTap: HealthCheckable {
         cancelHold()
         let wasCapsLock = key == .capsLock
         key = newKey
+        capture?.hyperKey = newKey
         if newKey == .capsLock {
             // Remapping takes the key's own function away, so unlatch the lock first.
             setCapsLockState(false)

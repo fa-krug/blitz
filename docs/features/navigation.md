@@ -1,13 +1,13 @@
 # Navigation
 
-Two commands that move you somewhere rather than changing something, behind one switch:
-**Switch Windows** raises any open window of any running app, and **Search Menu Bar Items** presses
-any item in the front app's menu bar. The second has its own page —
-[menu-search.md](menu-search.md) — because its internals are a menu walk; this page owns the
-switcher and the pane the two share.
+Commands that move you somewhere rather than changing something, behind one switch:
+**Switch Windows** raises any open window of any running app, **Switch Windows Backwards** walks the
+same list the other way, and **Search Menu Bar Items** presses any item in the front app's menu bar.
+The last has its own page — [menu-search.md](menu-search.md) — because its internals are a menu
+walk; this page owns the switcher and the pane they share.
 
-Ships **off**. Settings › Navigation is the switch, and while it is off neither command is in the
-launcher and a still-recorded shortcut for either does nothing.
+Ships **off**. Settings › Navigation is the switch, and while it is off none of them is in the
+launcher and a still-recorded shortcut for any does nothing.
 
 ## Invariants
 
@@ -44,8 +44,8 @@ launcher and a still-recorded shortcut for either does nothing.
 | `Model/WindowSwitchQuery.swift` | ranking over `SearchRelevance`, capped at 200 rows |
 | `Service/WindowZOrder.swift` | the one `CGWindowList` call: per-pid front rank |
 | `Service/WindowSwitchSweep.swift` | the AX sweep, and the live element table it hands back |
-| `Service/WindowSwitchSession.swift` | the observable state — snapshot, filtered rows, elements |
-| `UI/WindowSwitchCoordinator.swift` | show, activate, close, minimize, the switch, the reports |
+| `Service/WindowSwitchSession.swift` | the observable state — snapshot, filtered rows, elements, exits |
+| `UI/WindowSwitchCoordinator.swift` | show, activate, close, minimize, hide, the switch, the reports |
 | `UI/WindowSwitchScreen.swift` | the `PaletteScreen` conformance, the ⌘K menu, the empty states |
 | `UI/WindowSwitchList.swift` | the list and its row: app icon, title, app name |
 
@@ -86,10 +86,13 @@ contributes.
 ## Stepping with the shortcut
 
 Pressed again while the switcher is open, its shortcut steps the selection down the list instead of
-closing the palette; the first step lands on the window behind the current one. A step made with
-the chord's modifiers still held arms one `flagsChanged` local monitor, and letting go switches to
-the selection, as ⌘Tab does. A single press never arms it, so pressing once and typing still
-searches; Escape hides the palette, and the next modifier change finds it gone and switches
+closing the palette; the first step lands on the window behind the current one. Switch Windows
+Backwards opens the same list and steps up it, wrapping to the last window, so the two interleave
+like ⌘Tab and ⌘⇧Tab; `WindowSwitchOrder.step` is the wrap, pure so the harness pins it. A step made
+with the chord's modifiers still held arms one `flagsChanged` local monitor, and letting go switches
+to the selection, as ⌘Tab does. The first armed step's modifiers are the ones that count, so letting
+go of ⇧ alone mid-walk switches nothing. A single press never arms it, so pressing once and typing
+still searches; Escape hides the palette, and the next modifier change finds it gone and switches
 nothing.
 
 ## Raising
@@ -113,29 +116,39 @@ act on, so `hasActions` reads `actions(at:)` and the footer drops its Actions ha
   anything, so an unsaved document still puts up its save sheet. A successful press drops the row
   through `WindowSwitchSession.remove` instead of re-sweeping, which would race an app that is still
   closing — or still asking.
-- **Minimize Window** sets `kAXMinimizedAttribute`, offered only on a row not already minimized.
+- **Minimize Window** (⌃⇧M) sets `kAXMinimizedAttribute`, offered only on a row not already
+  minimized; `perform` declines the chord on a minimized row too, just as the menu leaves the row out.
   `markMinimized` flips the entry in place and re-sorts, so the row joins the minimized run at the
   end exactly where the next sweep would put it.
+- **Hide _App_** (⌃⇧H) calls `NSRunningApplication.hide()`, falling back to `kAXHiddenAttribute` when
+  the app refuses. It closes the palette with `restoreFocus: false`: restoring focus would activate
+  the app that was in front, and activating a hidden app unhides it.
 - **Quit _App_** (⌃⇧Q) and **Force Quit _App_** (⌃⌥⇧Q) go through
   `LauncherCoordinator.quit(bundleID:force:)`, the path the launcher's own Quit rows take, so every
-  instance quits and focus is handed back the same way. `perform` answers both chords without the
-  menu open.
+  instance quits and focus is handed back the same way.
+- **The chords are ⌃⇧M and ⌃⇧H, not ⌘M and ⌘H.** The app menu's Minimize and Hide take those
+  before the palette sees them. `perform` answers all four chords without the menu open.
+- **An app that exits takes its rows with it.** While rows are shown the session holds a
+  `didTerminateApplicationNotification` observer in a `NotificationToken` and drops that pid's rows;
+  `reset()` releases it. So an app quit from anywhere else — its own menu, the Dock — leaves the
+  list while it stays open.
 
 A refused press or write — no close button, a window that will not minimize, an app gone since the
 sweep — is a danger `showMessage`, and the palette stays open: nothing was raised to hide it for.
 
 ## Wiring
 
-- **`CommandID.switchWindows`** (`command:switch-windows`) and `CommandID.searchMenuItems` are both
-  named by `SettingsTab.navigation.ownedCommands`, which is the whole of what moves the second out of
+- **`CommandID.switchWindows`** (`command:switch-windows`), `CommandID.switchWindowsBackwards`
+  (`command:switch-windows-backwards`) and `CommandID.searchMenuItems` are all named by
+  `SettingsTab.navigation.ownedCommands`, which is the whole of what moves them out of
   Settings › Commands: `LauncherItemsSection` filters on `settingsOwner == nil`, and `VisibilityStore`
-  skips the `Enable Commands` category gate for a pane-owned command. Neither adds an
+  skips the `Enable Commands` category gate for a pane-owned command. None adds an
   `AppEntry.Kind`, a `HotKeyAction` case or a `VisibilityStore` category — they are plain `.command`
   entries.
 - **`navigationEnabled`** (off) is the switch. `AppCore.observeFeatureSwitches` tracks it once and
-  reprojects into both coordinators; each owns only its own command and its own palette mode, so
-  neither knows about the other. `AppIndex.isCommandEnabled` feeds `hotKeys.allowsAction`, so both
-  shortcuts go dead with the switch, and each `show()` re-guards the flag anyway.
+  reprojects into both coordinators; each owns only its own commands and its own palette mode, so
+  neither knows about the other. `AppIndex.isCommandEnabled` feeds `hotKeys.allowsAction`, so every
+  shortcut goes dead with the switch, and each `show()` re-guards the flag anyway.
 - **`menuSearchDisabledApps`** (empty) is the exclusion list. It ships with no seeded entries, unlike
   the clipboard's: a menu read only ever happens because the user asked for one. The pane and the
   Menu Search ⌘K row **Turn Off Menu Search for _App_** are its two writers, and both append.
@@ -159,8 +172,8 @@ sweep — is a danger `showMessage`, and the palette stays open: nothing was rai
 
 `Tests/window-switch-test.swift` covers the pure half: the handle-derived id, the untitled-window
 fallback, the name/owner split in the search fields, the MRU order and its totality under a shuffled
-sweep, the minimized run at the end, ranking, and the 200-row cap under both an empty and a
-matching query.
+sweep, the minimized run at the end, the step's wrap both ways, ranking, and the 200-row cap under
+both an empty and a matching query.
 
 `WindowZOrder` and `WindowSwitchSweep` are not compiled into the harness and have no automated
 coverage — the AX and `CGWindowList` paths need manual verification, particularly:
@@ -171,3 +184,6 @@ coverage — the AX and `CGWindowList` paths need manual verification, particula
 4. An app quit between the summon and the ↵ reports rather than failing silently.
 5. Close Window on an edited document leaves its save sheet up; the row leaves the list either way.
 6. Minimize Window moves the row into the minimized run, and ↵ on it then un-minimizes.
+7. Hide (⌃⇧H) hides the frontmost app as well as a background one, and the palette's close does not
+   bring it back.
+8. Quitting an app from its own menu while the switcher is open drops its rows at once.
