@@ -74,6 +74,10 @@ the capture cap, exact ordering, rejected prefixes, duplicates and symlinks usin
 The reader cases add the limit boundaries, the predicate call counts and modern/legacy precedence.
 Note that macOS synthesizes `public.file-url` items for any `NSFilenamesPboardType` write, so a
 legacy fixture still exercises the modern representation and the fallback branch stays unreached.
+`command-escape-tap-test` is the same rule for input: it shadows `CGEvent.tapCreate` and `tapEnable`
+with module-local fakes over private ports, so it drives the shipped worker thread — dispatch while
+main is blocked, timeout recovery, stale actions, cancelled installs, teardown — without ever
+installing a system-wide event tap.
 
 Never join a compile to its run with `&&` in a `set -e` script. `set -e` is specified to ignore a
 failing command in a non-final AND-OR list member, so `swiftc … && /tmp/x` swallows a compile error and
@@ -93,7 +97,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | Touching | Run |
 | --- | --- |
 | launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
-| the palette shell and shared views | `palette-*`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
+| the palette shell and shared views | `palette-*`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
@@ -325,7 +329,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - ⌘⎋ from any depth lands on an empty root search with the window still open — **must be checked on
   a real keyboard**: macOS claims the chord, so `CommandEscapeTap` is the only thing that delivers it
   and it needs Accessibility granted to the running build. With the palette closed, ⌘⎋ still does
-  whatever macOS does with it
+  whatever macOS does with it. With a menu or dialog open over the palette, ⌘⎋ passes through;
+  once it is dismissed, the palette chord works again
 - A bare ⌫ in an empty field walks the same path Escape does
 - General ▸ Escape Key Behavior set to `Close window and pop to root`: Escape on any screen closes
   the window, and reopening lands on the root search whatever Pop to Root Search says

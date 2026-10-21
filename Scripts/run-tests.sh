@@ -339,6 +339,7 @@ run hover-arming-test      Blitz/Palette/HoverArming.swift \
                            Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run command-escape-tap-test Blitz/Palette/CommandEscapeTap.swift
 run palette-escape-test    Blitz/Palette/PaletteMode.swift \
                            Blitz/Palette/PaletteEscapeAction.swift \
                            Blitz/Palette/CommandEscapeTap.swift \
