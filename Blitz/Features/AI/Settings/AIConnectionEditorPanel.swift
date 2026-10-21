@@ -197,21 +197,23 @@ struct AIConnectionEditorPanel: View {
     private func modelSearchResults(_ models: [AIModelDiscovery.Model]) -> some View {
         let query = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = matchingModels(in: models)
+        let isQueryAdded = connection.models.contains {
+            $0.caseInsensitiveCompare(query) == .orderedSame
+        }
+        // A gateway can list dated builds but accept a short alias that a listed ID contains.
+        let offersTypedID =
+            !query.isEmpty && !isQueryAdded
+            && AIModelDiscovery.exactMatch(models, query: query) == nil
         if matches.isEmpty {
             if query.isEmpty {
                 Label("Every available model is added.", systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
-            } else if connection.models.contains(where: {
-                $0.caseInsensitiveCompare(query) == .orderedSame
-            }) {
+            } else if isQueryAdded {
                 Label("This model is already added.", systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
             } else {
                 Label("No available model matches this key.", systemImage: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                if connection.provider == .openAICompatible {
-                    Button("Use “\(query)” anyway") { addModel(query) }
-                }
             }
         } else {
             ForEach(matches.prefix(visibleModelCount)) { model in
@@ -245,6 +247,9 @@ struct AIConnectionEditorPanel: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+        if offersTypedID {
+            Button("Use “\(query)” anyway") { addModel(query) }
         }
     }
 
@@ -306,13 +311,7 @@ struct AIConnectionEditorPanel: View {
     }
 
     private func addExactMatch(from models: [AIModelDiscovery.Model]) {
-        let query = modelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard
-            let match = models.first(where: {
-                $0.id.caseInsensitiveCompare(query) == .orderedSame
-                    || $0.name.caseInsensitiveCompare(query) == .orderedSame
-            })
-        else { return }
+        guard let match = AIModelDiscovery.exactMatch(models, query: modelQuery) else { return }
         addModel(match)
     }
 
