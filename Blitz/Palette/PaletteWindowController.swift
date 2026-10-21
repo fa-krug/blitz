@@ -402,7 +402,9 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
                 core.extensionCoordinator.exitExtensionScreen()
                 return true
             }
-            if core.palette.mode == .ai, core.quickAICoordinator.removeLastAttachment() {
+            if core.palette.mode == .ai || core.palette.mode == .launcher,
+                core.quickAICoordinator.removeLastAttachment()
+            {
                 return true
             }
             if core.settings.compactMode, core.palette.collapseToCompact() { return true }

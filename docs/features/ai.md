@@ -373,7 +373,8 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   the Quick AI fallback row — always starts a new chat and submits the text, because a question asked
   outright is not a summon: resuming a transcript to append an unrelated line to it would be the one
   reading of `Opens to` nobody wants. It is `showPalette(mode: .ai)` and `send`, never
-  `show`.
+  `show`. The new chat keeps Quick AI's staged files (`startNewChat(keepingAttachments:)`), since
+  the launcher shows them beside the question and ⇥ is what sends them.
 - **Staged files survive a re-summon; only the typed draft does not.** `applyOpenPolicy` treats a
   pasted-but-unsent attachment as resident state: `Recent Conversation` will not open a saved chat
   over one, and `A New Conversation` resets only a chat that actually has messages, since an empty
@@ -1115,7 +1116,10 @@ is why documents are *not* assumed the way images are. An attachment is never dr
 out: answering a question about a document the model never received is the one outcome this must
 not produce.
 
-In Quick AI attachments arrive by ⌘V; the window also takes a drop and the paperclip. They come in
+In Quick AI attachments arrive by ⌘V; the window also takes a drop and the paperclip. ⌘V at the
+launcher stages onto Quick AI's chat too, but leaves the launcher up — expanded out of the compact
+bar — with the pill beside the `Quick AI ⇥` hint, so a screenshot plus a typed question is one ⇥
+away from being asked; bare backspace there takes the last one back, as in the composer. They come in
 three kinds: an **image**, a **PDF** sent as a native document block,
 and a **text-ish file** whose contents are inlined as fenced, named text.
 `PaletteWindowController`'s command-shortcut hook gives chat the chord first; a pasteboard holding

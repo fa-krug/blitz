@@ -202,7 +202,8 @@ key does not go to: an argument field to walk takes Tab first, and the hint step
 
 `PaletteTabAction` decides where Tab goes *and* what happens to the typed text. The clipboard hands
 the query over, since one search narrows either list. **From the launcher, Tab `.ask`s** — Quick AI opens
-fresh with the typed text already sent, so one key turns a search into a question. Leaving chat is
+fresh with the typed text already sent, along with any file or screenshot pasted at the launcher,
+so one key turns a search into a question. Leaving chat is
 still a `.freshScreen`: that field holds a half-written message rather than a query, and a draft
 dropped into a filter matches nothing. `.ask` is its own case rather than a `carryQuery(.ai)` because
 the text is submitted, not seeded, and the hint reads the case back out (`== .ask`) instead of

@@ -181,11 +181,11 @@ final class AIChatState {
         finishLast(state: .failed, fallback: "Cancelled")
     }
 
-    func startNewChat() {
+    func startNewChat(keepingAttachments: Bool = false) {
         cancel()
         session = ChatSession()
         notice = nil
-        clearStaging()
+        if !keepingAttachments { clearStaging() }
         agentScope = AgentSessionScope()
     }
 
