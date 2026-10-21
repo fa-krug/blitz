@@ -460,10 +460,18 @@ and `None`. `takesThinkingField` decides who gets that pair: an OpenAI-shaped pr
 not that preset's own, because a preset pointed away from its own API is a gateway, and a gateway is
 the only destination Blitz can offer the switch to honestly. Picking `None` sends
 `"thinking": {"type": "disabled"}`, which is how DeepSeek and the endpoints that copied its contract
-answer without reasoning first. A vendor API is never offered the pair and so is never sent a field it
-does not define — which matters precisely because the preset alone says nothing about the destination
-when every base URL is editable. Only `None` is ever written, so every other body is the one it always
-was, and the choice rides in `AIModelSelection.effort` like every other route's.
+answer without reasoning first. A vendor API is never offered the pair, nor levels declared while its
+base URL pointed elsewhere, and so is never sent a field it does not define — which matters precisely
+because the preset alone says nothing about the destination when every base URL is editable. A
+gateway's model may also carry levels the reader declares in the connection editor (`minimal`, `low`,
+`medium`, `high`, never inferred), kept between `Default` and `None`; a picked level is sent as
+OpenAI's `reasoning_effort`. OpenRouter is left out at any URL (`takesDeclaredLevels`), because its
+catalog already names each model's levels. Changing a gateway's base URL drops its declarations
+(`dropDeclaredLevels`), since they described the old destination. A chat and a Quick Action keep
+their own effort, so `AIProviderFactory` sends only one the model still offers (`offeredEffort`): an
+unticked level, or one left behind by a changed provider, is dropped rather than sent. With nothing
+declared the only field ever written is the `None` one, so every other body is the one it always was,
+and the choice rides in `AIModelSelection.effort` like every other route's.
 
 ## Provider interface
 
@@ -484,8 +492,8 @@ content transformations without a second factory.
 
 `AIModelOption.groupedCatalog` is the Settings picker catalog for both AI and Quick Actions. Provider
 sections, ordering and model labels therefore cannot drift between the panes. Each route stores its
-own complete `AIModelSelection`, including the selected reasoning effort for installed models and
-OpenRouter models that offer one.
+own complete `AIModelSelection`, including the selected reasoning effort for installed models,
+OpenRouter models that offer one and gateway models.
 
 `AppleIntelligenceProvider` is the only route whose model is a local process. It builds a `Transcript`
 from the turns ahead of the newest user message and streams the rest as the prompt, so a conversation
@@ -511,10 +519,10 @@ while a response streams — an empty composer sends nothing, so the pill never 
 state. While a question waits the field's placeholder is "Answer the question…", and Stop is ⌘K →
 Stop Response (`⌘.`). The header's trailing model
 switcher opens by click or ⌘P, uses the same in-window menu control as Clipboard's type filter and
-changes the chat route for the next message. For installed routes and OpenRouter models whose catalog
-reports the capability, it also shows the supported reasoning efforts and changes the chat effort for
-the next message. Other API routes keep their provider default because their model catalogs expose no
-portable effort contract. Neither change interrupts a response already streaming; stopping one is
+changes the chat route for the next message. For installed routes, OpenRouter models whose catalog
+reports the capability and gateways (`Default`, `None` and any declared levels), it also shows the
+supported reasoning efforts and changes the chat effort for the next message. A vendor API keeps its
+provider default because its model catalog exposes no portable effort contract. Neither change interrupts a response already streaming; stopping one is
 the pill's job, so the header never has to fit a third control beside the switcher.
 
 The second footer control is the palette's normal Actions (`⌘K`) menu. It owns Continue in AI Agent
