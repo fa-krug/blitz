@@ -24,6 +24,7 @@ struct PasteboardTests {
         richFlavoursAreCaptured()
         anOversizedFlavourIsDropped()
         richEntriesWriteBackTheirFlavours()
+        thePollBacksOffOnceTheBoardSitsStill()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -394,6 +395,27 @@ struct PasteboardTests {
             expect(partial.types?.contains(.rtf) == false, "without the flavour that is gone")
             expect(partial.string(forType: .string) == "bold text", "but with the text")
         }
+    }
+
+    // MARK: - Polling
+
+    static func thePollBacksOffOnceTheBoardSitsStill() {
+        let window = ClipboardManager.activeWindow
+        func interval(_ elapsed: Duration, asleep: Bool = false) -> TimeInterval {
+            ClipboardManager.pollInterval(sinceActivity: elapsed, screensAsleep: asleep)
+        }
+        expect(interval(.zero) == ClipboardManager.activeInterval, "a fresh copy polls fast")
+        expect(
+            interval(window - .milliseconds(1)) == ClipboardManager.activeInterval,
+            "and keeps polling fast through the active window")
+        expect(interval(window) == ClipboardManager.quietInterval, "then backs off")
+        expect(
+            interval(.zero, asleep: true) == ClipboardManager.asleepInterval,
+            "asleep screens poll slowest, whatever happened last")
+        expect(
+            ClipboardManager.activeInterval < ClipboardManager.quietInterval
+                && ClipboardManager.quietInterval < ClipboardManager.asleepInterval,
+            "each tier is slower than the one before")
     }
 
     // MARK: - Harness

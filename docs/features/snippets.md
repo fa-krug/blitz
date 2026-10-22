@@ -54,7 +54,7 @@ snippets only ever arrive from the editor or a Raycast import. Malformed Markdow
 while valid files stay available.
 
 The store runs only while the feature is enabled: launch starts it for an enabled feature, and a
-user who never enables snippets pays for no load, no directory watcher and no event tap.
+user who never enables snippets pays for no load, no folder watcher and no event tap.
 
 **Settings → Snippets** carries the feature switch and its launcher-visibility companion. The switch
 is the whole feature, keyword expansion included — there is no separate expansion toggle — so
@@ -414,7 +414,15 @@ and stay silent, because a speculative expansion that declined is not news.
 
 `SnippetsStore` publishes repository snapshots and per-file issues on the main actor while all file
 I/O runs off-main. Its debounced watcher observes external edits and atomic replacements, discards
-stale load generations, and rearms after the directory is renamed, replaced, or deleted.
+stale load generations, and follows the folder when it is renamed, replaced, or deleted.
+
+The watcher is `SnippetFolderMonitor`: one FSEvents stream over the folder's real path, with
+file-level events, so a same-inode write to an existing snippet reports like a create or a rename
+and the library costs no file descriptor per snippet. A descriptor-per-file design ran out at the
+256-descriptor default once an import brought in a few hundred snippets, and then retried and
+reloaded the whole library every second. The stream is path-based, so a folder replaced or recreated
+under the same path stays watched without rearming. A symlinked snippet whose target lives outside
+the folder is the one edit it does not see; the next change in the folder reloads it.
 
 The editor keeps its draft in memory and writes only on **Save**; **New** creates no file until that
 first save. Saves and deletes include the loaded source revision. All repository instances

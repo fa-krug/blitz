@@ -1098,6 +1098,14 @@ change size depending on where it came from. An inline `data:` image is the one 
 fitted: the extension that drew it has already sized it, and rasterizing would cost the vector.
 
 Change the number only against a rendered strip of real icons; it means nothing on its own.
+
+The cache is two `NSCache`s. Fetched row icons, each a fitted bitmap of about 36 KB, keep 2 MB
+across palette closes, as app icons do. Shipped originals, Detail markdown images and store
+screenshots share 8 MB, and `ExtensionCoordinator.paletteDidHide()` drops that cache when the
+palette closes, beside the palette's own preview purges. Cost is `decodedCost(of:)`, the sum of
+the representations' pixels times four, because `NSImage.size` is in points and puts a 2× image at
+a quarter of its real footprint. An image with no pixels of its own, a vector, is costed as drawn
+at 2×. `ext-icon-test` pins all three cases.
 `ext-icon-test` guards the invariant: padding in the source cannot change the drawn size, and a
 `data:` payload decodes in either encoding — and one naming a `raycast-*` colour draws ink, in the
 stroke that appearance calls for.

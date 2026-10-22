@@ -457,6 +457,7 @@
 		7B60E6D645321035B80C571E /* ShellCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D6F87B01C2242AC406D556 /* ShellCommandRunner.swift */; };
 		7B6E0B7D3EC79B9FA3DD79AF /* AppleShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB203C77677BF3C920024EB /* AppleShortcutsSettingsView.swift */; };
 		7BC83D7D558606DB3C4B26D5 /* SearchScopesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57DC3251504E7254D0A09B68 /* SearchScopesSection.swift */; };
+		7BE811F3D4F8834359855A09 /* SnippetFolderMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B1616480E6E73690EFDA69 /* SnippetFolderMonitor.swift */; };
 		7BE98B410E9C82D2D7685FE0 /* MCPSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10893AAD3063FBB7AC5C7ADE /* MCPSettingsView.swift */; };
 		7C57F410DA3E01DE974EB763 /* NoteEditPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C77BB9D6CD3F2C619CEC3E /* NoteEditPlan.swift */; };
 		7C612574B1CF2F3FA6E01E94 /* SelectionFollowing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DD9C3A5FCD7D4003AE28523 /* SelectionFollowing.swift */; };
@@ -967,6 +968,7 @@
 		04011191AFD893034E3E1219 /* ClipboardToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardToolCatalog.swift; sourceTree = "<group>"; };
 		0460504108E433A7CA28617F /* UpdateCheckStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckStore.swift; sourceTree = "<group>"; };
 		04A6AD6C44C3DD38C58373D8 /* ContactDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactDraft.swift; sourceTree = "<group>"; };
+		04B1616480E6E73690EFDA69 /* SnippetFolderMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetFolderMonitor.swift; sourceTree = "<group>"; };
 		05980F3A102AA482B58E1C04 /* NoteEditAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditAction.swift; sourceTree = "<group>"; };
 		05BED2CB1F4753773E760E0E /* ExtensionActionKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionActionKeys.swift; sourceTree = "<group>"; };
 		0626B4085FB3022F8D1A516F /* VolumeLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeLevel.swift; sourceTree = "<group>"; };
@@ -2222,6 +2224,7 @@
 			children = (
 				E9023414FF7C35008DDF9253 /* RaycastSnippetImport.swift */,
 				6895265EE68EAEB638016068 /* Snippet.swift */,
+				04B1616480E6E73690EFDA69 /* SnippetFolderMonitor.swift */,
 				D70F51A5E8ADC5F53F9A80E6 /* SnippetKeywordPolicy.swift */,
 				450BF864BCE8E67D82B2F992 /* SnippetMarkdownSerializer.swift */,
 				EA37E1F17E99CFDB3D8417B7 /* SnippetRepository.swift */,
@@ -5003,6 +5006,7 @@
 				EB5EB9D7193A1B6F7C406093 /* Snippet.swift in Sources */,
 				69B5E09257CF3214B1DB37E0 /* SnippetArgumentFields.swift in Sources */,
 				33E81B7B0E9F28802C8AF6C0 /* SnippetCoordinator.swift in Sources */,
+				7BE811F3D4F8834359855A09 /* SnippetFolderMonitor.swift in Sources */,
 				9E1DB7EA43DBC05BC057B4BC /* SnippetKeywordListener.swift in Sources */,
 				338B5B9A8675A936898E95EB /* SnippetKeywordPolicy.swift in Sources */,
 				D152B537CACCCA4885823AE4 /* SnippetMarkdownSerializer.swift in Sources */,

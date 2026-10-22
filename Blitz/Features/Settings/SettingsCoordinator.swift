@@ -8,7 +8,10 @@ final class SettingsCoordinator {
         autosaveName: "SettingsWindow", activation: core.activationPolicy,
         keepsContentWhenClosed: true,
         // Hidden, not torn down, so an open editor panel would otherwise outlive the window.
-        onClose: { [weak self] in self?.editorPresenter?.dismissAll() })
+        onClose: { [weak self] in
+            self?.editorPresenter?.dismissAll()
+            self?.navigation?.windowDidHide()
+        })
     /// Environment injection only — never for state this type owns.
     private unowned let core: AppCore
     /// The open window's session; the window's chrome and view tree own it, so this self-nils.
@@ -28,9 +31,10 @@ final class SettingsCoordinator {
             if let tab { navigation?.select(tab, page: page, revealing: target) }
             return
         }
-        if let navigation, window.reopen() {
+        // Restarted before the reveal, so the first frame shown already holds the remounted pane.
+        if let navigation {
             navigation.restart(on: tab ?? navigation.tab, page: page, revealing: target)
-            return
+            if window.reopen() { return }
         }
         let navigation = SettingsNavigationState(tab: tab ?? .general)
         navigation.select(navigation.tab, page: page, revealing: target)
