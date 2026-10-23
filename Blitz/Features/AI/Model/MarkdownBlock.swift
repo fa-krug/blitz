@@ -116,20 +116,45 @@ enum MarkdownBlock: Equatable, Sendable {
         var reader = MarkdownReader(lines: text.components(separatedBy: "\n"), endsMidStream: midStream)
         return reader.blocks()
     }
+
+    /// `parse` of split lines, and how many leading lines and blocks no appended text can change.
+    static func settling(
+        _ lines: [String], midStream: Bool
+    ) -> (blocks: [MarkdownBlock], settledLines: Int, settledBlocks: Int) {
+        var reader = MarkdownReader(lines: lines, endsMidStream: midStream, reach: MarkdownReader.Reach())
+        return reader.settlingBlocks()
+    }
 }
 
 private struct MarkdownReader {
+    /// The furthest line one top-level step looked at, which bounds what its result depends on.
+    final class Reach {
+        var line = 0
+
+        func extend(to target: Int) { line = max(line, target) }
+    }
+
     let lines: [String]
     /// These lines run to where a reply still streaming currently ends.
     let endsMidStream: Bool
+    /// Only a top-level reader keeps one; a nested reader's lines were all read by its parent.
+    var reach: Reach?
     var index = 0
+
+    init(lines: [String], endsMidStream: Bool, reach: Reach? = nil) {
+        self.lines = lines
+        self.endsMidStream = endsMidStream
+        self.reach = reach
+    }
 
     /// Past the last text of a reply still streaming, where an open equation may yet close.
     private var isAtStreamEnd: Bool { endsMidStream && onlyBlankLines(from: index) }
 
     /// A stream that has just sent a newline ends on an empty line, which proves nothing yet.
     private func onlyBlankLines(from position: Int) -> Bool {
-        lines[min(position, lines.count)...].allSatisfy(\.isBlankLine)
+        let text = lines[min(position, lines.count)...].firstIndex { !$0.isBlankLine } ?? lines.count
+        reach?.extend(to: text)
+        return text == lines.count
     }
 
     private func heldBack(_ text: String) -> String {
@@ -138,34 +163,54 @@ private struct MarkdownReader {
 
     mutating func blocks() -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
-        while let line = peek() {
-            if line.isBlankLine {
-                index += 1
-            } else if let fence = MarkdownLine.fence(line) {
-                blocks.append(code(fence))
-            } else if let math = math() {
-                blocks.append(math)
-            } else if MarkdownLine.isRule(line) {
-                index += 1
-                blocks.append(.rule)
-            } else if case .heading(let level, let text)? = MarkdownLine.heading(line) {
-                index += 1
-                blocks.append(.heading(level: level, text: heldBack(text)))
-            } else if MarkdownLine.isQuote(line) {
-                blocks.append(quote())
-            } else if let table = table() {
-                blocks.append(table)
-            } else if let marker = MarkdownLine.listMarker(line) {
-                blocks.append(list(from: marker))
-            } else if let paragraph = paragraph() {
-                blocks.append(paragraph)
-            }
-        }
+        while step(into: &blocks) {}
         return blocks
+    }
+
+    /// Settled are the steps short of the last line, which is the one a stream still grows.
+    mutating func settlingBlocks() -> (blocks: [MarkdownBlock], settledLines: Int, settledBlocks: Int) {
+        var blocks: [MarkdownBlock] = []
+        var settled = (lines: 0, blocks: 0)
+        var isSettling = true
+        while true {
+            reach?.line = index
+            guard step(into: &blocks) else { break }
+            isSettling = isSettling && (reach?.line ?? lines.count) < lines.count - 1
+            if isSettling { settled = (index, blocks.count) }
+        }
+        return (blocks, settled.lines, settled.blocks)
+    }
+
+    /// Skips a blank line or reads one block; false once the lines run out.
+    private mutating func step(into blocks: inout [MarkdownBlock]) -> Bool {
+        guard let line = peek() else { return false }
+        if line.isBlankLine {
+            index += 1
+        } else if let fence = MarkdownLine.fence(line) {
+            blocks.append(code(fence))
+        } else if let math = math() {
+            blocks.append(math)
+        } else if MarkdownLine.isRule(line) {
+            index += 1
+            blocks.append(.rule)
+        } else if case .heading(let level, let text)? = MarkdownLine.heading(line) {
+            index += 1
+            blocks.append(.heading(level: level, text: heldBack(text)))
+        } else if MarkdownLine.isQuote(line) {
+            blocks.append(quote())
+        } else if let table = table() {
+            blocks.append(table)
+        } else if let marker = MarkdownLine.listMarker(line) {
+            blocks.append(list(from: marker))
+        } else if let paragraph = paragraph() {
+            blocks.append(paragraph)
+        }
+        return true
     }
 
     private func peek(_ offset: Int = 0) -> String? {
         let target = index + offset
+        reach?.extend(to: target)
         return lines.indices.contains(target) ? lines[target] : nil
     }
 

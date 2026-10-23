@@ -844,6 +844,7 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
+                           Blitz/Features/AI/Model/MarkdownStream.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
                            Blitz/Features/AI/Model/MathNode.swift \
@@ -853,10 +854,24 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/SyntaxStructuredLexers.swift \
                            Blitz/Features/AI/UI/ChatTextHighlight.swift \
                            Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderCache.swift \
                            Blitz/Features/AI/UI/MathAttachmentCell.swift \
                            Blitz/Features/AI/UI/MathBox.swift \
                            Blitz/Features/AI/UI/MathFont.swift \
-                           Blitz/Features/AI/UI/MathLayoutEngine.swift
+                           Blitz/Features/AI/UI/MathLayoutEngine.swift Tests/chat-markdown-fixture.swift
+run -O index chat-markdown-performance Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/InterfaceSize.swift \
+                           Blitz/Features/AI/Model/*.swift \
+                           Blitz/Features/AI/UI/ChatTextHighlight.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderCache.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownText.swift \
+                           Blitz/Features/AI/UI/MathAttachmentCell.swift \
+                           Blitz/Features/AI/UI/MathBox.swift \
+                           Blitz/Features/AI/UI/MathFont.swift \
+                           Blitz/Features/AI/UI/MathLayoutEngine.swift Tests/chat-markdown-fixture.swift
 run syntax-highlight-test  Blitz/Features/AI/Model/SyntaxGrammar.swift \
                            Blitz/Features/AI/Model/SyntaxHighlighter.swift \
                            Blitz/Features/AI/Model/SyntaxStructuredLexers.swift
