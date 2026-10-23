@@ -16,7 +16,8 @@ struct ClipboardScreen: PaletteScreen {
 
     /// Pinned, then one section per date bucket, as `ClipboardList` heads them.
     var sectionStarts: [Int] {
-        let titles = rows.map(ClipboardList.sectionTitle)
+        let buckets = DateBuckets()
+        let titles = rows.map { ClipboardList.sectionTitle(for: $0, buckets: buckets) }
         return titles.indices.filter { $0 == 0 || titles[$0] != titles[$0 - 1] }
     }
 
