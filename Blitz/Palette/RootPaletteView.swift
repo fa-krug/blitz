@@ -395,7 +395,8 @@ struct RootPaletteView: View {
             }
             .onChange(of: vm.query) {
                 if vm.collapseQueryLineBreaks() { return }
-                land()
+                if surfaceState.landedQuery != vm.query { land() }
+                surfaceState.landedQuery = nil
                 if vm.mode == .fileSearch { fileSearch.search(vm.query, filter: vm.fileSearchFilter) }
                 if vm.mode == .screenshots { core.screenshotSearch.search(vm.query) }
                 if vm.mode == .dictionary { dictionary.lookUp(vm.query) }
@@ -942,8 +943,7 @@ struct RootPaletteView: View {
 
     /// The one search field — empty it's a drag handle, and any text hands every press to editing.
     private func searchField(prompt: String, hidesField: Bool) -> some View {
-        @Bindable var vm = vm
-        return TextField("", text: $vm.query)
+        TextField("", text: Binding(get: { vm.query }, set: typeQuery))
             .textFieldStyle(.plain)
             .font(metrics.typography.searchField)
             .tint(Theme.Colors.textPrimary)
@@ -1348,6 +1348,14 @@ struct RootPaletteView: View {
     // MARK: - Actions
 
     /// Every reset lands here, so handlers that fire together agree in whatever order they run.
+    /// Lands in the keystroke's own transaction: from `onChange` it costs a second full render.
+    private func typeQuery(_ text: String) {
+        vm.query = text
+        guard !text.contains(where: \.isNewline) else { return }
+        land()
+        surfaceState.landedQuery = text
+    }
+
     private func land() {
         let landing = screen.landingSelection
         vm.selection = landing
@@ -1743,4 +1751,6 @@ private struct PaletteSurface: View {
 @Observable
 private final class PaletteSurfaceState {
     var scroll = ScrollIntent(kind: .top)
+    /// The query `typeQuery` already landed, so its `onChange` doesn't land the list again.
+    @ObservationIgnored var landedQuery: String?
 }

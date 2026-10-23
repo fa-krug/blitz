@@ -89,6 +89,8 @@ final class PaletteState {
     /// True while a palette menu is open. See docs/features/palette.md#menu-open-input-freeze.
     @ObservationIgnored var menuOpen = false { didSet { onMenuOpenChanged?(menuOpen) } }
     var menuQuery = ""
+    /// Written by the launcher's list: a list scrolled by hand still needs Pop to Root's landing.
+    @ObservationIgnored var launcherListAtOrigin = true
     /// Fired when `menuOpen` flips, so the panel can hide the caret without a focus swap.
     @ObservationIgnored var onMenuOpenChanged: ((Bool) -> Void)?
     /// A fresh presentation resets a long popover to the row it opens with.
@@ -106,6 +108,17 @@ final class PaletteState {
     func prepare(mode: PaletteMode) {
         backStack.removeAll()
         replace(mode: mode)
+    }
+
+    /// True when `prepare(mode: .launcher)` would change nothing a view reads, so it can be skipped.
+    var isFreshLauncher: Bool {
+        mode == .launcher && backStack.isEmpty && query.isEmpty && selection == 0
+            && launcherListAtOrigin && !isComposing && !isEditingField && !isControlListOpen
+            && commandArguments.isEmpty && pendingArgumentEntryID == nil && argumentEntryID == nil
+            && recalledQueryIndex == nil && clipboardFilter == .all && fileSearchFilter == .all
+            && emojiCategoryFilter == .all && quicklinkTagFilter == nil
+            && emojiGridColumnsOverride == nil && !fileSearchQuickLook && !forceExpanded
+            && !menuOpen && menuQuery.isEmpty
     }
 
     /// Swap the screen in place, leaving whatever it was opened over still behind it.

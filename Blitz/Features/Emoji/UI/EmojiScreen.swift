@@ -10,6 +10,38 @@ struct EmojiScreen: PaletteScreen {
     let tone: EmojiSkinTone
     let defaultColumns: EmojiGridColumns
     let openActions: () -> Void
+    /// Resolved in `init`: the palette reads it several times per event, and it spans the catalog.
+    private let sections: [EmojiGridSection]
+    /// Flat grid order across sections — what the selection indexes.
+    let rows: [EmojiEntry]
+
+    init(
+        index: EmojiIndex, frequent: FrequentEmojiStore, pinned: PinnedEmojiStore, core: AppCore,
+        vm: PaletteState, tone: EmojiSkinTone, defaultColumns: EmojiGridColumns,
+        openActions: @escaping () -> Void
+    ) {
+        self.index = index
+        self.frequent = frequent
+        self.pinned = pinned
+        self.core = core
+        self.vm = vm
+        self.tone = tone
+        self.defaultColumns = defaultColumns
+        self.openActions = openActions
+        sections = Self.sections(
+            index: index, frequent: frequent, pinned: pinned, vm: vm,
+            columns: vm.emojiGridColumnsOverride ?? defaultColumns)
+        rows = sections.flatMap(\.entries)
+    }
+
+    private static func sections(
+        index: EmojiIndex, frequent: FrequentEmojiStore, pinned: PinnedEmojiStore, vm: PaletteState,
+        columns: EmojiGridColumns
+    ) -> [EmojiGridSection] {
+        EmojiGrid.sections(
+            query: vm.query, index: index, frequent: frequent, pinned: pinned,
+            filter: vm.emojiCategoryFilter, columns: columns)
+    }
 
     private var columns: EmojiGridColumns {
         vm.emojiGridColumnsOverride ?? defaultColumns
@@ -29,20 +61,10 @@ struct EmojiScreen: PaletteScreen {
         isBrowsing && (vm.emojiCategoryFilter == .all || vm.emojiCategoryFilter == .pinned)
     }
 
-    private var sections: [EmojiGridSection] {
-        EmojiGrid.sections(
-            query: vm.query, index: index, frequent: frequent, pinned: pinned,
-            filter: vm.emojiCategoryFilter, columns: columns)
-    }
-
-    /// Flat grid order across sections — what the selection indexes.
-    var rows: [EmojiEntry] { sections.flatMap(\.entries) }
-
     var primaryActionTitle: String { vm.pasteTarget?.pasteTitle ?? "Paste" }
 
     private func entry(at selection: Int) -> EmojiEntry? {
-        let rows = rows
-        return rows.indices.contains(selection) ? rows[selection] : nil
+        rows.indices.contains(selection) ? rows[selection] : nil
     }
 
     func actions(at selection: Int) -> PopoverMenuContent? {
@@ -115,7 +137,6 @@ struct EmojiScreen: PaletteScreen {
 
     /// One visual row vertically, spilling into the neighbour by column; one cell horizontally.
     func move(_ delta: Int, axis: PaletteAxis, from selection: Int) -> Int? {
-        let sections = sections
         let count = sections.reduce(0) { $0 + $1.entries.count }
         guard count > 0 else { return selection }
         switch axis {
@@ -146,7 +167,6 @@ struct EmojiScreen: PaletteScreen {
 
     @ViewBuilder
     private func content(selection: Int, scroll: ScrollIntent) -> some View {
-        let sections = sections
         if !index.isLoaded {
             EmptyResults(text: "Loading emoji…")
         } else if sections.isEmpty {
@@ -178,7 +198,11 @@ struct EmojiScreen: PaletteScreen {
         } else if isBrowsing, vm.emojiCategoryFilter == .all {
             vm.selection = max(vm.selection + (position == nil ? 1 : -1), 0)
         } else if vm.emojiCategoryFilter == .pinned {
-            vm.selection = min(vm.selection, max(rows.count - 1, 0))
+            // Counted afresh: `rows` predates the toggle.
+            let count = Self.sections(
+                index: index, frequent: frequent, pinned: pinned, vm: vm, columns: columns
+            ).reduce(0) { $0 + $1.entries.count }
+            vm.selection = min(vm.selection, max(count - 1, 0))
         }
     }
 
