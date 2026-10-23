@@ -58,10 +58,12 @@ final class QuickActionSettingsStore {
         modelOverrides[action.id] = selection
     }
 
-    /// Nothing chosen takes the route that needs no account, the way chat's own default resolves.
-    func resolveModel(appleIntelligenceAvailable: Bool, fallback: AIModelSelection?) {
+    /// Nothing chosen takes the route that needs no account; only then is the model's XPC asked.
+    func resolveModel(
+        appleIntelligenceAvailable: @autoclosure () -> Bool, fallback: AIModelSelection?
+    ) {
         guard model == nil else { return }
-        model = appleIntelligenceAvailable ? .appleIntelligence : fallback
+        model = appleIntelligenceAvailable() ? .appleIntelligence : fallback
     }
 
     /// A removed connection must not leave a route pointing where nothing can answer.

@@ -7,7 +7,20 @@ import Foundation
 final class ContactsStore {
     /// Every card in `ContactDirectory.sorted` order.
     private(set) var contacts: [ContactItem] = []
-    private(set) var access: CalendarAccess = Permissions.contactsAccess()
+    /// Asked on first read, not at launch: the TCC answer is an XPC round trip.
+    private(set) var access: CalendarAccess {
+        get {
+            access(keyPath: \.access)
+            if let knownAccess { return knownAccess }
+            let current = Permissions.contactsAccess()
+            knownAccess = current
+            return current
+        }
+        set {
+            withMutation(keyPath: \.access) { knownAccess = newValue }
+        }
+    }
+    @ObservationIgnored private var knownAccess: CalendarAccess?
     /// False until the first read lands, so an empty list never claims the address book is empty.
     private(set) var hasLoaded = false
     /// Cards the reader asked to find from root search; inclusions, since marking is the opt-in.
@@ -173,7 +186,8 @@ final class ContactsStore {
     }
 
     private func publish(_ next: [ContactItem]) {
-        if access == .granted, !hasLoaded { hasLoaded = true }
+        // The cache, not `access`: a disabled launch's empty publish must not ask TCC.
+        if knownAccess == .granted, !hasLoaded { hasLoaded = true }
         guard next != contacts else { return }
         contacts = next
         byID = Dictionary(next.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })

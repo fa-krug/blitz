@@ -150,7 +150,11 @@ A database that won't open is deleted and recreated (worst case the store degrad
 in-memory history).
 
 Image capture (TIFF→PNG re-encode + blob write) runs off the main actor via detached tasks; row
-inserts, original-text search, and pruning stay on the main actor.
+inserts, original-text search, and capture-time pruning stay on the main actor. `load` is the
+exception: the retention cut made while Blitz was quit and the window read run detached, on a
+connection of their own, and only the result is published on main — 5.5 ms of stall at 5,000 rows,
+39 ms with 1,000 expired, before. A capture landing meanwhile waits on the 5 s busy timeout both
+connections carry rather than failing, and the read repeats if `items` changed under it.
 Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG, its file URL
 and marker. The file URL is what a terminal pastes, as the path, since it ignores image data; there
 is deliberately no `.string`, which a rich text field would take over the image.
@@ -184,7 +188,7 @@ handed in are already the ones to keep, as the Raycast import's are.
 
 **The load query is deliberately two indexed branches**, not one `pinned_at IS NOT NULL OR rowid >= ?`.
 It fetches every pinned row plus the newest `memoryWindow` unpinned ones, keyed off the floor rowid
-that `windowFloor` looks up. The planner cannot drive an `OR` from an index while preserving row
+that `windowFloorSQL` looks up. The planner cannot drive an `OR` from an index while preserving row
 order, so the single-predicate form reads the whole table instead. The floor is 0 — meaning no floor,
 load everything — while the history is shorter than the window.
 
@@ -501,8 +505,8 @@ a no-op. They are fixed to the physical number row, with ⌘1…⌘9 then ⌘0 a
 `load` reads every pinned row plus the newest 1000 unpinned ones as two indexed branches over a
 partial index on `pinned_at` (`Tests/clipboard-test.swift` covers the shape). The single
 `pinned_at IS NOT NULL OR rowid >= ?` form reads better but cannot be driven from an index while
-holding row order, so it scans the whole table — ~12ms against ~1ms at 200k rows, on the main actor
-at launch.
+holding row order, so it scans the whole table — ~12ms against ~1ms at 200k rows, on the launch
+read.
 
 ## Referenced files
 

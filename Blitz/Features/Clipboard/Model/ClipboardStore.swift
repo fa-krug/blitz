@@ -204,6 +204,7 @@ final class ClipboardStore {
                 textSearchMatches = textSearchMatches.map { current[$0.id] ?? $0 }
             }
             invalidateSearch(preservingMatches: true)
+            revision += 1
             onItemsChanged?()
         }
     }
@@ -211,6 +212,10 @@ final class ClipboardStore {
     @ObservationIgnored var onSearchResultsChanged: ((String, [ClipboardItem], [ClipboardItem]) -> Void)?
     /// Rotated whenever the history is replaced, so a helper's late answer lands on nothing.
     @ObservationIgnored private(set) var extractionGeneration = UUID()
+    /// Bumped by every change to `items`, so a background read can tell it was overtaken.
+    @ObservationIgnored private var revision = 0
+    /// Bumped by `close`, so a read still in flight never refills a store switched off.
+    @ObservationIgnored private var closings = 0
     /// The only thing a view observes for search freshness; `items` cannot speak for OCR.
     private var searchRevision = 0
     @ObservationIgnored private(set) var textSearchEnabled = false
@@ -238,6 +243,29 @@ final class ClipboardStore {
         INSERT INTO items(id, kind, text, image_path, created_at, source_app, pinned_at)
         VALUES(?,?,?,?,?,?,?)
         """
+
+    /// Two indexed branches, deliberately not one OR. See docs/features/clipboard.md#store.
+    nonisolated private static let windowSQL = """
+        SELECT \(columns("i")) FROM (
+          SELECT rowid AS rid, * FROM items WHERE rowid >= ?1
+          UNION ALL
+          SELECT rowid AS rid, * FROM items WHERE pinned_at IS NOT NULL AND rowid < ?1
+        ) AS i ORDER BY rid DESC
+        """
+    /// The floor rowid `windowSQL` reads from; no row means no floor, so everything loads.
+    nonisolated private static let windowFloorSQL =
+        "SELECT rowid FROM items WHERE pinned_at IS NULL ORDER BY rowid DESC LIMIT 1 OFFSET ?"
+    nonisolated private static let staleFilesSQL = """
+        SELECT image_path, 1 FROM items
+        WHERE created_at < ?1 AND pinned_at IS NULL AND image_path IS NOT NULL
+        UNION ALL
+        SELECT f.path, 0 FROM item_formats f JOIN items i ON i.id = f.item_id
+        WHERE i.created_at < ?1 AND i.pinned_at IS NULL
+        """
+    nonisolated private static let deleteStaleSQL =
+        "DELETE FROM items WHERE created_at < ? AND pinned_at IS NULL"
+    /// A launch's retention cut writes on its own connection; a capture meanwhile waits it out.
+    nonisolated private static let busyTimeoutMilliseconds: Int32 = 5_000
 
     private static let schema = """
         CREATE TABLE IF NOT EXISTS items(
@@ -327,8 +355,6 @@ final class ClipboardStore {
     var formatsDirectory: URL { imagesDir.appendingPathComponent("formats", isDirectory: true) }
     @ObservationIgnored private var db: OpaquePointer?
     @ObservationIgnored private var insertStmt: OpaquePointer?
-    @ObservationIgnored private var loadStmt: OpaquePointer?
-    @ObservationIgnored private var windowFloorStmt: OpaquePointer?
     @ObservationIgnored private var searchStmt: OpaquePointer?
     @ObservationIgnored private var deleteByIDStmt: OpaquePointer?
     @ObservationIgnored private var pinStmt: OpaquePointer?
@@ -361,6 +387,7 @@ final class ClipboardStore {
         setTextSearchEnabled(false)
         extractionGeneration = UUID()
         closeDatabase()
+        closings += 1
         items = []
     }
 
@@ -378,20 +405,25 @@ final class ClipboardStore {
         closeDatabase()
     }
 
-    func load() {
+    /// The read, and the retention cut since the last launch, run off the main actor.
+    func load() async {
         invalidateSearch()
         extractionGeneration = UUID()
-        guard let stmt = loadStmt else { return }
-        sqlite3_bind_int64(stmt, 1, windowFloor())
-        var loaded: [ClipboardItem] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            if let item = Self.row(stmt) { loaded.append(item) }
-        }
-        sqlite3_reset(stmt)
-        sqlite3_clear_bindings(stmt)
-        items = loaded
-        ImageDerivative.removeOrphans(in: imagesDir)
+        guard db != nil else { return }
+        let closings = closings
         // Age passes while the app isn't running; insert-time pruning alone can't catch that.
+        let cutoff = Date().addingTimeInterval(-maxAge)
+        while true {
+            let revision = revision
+            let window = await Task.detached(priority: .userInitiated) { [dbURL, imagesDir] in
+                Self.prunedWindow(inDatabaseAt: dbURL, before: cutoff, owning: imagesDir)
+            }.value
+            guard closings == self.closings else { return }
+            guard revision == self.revision else { continue }
+            if let window { items = window }
+            break
+        }
+        ImageDerivative.removeOrphans(in: imagesDir)
         enforceLimits()
     }
 
@@ -400,15 +432,72 @@ final class ClipboardStore {
         prune()
     }
 
-    /// The floor rowid `loadStmt` reads from; 0 means no floor, so load everything.
-    private func windowFloor() -> sqlite3_int64 {
-        guard let stmt = windowFloorStmt else { return 0 }
-        defer {
-            sqlite3_reset(stmt)
-            sqlite3_clear_bindings(stmt)
+    nonisolated private static func prunedWindow(
+        inDatabaseAt url: URL, before cutoff: Date, owning imagesDirectory: URL
+    ) -> [ClipboardItem]? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            sqlite3_close_v2(db)
+            return nil
         }
-        sqlite3_bind_int(stmt, 1, Int32(Self.memoryWindow - 1))
-        return sqlite3_step(stmt) == SQLITE_ROW ? sqlite3_column_int64(stmt, 0) : 0
+        defer { sqlite3_close_v2(db) }
+        sqlite3_busy_timeout(db, busyTimeoutMilliseconds)
+        deleteStale(in: db, before: cutoff, owning: imagesDirectory)
+        return window(in: db)
+    }
+
+    /// One transaction, so a row pinned between the two statements never loses its file.
+    nonisolated private static func deleteStale(
+        in db: OpaquePointer?, before cutoff: Date, owning imagesDirectory: URL
+    ) {
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return }
+        var blobs: [String] = []
+        var formats: [String] = []
+        var select: OpaquePointer?
+        if sqlite3_prepare_v2(db, staleFilesSQL, -1, &select, nil) == SQLITE_OK {
+            sqlite3_bind_double(select, 1, cutoff.timeIntervalSince1970)
+            while sqlite3_step(select) == SQLITE_ROW {
+                guard let path = columnString(select, 0), isOwned(path, by: imagesDirectory)
+                else { continue }
+                if sqlite3_column_int(select, 1) == 1 {
+                    blobs.append(path)
+                } else {
+                    formats.append(path)
+                }
+            }
+        }
+        sqlite3_finalize(select)
+        var delete: OpaquePointer?
+        let deleted =
+            sqlite3_prepare_v2(db, deleteStaleSQL, -1, &delete, nil) == SQLITE_OK
+            && sqlite3_bind_double(delete, 1, cutoff.timeIntervalSince1970) == SQLITE_OK
+            && sqlite3_step(delete) == SQLITE_DONE
+        sqlite3_finalize(delete)
+        guard deleted, sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK else {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            return
+        }
+        for path in formats { try? FileManager.default.removeItem(atPath: path) }
+        for path in blobs { removeBlob(atPath: path) }
+    }
+
+    nonisolated private static func window(in db: OpaquePointer?) -> [ClipboardItem]? {
+        var floorStmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, windowFloorSQL, -1, &floorStmt, nil) == SQLITE_OK else {
+            return nil
+        }
+        sqlite3_bind_int(floorStmt, 1, Int32(memoryWindow - 1))
+        let floor = sqlite3_step(floorStmt) == SQLITE_ROW ? sqlite3_column_int64(floorStmt, 0) : 0
+        sqlite3_finalize(floorStmt)
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, windowSQL, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, floor)
+        var loaded: [ClipboardItem] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let item = row(stmt) { loaded.append(item) }
+        }
+        return loaded
     }
 
     /// `formats` are files already written by `writeFormats`; a repeat copy discards them.
@@ -496,11 +585,11 @@ final class ClipboardStore {
 
     /// Bulk-insert from an import: original timestamps, external image paths, deduped.
     @discardableResult
-    func importEntries(_ entries: [ClipboardItem]) -> Int {
+    func importEntries(_ entries: [ClipboardItem]) async -> Int {
         // Oldest first so newest ends up with the highest rowid (load orders by rowid DESC).
         let inserted = Self.importStoredItems(
             inDatabaseAt: dbURL, entries.sorted { $0.createdAt < $1.createdAt })
-        load()
+        await load()
         return inserted
     }
 
@@ -1009,7 +1098,11 @@ final class ClipboardStore {
 
     /// Whether a path is inside our images directory; only those are ours to delete.
     private func owns(_ path: String) -> Bool {
-        path.hasPrefix(imagesDir.path + "/")
+        Self.isOwned(path, by: imagesDir)
+    }
+
+    nonisolated private static func isOwned(_ path: String, by imagesDirectory: URL) -> Bool {
+        path.hasPrefix(imagesDirectory.path + "/")
     }
 
     private func prune() {
@@ -1068,23 +1161,13 @@ final class ClipboardStore {
         guard
             sqlite3_open_v2(dbURL.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
                 == SQLITE_OK,
+            sqlite3_busy_timeout(db, Self.busyTimeoutMilliseconds) == SQLITE_OK,
             sqlite3_exec(db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nil, nil, nil)
                 == SQLITE_OK,
             sqlite3_exec(db, Self.schema, nil, nil, nil) == SQLITE_OK,
             sqlite3_exec(db, Self.sideSchema, nil, nil, nil) == SQLITE_OK
         else { return false }
         insertStmt = prepare(Self.insertSQL)
-        // Two indexed branches, deliberately not one OR. See docs/features/clipboard.md#store.
-        loadStmt = prepare(
-            """
-            SELECT \(Self.columns("i")) FROM (
-              SELECT rowid AS rid, * FROM items WHERE rowid >= ?1
-              UNION ALL
-              SELECT rowid AS rid, * FROM items WHERE pinned_at IS NOT NULL AND rowid < ?1
-            ) AS i ORDER BY rid DESC
-            """)
-        windowFloorStmt = prepare(
-            "SELECT rowid FROM items WHERE pinned_at IS NULL ORDER BY rowid DESC LIMIT 1 OFFSET ?")
         searchStmt = prepare(
             """
             SELECT \(Self.columns("i")) FROM (
@@ -1100,16 +1183,9 @@ final class ClipboardStore {
         deleteByIDStmt = prepare("DELETE FROM items WHERE id = ?")
         // Only ever sets a stamp: unpinning rewrites the whole row so it leads the history again.
         pinStmt = prepare("UPDATE items SET pinned_at = ? WHERE id = ?")
-        staleImagesStmt = prepare(
-            """
-            SELECT image_path, 1 FROM items
-            WHERE created_at < ?1 AND pinned_at IS NULL AND image_path IS NOT NULL
-            UNION ALL
-            SELECT f.path, 0 FROM item_formats f JOIN items i ON i.id = f.item_id
-            WHERE i.created_at < ?1 AND i.pinned_at IS NULL
-            """)
-        deleteStaleStmt = prepare("DELETE FROM items WHERE created_at < ? AND pinned_at IS NULL")
-        return insertStmt != nil && loadStmt != nil && windowFloorStmt != nil && searchStmt != nil
+        staleImagesStmt = prepare(Self.staleFilesSQL)
+        deleteStaleStmt = prepare(Self.deleteStaleSQL)
+        return insertStmt != nil && searchStmt != nil
             && deleteByIDStmt != nil && pinStmt != nil && staleImagesStmt != nil
             && deleteStaleStmt != nil
     }
@@ -1122,12 +1198,9 @@ final class ClipboardStore {
 
     private func closeDatabase() {
         [
-            insertStmt, loadStmt, windowFloorStmt, searchStmt, deleteByIDStmt, pinStmt,
-            staleImagesStmt, deleteStaleStmt
+            insertStmt, searchStmt, deleteByIDStmt, pinStmt, staleImagesStmt, deleteStaleStmt
         ].forEach { sqlite3_finalize($0) }
         insertStmt = nil
-        loadStmt = nil
-        windowFloorStmt = nil
         searchStmt = nil
         deleteByIDStmt = nil
         pinStmt = nil

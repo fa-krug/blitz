@@ -8,7 +8,7 @@ struct PasteboardTests {
     static var passes = 0
     static let cap = ClipboardManager.maxCapturedFiles
 
-    static func main() {
+    static func main() async {
         finderCopyReadsAsAFileNotItsName()
         everyFileFlavourIsRead()
         multipleFilesReadNewestLast()
@@ -20,7 +20,7 @@ struct PasteboardTests {
         aModernFileURLSuppressesTheLegacyFallback()
         fileEntriesWriteBackAsFiles()
         aVanishedFileWritesNothing()
-        imageEntriesWriteBackWithTheirFile()
+        await imageEntriesWriteBackWithTheirFile()
         richFlavoursAreCaptured()
         anOversizedFlavourIsDropped()
         richEntriesWriteBackTheirFlavours()
@@ -310,13 +310,13 @@ struct PasteboardTests {
     }
 
     /// A text-only receiver ignores image data, so the stored file goes out beside it.
-    static func imageEntriesWriteBackWithTheirFile() {
-        withScratch { dir in
+    static func imageEntriesWriteBackWithTheirFile() async {
+        await withScratch { dir in
             let image = dir.appendingPathComponent("shot.png")
             let bytes = Data("png".utf8)
             try? bytes.write(to: image)
             let store = ClipboardStore(directory: dir.appendingPathComponent("store"))
-            store.importEntries([ClipboardItem(imagePath: image.path, sourceBundleID: nil)])
+            await store.importEntries([ClipboardItem(imagePath: image.path, sourceBundleID: nil)])
             let pb = board()
 
             expect(Paster.write(store.items[0], store: store, to: pb), "a present image writes")
@@ -428,6 +428,14 @@ struct PasteboardTests {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         body(dir)
+    }
+
+    static func withScratch(_ body: (URL) async -> Void) async {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-pasteboard-test-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await body(dir)
     }
 
     static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

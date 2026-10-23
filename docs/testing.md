@@ -202,11 +202,20 @@ search result that navigates and then sits there.
 
 ## Performance measurement
 
-`Platform/Signposts.swift` emits intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.start`,
-`AppIndex.scan`, `AppIndex.rank`, `PaletteWindowController.show`, `UninstallScanner.discover` and
-`UninstallScanner.measure`, `FileSearchService.search`, `ScreenshotService.search`,
+`Platform/Signposts.swift` emits intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.init`
+(the whole construction, which `BlitzApp.body` triggers before `applicationDidFinishLaunching`),
+`AppCore.start`, `AppIndex.scan`, `AppIndex.rank`, `PaletteWindowController.show`,
+`UninstallScanner.discover` and `UninstallScanner.measure`, `FileSearchService.search`, `ScreenshotService.search`,
 `ContactsStore.fetch` and `Notes.search`. Open the Time Profiler or `os_signpost` instrument in
 Instruments and filter to that subsystem; nothing needs recompiling.
+
+**Profile a launch from a renamed copy.** `xctrace record --launch` handed `Blitz Dev.app` profiles
+whichever `Blitz Dev` LaunchServices has registered — typically Xcode's own DerivedData build — and
+leaves that process running. Copy the app, rename its executable and `CFBundleExecutable`, give it a
+bundle id of its own, re-sign it ad hoc (`codesign --force --deep --sign -`), check the process path
+in `xctrace export --toc`, and pass preferences as `-key value` arguments. `AppCore.init` can begin
+before the recorder does, so its interval sometimes arrives as an `End` alone; Time Profiler samples
+miss time blocked in XPC, which only System Trace's `syscall` table shows.
 
 None of the benchmarks below join the suite, so each is registered in `run-tests.sh` as `run index`
 instead: `--index` hands it editor flags without queueing it, and without that entry nothing in the
@@ -368,9 +377,10 @@ Measured on `main`. Useful as orders of magnitude, not as contracts.
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
 | Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |
 | Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter; an arrow step 14–20 ms |
+| Launch, main thread (Debug channel at `-O`, AI on, 33 MB chat history half past retention, 5,000 clips) | `AppCore.init` 13–16 ms; main thread on-CPU ~210 ms over the first 12 s, no SQLite on main |
 
-Launch time and allocation counts are not recorded. The signposts are in place, so either can be
-taken from `main` whenever a change makes it worth knowing.
+Allocation counts are not recorded. The signposts are in place, so they can be taken from `main`
+whenever a change makes it worth knowing.
 
 ## Manual regression sweep
 

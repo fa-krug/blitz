@@ -3,7 +3,6 @@ import Foundation
 /// A short-lived run of a command, bounded by a watchdog, an output cap and cancellation.
 enum InstalledAIProbe {
     private static let maximumOutputBytes = 2 * 1_048_576
-    private static let readChunkBytes = 64 * 1_024
 
     struct Result: Sendable {
         let status: Int32
@@ -41,47 +40,37 @@ enum InstalledAIProbe {
         let handle = ProcessHandle()
         return await withTaskCancellationHandler(
             operation: {
-                // Detached because the read loop and the exit wait block: never a pool thread.
-                await Task.detached {
-                    try? FileManager.default.createDirectory(
-                        at: workspace, withIntermediateDirectories: true)
-                    let process = Process()
-                    let output = Pipe()
-                    process.executableURL = executable
-                    process.arguments = arguments
-                    process.currentDirectoryURL = workspace
-                    process.environment =
-                        environment ?? ExecutableLocator.environment(running: executable)
-                    let stdin = input.map { _ in Pipe() }
-                    process.standardInput = stdin ?? FileHandle.nullDevice
-                    process.standardOutput = output
-                    process.standardError = FileHandle.nullDevice
-                    guard let exit = try? process.runObservingExit() else {
-                        return Result(status: -1, output: "")
-                    }
-                    handle.set(process)
-                    if let stdin, let input { Self.write(input, to: stdin, closing: true) }
-                    let watchdog = Task {
-                        try? await Task.sleep(for: timeout)
-                        if process.isRunning { process.terminate() }
-                    }
-                    var data = Data()
-                    while data.count < Self.maximumOutputBytes {
-                        let count = min(Self.readChunkBytes, Self.maximumOutputBytes - data.count)
-                        guard let chunk = try? output.fileHandleForReading.read(upToCount: count),
-                            !chunk.isEmpty
-                        else { break }
-                        data.append(chunk)
-                    }
-                    if data.count == Self.maximumOutputBytes, process.isRunning {
-                        process.terminate()
-                    }
-                    exit.wait()
-                    watchdog.cancel()
-                    return Result(
-                        status: process.terminationStatus,
-                        output: String(bytes: data, encoding: .utf8) ?? "")
-                }.value
+                try? FileManager.default.createDirectory(
+                    at: workspace, withIntermediateDirectories: true)
+                let process = Process()
+                let output = Pipe()
+                process.executableURL = executable
+                process.arguments = arguments
+                process.currentDirectoryURL = workspace
+                process.environment =
+                    environment ?? ExecutableLocator.environment(running: executable)
+                let stdin = input.map { _ in Pipe() }
+                process.standardInput = stdin ?? FileHandle.nullDevice
+                process.standardOutput = output
+                process.standardError = FileHandle.nullDevice
+                guard let exit = try? process.runObservingExit() else {
+                    return Result(status: -1, output: "")
+                }
+                handle.set(process)
+                if let stdin, let input { Self.write(input, to: stdin, closing: true) }
+                let watchdog = Task {
+                    try? await Task.sleep(for: timeout)
+                    if process.isRunning { process.terminate() }
+                }
+                let data = await output.fileHandleForReading.collect(upTo: Self.maximumOutputBytes)
+                if data.count == Self.maximumOutputBytes, process.isRunning {
+                    process.terminate()
+                }
+                await exit.exited()
+                watchdog.cancel()
+                return Result(
+                    status: process.terminationStatus,
+                    output: String(bytes: data, encoding: .utf8) ?? "")
             },
             onCancel: {
                 handle.cancel()
@@ -94,40 +83,31 @@ enum InstalledAIProbe {
         environment: [String: String]? = nil, input: Data,
         until answered: @escaping @Sendable (String) -> Bool, timeout: Duration = .seconds(30)
     ) async -> String {
-        await Task.detached {
-            try? FileManager.default.createDirectory(
-                at: workspace, withIntermediateDirectories: true)
-            let process = Process()
-            let stdin = Pipe()
-            let output = Pipe()
-            process.executableURL = executable
-            process.arguments = arguments
-            process.currentDirectoryURL = workspace
-            process.environment =
-                environment ?? ExecutableLocator.environment(running: executable)
-            process.standardInput = stdin
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            guard let exit = try? process.runObservingExit() else { return "" }
-            Self.write(input, to: stdin, closing: false)
-            let watchdog = Task {
-                try? await Task.sleep(for: timeout)
-                if process.isRunning { process.terminate() }
-            }
-            var data = Data()
-            // Not `read(upToCount:)`, which waits for a full chunk or EOF and so for the watchdog.
-            while data.count < Self.maximumOutputBytes {
-                let chunk = output.fileHandleForReading.availableData
-                guard !chunk.isEmpty else { break }
-                data.append(chunk)
-                if answered(String(bytes: data, encoding: .utf8) ?? "") { break }
-            }
-            try? stdin.fileHandleForWriting.close()
+        try? FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let process = Process()
+        let stdin = Pipe()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.currentDirectoryURL = workspace
+        process.environment = environment ?? ExecutableLocator.environment(running: executable)
+        process.standardInput = stdin
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        guard let exit = try? process.runObservingExit() else { return "" }
+        Self.write(input, to: stdin, closing: false)
+        let watchdog = Task {
+            try? await Task.sleep(for: timeout)
             if process.isRunning { process.terminate() }
-            exit.wait()
-            watchdog.cancel()
-            return String(bytes: data, encoding: .utf8) ?? ""
-        }.value
+        }
+        let data = await output.fileHandleForReading.collect(upTo: Self.maximumOutputBytes) {
+            answered(String(bytes: $0, encoding: .utf8) ?? "")
+        }
+        try? stdin.fileHandleForWriting.close()
+        if process.isRunning { process.terminate() }
+        await exit.exited()
+        watchdog.cancel()
+        return String(bytes: data, encoding: .utf8) ?? ""
     }
 
     /// A child that exits before reading must fail the write, not SIGPIPE Blitz.

@@ -67,37 +67,35 @@ enum ExecutableLocator {
 
     /// `-i` reads the rc file that puts a version manager on PATH; a watchdog bounds a hang.
     nonisolated static func shellLookup(_ command: String, shell: URL) async -> String? {
-        await Task.detached {
-            let process = Process()
-            let (executable, arguments) = lookup(command, in: shell)
-            process.executableURL = executable
-            process.arguments = arguments
-            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
-            process.environment = ProcessInfo.processInfo.environment.merging(["BLITZ": "1"]) {
-                _, new in new
-            }
-            process.standardInput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            let stdout = Pipe()
-            process.standardOutput = stdout
-            guard let exit = try? process.runObservingExit() else { return nil }
-            let watchdog = Task {
-                try await Task.sleep(for: .seconds(5))
-                if process.isRunning { process.terminate() }
-            }
-            let data = stdout.fileHandleForReading.readDataToEndOfFile()
-            exit.wait()
-            watchdog.cancel()
-            guard process.terminationStatus == 0 else { return nil }
-            // Startup and logout files can print on either side of the lookup's answer.
-            let path =
-                String(decoding: data, as: UTF8.self)
-                .split(whereSeparator: \.isNewline)
-                .last { $0.hasPrefix(answerMarker) }?
-                .dropFirst(answerMarker.count)
-                .trimmingCharacters(in: .whitespaces) ?? ""
-            return path.hasPrefix("/") ? path : nil
-        }.value
+        let process = Process()
+        let (executable, arguments) = lookup(command, in: shell)
+        process.executableURL = executable
+        process.arguments = arguments
+        process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        process.environment = ProcessInfo.processInfo.environment.merging(["BLITZ": "1"]) {
+            _, new in new
+        }
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        guard let exit = try? process.runObservingExit() else { return nil }
+        let watchdog = Task {
+            try await Task.sleep(for: .seconds(5))
+            if process.isRunning { process.terminate() }
+        }
+        let data = await stdout.fileHandleForReading.collect()
+        await exit.exited()
+        watchdog.cancel()
+        guard process.terminationStatus == 0 else { return nil }
+        // Startup and logout files can print on either side of the lookup's answer.
+        let path =
+            String(decoding: data, as: UTF8.self)
+            .split(whereSeparator: \.isNewline)
+            .last { $0.hasPrefix(answerMarker) }?
+            .dropFirst(answerMarker.count)
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        return path.hasPrefix("/") ? path : nil
     }
 
     nonisolated private static let answerMarker = "blitz-locator:"

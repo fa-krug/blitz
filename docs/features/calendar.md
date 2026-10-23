@@ -378,7 +378,9 @@ preference lands on `.disabled` and `.today` rather than fighting them. `MenuBar
 disagree with it.
 
 `CalendarStore.access` is a snapshot, refreshed on `start`, on every `reload` and after a request —
-TCC announces nothing when a grant changes in Settings. `refreshAccess()` is why anything that acts on
+TCC announces nothing when a grant changes in Settings. It is asked on first read rather than at
+init, as `RemindersStore`'s and `ContactsStore`'s are: each answer is a 2–10 ms XPC round trip to
+TCC, and a launch with the feature off never needs it. `refreshAccess()` is why anything that acts on
 `access` outside those three re-reads first: the enable path, so its guard cannot bounce off a stale
 `.granted` and leave a dead button, the Calendar pane on appear, so a grant made in Settings while
 the feature was off is not reported as still missing, and Create Event, so its report names the

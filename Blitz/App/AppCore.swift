@@ -4,7 +4,8 @@ import AppKit
 @MainActor
 @Observable
 final class AppCore {
-    static let shared = AppCore()
+    /// Its stored properties build before `start`, so the interval wraps the whole construction.
+    static let shared = Signposts.interval("AppCore.init") { AppCore() }
 
     let launcherRanking: LauncherRankingStore
     let launcherQueryHistory: LauncherQueryHistoryStore

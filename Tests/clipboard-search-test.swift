@@ -31,7 +31,7 @@ struct ClipboardSearchTests {
             return item
         }
         precondition(ClipboardStore.importStoredItems(inDatabaseAt: store.dbURL, entries) == entries.count)
-        store.load()
+        await store.load()
         try await compare(store, phase: "disabled by default")
         precondition(store.setTextSearchEnabled(true))
         for entry in entries {
@@ -60,7 +60,7 @@ struct ClipboardSearchTests {
         try await compare(store, phase: "deleted indexed row")
         store.close()
         store.open()
-        store.load()
+        await store.load()
         try await compare(store, phase: "reopened defaults off")
         store.setTextSearchEnabled(true)
         try await compare(store, phase: "reopened and enabled")
