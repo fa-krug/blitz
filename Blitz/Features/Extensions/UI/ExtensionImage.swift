@@ -362,6 +362,36 @@ extension ExtensionImage {
             return nil
         }
     }
+
+    /// Cache-only twin of `load`, so a warm image paints on the row's first frame.
+    static func cached(_ resolved: Resolved?, animates: Bool) -> NSImage? {
+        switch resolved?.source {
+        case .file(let path):
+            return animates
+                ? ExtensionIconCache.cachedOriginal(atPath: path)
+                : ExtensionIconCache.cached(atPath: path)
+        case .fileIcon(let path):
+            return IconCache.cachedFitted(forFile: path)
+        case .remote(let url):
+            return ExtensionIconCache.cachedRemote(url, asIcon: !animates)
+        default:
+            return nil
+        }
+    }
+
+    /// A decoded image with the key it answered, so a changed source is never drawn as the old one.
+    struct Loaded {
+        let key: LoadKey
+        let image: NSImage
+    }
+
+    /// The current load, else a warm cache hit, else the previous image until the new one lands.
+    static func image(
+        _ loaded: Loaded?, key: LoadKey, resolved: Resolved?, animates: Bool
+    ) -> NSImage? {
+        if let loaded, loaded.key == key { return loaded.image }
+        return cached(resolved, animates: animates) ?? loaded?.image
+    }
 }
 
 /// A resolved icon at row size; an unresolvable one draws the faint tile, so rows never jump.
@@ -378,18 +408,24 @@ struct ExtensionIconView: View {
     /// Opt-in, and off for row icons: a playing GIF at 24pt is noise in a long list.
     var animates = false
     var usesMenuSymbolStyle = false
-    @State private var loaded: NSImage?
+    @State private var loaded: ExtensionImage.Loaded?
 
     /// Row size unless a caller states one, which only the ⌘K panel's 20pt slot does.
     private var side: CGFloat { size ?? metrics.size.rowIcon }
+
+    /// Keyed on appearance too: an inline SVG's palette resolves at decode.
+    private var loadKey: ExtensionImage.LoadKey {
+        ExtensionImage.LoadKey(source: resolved?.source, isDark: isDark)
+    }
 
     var body: some View {
         content
             .frame(width: side, height: side)
             .clipShape(shape)
-            // Keyed on appearance too: an inline SVG's palette resolves at decode.
-            .task(id: ExtensionImage.LoadKey(source: resolved?.source, isDark: isDark)) {
+            .task(id: loadKey) {
+                let key = loadKey
                 loaded = await ExtensionImage.load(resolved, isDark: isDark, animates: animates)
+                    .map { ExtensionImage.Loaded(key: key, image: $0) }
             }
     }
 
@@ -422,7 +458,9 @@ struct ExtensionIconView: View {
                 .font(.system(size: side * 0.72))
                 .frame(width: side, height: side)
         case .file, .fileIcon, .remote, .inline:
-            if let loaded {
+            if let loaded = ExtensionImage.image(
+                loaded, key: loadKey, resolved: resolved, animates: animates)
+            {
                 // Only a multi-frame image pays for `NSImageView`; a still stays on SwiftUI's path.
                 if animates, loaded.isAnimated {
                     AnimatedImageView(image: loaded)

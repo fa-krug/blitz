@@ -39,6 +39,7 @@ struct ExtensionSearchAccessoryTests {
         parsing()
         seeding()
         storageIsolation()
+        storageWrites()
         print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
         print("\(passes) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
@@ -169,7 +170,7 @@ struct ExtensionSearchAccessoryTests {
         check(
             "a pick reads back on its own",
             storage.accessoryValue(extension: "sample", key: "filter") == "selected")
-        storage.flush()
+        storage.flushSynchronously()
 
         let reloaded = ExtensionStorage(directory: directory)
         check(
@@ -183,7 +184,7 @@ struct ExtensionSearchAccessoryTests {
         // A store with no accessory section: the missing key must cost nothing.
         storage.setLocalStorage(extension: "older", key: "kept", value: .string("value"))
         storage.setPreference(extension: "older", key: "token", value: .string("secret"))
-        storage.flush()
+        storage.flushSynchronously()
         let file = directory.appendingPathComponent("older.json")
         if var older = (try? Data(contentsOf: file))
             .flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })
@@ -200,6 +201,40 @@ struct ExtensionSearchAccessoryTests {
         check(
             "a store with no accessory section keeps its preferences",
             older.preference(extension: "older", key: "token") == .string("secret"))
+    }
+
+    /// Writes leave the main actor, so their order and the termination flush must still hold.
+    static func storageWrites() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-ext-storage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storage = ExtensionStorage(directory: directory)
+        for index in 0..<50 {
+            storage.setCache(extension: "busy", namespace: "ns", key: "k", value: "v\(index)")
+            storage.flush()
+        }
+        storage.flushSynchronously()
+        check(
+            "the newest of many detached writes is the one on disk",
+            ExtensionStorage(directory: directory).caches(extension: "busy")["ns"]?["k"] == "v49")
+
+        storage.setLocalStorage(extension: "pending", key: "k", value: .string("debounced"))
+        storage.flushSynchronously()
+        check(
+            "a still-debounced write lands on the termination flush",
+            ExtensionStorage(directory: directory).localStorageValue(extension: "pending", key: "k")
+                == .string("debounced"))
+
+        storage.setLocalStorage(extension: "gone", key: "k", value: .string("v"))
+        storage.flushSynchronously()
+        storage.setLocalStorage(extension: "gone", key: "k", value: .string("queued"))
+        storage.flush()
+        storage.removeAll(extension: "gone")
+        storage.flushSynchronously()
+        let file = directory.appendingPathComponent("gone.json")
+        check(
+            "uninstall removes the file even with a write queued behind it",
+            !FileManager.default.fileExists(atPath: file.path))
     }
 
     static func check(_ label: String, _ condition: Bool, _ detail: String = "") {

@@ -43,6 +43,10 @@ enum ExtensionIconCache {
         return await IconCache.loadArtworkAsync(atPath: path, extent: extent)
     }
 
+    static func cachedOriginal(atPath path: String) -> NSImage? {
+        cache.object(forKey: originalKey(path))
+    }
+
     /// Never rasterized: fitting flattens a GIF to its first frame.
     static func loadOriginalAsync(atPath path: String) async -> NSImage? {
         let key = originalKey(path)
@@ -113,6 +117,10 @@ enum ExtensionIconCache {
     }
 
     // MARK: - Fetched by the extension
+
+    static func cachedRemote(_ url: URL, asIcon: Bool = true) -> NSImage? {
+        cache.object(forKey: remoteKey(url, asIcon: asIcon))
+    }
 
     /// A failure caches nothing, so a transient error retries; `asIcon` is off for markdown images.
     static func loadRemoteAsync(_ url: URL, asIcon: Bool = true) async -> NSImage? {

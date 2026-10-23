@@ -85,7 +85,10 @@ struct ExtensionScreen: Equatable {
         screenActions: nil, emptyView: nil, pagination: nil)
 
     /// Filters rows by `query` only when the extension hasn't taken the search text over.
-    init(tree: RenderTree, query: String) {
+    init(
+        tree: RenderTree, query: String,
+        searchIndex: (RenderTree) -> ExtensionSearchIndex = ExtensionSearchIndex.init
+    ) {
         guard let root = tree.activeRoot else {
             self = .empty
             return
@@ -124,6 +127,8 @@ struct ExtensionScreen: Equatable {
             emptyView = root.children.first { $0.type == emptyType }
             let needle = FuzzyMatch.Query(
                 filtersLocally ? query.trimmingCharacters(in: .whitespaces) : "")
+            let index: ExtensionSearchIndex? = needle.isEmpty ? nil : searchIndex(tree)
+            func matches(_ node: RenderNode) -> Bool { index?.matches(node, needle) ?? true }
             var rows: [Row] = []
             var items: [Item] = []
             // Numbering as rows are built keeps `selection` and the drawn order in step.
@@ -136,14 +141,14 @@ struct ExtensionScreen: Equatable {
                 if child.type == sectionType {
                     let matching = child.children
                         .filter { $0.type == itemType }
-                        .filter { ExtensionScreen.matches($0, needle) }
+                        .filter(matches)
                     guard !matching.isEmpty else { continue }
                     rows.append(
                         .header(
                             title: child.string("title") ?? "",
                             subtitle: child.string("subtitle"), id: String(child.id)))
                     matching.forEach(append)
-                } else if child.type == itemType, ExtensionScreen.matches(child, needle) {
+                } else if child.type == itemType, matches(child) {
                     append(child)
                 }
             }
@@ -209,15 +214,6 @@ struct ExtensionScreen: Equatable {
         guard let selectionHandler else { return nil }
         let itemID = items.indices.contains(index) ? items[index].node.string("id") : nil
         return SelectionChange(handler: selectionHandler, itemID: itemID)
-    }
-
-    /// Title, subtitle and keywords, ranked by the launcher's matcher.
-    static func matches(_ item: RenderNode, _ needle: FuzzyMatch.Query) -> Bool {
-        guard !needle.isEmpty else { return true }
-        var haystack = [item.string("title") ?? ""]
-        if let subtitle = item.string("subtitle") { haystack.append(subtitle) }
-        haystack.append(contentsOf: item.array("keywords").compactMap(\.stringValue))
-        return haystack.contains { FuzzyMatch.score(needle, candidate: $0) != nil }
     }
 
     /// The selection's panel: the item's own, an empty list's `EmptyView`'s, else the screen's.

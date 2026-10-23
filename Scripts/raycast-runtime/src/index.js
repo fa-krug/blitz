@@ -13,6 +13,7 @@ import { defineModule, evaluateCommonJS } from "./modules.js";
 import { resolveComponent } from "./async-component.js";
 import { NavigationRoot, setFieldCommandHandler } from "./api/components.js";
 import { Surface } from "./reconciler.js";
+import { TreeDelta } from "./tree-delta.js";
 import { raycastApi } from "./api/index.js";
 import { configureSystem, runToastAction, showToast, Toast } from "./api/system.js";
 import { WebSocket } from "./websocket.js";
@@ -56,18 +57,25 @@ class Session {
     this.surface = null;
     this.navigationDepth = 1;
     this.navigation = {};
-    this.lastTree = null;
+    this.delta = new TreeDelta();
+  }
+
+  /// Swift answers `false` when it lacks the base a delta names, so the tree is resent whole.
+  sendTree(tree) {
+    const encoded = this.delta.encode(tree);
+    if (!encoded) return;
+    if (this.host.render(this.id, encoded.json) !== false) {
+      encoded.accept();
+      return;
+    }
+    this.delta.reset();
+    const whole = this.delta.encode(tree);
+    if (whole && this.host.render(this.id, whole.json) !== false) whole.accept();
   }
 
   mountView(element) {
     this.surface = new Surface(
-      (tree) => {
-        // An unchanged tree would cost Swift a decode and the palette a full re-render for nothing.
-        const json = JSON.stringify(tree);
-        if (json === this.lastTree) return;
-        this.lastTree = json;
-        this.host.render(this.id, json);
-      },
+      (tree) => this.sendTree(tree),
       (error) => this.fail(error),
       (error) => this.actionFailed(error),
     );

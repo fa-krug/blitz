@@ -397,13 +397,19 @@ private struct ExtensionGridContentView: View {
     let fills: Bool
     /// Passed down rather than measured: the grid already knows every tile's size.
     let size: CGSize
-    @State private var loaded: NSImage?
+    @State private var loaded: ExtensionImage.Loaded?
+
+    /// Keyed on appearance too: an inline SVG's palette resolves at decode.
+    private var loadKey: ExtensionImage.LoadKey {
+        ExtensionImage.LoadKey(source: resolved?.source, isDark: isDark)
+    }
 
     var body: some View {
         content
-            // Keyed on appearance too: an inline SVG's palette resolves at decode.
-            .task(id: ExtensionImage.LoadKey(source: resolved?.source, isDark: isDark)) {
+            .task(id: loadKey) {
+                let key = loadKey
                 loaded = await ExtensionImage.load(resolved, isDark: isDark, animates: true)
+                    .map { ExtensionImage.Loaded(key: key, image: $0) }
             }
     }
 
@@ -422,7 +428,9 @@ private struct ExtensionGridContentView: View {
             Text(text)
                 .font(.system(size: min(size.width, size.height) * 0.72))
         case .file, .fileIcon, .remote, .inline:
-            if let loaded {
+            if let loaded = ExtensionImage.image(
+                loaded, key: loadKey, resolved: resolved, animates: true)
+            {
                 image(loaded)
             } else {
                 placeholder

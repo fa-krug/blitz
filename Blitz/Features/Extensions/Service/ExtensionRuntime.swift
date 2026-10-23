@@ -43,6 +43,8 @@ final class ExtensionRuntime: @unchecked Sendable {
     private let nodeShims = ExtensionNodeShims()
     /// Bumped per tree on the JS thread; a main-actor hop that finds a newer one skips its own.
     private let renderSequence = Mutex(0)
+    /// Per session, the last tree's elements a delta may name; touched only on `thread`.
+    private var renderBases: [String: [RenderNode.ID: RenderNode]] = [:]
 
     /// Set once at startup; read on the JS thread, so it is written before the runtime ever boots.
     private nonisolated(unsafe) weak var delegate: ExtensionRuntimeDelegate?
@@ -103,7 +105,7 @@ final class ExtensionRuntime: @unchecked Sendable {
         guard
             let url = runtimeOverride
                 ?? Bundle.main.url(forResource: "RaycastRuntime.generated", withExtension: "js"),
-            let source = try? String(contentsOf: url, encoding: .utf8)
+            let source = Self.runtimeSource(at: url)
         else { throw RuntimeError.runtimeResourceMissing }
 
         guard let context = JSContext() else { throw RuntimeError.bootFailed("no JSContext") }
@@ -126,6 +128,16 @@ final class ExtensionRuntime: @unchecked Sendable {
         let payload = config.jsonString()
         _ = context.objectForKeyedSubscript("__blitz")?
             .invokeMethod("boot", withArguments: [payload])
+    }
+
+    /// Read once; every context still evaluates it, as JSC offers no public bytecode cache.
+    private static let runtimeSources = Mutex<[URL: String]>([:])
+
+    private static func runtimeSource(at url: URL) -> String? {
+        if let cached = runtimeSources.withLock({ $0[url] }) { return cached }
+        guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        runtimeSources.withLock { $0[url] = source }
+        return source
     }
 
     /// Load and mount one command. `code` is its prebuilt CommonJS bundle.
@@ -177,7 +189,10 @@ final class ExtensionRuntime: @unchecked Sendable {
             _ = context.objectForKeyedSubscript("__blitz")?
                 .invokeMethod("stop", withArguments: [session])
         }
-        thread.async { self.nodeShims.closeFiles() }
+        thread.async {
+            self.renderBases[session] = nil
+            self.nodeShims.closeFiles()
+        }
     }
 
     private func onQueue(_ body: @escaping @Sendable (JSContext) -> Void) async {
@@ -198,8 +213,8 @@ final class ExtensionRuntime: @unchecked Sendable {
         let log: @convention(block) (String, String) -> Void = { [weak self] level, message in
             self?.report(level: level, message: message)
         }
-        let render: @convention(block) (String, String) -> Void = { [weak self] session, json in
-            self?.deliverRender(session: session, json: json)
+        let render: @convention(block) (String, String) -> Bool = { [weak self] session, json in
+            self?.deliverRender(session: session, json: json) ?? true
         }
         let failed: @convention(block) (String, String) -> Void = { [weak self] session, message in
             guard let self else { return }
@@ -323,13 +338,21 @@ final class ExtensionRuntime: @unchecked Sendable {
         for waiter in waiters { waiter.resume() }
     }
 
-    private func deliverRender(session: String, json: String) {
-        guard let delegate else { return }
+    /// False asks the runtime to resend the tree whole, as Swift no longer holds its delta's base.
+    private func deliverRender(session: String, json: String) -> Bool {
         // Parsing a large list is the expensive part, and it belongs off the main actor.
-        guard let tree = RenderTree(json: json) else {
-            report(level: "error", message: "Could not decode the render tree for \(session).")
-            return
+        let tree: RenderTree
+        do {
+            tree = try RenderTree(json: json, reusing: renderBases[session] ?? [:])
+        } catch {
+            renderBases[session] = nil
+            if error == .malformed {
+                report(level: "error", message: "Could not decode the render tree for \(session).")
+            }
+            return false
         }
+        renderBases[session] = tree.referenceableNodes
+        guard let delegate else { return true }
         let sequence = renderSequence.withLock { value in
             value += 1
             return value
@@ -338,6 +361,7 @@ final class ExtensionRuntime: @unchecked Sendable {
             guard self.renderSequence.withLock({ $0 }) == sequence else { return }
             delegate.runtime(self, session: session, didRender: tree)
         }
+        return true
     }
 
     private func report(level: String, message: String) {
@@ -378,6 +402,7 @@ final class ExtensionRuntime: @unchecked Sendable {
             self.hostTasks.removeAll()
             self.resumeIdleWaiters()
             self.generation = UUID()
+            self.renderBases.removeAll()
             self.context = nil
             self.nodeShims.closeFiles()
         }

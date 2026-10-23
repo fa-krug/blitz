@@ -1,9 +1,10 @@
 import Foundation
+import Synchronization
 
-/// One JSON file per extension: small, read whole at launch and written rarely.
+/// One JSON file per extension, read whole on first use; writes are debounced and land off-main.
 @MainActor
 final class ExtensionStorage {
-    private struct Store: Codable {
+    private struct Store: Codable, Sendable {
         var localStorage: [String: StoredValue] = [:]
         var caches: [String: [String: String]] = [:]
         var preferences: [String: StoredValue] = [:]
@@ -76,6 +77,7 @@ final class ExtensionStorage {
     /// Writes are coalesced, so a busy `Cache` doesn't hit the disk per key.
     private var dirty: Set<String> = []
     private var flushTask: Task<Void, Never>?
+    private let disk = ExtensionStorageDisk()
 
     init(directory: URL) {
         self.directory = directory
@@ -176,9 +178,12 @@ final class ExtensionStorage {
         }
     }
 
+    /// Synchronous, so a reinstall's first read cannot find the file a queued write would leave.
     func removeAll(extension name: String) {
         stores.removeValue(forKey: name)
-        try? FileManager.default.removeItem(at: fileURL(for: name))
+        dirty.remove(name)
+        disk.enqueue([fileURL(for: name): .remove])
+        disk.drain()
     }
 
     // MARK: - Persistence
@@ -208,18 +213,67 @@ final class ExtensionStorage {
         }
     }
 
+    /// Encodes and writes off-main: a `Cache` holding fetched results runs to megabytes.
     func flush() {
+        guard queueDirtyStores() else { return }
+        let disk = self.disk
+        Task.detached(priority: .utility) { disk.drain() }
+    }
+
+    /// Termination cannot await a detached write, so whatever is still queued lands here.
+    func flushSynchronously() {
+        queueDirtyStores()
+        disk.drain()
+    }
+
+    @discardableResult
+    private func queueDirtyStores() -> Bool {
         flushTask?.cancel()
         flushTask = nil
-        let pending = dirty
-        dirty.removeAll()
-        for name in pending {
-            guard let store = stores[name], let data = try? JSONEncoder().encode(store) else { continue }
-            try? data.write(to: fileURL(for: name), options: .atomic)
+        var operations: [URL: ExtensionStorageDisk.Operation] = [:]
+        for name in dirty {
+            guard let store = stores[name] else { continue }
+            operations[fileURL(for: name)] = .write { try JSONEncoder().encode(store) }
         }
+        dirty.removeAll()
+        disk.enqueue(operations)
+        return !operations.isEmpty
     }
 
     private func fileURL(for name: String) -> URL {
         directory.appendingPathComponent("\(ExtensionCatalog.safeName(name)).json")
+    }
+}
+
+/// Only the newest operation per file is queued, and one drain runs at a time, so none reorder.
+private final class ExtensionStorageDisk: Sendable {
+    enum Operation: Sendable {
+        case write(@Sendable () throws -> Data)
+        case remove
+    }
+
+    private let queued = Mutex<[URL: Operation]>([:])
+    private let io = Mutex(())
+
+    func enqueue(_ operations: [URL: Operation]) {
+        queued.withLock { $0.merge(operations) { _, newer in newer } }
+    }
+
+    func drain() {
+        io.withLock { _ in
+            let operations = queued.withLock { queued in
+                defer { queued.removeAll() }
+                return queued
+            }
+            for (url, operation) in operations {
+                switch operation {
+                case .write(let encode):
+                    guard let data = try? encode() else { continue }
+                    try? data.write(to: url, options: .atomic)
+                case .remove:
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
     }
 }

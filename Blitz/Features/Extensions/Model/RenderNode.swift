@@ -123,6 +123,26 @@ enum RenderValue: Sendable, Hashable {
         }
     }
 
+    /// A delta's prop: the value itself, or each item of an array, is an element position.
+    fileprivate init(prop json: Any, base: [RenderNode.ID: RenderNode]) throws {
+        guard let items = json as? [Any] else {
+            self = try RenderValue(position: json, base: base)
+            return
+        }
+        self = .array(try items.map { try RenderValue(position: $0, base: base) })
+    }
+
+    /// Below a position nothing is a reference, which the runtime guarantees by sending whole.
+    private init(position json: Any, base: [RenderNode.ID: RenderNode]) throws {
+        guard let object = json as? [String: Any], object["$fn"] == nil, object["$date"] == nil,
+            let node = try RenderNode(position: object, base: base), node.isElement
+        else {
+            self = RenderValue(json: json)
+            return
+        }
+        self = .node(node)
+    }
+
     /// The format style is `Sendable`, so it can be a shared constant under strict concurrency.
     private static let fractionalISO = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
     private static let plainISO = Date.ISO8601FormatStyle()
@@ -157,6 +177,13 @@ struct RenderNode: Sendable, Hashable, Identifiable {
     }
 
     init?(json: [String: Any]) {
+        // A nil base reads nothing as a reference, so this cannot throw.
+        guard let node = try? RenderNode(json: json, base: nil) else { return nil }
+        self = node
+    }
+
+    /// `base` is set only for a delta, whose `{"$same": id}` at an element position reuses a node.
+    fileprivate init?(json: [String: Any], base: [ID: RenderNode]?) throws {
         guard let type = json["type"] as? String else { return nil }
         if type == "#text" {
             self.init(id: 0, type: type, text: json["text"] as? String ?? "")
@@ -165,10 +192,32 @@ struct RenderNode: Sendable, Hashable, Identifiable {
         guard let id = json["id"] as? Int, let rawProps = json["props"] as? [String: Any],
             let rawChildren = json["children"] as? [Any]
         else { return nil }
+        guard let base else {
+            self.init(
+                id: id, type: type,
+                props: rawProps.mapValues(RenderValue.init(json:)),
+                children: rawChildren.compactMap {
+                    ($0 as? [String: Any]).flatMap(RenderNode.init(json:))
+                })
+            return
+        }
         self.init(
             id: id, type: type,
-            props: rawProps.mapValues(RenderValue.init(json:)),
-            children: rawChildren.compactMap { ($0 as? [String: Any]).flatMap(RenderNode.init(json:)) })
+            props: try rawProps.mapValues { try RenderValue(prop: $0, base: base) },
+            children: try rawChildren.compactMap { try RenderNode(position: $0, base: base) })
+    }
+
+    /// An element position in a delta: a reference to the previous tree, or a node of its own.
+    fileprivate init?(position json: Any, base: [ID: RenderNode]) throws {
+        guard let object = json as? [String: Any] else { return nil }
+        if let reference = object["$same"] {
+            guard let id = reference as? Int, let node = base[id] else {
+                throw RenderTree.DecodeError.missingBase
+            }
+            self = node
+            return
+        }
+        try self.init(json: object, base: base)
     }
 
     // MARK: - Prop access
@@ -208,14 +257,56 @@ struct RenderTree: Sendable, Equatable {
         self.screens = screens
     }
 
+    enum DecodeError: Error {
+        case malformed
+        /// A delta named a node the previous tree did not hold, so the runtime must send it whole.
+        case missingBase
+    }
+
     init?(json: String) {
+        guard let tree = try? RenderTree(json: json, reusing: [:]) else { return nil }
+        self = tree
+    }
+
+    /// `previous` is `referenceableNodes` of the last tree decoded for this session.
+    init(json: String, reusing previous: [RenderNode.ID: RenderNode]) throws(DecodeError) {
         guard let data = json.data(using: .utf8),
             let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let children = root["children"] as? [Any]
-        else { return nil }
-        let nodes = children.compactMap { ($0 as? [String: Any]).flatMap(RenderNode.init(json:)) }
+        else { throw .malformed }
+        let base = root["delta"] as? Bool == true ? previous : nil
+        let nodes: [RenderNode]
+        do {
+            nodes = try children.compactMap { child in
+                guard let base else {
+                    return (child as? [String: Any]).flatMap(RenderNode.init(json:))
+                }
+                return try RenderNode(position: child, base: base)
+            }
+        } catch {
+            throw .missingBase
+        }
         // A no-view command renders nothing; a view command wraps every screen in `__screen`.
         screens = nodes.filter { $0.type == "__screen" }
+    }
+
+    /// Every element at a position the runtime's next delta may refer back to, by id.
+    var referenceableNodes: [RenderNode.ID: RenderNode] {
+        var nodes: [RenderNode.ID: RenderNode] = [:]
+        func walk(_ node: RenderNode) {
+            guard node.isElement else { return }
+            nodes[node.id] = node
+            node.children.forEach(walk)
+            for value in node.props.values {
+                switch value {
+                case .node(let child): walk(child)
+                case .array(let items): items.forEach { $0.nodeValue.map(walk) }
+                default: break
+                }
+            }
+        }
+        screens.forEach(walk)
+        return nodes
     }
 
     /// The screen the palette shows — the top of the navigation stack.
