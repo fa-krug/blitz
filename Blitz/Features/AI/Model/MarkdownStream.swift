@@ -10,9 +10,9 @@ struct MarkdownStream: Sendable {
     /// What `MarkdownBlock.parse` returns, reading only what follows the settled lines.
     mutating func blocks(of markdown: String, midStream: Bool) -> [MarkdownBlock] {
         let text =
-            markdown.utf8.contains(0x0D) ? markdown.replacingOccurrences(of: "\r\n", with: "\n") : markdown
+            markdown.containsUTF8(0x0D) ? markdown.replacingOccurrences(of: "\r\n", with: "\n") : markdown
         // Mid-stream decides what the end holds back, so a settled block assumed one value of it.
-        if midStream != self.midStream || !text.utf8.starts(with: settledText.utf8) {
+        if midStream != self.midStream || !text.hasUTF8Prefix(settledText) {
             settledText = ""
             settledBlocks = []
             self.midStream = midStream
@@ -26,5 +26,27 @@ struct MarkdownStream: Sendable {
             settledBlocks += read.blocks[..<read.settledBlocks]
         }
         return blocks
+    }
+}
+
+/// Raw memory reads: the generic walk over `utf8` costs a long reply's length on every update.
+extension String {
+    func hasUTF8Prefix(_ prefix: String) -> Bool {
+        let compared = utf8.withContiguousStorageIfAvailable { whole in
+            prefix.utf8.withContiguousStorageIfAvailable { part in
+                part.isEmpty
+                    || part.count <= whole.count
+                        && memcmp(whole.baseAddress!, part.baseAddress!, part.count) == 0
+            }
+        }
+        if case let compared?? = compared { return compared }
+        return utf8.starts(with: prefix.utf8)
+    }
+
+    func containsUTF8(_ byte: UInt8) -> Bool {
+        let found = utf8.withContiguousStorageIfAvailable { bytes in
+            !bytes.isEmpty && memchr(bytes.baseAddress!, Int32(byte), bytes.count) != nil
+        }
+        return found ?? utf8.contains(byte)
     }
 }

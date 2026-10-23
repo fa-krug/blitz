@@ -192,6 +192,7 @@
 		32209D5E0C692B81340DBFD0 /* WindowLayoutEditorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859C8070C3960D7C900F5B8C /* WindowLayoutEditorPanel.swift */; };
 		32C7C3C5E2CE85E1290A5DDA /* MenuSearchQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 218B511B0448D3BD8ED085E1 /* MenuSearchQuery.swift */; };
 		334B297D879271AD407F1361 /* InterfaceSize.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4978D858645BC14CF5E4E3B /* InterfaceSize.swift */; };
+		3382643E5192B2D280871084 /* ChatChoicesStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C8EC7254BD1A0D9EF54915 /* ChatChoicesStream.swift */; };
 		3384B2E67E7215555B30ED3F /* ExtensionDateExpression.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7854D2374E56E1DCE77A48 /* ExtensionDateExpression.swift */; };
 		338B5B9A8675A936898E95EB /* SnippetKeywordPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D70F51A5E8ADC5F53F9A80E6 /* SnippetKeywordPolicy.swift */; };
 		339D2C53F8F752F788E6BB9D /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF0A07BD080463B5C69CF4B /* DictionaryService.swift */; };
@@ -1733,6 +1734,7 @@
 		D70F51A5E8ADC5F53F9A80E6 /* SnippetKeywordPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetKeywordPolicy.swift; sourceTree = "<group>"; };
 		D71FCE9FF92A6CD56B262C55 /* RegionNumberFormatMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegionNumberFormatMonitor.swift; sourceTree = "<group>"; };
 		D77C1CAD13AD832AADD5A146 /* NotesWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesWindowController.swift; sourceTree = "<group>"; };
+		D7C8EC7254BD1A0D9EF54915 /* ChatChoicesStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatChoicesStream.swift; sourceTree = "<group>"; };
 		D7FC59D5E15A3B3E77790619 /* UnitCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitCategory.swift; sourceTree = "<group>"; };
 		D80DE0575FFD2F4B6A8D293A /* ExtensionRefreshState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionRefreshState.swift; sourceTree = "<group>"; };
 		D84CF024A1608995A343B504 /* EscapeKeyBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscapeKeyBehavior.swift; sourceTree = "<group>"; };
@@ -3638,6 +3640,7 @@
 				BA4067C2B09200BACEE6F7D8 /* AppleIntelligence.swift */,
 				340177756F52FB46C61A3B7B /* AskUserToolCatalog.swift */,
 				A74680D9D9E40E509A05204E /* ChatChoices.swift */,
+				D7C8EC7254BD1A0D9EF54915 /* ChatChoicesStream.swift */,
 				CAD29CBF668CF79D3D8F49B5 /* ChatCitations.swift */,
 				A022156C8104054509F1911D /* ChatFind.swift */,
 				75FC820EFACAC408930BAECE /* ChatGPTSubscription.swift */,
@@ -4402,6 +4405,7 @@
 				EB860A8C5212E1AE5A7D127A /* CameraView.swift in Sources */,
 				9E0240BB83EE5D4AAA351FCB /* ChatAttachmentReader.swift in Sources */,
 				BB48AC7A0585A734CA0B77A1 /* ChatChoices.swift in Sources */,
+				3382643E5192B2D280871084 /* ChatChoicesStream.swift in Sources */,
 				ADB24B1574FF6C540C31DD0C /* ChatCitations.swift in Sources */,
 				1014615420641AE0748D7EDC /* ChatComposerChips.swift in Sources */,
 				C8A336E471E9EC0490C72475 /* ChatComposerTextView.swift in Sources */,

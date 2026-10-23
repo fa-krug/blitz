@@ -359,9 +359,10 @@ swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /
 update at a quarter, half, three quarters and all of it, split into parse, render and layout. `full`
 parses, renders and lays out the whole reply at every update, as the text view did before
 `MarkdownStream` and `ChatMarkdownRenderCache`; `cached` runs the same three steps through them;
-`view` drives the shipped `ChatSelectableTextView`, its Copy stubbed off the shared pasteboard, with
-the transcript's `ChatChoices.split` as its parse. `--chunk` and `--sections` change the reply, and
-`--incremental-only` skips the two-minute `full` pass:
+`view` drives the shipped `ChatSelectableTextView`, its Copy stubbed off the shared pasteboard,
+handed the raw reply as the transcript hands it, so its `render` holds the choices split and the
+parse. `--chunk` and `--sections` change the reply, and `--incremental-only` skips the two-minute
+`full` pass:
 
 ```sh
 A=Blitz/Features/AI
@@ -392,7 +393,7 @@ Measured on `main`. Useful as orders of magnitude, not as contracts.
 | `palette-selection-test` | 111,684 assertions — a tripwire: a change in this count means the row-order model moved |
 | `SnippetKeywordPolicy` match | 7 µs/keystroke at 50 keywords, 59 µs at 1,000 — the `lowercased()` is 0.09 µs of it |
 | `ClipboardStore.pinnedItems` | 27–127 µs per uncached search, 1,000-row window — no cache earns its invalidation yet |
-| A streaming reply's update, at 20 KB | 0.6 ms through `MarkdownStream` and `ChatMarkdownRenderCache`, 64–89 ms whole; the view's 4 ms is mostly `ChatChoices.split`, still linear |
+| A streaming reply's update, at 20 KB | 0.5 ms through `MarkdownStream` and `ChatMarkdownRenderCache`, 64–89 ms whole; 0.95 ms in the view, its `ChatChoicesStream` split 0.04 ms (3.3 ms whole). At 78 KB the split and parse are unchanged, the render and layout reach 1.6 and 0.65 ms |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
 | Palette summon, main thread busy (`palette-benchmark`, compact off, Pop to Root immediate) | 60 ms the first after launch; then 23 ms launcher, 52 ms clipboard, 52 ms emoji (a screen swap mounts the list); a close 17 ms untouched, 26 ms after moving, 38–42 ms from clipboard or emoji, which Pop to Root swaps back to the launcher off screen |

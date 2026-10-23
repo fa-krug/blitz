@@ -842,6 +842,7 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/AIToolJSON.swift \
                            Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
+                           Blitz/Features/AI/Model/ChatChoicesStream.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \

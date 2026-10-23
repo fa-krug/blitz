@@ -326,7 +326,7 @@ private struct ChatMessageView: View, @MainActor Equatable {
                         switch segment {
                         case .text(let text):
                             ChatMarkdownText(
-                                markdown: ChatChoices.split(text).text,
+                                markdown: text, hidesChoices: true,
                                 midStream: message.isArriving(segmentAt: offset, of: segments.count),
                                 failsLastBlock: message.state == .failed && offset == segments.count - 1)
                         case .search(let search):

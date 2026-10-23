@@ -117,13 +117,11 @@ struct ChatMarkdownPerformance {
         for piece in pieces {
             text += piece
             var timing = Timing()
-            var markdown = ""
-            timing.parse = milliseconds { markdown = ChatChoices.split(text).text }
             timing.render = milliseconds {
                 view.show(
                     ChatMarkdownInput(
-                        markdown: markdown, midStream: true, failsLastBlock: false, highlight: nil,
-                        citations: [:], prefix: [0], metrics: .standard))
+                        markdown: text, hidesChoices: true, midStream: true, failsLastBlock: false,
+                        highlight: nil, citations: [:], prefix: [0], metrics: .standard))
             }
             timing.layout = milliseconds {
                 let size = view.measure(width: width)
@@ -131,7 +129,7 @@ struct ChatMarkdownPerformance {
             }
             timings.append((text.utf8.count, timing))
         }
-        report("view (parse = choices split, render = show, layout = measure and resize)", timings)
+        report("view (render = show with its choices split, layout = measure and resize)", timings)
     }
 
     static func report(_ name: String, _ timings: [(bytes: Int, timing: Timing)]) {
