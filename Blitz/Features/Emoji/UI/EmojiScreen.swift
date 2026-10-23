@@ -10,10 +10,8 @@ struct EmojiScreen: PaletteScreen {
     let tone: EmojiSkinTone
     let defaultColumns: EmojiGridColumns
     let openActions: () -> Void
-    /// Resolved in `init`: the palette reads it several times per event, and it spans the catalog.
-    private let sections: [EmojiGridSection]
-    /// Flat grid order across sections — what the selection indexes.
-    let rows: [EmojiEntry]
+    /// Built on first read, then kept: one event reads the grid several times, across the catalog.
+    private let grid = GridMemo()
 
     init(
         index: EmojiIndex, frequent: FrequentEmojiStore, pinned: PinnedEmojiStore, core: AppCore,
@@ -28,19 +26,23 @@ struct EmojiScreen: PaletteScreen {
         self.tone = tone
         self.defaultColumns = defaultColumns
         self.openActions = openActions
-        sections = Self.sections(
-            index: index, frequent: frequent, pinned: pinned, vm: vm,
-            columns: vm.emojiGridColumnsOverride ?? defaultColumns)
-        rows = sections.flatMap(\.entries)
     }
 
-    private static func sections(
-        index: EmojiIndex, frequent: FrequentEmojiStore, pinned: PinnedEmojiStore, vm: PaletteState,
-        columns: EmojiGridColumns
-    ) -> [EmojiGridSection] {
-        EmojiGrid.sections(
+    private var sections: [EmojiGridSection] {
+        if let sections = grid.sections { return sections }
+        let sections = EmojiGrid.sections(
             query: vm.query, index: index, frequent: frequent, pinned: pinned,
             filter: vm.emojiCategoryFilter, columns: columns)
+        grid.sections = sections
+        return sections
+    }
+
+    /// Flat grid order across sections — what the selection indexes.
+    var rows: [EmojiEntry] {
+        if let rows = grid.rows { return rows }
+        let rows = sections.flatMap(\.entries)
+        grid.rows = rows
+        return rows
     }
 
     private var columns: EmojiGridColumns {
@@ -198,11 +200,9 @@ struct EmojiScreen: PaletteScreen {
         } else if isBrowsing, vm.emojiCategoryFilter == .all {
             vm.selection = max(vm.selection + (position == nil ? 1 : -1), 0)
         } else if vm.emojiCategoryFilter == .pinned {
-            // Counted afresh: `rows` predates the toggle.
-            let count = Self.sections(
-                index: index, frequent: frequent, pinned: pinned, vm: vm, columns: columns
-            ).reduce(0) { $0 + $1.entries.count }
-            vm.selection = min(vm.selection, max(count - 1, 0))
+            // Counted afresh: the memo may predate the toggle.
+            grid.reset()
+            vm.selection = min(vm.selection, max(rows.count - 1, 0))
         }
     }
 
@@ -293,5 +293,17 @@ enum EmojiActionsMenu {
             ) { zoom(.zoomOut) }
         ])
         return PopoverMenuContent(header: entry.displayName, items: items)
+    }
+}
+
+/// A screen is rebuilt per render, so its grid lives exactly as long as one render's reads.
+@MainActor
+private final class GridMemo {
+    var sections: [EmojiGridSection]?
+    var rows: [EmojiEntry]?
+
+    func reset() {
+        sections = nil
+        rows = nil
     }
 }
