@@ -80,6 +80,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     @ObservationIgnored private var paginationLatch = ExtensionPagination.Latch()
     @ObservationIgnored private var treeRevision = 0
     @ObservationIgnored private var screenMemo: (revision: Int, query: String, screen: ExtensionScreen)?
+    @ObservationIgnored private var searchIndexMemo: (revision: Int, index: ExtensionSearchIndex)?
     @ObservationIgnored private var lastOAuthExtensionName: String?
     @ObservationIgnored private var lastLaunch: ExtensionLaunch?
     /// What the foreground command logged, for Copy Error.
@@ -104,6 +105,12 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         // Not gated on `isEnabled`: a stranded workspace is ours whether or not the feature is on.
         let temp = FileManager.default.temporaryDirectory
         Task.detached(priority: .utility) { ExtensionCleanup.sweepWorkspaces(in: temp) }
+    }
+
+    /// A running command's last writes are still debounced, and nothing stops it before exit.
+    func prepareForTermination() {
+        storage.flushSynchronously()
+        commandMetadata.flush()
     }
 
     // MARK: - The switches
@@ -946,9 +953,17 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     func screen(query: String) -> ExtensionScreen {
         guard case .rendered(let tree) = state else { return .empty }
         if let memo = screenMemo, memo.revision == treeRevision, memo.query == query { return memo.screen }
-        let screen = ExtensionScreen(tree: tree, query: query)
+        let screen = ExtensionScreen(tree: tree, query: query, searchIndex: searchIndex(for:))
         screenMemo = (treeRevision, query, screen)
         return screen
+    }
+
+    /// Built on the first keystroke after a commit, then reused until the tree changes.
+    private func searchIndex(for tree: RenderTree) -> ExtensionSearchIndex {
+        if let memo = searchIndexMemo, memo.revision == treeRevision { return memo.index }
+        let index = ExtensionSearchIndex(tree)
+        searchIndexMemo = (treeRevision, index)
+        return index
     }
 
     /// Pops the extension's stack; false when there is nothing to pop and the palette should close.

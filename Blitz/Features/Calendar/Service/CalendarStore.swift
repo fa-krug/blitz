@@ -8,7 +8,20 @@ final class CalendarStore {
     /// Flattened occurrences over `span`, newest query wins.
     private(set) var events: [MeetingEvent] = []
     private(set) var calendars: [MeetingCalendar] = []
-    private(set) var access: CalendarAccess = Permissions.calendarAccess()
+    /// Asked on first read, not at launch: the TCC answer is an XPC round trip.
+    private(set) var access: CalendarAccess {
+        get {
+            access(keyPath: \.access)
+            if let knownAccess { return knownAccess }
+            let current = Permissions.calendarAccess()
+            knownAccess = current
+            return current
+        }
+        set {
+            withMutation(keyPath: \.access) { knownAccess = newValue }
+        }
+    }
+    @ObservationIgnored private var knownAccess: CalendarAccess?
     /// The details page's meeting, re-read with every reload so an edit never shows stale.
     private(set) var details: MeetingDetails?
 

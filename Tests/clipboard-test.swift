@@ -8,12 +8,12 @@ struct ClipboardTests {
     static var failures = 0
     static var passes = 0
 
-    static func main() {
+    static func main() async {
         pinOrder()
         unpinRejoinsAsNewest()
         pasteLeavesPinsAlone()
-        pinsSurvivePruningAndTheWindow()
-        pinsLeadFilteredSearches()
+        await pinsSurvivePruningAndTheWindow()
+        await pinsLeadFilteredSearches()
         pinnedSlotResolutionUsesVisiblePins()
         landingSkipsThePins()
         textFormClassification()
@@ -23,24 +23,24 @@ struct ClipboardTests {
         colorFormatsRoundTrip()
         typeFilterSplitsTheHistory()
         typeFilterJoinsTheSearchMemo()
-        persistence()
-        exportSeesPastTheMemoryWindow()
-        importedImagesArriveOnce()
-        imageCopiesLeaveWithTheirBlob()
-        orphanedCopiesAreSweptOnLoad()
+        await persistence()
+        await exportSeesPastTheMemoryWindow()
+        await importedImagesArriveOnce()
+        await imageCopiesLeaveWithTheirBlob()
+        await orphanedCopiesAreSweptOnLoad()
         multiFileCopyMakesOneRowEach()
         referencedFilesOutliveTheirRows()
         filePathsAreNeverATextForm()
         fileEntriesAreFoundByNameAndFolder()
         fileKindClassification()
-        importedFilesArriveOncePerPath()
+        await importedFilesArriveOncePerPath()
         defaultActionChords()
         plainTextSkipsTheFile()
         offersTextExtraction()
-        renamedEntriesAreFoundByTitle()
-        titlesReachPastTheWindowAndThroughBackups()
-        editingKeepsTheRowAndItsDerivedText()
-        richFormatsArePersistedAndOwned()
+        await renamedEntriesAreFoundByTitle()
+        await titlesReachPastTheWindowAndThroughBackups()
+        await editingKeepsTheRowAndItsDerivedText()
+        await richFormatsArePersistedAndOwned()
         richFormatsLeaveWithTheirRows()
         linksAndAddressesOpen()
 
@@ -113,11 +113,11 @@ struct ClipboardTests {
     }
 
     /// Retention sweeps everything around a pin but never the pin itself.
-    static func pinsSurvivePruningAndTheWindow() {
-        withStore { store, dir in
+    static func pinsSurvivePruningAndTheWindow() async {
+        await withStore { store, dir in
             // Older than the case's 1-day retention, inside the default the import prunes against.
             let old = Date().addingTimeInterval(-2 * 86_400)
-            _ = store.importEntries([
+            _ = await store.importEntries([
                 entry("ancient-pinned", at: old),
                 entry("ancient-loose", at: old.addingTimeInterval(1)),
                 entry("fresh", at: Date())
@@ -133,7 +133,7 @@ struct ClipboardTests {
             // Reopen: the pin must come back even though it is far outside the retention window.
             let reopened = ClipboardStore(directory: dir)
             reopened.maxAge = 86_400
-            reopened.load()
+            await reopened.load()
             expect(
                 Set(texts(reopened)) == ["ancient-pinned", "fresh"],
                 "a pin outlives retention across a relaunch")
@@ -141,8 +141,8 @@ struct ClipboardTests {
     }
 
     /// A pin must lead a filtered search even when the FTS statement's LIMIT cannot reach it.
-    static func pinsLeadFilteredSearches() {
-        withStore { store, _ in
+    static func pinsLeadFilteredSearches() async {
+        await withStore { store, _ in
             var seed: [ClipboardItem] = []
             let base = Date().addingTimeInterval(-10_000)
             // The pinned hit is the oldest of 260 matches; the FTS statement stops at 200.
@@ -150,7 +150,7 @@ struct ClipboardTests {
             for i in 1...259 {
                 seed.append(entry("haystack filler \(i)", at: base.addingTimeInterval(Double(i))))
             }
-            _ = store.importEntries(seed)
+            _ = await store.importEntries(seed)
             store.togglePinned(item(store, "needle in the haystack"))
 
             let results = store.search("haystack", filter: .all)
@@ -525,8 +525,8 @@ struct ClipboardTests {
     }
 
     /// Pin stamps and their order survive a reopen.
-    static func persistence() {
-        withStore { store, dir in
+    static func persistence() async {
+        await withStore { store, dir in
             store.addText("first", sourceBundleID: nil)
             store.addText("second", sourceBundleID: nil)
             store.addText("third", sourceBundleID: nil)
@@ -534,7 +534,7 @@ struct ClipboardTests {
             store.togglePinned(item(store, "first"))
 
             let reopened = ClipboardStore(directory: dir)
-            reopened.load()
+            await reopened.load()
             expect(
                 texts(reopened) == ["third", "first", "second"],
                 "pin order is restored from disk, not recomputed from recency")
@@ -546,16 +546,16 @@ struct ClipboardTests {
             expect(texts(reopened) == ["first"], "Clear History spares the pin")
 
             let afterClear = ClipboardStore(directory: dir)
-            afterClear.load()
+            await afterClear.load()
             expect(texts(afterClear) == ["first"], "and the unpinned rows are gone from disk")
         }
     }
 
     /// A backup reads the whole table, not `items` — which stops at the memory window.
-    static func exportSeesPastTheMemoryWindow() {
-        withStore { store, _ in
+    static func exportSeesPastTheMemoryWindow() async {
+        await withStore { store, _ in
             let total = 1_200
-            store.importEntries(
+            await store.importEntries(
                 (0..<total).map {
                     ClipboardItem(
                         id: UUID(), kind: .text, text: "entry \($0)", imagePath: nil,
@@ -576,8 +576,8 @@ struct ClipboardTests {
     }
 
     /// Importing one backup twice must not leave a second copy of every image.
-    static func importedImagesArriveOnce() {
-        withStore { store, dir in
+    static func importedImagesArriveOnce() async {
+        await withStore { store, dir in
             let staging = dir.appendingPathComponent("staged", isDirectory: true)
             try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
             let blob = staging.appendingPathComponent("blob.png")
@@ -589,7 +589,7 @@ struct ClipboardTests {
                     inDatabaseAt: store.dbURL, adoptingImagesInto: store.imagesDir, [staged])
                 expect(inserted == (pass == 1 ? 1 : 0), "pass \(pass) inserts \(2 - pass) row(s)")
             }
-            store.load()
+            await store.load()
             expect(store.items.count == 1, "the second import adds no row")
             let images =
                 (try? FileManager.default.contentsOfDirectory(atPath: store.imagesDir.path)) ?? []
@@ -597,9 +597,9 @@ struct ClipboardTests {
         }
     }
 
-    static func imageCopiesLeaveWithTheirBlob() {
+    static func imageCopiesLeaveWithTheirBlob() async {
         for way in ["removing", "clearing history", "a retention cut"] {
-            withStore { store, dir in
+            await withStore { store, dir in
                 let blob = dir.appendingPathComponent("blob.png")
                 try? Data("png".utf8).write(to: blob)
                 let staged = ClipboardItem(
@@ -608,7 +608,7 @@ struct ClipboardTests {
                 expect(!store.ownsImage(of: staged), "an image outside the store gets no copies")
                 _ = ClipboardStore.importStoredItems(
                     inDatabaseAt: store.dbURL, adoptingImagesInto: store.imagesDir, [staged])
-                store.load()
+                await store.load()
                 guard let item = store.items.first, let url = store.imageURL(for: item) else {
                     return expect(false, "the adopted image is listed")
                 }
@@ -631,8 +631,8 @@ struct ClipboardTests {
     }
 
     /// A quit before a queued copy delete runs leaves orphaned copies; the next load sweeps them.
-    static func orphanedCopiesAreSweptOnLoad() {
-        withStore { store, dir in
+    static func orphanedCopiesAreSweptOnLoad() async {
+        await withStore { store, dir in
             let blob = dir.appendingPathComponent("kept.png")
             try? Data("png".utf8).write(to: blob)
             _ = ClipboardStore.importStoredItems(
@@ -646,7 +646,7 @@ struct ClipboardTests {
                 at: ImageDerivative.folder(beside: kept[0]), withIntermediateDirectories: true)
             for copy in kept + orphans { try? Data("copy".utf8).write(to: copy) }
 
-            store.load()
+            await store.load()
             ImageDerivative.queue.sync {}
             expect(noneExist(orphans.map(\.path)), "a copy whose blob is gone is swept on load")
             expect(
@@ -727,12 +727,14 @@ struct ClipboardTests {
     }
 
     /// `importKey` must key a file row off its path, or every file collides into one row.
-    static func importedFilesArriveOncePerPath() {
-        withStore { store, _ in
+    static func importedFilesArriveOncePerPath() async {
+        await withStore { store, _ in
             let a = ClipboardItem(filePath: "/tmp/one.pdf", sourceBundleID: nil)
             let b = ClipboardItem(filePath: "/tmp/two.pdf", sourceBundleID: nil)
-            expect(store.importEntries([a, b]) == 2, "two distinct paths import as two rows")
-            expect(store.importEntries([a]) == 0, "and re-importing one adds nothing")
+            let both = await store.importEntries([a, b])
+            expect(both == 2, "two distinct paths import as two rows")
+            let again = await store.importEntries([a])
+            expect(again == 0, "and re-importing one adds nothing")
             expect(
                 store.items.allSatisfy { $0.imagePath == nil },
                 "an imported file row is never adopted into imagesDir")
@@ -802,8 +804,8 @@ struct ClipboardTests {
 
     // MARK: - Titles, edits and rich text
 
-    static func renamedEntriesAreFoundByTitle() {
-        withStore { store, dir in
+    static func renamedEntriesAreFoundByTitle() async {
+        await withStore { store, dir in
             store.addText("4111 2222 3333", sourceBundleID: nil)
             store.addText("unrelated", sourceBundleID: nil)
             store.setTitle("  Card number  ", for: item(store, "4111 2222 3333"))
@@ -820,7 +822,7 @@ struct ClipboardTests {
             expect(matches(store, "a_b") == ["x1"], "a typed underscore is literal, not a wildcard")
 
             let reopened = ClipboardStore(directory: dir)
-            reopened.load()
+            await reopened.load()
             expect(item(reopened, "4111 2222 3333").title == "Card number", "a title is persisted")
             reopened.setTitle("   ", for: item(reopened, "4111 2222 3333"))
             expect(item(reopened, "4111 2222 3333").title == nil, "a blank rename clears it")
@@ -838,10 +840,10 @@ struct ClipboardTests {
         }
     }
 
-    static func titlesReachPastTheWindowAndThroughBackups() {
-        withStore { store, _ in
+    static func titlesReachPastTheWindowAndThroughBackups() async {
+        await withStore { store, _ in
             let total = 1_100
-            store.importEntries(
+            await store.importEntries(
                 (0..<total).map {
                     ClipboardItem(
                         id: UUID(), kind: .text, text: "entry \($0)", imagePath: nil,
@@ -863,19 +865,19 @@ struct ClipboardTests {
             }
             expect(exported == ["Zebra crossing"], "a backup reads the title with its row")
         }
-        withStore { store, _ in
+        await withStore { store, _ in
             let restored = ClipboardItem(
                 id: UUID(), kind: .text, text: "restored", imagePath: nil, createdAt: Date(),
                 sourceBundleID: nil, title: "From backup")
             _ = ClipboardStore.importStoredItems(inDatabaseAt: store.dbURL, [restored])
-            store.load()
+            await store.load()
             expect(item(store, "restored").title == "From backup", "a restore brings the title back")
         }
     }
 
     /// Edit Text rewrites the row in place, so nothing keyed to it is lost.
-    static func editingKeepsTheRowAndItsDerivedText() {
-        withStore { store, dir in
+    static func editingKeepsTheRowAndItsDerivedText() async {
+        await withStore { store, dir in
             store.addText("first draft", sourceBundleID: nil)
             store.addText("newest", sourceBundleID: nil)
             let original = item(store, "first draft")
@@ -903,13 +905,13 @@ struct ClipboardTests {
                 "the row's recognized text survives the edit")
 
             let reopened = ClipboardStore(directory: dir)
-            reopened.load()
+            await reopened.load()
             expect(texts(reopened) == ["second draft", "newest"], "the edit is persisted")
         }
     }
 
-    static func richFormatsArePersistedAndOwned() {
-        withStore { store, dir in
+    static func richFormatsArePersistedAndOwned() async {
+        await withStore { store, dir in
             let flavours: [ClipboardRichFormat: Data] = [
                 .rtf: Data("{\\rtf1 bold}".utf8), .html: Data("<b>bold</b>".utf8)
             ]
@@ -927,7 +929,7 @@ struct ClipboardTests {
                 "the bytes land as captured")
 
             let reopened = ClipboardStore(directory: dir)
-            reopened.load()
+            await reopened.load()
             expect(item(reopened, "bold").formats == written, "the flavours survive a relaunch")
 
             let again = ClipboardStore.writeFormats(flavours, into: reopened.formatsDirectory)
@@ -1028,6 +1030,12 @@ struct ClipboardTests {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         body(ClipboardStore(directory: dir), dir)
+    }
+
+    static func withStore(_ body: (ClipboardStore, URL) async -> Void) async {
+        let dir = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await body(ClipboardStore(directory: dir), dir)
     }
 
     static func scratchDirectory() -> URL {

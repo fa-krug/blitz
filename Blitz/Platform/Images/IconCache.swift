@@ -88,7 +88,7 @@ enum IconCache {
     // One entry per file, not per file and size: resizing must replace rows, never accumulate them.
     private static let rowCache: RowCache = {
         let cache = RowCache()
-        cache.totalCostLimit = 8 * 1024 * 1024
+        cache.totalCostLimit = 6 * 1024 * 1024
         return cache
     }()
 
@@ -96,7 +96,7 @@ enum IconCache {
 
     private static let cache: Cache = {
         let cache = Cache()
-        cache.totalCostLimit = 32 * 1024 * 1024
+        cache.totalCostLimit = 12 * 1024 * 1024
         return cache
     }()
 

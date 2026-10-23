@@ -38,7 +38,7 @@ struct ClipboardThumbnailTests {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = ClipboardStore(directory: dir.appendingPathComponent("store"))
-        let item = adopt("shot.png", color: .systemRed, into: store, from: dir)
+        let item = await adopt("shot.png", color: .systemRed, into: store, from: dir)
         guard let url = store.imageURL(for: item), let copy = ImageDerivative.covering(url, maxPixel: 64)
         else { return fail("\(way): the adopted image has a row copy") }
         let helper = script(in: dir, sleeping: 0.6)
@@ -61,8 +61,8 @@ struct ClipboardThumbnailTests {
         let dir = scratchDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = ClipboardStore(directory: dir.appendingPathComponent("store"))
-        let jpeg = adopt("shot.jpg", color: .systemRed, into: store, from: dir)
-        let png = adopt("shot.png", color: .systemBlue, into: store, from: dir)
+        let jpeg = await adopt("shot.jpg", color: .systemRed, into: store, from: dir)
+        let png = await adopt("shot.png", color: .systemBlue, into: store, from: dir)
         let helper = script(in: dir, sleeping: 0)
         var copies: [URL] = []
         for item in [jpeg, png] {
@@ -181,14 +181,14 @@ struct ClipboardThumbnailTests {
 
     static func adopt(
         _ name: String, color: NSColor, into store: ClipboardStore, from dir: URL
-    ) -> ClipboardItem {
+    ) async -> ClipboardItem {
         let staged = dir.appendingPathComponent("staged-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: staged, withIntermediateDirectories: true)
         let blob = image(name, color: color, in: staged)
         _ = ClipboardStore.importStoredItems(
             inDatabaseAt: store.dbURL, adoptingImagesInto: store.imagesDir,
             [ClipboardItem(imagePath: blob.path, sourceBundleID: nil)])
-        store.load()
+        await store.load()
         guard let item = store.items.first(where: { $0.imagePath?.hasSuffix("/" + name) == true }) else {
             fail("\(name) is adopted")
             exit(1)

@@ -23,6 +23,7 @@ struct LauncherList: View {
     /// The `Use "…" with` section, always last; nil when nothing is typed.
     var fallbacks: FallbackSection?
     @Environment(RunningAppsMonitor.self) private var runningApps
+    @Environment(PaletteState.self) private var palette
 
     /// What the fallback section draws and where its rows go, addressed by position.
     struct FallbackSection {
@@ -197,6 +198,11 @@ struct LauncherList: View {
                     // Snap to the origin on the first row so its header shows too.
                     .scrollFollowsSelection(
                         scroll, row: selectedRowID, atOrigin: firstRowSelected, proxy: proxy)
+                    .onScrollGeometryChange(for: Bool.self) {
+                        abs($0.contentOffset.y + $0.contentInsets.top) < 0.5
+                    } action: {
+                        palette.launcherListAtOrigin = $1
+                    }
                 }
             }
         }

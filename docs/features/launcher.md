@@ -684,13 +684,18 @@ persistence and both reset paths; see the command in `development.md`.
 Launcher rows and compact favorites ask for the point size they actually draw at, scaled by the
 view's `displayScale`: 24/26/29pt becomes 48/52/58px at 2×. `IconCache` still rasterizes through its
 96px canvas first — AppKit picks the representation and the drop shadow from that size — and then
-keeps only the row-sized bitmap, in an 8 MB cost-capped row cache separate from the 32 MB one.
+keeps only the row-sized bitmap, in a 6 MB cost-capped row cache separate from the 12 MB one.
 
 That cache holds **one size per path and stamp**: switching interface size replaces each entry
 rather than accumulating all three. A lookup carrying a different size is a miss, so a row can never
 paint a bitmap meant for another layout. Everything else — settings, symbols, artwork — keeps the
-96px path and the persistent 32 MB cache. Fitted file-row icons keep their own transient 8 MB cache,
-purged when its palette list disappears.
+96px path and the persistent 12 MB cache, about 340 icons at 36 KB each. Fitted file-row icons keep
+their own transient 8 MB cache, purged when its palette list disappears.
+
+Every image cache in the app fits one budget: 28 MB survives a palette close (these two, the
+clipboard's two 4 MB row-tile caches and 2 MB of extension icons) and 40 MB more lives only while
+the palette is up (fitted icons, the 8 MB image and 16 MB file previews, 8 MB of extension images).
+At most 68 MB in all, so a full set still leaves the app under its 100 MB.
 
 A file-icon key carries a `FileIconStamp` as well as the path — the bundle's own modification and
 attribute dates plus its `Icon\r` — because pasting a custom icon in Finder leaves the bundle's

@@ -98,8 +98,28 @@ together rather than filtering a list it has already decoded whole. Rejected pat
 the cap, and even a rejected modern file URL suppresses the legacy filenames fallback. The uncapped
 `PasteboardFiles.urls(on:)` that attachments use is the same reader with no limit and no test.
 
-`ClipboardManager` runs a 0.5s `Timer` watching `NSPasteboard.general.changeCount`. To avoid
-re-capturing Blitz's own writes, every write stamps a private `internalType` marker on the
+`ClipboardManager` runs a `Timer` watching `NSPasteboard.general.changeCount`, on one of three
+tiers from `pollInterval(sinceActivity:screensAsleep:)`: every 0.5s for 30 seconds after the last
+activity, every 2s once the board has sat still that long, and every 15s while the screens sleep.
+Activity is a change the poll saw, an app switch, a palette summon or the screens waking. Copying
+clusters around switching apps, so a switch keeps the next copy on the fast tier; idle, the app
+wakes once every two seconds instead of twice a second.
+
+Three things read the board at once instead of waiting for a tick, so a slower tier never shows
+stale history. `PaletteWindowController.show()` calls `paletteDidShow()`, so a summon lists a copy
+made a moment before. `NSWorkspace.didActivateApplicationNotification` drains the board first and
+attributes what it finds to the app that was in front until the switch: by the time the switch is
+reported the new app is frontmost, and a copy made in an app under `clipboardDisabledApps` must
+not be recorded under whichever app comes next. The screens waking drains too.
+
+**The trade is rapid copies on a slow tier.** `changeCount` says only that something changed, so
+two copies inside one interval keep the second and drop the first. That needs a copy, then another
+in the same app within two seconds, after half a minute with no copy, switch or summon (within
+fifteen while the screens sleep, when only a script can copy): once one copy lands, the fast tier
+is back for the next 30 seconds. Nothing else can be lost, since every
+Blitz write still drains first.
+
+To avoid re-capturing Blitz's own writes, every write stamps a private `internalType` marker on the
 pasteboard and the poller skips anything carrying it.
 
 A ⌘C Blitz sends to read a selection can't carry that marker, since the other app writes it.
@@ -107,7 +127,7 @@ A ⌘C Blitz sends to read a selection can't carry that marker, since the other 
 between, and the restore's baseline keeps the copy from being recorded once it resumes.
 `TextInjector` refuses a second borrow while one is in flight, so the pause is never nested.
 
-`stop()` is the off switch: it drops the timer and the fast-user-switching observers, and clears the
+`stop()` is the off switch: it drops the timer and the workspace observers, and clears the
 `isCapturing` flag that `prepareForBlitzPasteboardMutation` reads — so a paste Blitz performs
 itself does not drain the pasteboard into history either.
 
@@ -130,7 +150,11 @@ A database that won't open is deleted and recreated (worst case the store degrad
 in-memory history).
 
 Image capture (TIFF→PNG re-encode + blob write) runs off the main actor via detached tasks; row
-inserts, original-text search, and pruning stay on the main actor.
+inserts, original-text search, and capture-time pruning stay on the main actor. `load` is the
+exception: the retention cut made while Blitz was quit and the window read run detached, on a
+connection of their own, and only the result is published on main — 5.5 ms of stall at 5,000 rows,
+39 ms with 1,000 expired, before. A capture landing meanwhile waits on the 5 s busy timeout both
+connections carry rather than failing, and the read repeats if `items` changed under it.
 Image copy uses Foundation’s `mappedIfSafe` hint before publishing the original PNG, its file URL
 and marker. The file URL is what a terminal pastes, as the path, since it ignores image data; there
 is deliberately no `.string`, which a rich text field would take over the image.
@@ -140,7 +164,7 @@ is deliberately no `.string`, which a rich text field would take over the image.
 write the `ImageDerivative` copy it needs, 256px for a row or 1080px for the preview, to
 `images/.thumbnails/` (excluded from backup); later draws decode those. Without a readable copy — a
 failed or timed-out helper, an original no larger than the copy, or a size past 1080px — the app
-decodes the original itself, unless the tile was scrolled away first. The preview cache is 8 MB, like the rows', since a preview is a copy.
+decodes the original itself, unless the tile was scrolled away first. The preview cache is 8 MB and the rows' 4 MB, since a preview is a copy.
 Copies are made and deleted on one serial `ImageDerivative.queue`, so a copy's delete waits out the
 copy in flight; the blob itself is still deleted at once. The helper's wait runs on that queue, off
 the cooperative pool, with a 10 s deadline and the caller's cancellation. `load` sweeps copies whose
@@ -164,7 +188,7 @@ handed in are already the ones to keep, as the Raycast import's are.
 
 **The load query is deliberately two indexed branches**, not one `pinned_at IS NOT NULL OR rowid >= ?`.
 It fetches every pinned row plus the newest `memoryWindow` unpinned ones, keyed off the floor rowid
-that `windowFloor` looks up. The planner cannot drive an `OR` from an index while preserving row
+that `windowFloorSQL` looks up. The planner cannot drive an `OR` from an index while preserving row
 order, so the single-predicate form reads the whole table instead. The floor is 0 — meaning no floor,
 load everything — while the history is shorter than the window.
 
@@ -481,8 +505,8 @@ a no-op. They are fixed to the physical number row, with ⌘1…⌘9 then ⌘0 a
 `load` reads every pinned row plus the newest 1000 unpinned ones as two indexed branches over a
 partial index on `pinned_at` (`Tests/clipboard-test.swift` covers the shape). The single
 `pinned_at IS NOT NULL OR rowid >= ?` form reads better but cannot be driven from an index while
-holding row order, so it scans the whole table — ~12ms against ~1ms at 200k rows, on the main actor
-at launch.
+holding row order, so it scans the whole table — ~12ms against ~1ms at 200k rows, on the launch
+read.
 
 ## Referenced files
 
@@ -586,7 +610,7 @@ entry — text, image or file — into `PaletteCoordinator.targetApp` through `P
 writes nothing, so the same press moves on to the next entry.
 
 **A press drains the poller before it writes**, through `prepareForBlitzPasteboardMutation`. A
-copy made inside the 0.5s poll interval would otherwise be overwritten unrecorded, and the walk
+copy made inside the poll interval would otherwise be overwritten unrecorded, and the walk
 would start one entry too old.
 
 **What keeps a walk going is the pasteboard count its own write left.** Any other count means the

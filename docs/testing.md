@@ -210,11 +210,40 @@ search result that navigates and then sits there.
 
 ## Performance measurement
 
-`Platform/Signposts.swift` emits intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.start`,
-`AppIndex.scan`, `AppIndex.rank`, `PaletteWindowController.show`, `UninstallScanner.discover` and
-`UninstallScanner.measure`, `FileSearchService.search`, `ScreenshotService.search`,
+`Platform/Signposts.swift` emits intervals on the `de.fa-krug.blitz.perf` subsystem: `AppCore.init`
+(the whole construction, which `BlitzApp.body` triggers before `applicationDidFinishLaunching`),
+`AppCore.start`, `AppIndex.scan`, `AppIndex.rank`, `PaletteWindowController.show`,
+`UninstallScanner.discover` and `UninstallScanner.measure`, `FileSearchService.search`, `ScreenshotService.search`,
 `ContactsStore.fetch` and `Notes.search`. Open the Time Profiler or `os_signpost` instrument in
 Instruments and filter to that subsystem; nothing needs recompiling.
+
+**Profile a launch from a renamed copy.** `xctrace record --launch` handed `Blitz Dev.app` profiles
+whichever `Blitz Dev` LaunchServices has registered — typically Xcode's own DerivedData build — and
+leaves that process running. Copy the app, rename its executable and `CFBundleExecutable`, give it a
+bundle id of its own, re-sign it ad hoc (`codesign --force --deep --sign -`), check the process path
+in `xctrace export --toc`, and pass preferences as `-key value` arguments. `AppCore.init` can begin
+before the recorder does, so its interval sometimes arrives as an `End` alone; Time Profiler samples
+miss time blocked in XPC, which only System Trace's `syscall` table shows.
+
+**The palette benchmark** drives a real palette and needs no Accessibility grant, so it runs with the
+screen locked. `Scripts/palette-benchmark/run.sh build <name>` keeps an optimized dev-channel build of
+the checkout as `<name>`; `compare` injects `driver.m` into each named build, summons through the app
+delegate's URL entry point, posts real key events into the panel and records how long the main run
+loop stays awake per action, then prints the median of every run, interleaved across builds:
+
+```sh
+Scripts/palette-benchmark/run.sh build before      # on the base commit
+Scripts/palette-benchmark/run.sh build after       # on the change
+BLITZ_BENCH_ARGS="-compactMode NO -popToRootTimeout 0" \
+    Scripts/palette-benchmark/run.sh compare launcher 3 before after
+```
+
+`launcher` types, deletes, steps and closes; `modes` summons Clipboard History and the emoji picker;
+`scroll` runs the selection 30–40 rows down each. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
+which overrides the dev channel's own preferences for the run without writing them. Every action also
+emits a `palette-benchmark` Points of Interest interval, so a Time Profiler recording attached to the
+process (`xctrace record --attach <pid>`) can be cut down to one kind of action. Another process
+already holding ktrace — a second recording, say — leaves the trace with no samples.
 
 None of the benchmarks below join the suite, so each is registered in `run-tests.sh` as `run index`
 instead: `--index` hands it editor flags without queueing it, and without that entry nothing in the
@@ -317,6 +346,42 @@ swiftc -O -swift-version 6 Blitz/Platform/{Signposts,Appearance,NotificationToke
 /tmp/notes-editor-performance
 ```
 
+`Tests/ext-performance.swift` times the extension engine where a large list strains it: booting a
+fresh runtime, a one-row update of a 1,000-row list (the JS commit, the hop to the main actor, and the
+decode of a whole commit against a delta), local filtering per keystroke with and without the
+per-tree search index, and the main-actor share of a 1 MB and a 5 MB storage flush. It compiles the
+engine sources `ext-test` does — `X` in `run-tests.sh`, read from there so the list stays single —
+and `EXT_PERF_ROWS` changes the list size. Timings swing with machine load, so compare two builds
+back to back rather than against numbers quoted elsewhere:
+
+```sh
+E=Blitz/Features/Extensions L=Blitz/Features/Launcher/Model
+eval "$(sed -n '/^X="/,/"$/p' Scripts/run-tests.sh)"
+swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /tmp/ext-performance
+/tmp/ext-performance
+```
+
+`Tests/chat-markdown-performance.swift` streams a 20 KB reply from `Tests/chat-markdown-fixture.swift`
+— headings, lists, code in five languages, inline and display math, tables and quotes — in
+16-character updates, about what `AIChatState` flushes every 40 ms, and prints the mean cost of an
+update at a quarter, half, three quarters and all of it, split into parse, render and layout. `full`
+parses, renders and lays out the whole reply at every update, as the text view did before
+`MarkdownStream` and `ChatMarkdownRenderCache`; `cached` runs the same three steps through them;
+`view` drives the shipped `ChatSelectableTextView`, its Copy stubbed off the shared pasteboard,
+handed the raw reply as the transcript hands it, so its `render` holds the choices split and the
+parse. `--chunk` and `--sections` change the reply, and `--incremental-only` skips the two-minute
+`full` pass:
+
+```sh
+A=Blitz/Features/AI
+swiftc -O -swift-version 6 Blitz/Platform/Appearance.swift Blitz/DesignSystem/{Theme,InterfaceMetrics}.swift \
+    Blitz/Features/Settings/InterfaceSize.swift $A/Model/*.swift \
+    $A/UI/{ChatTextHighlight,ChatMarkdownRenderer,ChatMarkdownRenderCache,ChatMarkdownText}.swift \
+    $A/UI/{MathAttachmentCell,MathBox,MathFont,MathLayoutEngine}.swift \
+    Tests/chat-markdown-fixture.swift Tests/chat-markdown-performance.swift -o /tmp/chat-markdown-performance
+/tmp/chat-markdown-performance
+```
+
 `Signposts.interval` owns an explicit `defer` around the wrapped work on purpose. The obvious spelling
 leaks the interval when the work throws, because the `.end` emit is skipped on the throw path and the
 instrument then shows an interval that never closes.
@@ -336,13 +401,15 @@ Measured on `main`. Useful as orders of magnitude, not as contracts.
 | `palette-selection-test` | 111,684 assertions — a tripwire: a change in this count means the row-order model moved |
 | `SnippetKeywordPolicy` match | 7 µs/keystroke at 50 keywords, 59 µs at 1,000 — the `lowercased()` is 0.09 µs of it |
 | `ClipboardStore.pinnedItems` | 27–127 µs per uncached search, 1,000-row window — no cache earns its invalidation yet |
+| A streaming reply's update, at 20 KB | 0.5 ms through `MarkdownStream` and `ChatMarkdownRenderCache`, 64–89 ms whole; 0.95 ms in the view, its `ChatChoicesStream` split 0.04 ms (3.3 ms whole). At 78 KB the split and parse are unchanged, the render and layout reach 1.6 and 0.65 ms |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
-| Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |
-| Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter; an arrow step 14–20 ms |
+| Palette summon, main thread busy (`palette-benchmark`, compact off, Pop to Root immediate) | 60 ms the first after launch; then 23 ms launcher, 52 ms clipboard, 52 ms emoji (a screen swap mounts the list); a close 17 ms untouched, 26 ms after moving, 38–42 ms from clipboard or emoji, which Pop to Root swaps back to the launcher off screen |
+| Palette keystroke, main thread busy (same) | 25 ms the first letter, 20 ms each one after, 21 ms a backspace; 32 ms the first letter in compact mode, which grows the panel; an arrow step 13–14 ms in the launcher, 16–17 ms in clipboard and emoji |
+| Launch, main thread (Debug channel at `-O`, AI on, 33 MB chat history half past retention, 5,000 clips) | `AppCore.init` 13–16 ms; main thread on-CPU ~210 ms over the first 12 s, no SQLite on main |
 
-Launch time and allocation counts are not recorded. The signposts are in place, so either can be
-taken from `main` whenever a change makes it worth knowing.
+Allocation counts are not recorded. The signposts are in place, so they can be taken from `main`
+whenever a change makes it worth knowing.
 
 ## Manual regression sweep
 
@@ -410,6 +477,7 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Clipboard
 
 - A copy appears at the top within about a second; an image copy records a thumbnail
+- After a minute untouched, a copy summoned straight away is already at the top of the history
 - Search is correct both under and over three characters
 - The type filter searches from its top band, retains its active checkmark when matched, and shows
   centred **No Results** without changing the clipboard query; its native field supports selection
@@ -432,7 +500,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Copying something else while "Reading text…" shows leaves that copy on the pasteboard, and the
   pill says **Clipboard changed, text not copied**
 - A tall phone screenshot and a full-width Retina screenshot copy each line once, whole, in order
-- A copy from an excluded app (Settings ▸ Clipboard ▸ Disabled Applications) is **not** recorded
+- A copy from an excluded app (Settings ▸ Clipboard ▸ Disabled Applications) is **not** recorded,
+  even when ⌘Tab follows the ⌘C at once
 - Password-manager copies are still not recorded
 - Off (Settings ▸ Clipboard ▸ Enable Clipboard History): nothing new is recorded, the launcher rows
   and their shortcuts are gone, the menu-bar row is gone, and Tab rings straight past the screen
@@ -924,6 +993,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   shows the new state; General's Calculator and Search sections, AI's sections from
   Conversations down appear a frame later and Agent's groups from Mac down one per frame, and a
   search result into one of them still scrolls to and lights its row
+- With Settings open on Permissions, granting Accessibility in System Settings flips the row to
+  Granted within a second; closed, `sample` on the process shows no `PermissionsSettingsView` frames
 - Settings › AI › Providers: each row opens its route's page and Back returns to the list on that
   row; the Overview / Models / Advanced tab stays put from one provider to the next; adding a
   connection opens its page, and removing it from there confirms, then lands on the list. The AI

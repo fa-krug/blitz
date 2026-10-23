@@ -53,20 +53,24 @@ final class AIChatCoordinator {
         }
         core.applyInstalledAILifecycle()
         watchWaits()
-        // Deferred off the launch path like the clipboard's own read; history fills in behind it.
+        // Both off the main actor; retention goes first, so an expired chat is never listed.
         Task {
-            core.chatHistory.load()
-            core.agentMemoryCoordinator.load()
             // Inside the enabled branch only: off means the file is untouched, however old it gets.
-            applyRetention()
+            await pruneExpiredChats()
+            await core.chatHistory.load()
+            core.agentMemoryCoordinator.load()
         }
     }
 
     func applyRetention() {
+        Task { await pruneExpiredChats() }
+    }
+
+    private func pruneExpiredChats() async {
         guard settings.aiEnabled,
             let cutoff = core.aiSettings.retention.cutoff(from: Date())
         else { return }
-        core.chatHistory.prune(before: cutoff)
+        await core.chatHistory.prune(before: cutoff)
     }
 
     // MARK: - The window

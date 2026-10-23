@@ -83,6 +83,19 @@ Two conventions make the Raycast component surface expressible in a tree:
 Only the active `__screen` crosses in full: a screen covered by a pushed one keeps its React state but
 arrives as an empty stub, and a commit whose serialized tree matches the last one is not sent at all.
 
+**A commit crosses as a delta.** `src/tree-delta.js` compares each element with the one of the same
+id in the last tree Swift accepted, and an element whose own content and every descendant are
+unchanged crosses as `{"$same": id}`; `RenderTree(json:reusing:)` puts back the node it decoded for
+that id, so re-rendering a 1,000-row list for one changed row sends ~15 KB instead of ~530 KB and
+decodes in ~1–1.5 ms instead of ~30–55 ms. References are read only at element positions — an
+element's `children`, a prop holding an element, and an array prop's element items — which
+`RenderTree.referenceableNodes` walks identically, and only inside an envelope flagged
+`"delta": true`, which a commit carries only when it holds a reference — a first commit takes the
+plain decode. A tree with a repeated id or a raw prop shaped like a reference crosses whole
+without the flag. When Swift lacks the base a delta names, `__blitzHost.render` answers `false` and
+the runtime forgets its base and resends the tree whole, so a lost base costs one extra encode,
+never a wrong row. The base is per session, kept on the JS thread, and dropped on stop.
+
 ### Why JavaScriptCore
 
 JavaScriptCore ships with macOS: embedding it costs **zero binary size** and no vendored C. QuickJS
@@ -105,6 +118,7 @@ same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node
 | `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
 | `src/host.js` | the JS→Swift seam: async `hostCall`, blocking `hostCallSync`, logging |
 | `src/reconciler.js` | `react-reconciler` host config that commits into a JSON tree |
+| `src/tree-delta.js` | the delta each commit crosses as, and the resolver the Node harness applies it with |
 | `src/async-component.js` | renders an async component — `withAccessToken`'s wrapped command — on React's concurrent path, where the thenable it suspended on survives |
 | `src/modules.js` | the `require` a bundle sees: `react`, `react/jsx-runtime`, `@raycast/api` and the Node builtins |
 | `src/polyfills.js` | globals JavaScriptCore lacks that bundles and React's scheduler assume |
@@ -145,7 +159,7 @@ Two host-call flavours:
 | `Service/ExtensionNameResolver.swift` | `getaddrinfo`, which is how a `.local` name resolves |
 | `Service/ExtensionOAuthKeychain.swift` | secure OAuth token storage backed by macOS Keychain |
 | `Service/ExtensionOAuthSession.swift` | the browser step of a sign-in (`ASWebAuthenticationSession`) and redirect parsing |
-| `Service/ExtensionStorage.swift` | per-extension `LocalStorage`, `Cache` and preference values (one JSON file each) |
+| `Service/ExtensionStorage.swift` | per-extension `LocalStorage`, `Cache` and preference values (one JSON file each), debounced and written off-main, flushed synchronously at quit |
 | `Service/ExtensionCommandMetadataStore.swift` | every command's subtitle override, refresh bookkeeping and menu-bar state, in one small file |
 | `Service/ExtensionCatalog.swift` | discovery on disk, install, uninstall, import-from-Raycast |
 | `Service/ExtensionCleanup.swift` | the build workspace's name, the launch sweep, and reclaiming orphans |
@@ -162,7 +176,8 @@ Two host-call flavours:
 | `Model/ExtensionManifest.swift` | `package.json` → commands, preferences, arguments |
 | `Model/ExtensionRefreshPolicy.swift` | background-refresh decisions: interval parsing, due dates, backoff |
 | `Model/ExtensionLaunchType.swift` | `userInitiated` / `background`, mirroring `@raycast/api` `LaunchType` |
-| `Model/RenderNode.swift` | the decoded render tree (`RenderTree` / `RenderNode` / `RenderValue`) |
+| `Model/RenderNode.swift` | the decoded render tree (`RenderTree` / `RenderNode` / `RenderValue`), deltas included |
+| `Model/ExtensionSearchIndex.swift` | every row's title, subtitle and keywords folded once per tree for local filtering |
 | `Model/ExtensionAppearance.swift` | the per-extension icon override and its tint palette |
 | `Service/ExtensionAppearanceStore.swift` | where those overrides persist |
 | `Service/SymbolCatalog.swift` | the SF Symbol list read from `CoreGlyphs.bundle` |
@@ -269,7 +284,9 @@ screens hold (see [palette.md](palette.md)).
 - **List / Grid** — sections and items flattened in render order. When `filtering` is on (Raycast's
   default unless the command supplies `onSearchTextChange`) rows are filtered with the launcher's own
   `FuzzyMatch` over title, subtitle and keywords, and a section whose items all drop loses its header
-  too. `isShowingDetail` splits the screen into rows plus a detail pane and drops each row's
+  too. Those fields are folded once per tree into an `ExtensionSearchIndex`, built on the first
+  keystroke after a commit, so typing into a 1,000-row list matches in ~0.3 ms rather than refolding
+  every row per keystroke. `isShowingDetail` splits the screen into rows plus a detail pane and drops each row's
   subtitle, but **not its accessories**: the API only advises an extension against sending them in
   this mode, and Raycast draws the ones it is sent, so suppressing them here would lose a row its
   whole signal. As in Raycast, they keep their full width and the title is what truncates.
@@ -339,7 +356,9 @@ screens hold (see [palette.md](palette.md)).
   never pass through `resolve` at all. The palette is handed in as `[name: css]`, resolved once per
   appearance by `ExtensionImage.svgPalette(isDark:)` — a `Color` can only be flattened to sRGB on the
   main actor, which is exactly what the decode must not touch. Anything reading a decoded image keys
-  its `.task` on `ExtensionImage.LoadKey`, since the URL alone does not say what will be drawn.
+  its `.task` on `ExtensionImage.LoadKey`, since the URL alone does not say what will be drawn, and
+  keeps the key with the image it loaded; until that load lands for the current key,
+  `ExtensionImage.cached` paints a warm cache hit on the first frame instead of the placeholder.
   The feature's own fills live in `ExtensionColors` — never in `Theme`.
 - **Form** — label-left/control-right rows. Field values live in the extension (React owns them); every
   edit dispatches `onBlitzChange` and the resulting re-render is what updates the control, so
@@ -996,6 +1015,8 @@ Scripts/run-tests.sh ext-test
 .build/harness/ext-test ~/Library/Application\ Support/de.fa-krug.blitz.dev/extensions/<name> [command]
 ```
 
+`Tests/ext-performance.swift` times the same sources on a 1,000-row list;
+[testing.md](../testing.md#performance-measurement) says how to build it.
 `ext-test` compiles the real engine sources — there is no copy to keep in sync — and
 `Tests/ext-menu-bar-test.swift` and `Tests/ext-fetch-test.swift` compile into it rather than running
 as harnesses of their own; `Tests/ext-list-key-test.swift` compiles into `ext-form-test` the same
@@ -1098,6 +1119,14 @@ change size depending on where it came from. An inline `data:` image is the one 
 fitted: the extension that drew it has already sized it, and rasterizing would cost the vector.
 
 Change the number only against a rendered strip of real icons; it means nothing on its own.
+
+The cache is two `NSCache`s. Fetched row icons, each a fitted bitmap of about 36 KB, keep 2 MB
+across palette closes, as app icons do. Shipped originals, Detail markdown images and store
+screenshots share 8 MB, and `ExtensionCoordinator.paletteDidHide()` drops that cache when the
+palette closes, beside the palette's own preview purges. Cost is `decodedCost(of:)`, the sum of
+the representations' pixels times four, because `NSImage.size` is in points and puts a 2× image at
+a quarter of its real footprint. An image with no pixels of its own, a vector, is costed as drawn
+at 2×. `ext-icon-test` pins all three cases.
 `ext-icon-test` guards the invariant: padding in the source cannot change the drawn size, and a
 `data:` payload decodes in either encoding — and one naming a `raycast-*` colour draws ink, in the
 stroke that appearance calls for.

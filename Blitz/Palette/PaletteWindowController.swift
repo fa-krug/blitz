@@ -79,6 +79,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             core.calendarCoordinator.paletteDidShow()
             core.palette.noteVisible(true)
             core.clipboardStore.setTextSearchActive(true)
+            core.clipboardManager.paletteDidShow()
             // Re-resolve the anchor now, then hold it so resizes never move the window.
             anchor = nil
             // Size and place before ordering front, so a compact summon never flashes.
@@ -174,6 +175,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
         ImageThumbnail.purgePreviews()
         FilePreviewThumbnail.purgePreviews()
         IconCache.purgeFitted()
+        core.extensionCoordinator.paletteDidHide()
         schedulePopToRoot()
         guard restoreFocus else { return }
         // Our own window first: it is still open, and activating another app would bury it.
@@ -206,7 +208,8 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
 
     /// The screen only: a conversation is not a typed query, and `Opens To` decides its lifetime.
     private func popToRoot() {
-        core.palette.prepare(mode: .launcher)
+        // Resetting an untouched launcher re-renders the whole list off screen for nothing.
+        if !core.palette.isFreshLauncher { core.palette.prepare(mode: .launcher) }
         isPoppedToRoot = true
     }
 

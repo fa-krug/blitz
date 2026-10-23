@@ -51,7 +51,7 @@ final class ClipboardCoordinator {
         clipboardManager.start()
         core.applyClipboardTextSearch()
         // Deferred off the launch path: the palette fills in behind the SQLite read and prune.
-        Task { clipboardStore.load() }
+        Task { await clipboardStore.load() }
     }
 
     func followSearchResults(query: String, previous: [ClipboardItem], current: [ClipboardItem]) {

@@ -192,6 +192,7 @@ struct ExtensionTests {
     static func runChecks() async {
         manifestChecks()
         renderNodeChecks()
+        renderDeltaChecks()
         screenChecks()
         actionIconChecks()
         oauthUnitChecks()
@@ -510,6 +511,55 @@ struct ExtensionTests {
         check(
             "non-extension entry id is rejected",
             ExtensionCommandRef(entryID: "/Applications/Mail.app") == nil)
+    }
+
+    /// A delta names the last tree's elements by id; only a `delta` envelope is read that way.
+    static func renderDeltaChecks() {
+        let whole = """
+            {"children":[{"id":1,"type":"__screen","props":{"active":true},"children":[
+              {"id":2,"type":"List","props":{"isLoading":false,
+                 "actions":{"id":9,"type":"ActionPanel","props":{},"children":[]}},"children":[
+                {"id":3,"type":"List.Item","props":{"title":"Row","actions":{"id":4,"type":"ActionPanel",
+                   "props":{},"children":[{"id":5,"type":"Action","props":{"title":"Go",
+                   "onAction":{"$fn":"5:onAction"}},"children":[]}]}},"children":[]}]}]}]}
+            """
+        guard let base = RenderTree(json: whole) else {
+            check("delta base decodes", false)
+            return
+        }
+        let nodes = base.referenceableNodes
+        check("every element is referenceable", Set(nodes.keys) == [1, 2, 3, 4, 5, 9], "\(nodes.keys)")
+
+        let delta = """
+            {"delta":true,"children":[{"id":1,"type":"__screen","props":{"active":true},"children":[
+              {"id":2,"type":"List","props":{"isLoading":true,"actions":{"$same":9},
+                 "slots":[{"$same":4},{"text":"plain"}]},"children":[{"$same":3}]}]}]}
+            """
+        let applied = try? RenderTree(json: delta, reusing: nodes)
+        let list = applied?.activeRoot
+        check("a delta applies its own changes", list?.bool("isLoading") == true)
+        check("a referenced child is the previous node", list?.children.first == nodes[3])
+        check("a referenced slot is the previous node", list?.node("actions") == nodes[9])
+        check(
+            "array slot items resolve, plain items stay plain",
+            list?.nodes("slots") == [nodes[4]!]
+                && list?.array("slots").last?.objectValue?["text"]?.stringValue == "plain")
+        check(
+            "a referenced subtree keeps its handlers",
+            list?.children.first?.node("actions")?.children.first?.handler("onAction") == "5:onAction")
+
+        do {
+            _ = try RenderTree(json: delta, reusing: [:])
+            check("a delta without its base is refused", false)
+        } catch {
+            check("a delta without its base is refused", error == .missingBase)
+        }
+        let undeclared = delta.replacingOccurrences(of: #""delta":true,"#, with: "")
+        let plain = RenderTree(json: undeclared)?.activeRoot
+        check("without the flag nothing reads as a reference", plain?.children.isEmpty == true)
+        check(
+            "and a reference-shaped prop stays an object",
+            plain?.object("actions")?["$same"]?.doubleValue == 9)
     }
 
     static func renderNodeChecks() {

@@ -714,52 +714,54 @@ run ext-accessory-test     $E/Model/RenderNode.swift \
                            $E/Model/ExtensionPickerItem.swift \
                            $E/Model/ExtensionSearchAccessory.swift \
                            $E/Service/ExtensionStorage.swift
-run slow ext-test          -parse-as-library \
-                           Tests/ext-menu-bar-test.swift \
-                           Tests/ext-fetch-test.swift \
-                           $E/Model/ExtensionActionKeys.swift \
-                           $E/Model/ExtensionLaunchError.swift \
-                           $E/Model/ExtensionMenuBarSnapshot.swift \
-                           $E/Service/ExtensionStorage.swift \
-                           $E/Service/ExtensionMenuBarManager.swift \
-                           $E/Model/ExtensionCommandMetadata.swift \
-                           $E/Service/ExtensionCommandMetadataStore.swift \
-                           $E/UI/ExtensionMenuBarController.swift \
-                           $E/UI/ExtensionMenuBarImage.swift \
-                           Blitz/Platform/Appearance.swift \
-                           Blitz/Platform/AppDisplayName.swift \
-                           Blitz/Platform/Images/IconCache.swift \
-                           Blitz/DesignSystem/Theme.swift \
-                           Blitz/DesignSystem/InterfaceMetrics.swift \
-                           $E/Model/ExtensionBootConfig.swift \
-                           $E/Model/ExtensionDeepLink.swift \
-                           $E/Model/ExtensionLaunchType.swift \
-                           $E/Model/ExtensionFormField.swift \
-                           $E/Model/ExtensionGridLayout.swift \
-                           $E/Model/ExtensionManifest.swift \
-                           $E/Model/ExtensionRefreshPolicy.swift \
-                           $E/Model/ExtensionRefreshState.swift \
-                           $E/Model/RenderNode.swift \
-                           $E/Model/ExtensionPickerItem.swift \
-                           $E/Model/ExtensionSearchAccessory.swift \
-                           $E/Service/ExtensionCatalog.swift \
-                           $E/Service/ExtensionFetcher.swift \
-                           Blitz/Platform/ProcessExit.swift \
-                           $E/Service/ExtensionIconCache.swift \
-                           $E/Service/ExtensionNodeShims.swift \
-                           $E/Service/ExtensionOAuthKeychain.swift \
-                           $E/Service/ExtensionOAuthSession.swift \
-                           $E/Service/ExtensionRuntime.swift \
-                           $E/Service/ExtensionNameResolver.swift \
-                           $E/Service/ExtensionWebSocketBridge.swift \
-                           $E/UI/ExtensionAnimatedImage.swift \
-                           $E/UI/ExtensionImage.swift \
-                           $E/UI/ExtensionScreen.swift \
-                           $E/Model/ExtensionPagination.swift \
-                           $L/SearchRelevance.swift \
-                           Blitz/Platform/Compression/Zlib.swift \
-                           Blitz/Features/Clipboard/Model/ColorValue.swift \
-                           Blitz/Features/Clipboard/Model/ColorSpaces.swift
+# The engine sources: `ext-test` checks them, `ext-performance` times them.
+X="$E/Model/ExtensionActionKeys.swift \
+   $E/Model/ExtensionLaunchError.swift \
+   $E/Model/ExtensionMenuBarSnapshot.swift \
+   $E/Service/ExtensionStorage.swift \
+   $E/Service/ExtensionMenuBarManager.swift \
+   $E/Model/ExtensionCommandMetadata.swift \
+   $E/Service/ExtensionCommandMetadataStore.swift \
+   $E/UI/ExtensionMenuBarController.swift \
+   $E/UI/ExtensionMenuBarImage.swift \
+   Blitz/Platform/Appearance.swift \
+   Blitz/Platform/AppDisplayName.swift \
+   Blitz/Platform/Images/IconCache.swift \
+   Blitz/DesignSystem/Theme.swift \
+   Blitz/DesignSystem/InterfaceMetrics.swift \
+   $E/Model/ExtensionBootConfig.swift \
+   $E/Model/ExtensionDeepLink.swift \
+   $E/Model/ExtensionLaunchType.swift \
+   $E/Model/ExtensionFormField.swift \
+   $E/Model/ExtensionGridLayout.swift \
+   $E/Model/ExtensionManifest.swift \
+   $E/Model/ExtensionRefreshPolicy.swift \
+   $E/Model/ExtensionRefreshState.swift \
+   $E/Model/RenderNode.swift \
+   $E/Model/ExtensionPickerItem.swift \
+   $E/Model/ExtensionSearchAccessory.swift \
+   $E/Service/ExtensionCatalog.swift \
+   $E/Service/ExtensionFetcher.swift \
+   Blitz/Platform/ProcessExit.swift \
+   $E/Service/ExtensionIconCache.swift \
+   $E/Service/ExtensionNodeShims.swift \
+   $E/Service/ExtensionOAuthKeychain.swift \
+   $E/Service/ExtensionOAuthSession.swift \
+   $E/Service/ExtensionRuntime.swift \
+   $E/Service/ExtensionNameResolver.swift \
+   $E/Service/ExtensionWebSocketBridge.swift \
+   $E/UI/ExtensionAnimatedImage.swift \
+   $E/UI/ExtensionImage.swift \
+   $E/UI/ExtensionScreen.swift \
+   $E/Model/ExtensionSearchIndex.swift \
+   $E/Model/ExtensionPagination.swift \
+   $L/SearchRelevance.swift \
+   Blitz/Platform/Compression/Zlib.swift \
+   Blitz/Features/Clipboard/Model/ColorValue.swift \
+   Blitz/Features/Clipboard/Model/ColorSpaces.swift"
+run slow ext-test          -parse-as-library Tests/ext-menu-bar-test.swift \
+                           Tests/ext-fetch-test.swift $X
+run index ext-performance  -parse-as-library $X
 run settings-history-test  Blitz/Features/Settings/SettingsTab.swift \
                            Blitz/Features/Settings/SettingsHistory.swift \
                            Blitz/Features/Settings/SettingsAnchor.swift \
@@ -840,10 +842,12 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/AIToolJSON.swift \
                            Blitz/Features/AI/Model/AIToolDate.swift \
                            Blitz/Features/AI/Model/ChatChoices.swift \
+                           Blitz/Features/AI/Model/ChatChoicesStream.swift \
                            Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/ChatCitations.swift \
                            Blitz/Features/AI/Model/ChatFind.swift \
                            Blitz/Features/AI/Model/MarkdownBlock.swift \
+                           Blitz/Features/AI/Model/MarkdownStream.swift \
                            Blitz/Features/AI/Model/MarkdownMath.swift \
                            Blitz/Features/AI/Model/MathFormula.swift \
                            Blitz/Features/AI/Model/MathNode.swift \
@@ -853,10 +857,24 @@ run chat-markdown-test     Blitz/Platform/Appearance.swift \
                            Blitz/Features/AI/Model/SyntaxStructuredLexers.swift \
                            Blitz/Features/AI/UI/ChatTextHighlight.swift \
                            Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderCache.swift \
                            Blitz/Features/AI/UI/MathAttachmentCell.swift \
                            Blitz/Features/AI/UI/MathBox.swift \
                            Blitz/Features/AI/UI/MathFont.swift \
-                           Blitz/Features/AI/UI/MathLayoutEngine.swift
+                           Blitz/Features/AI/UI/MathLayoutEngine.swift Tests/chat-markdown-fixture.swift
+run -O index chat-markdown-performance Blitz/Platform/Appearance.swift \
+                           Blitz/DesignSystem/Theme.swift \
+                           Blitz/DesignSystem/InterfaceMetrics.swift \
+                           Blitz/Features/Settings/InterfaceSize.swift \
+                           Blitz/Features/AI/Model/*.swift \
+                           Blitz/Features/AI/UI/ChatTextHighlight.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderer.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownRenderCache.swift \
+                           Blitz/Features/AI/UI/ChatMarkdownText.swift \
+                           Blitz/Features/AI/UI/MathAttachmentCell.swift \
+                           Blitz/Features/AI/UI/MathBox.swift \
+                           Blitz/Features/AI/UI/MathFont.swift \
+                           Blitz/Features/AI/UI/MathLayoutEngine.swift Tests/chat-markdown-fixture.swift
 run syntax-highlight-test  Blitz/Features/AI/Model/SyntaxGrammar.swift \
                            Blitz/Features/AI/Model/SyntaxHighlighter.swift \
                            Blitz/Features/AI/Model/SyntaxStructuredLexers.swift

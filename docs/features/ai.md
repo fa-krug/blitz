@@ -388,12 +388,14 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   always starts fresh. There is no third setting for "immediately" because that *is* `A New
   Conversation` — two controls able to express one state would only ever disagree.
 - **History is local and lazy.** Conversation summaries stay in memory while transcripts load from the
-  system SQLite database only for the opened chat. Empty chats are never saved.
+  system SQLite database only for the opened chat. Empty chats are never saved. The summaries are read
+  at the enable transition by `ChatHistoryStore.load()`, a detached read on a connection of its own;
+  a write that lands on `saved` meanwhile makes it read again, and a `close` in between drops it.
 - **A failed reply ends on a note saying why, and only the note reads as an error.** A cancel, an
   error and a reply cut off by a quit each close the reply's text with a last paragraph (`Cancelled`,
-  the error, `Response interrupted.`, which `ChatHistoryStore` adds on load). The transcript hands
-  the markdown renderer `failedFrom`, the first block of that note, so what was written before the
-  stop is never red; a note on its own is the whole text.
+  the error, `Response interrupted.`, which `ChatHistoryStore` adds on load). The transcript marks
+  that text `failsLastBlock`, so the markdown renderer's `failedFrom` is the note's own block and
+  what was written before the stop is never red; a note on its own is the whole text.
 - **A rename and a pin are the reader's, and nothing derived overwrites them.** Both live in
   `conversation_details` beside `conversations`, whose `title` stays the first question: every save
   rewrites that summary, so a rename stored there would be undone by the next turn. A blank rename
@@ -419,7 +421,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   fully off" promises the file is untouched. A Mac left off for four months keeps its chats.
   `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats but not archived ones, that cascades to messages, images, searches and the archive row,
   and it `VACUUM`s only when something actually went: pictures live inline as BLOBs, so this is the
-  one store where a delete alone frees pages without ever shrinking the file.
+  one store where a delete alone frees pages without ever shrinking the file. The `VACUUM` rewrites
+  every stored image and document, so both run detached on a connection of their own — 120–190 ms
+  of main-thread stall for a 33 MB history before — and the enable transition prunes before it loads,
+  so an expired chat is never listed. Every connection carries a 5 s busy timeout: a save landing
+  mid-`VACUUM` waits it out instead of failing (`aSaveRacingRetentionIsKept` pins this).
 - **Everything but the newest message is bounded.** `ChatSession.boundedContext` sends that message
   whole — truncating what someone just typed is worse than the provider's own error — keeps images
   and documents only on that turn and only up to `AIAttachmentBudget`, inlining an attached text
@@ -596,7 +602,18 @@ and the Actions menu's own chords, and dies with the window.
   `ChatMarkdownText` draws each text segment into one read-only `NSTextView`, and
   `ChatMarkdownRenderer` builds its single attributed string: lists with hanging indents, quotes,
   code as `NSTextBlock`s, tables as an `NSTextTable`, with find's marks and the citation numbers
-  in it. Its leaf paths are `ChatFindIndex.leaves`'s, which `chat-markdown-test` pins. A code
+  in it. Its leaf paths are `ChatFindIndex.leaves`'s, which `chat-markdown-test` pins.
+  The view is handed the segment's raw text, not its blocks, and redoes only what an update changed,
+  so a long reply costs no more per update than a short one. `ChatChoicesStream` lifts the choices
+  out as `ChatChoices.split` would, but settles leading lines that hold no `choices` fence opener or
+  label once a plain prose line follows them — nothing later can reach back past that line — and
+  re-reads only from it; a reply that opens the fence or writes the label mid-text re-reads from
+  there on. `MarkdownStream` keeps the top-level blocks whose reading stopped short of the last
+  line — the one a stream still grows — and re-reads only the lines after them; `ChatMarkdownRenderCache` keeps each block's drawn text, typeset math
+  and colouring included, and replaces the text storage from the first block that changed, so what
+  comes before keeps its layout. A changed find query, citation list, path or text size redraws
+  every block. All three must give exactly what a whole split, parse and render give, and
+  `chat-markdown-test` checks that at every update of a streamed reply, layout included. A code
   block's `NSTextBlock` only lays it out: `ChatSelectableTextView.drawBackground(in:)` draws its box,
   a continuous rounded rectangle (`Theme.Radius.codeBlock`) over the block's bounds less its margin
   (the list or quote indent), because a text block paints only around the glyphs being redrawn and
@@ -988,6 +1005,11 @@ so an edit takes the next one, and `AISettingsStore.launchRevisions` lets `AppCo
 the tool that was edited — Codex by stopping its server, which restarts on demand. The
 commands are never installed by Blitz; Settings links to their own install docs and offers a sign-in
 command to copy. `InstalledAIManager` probes Claude, Grok, OpenCode and Cursor off-main, in parallel.
+No probe holds a thread while its child runs: `InstalledAIProbe` and `ExecutableLocator.shellLookup`
+read output through `FileHandle.collect`, a `readabilityHandler`, and await the exit through
+`ProcessExit.exited()`, because each child takes 0.4–1.3 s and a blocking wait inside `Task.detached`
+pins one of the cooperative pool's `hw.ncpu` threads for that long — twelve probes at once took two
+pool-sized batches before, one after.
 Claude's auth status gates an `initialize` control request, and `InstalledAIModel.claudeCatalog` builds
 its model list from the answer. OpenCode must be version 2 or later; past that, its successful
 model list is both its auth check and catalog, and an empty one reads as signed out.

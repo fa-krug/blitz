@@ -1119,6 +1119,35 @@ struct SnippetsTests {
             store.issues.contains { $0.fileURL.lastPathComponent == "corrupt.md" }
                 && store.record(id: afterDeleteURL.path) != nil)
 
+        let descriptorsBefore = openDescriptorCount()
+        let library = (0..<300).map {
+            repository.snippetsDirectory.appendingPathComponent("library-\($0).md")
+        }
+        for (index, fileURL) in library.enumerated() {
+            try SnippetMarkdownSerializer.serialize(Snippet(name: "Library \(index)", text: "v1"))
+                .write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+        await settle(within: .seconds(3)) {
+            store.snippets.filter { $0.snippet.name.hasPrefix("Library ") }.count == library.count
+        }
+        let descriptorsAfter = openDescriptorCount()
+        check(
+            "a large library is watched without a descriptor per file",
+            store.snippets.filter { $0.snippet.name.hasPrefix("Library ") }.count == library.count
+                && descriptorsAfter - descriptorsBefore < 10)
+        let edited = try FileHandle(forWritingTo: library[150])
+        try edited.truncate(atOffset: 0)
+        try edited.write(
+            contentsOf: Data(
+                SnippetMarkdownSerializer.serialize(Snippet(name: "Library 150", text: "v2")).utf8))
+        try edited.close()
+        await settle(within: .seconds(2)) {
+            store.record(id: library[150].path)?.snippet.text == "v2"
+        }
+        check(
+            "an in-place edit deep in a large library still reloads",
+            store.record(id: library[150].path)?.snippet.text == "v2")
+
         store.stop()
         let stoppedSnapshotCount = snapshotCount
         store.retry()
@@ -2116,6 +2145,10 @@ struct SnippetsTests {
     }
 
     // The same budget a fixed sleep spent, but a prompt watcher costs milliseconds of it.
+    private static func openDescriptorCount() -> Int {
+        (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+    }
+
     private static func settle(
         within timeout: Duration = .milliseconds(500),
         until condition: () -> Bool

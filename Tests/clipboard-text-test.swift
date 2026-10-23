@@ -149,7 +149,7 @@ struct ClipboardTextTests {
         store.promote(store.items.first { $0.id == original.id }!)
         store.close()
         store.open()
-        store.load()
+        await store.load()
         expect(!store.textSearchEnabled, "reopen does not opt in")
         expect(store.nextExtractionItem() == nil, "reopen does not initialize worker")
         store.setTextSearchEnabled(true)
@@ -163,7 +163,7 @@ struct ClipboardTextTests {
         let old = ClipboardItem(
             imagePath: "/tmp/old.png",
             createdAt: Date().addingTimeInterval(-86_400 * 7), sourceBundleID: nil)
-        store.importEntries([old] + (0..<1005).map { ClipboardItem(text: "new \($0)", sourceBundleID: nil) })
+        await store.importEntries([old] + (0..<1005).map { ClipboardItem(text: "new \($0)", sourceBundleID: nil) })
         expect(!store.items.contains { $0.id == old.id }, "fixture is beyond resident window")
         store.setExtractedText("archive document", for: old, generation: store.extractionGeneration)
         try await waitUntil { store.search("archive", filter: .image).first?.id == old.id }

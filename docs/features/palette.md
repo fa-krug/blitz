@@ -35,6 +35,10 @@ The command palette is a borderless floating `NSPanel` hosting SwiftUI; see
   ~20 `onChange` modifiers resolve the screen inside their closures, when they run; rebuilding those
   chains was half of every keystroke. `scroll` lives in `PaletteSurfaceState` for the same reason: `land()`
   writes it on every keystroke, and a plain `@State` write would re-render the root that owns it.
+- **A typed keystroke lands the list in the field's own setter** (`typeQuery`), in the same
+  transaction as the query. Landing from `onChange(of: query)` wrote the selection and scroll one update
+  later and rendered the whole surface twice per keystroke; the `onChange` now lands only for a query
+  something else wrote, and `PaletteSurfaceState.landedQuery` is how it tells the two apart.
 
 ## Summoning
 
@@ -82,6 +86,12 @@ off too, since resetting would cancel it, and a re-summon meanwhile returns to t
 (`consumePreservedState`). Nothing is lost either way: a conversation is
 written to Chat History, and the AI Agent window's sidebar, as soon as it has a message.
 
+A launcher that is already fresh is not reset: `PaletteState.isFreshLauncher` is true when
+`prepare(mode: .launcher)` would change nothing a view reads, and resetting anyway re-rendered the
+whole list off screen on every close. The list's scroll offset is not palette state, so `LauncherList`
+reports whether it rests at its origin (`launcherListAtOrigin`), and a list scrolled by hand still
+resets.
+
 Each `PaletteMode` maps to one type conforming to `PaletteScreen`, and the protocol is what keeps the
 selection invariant honest: a screen exposes `rows` as its single source of visible order, and the
 palette indexes into it. Resolving a screen builds those rows, so `PaletteSurface` resolves it once
@@ -92,7 +102,7 @@ A chord aimed at the selected row — ⌃X, ⇧⌘F, ⌘Y and the rest — follo
 answers through `perform(_:at:)`, so a new chord never adds a cast to the shell.
 
 Where a reset leaves the highlight is the screen's to say too. Every reset — an open, a new query, a
-new filter — goes through `RootPaletteView.land()`, which reads `landingSelection`, so handlers that
+new filter — goes through `RootPaletteView.land()`, a typed query from the field's setter, which reads `landingSelection`, so handlers that
 fire in one update agree whatever order they run in. `onAppear` lands as well, for a summon that beats
 the launch-time prewarm: that one builds the view after `prepare` has run, so no handler sees the reset. The landing is row 0 on
 every screen but two: the clipboard lands past its pins

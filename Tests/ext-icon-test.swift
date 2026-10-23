@@ -33,6 +33,41 @@ struct ExtensionIconTests {
             "artwork draws below an app icon's \(IconCache.appIconExtent): \(full)")
     }
 
+    /// A 2× bitmap's `size` is a quarter of its pixels, so a points-based cost under-reads RAM.
+    static func retinaImagesCostTheirPixels() {
+        guard
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 200, bitsPerSample: 8,
+                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0)
+        else { return expect(false, "the 2x fixture builds") }
+        rep.size = NSSize(width: 100, height: 100)
+        let image = NSImage(size: rep.size)
+        image.addRepresentation(rep)
+        expect(
+            ExtensionIconCache.decodedCost(of: image) == 200 * 200 * 4,
+            "a 2x bitmap costs its pixels: \(ExtensionIconCache.decodedCost(of: image))")
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ext-icon-cost-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("icon@2x.png")
+        try? rep.representation(using: .png, properties: [:])?.write(to: file)
+        guard let loaded = NSImage(contentsOfFile: file.path) else {
+            return expect(false, "the 2x PNG loads")
+        }
+        expect(loaded.size == NSSize(width: 100, height: 100), "the PNG reads back at 2x")
+        expect(
+            ExtensionIconCache.decodedCost(of: loaded) == 200 * 200 * 4,
+            "a 2x PNG read from disk costs its pixels, not its \(loaded.size) points")
+
+        let vector = NSImage(size: NSSize(width: 50, height: 50), flipped: false) { _ in true }
+        expect(
+            ExtensionIconCache.decodedCost(of: vector) == 100 * 100 * 4,
+            "a pixel-less image is costed as drawn at 2x")
+    }
+
     /// A missing file still answers, so a row never renders an empty slot.
     static func missingFileFallsBack() {
         let icon = ExtensionIconCache.icon(atPath: "/nonexistent/\(UUID().uuidString).png")
@@ -226,6 +261,7 @@ struct ExtensionIconTests {
     static func main() async {
         artworkIsNormalized()
         missingFileFallsBack()
+        retinaImagesCostTheirPixels()
         await inlineDataURLsDecode()
         await paletteColorsInSVGResolve()
 

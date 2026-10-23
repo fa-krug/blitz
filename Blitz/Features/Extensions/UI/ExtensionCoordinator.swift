@@ -171,6 +171,11 @@ final class ExtensionCoordinator {
         return true
     }
 
+    /// Row icons stay warm for the next summon; the large images go, as the palette's previews do.
+    func paletteDidHide() {
+        ExtensionIconCache.purgeImages()
+    }
+
     var isShowingStoreDetail: Bool {
         palette.mode == .extensionStore && store.detail != nil
     }

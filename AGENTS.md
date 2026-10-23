@@ -46,7 +46,7 @@ dependency comes in without a gap of that kind. Full reasoning in
 | `Blitz/Windows/` | the non-palette AppKit surfaces: `Dialog/`, `HUD/`, `About/`, `AppWindowController` |
 | `Blitz/Features/` | one folder per feature; larger ones split `Model/` `Service/` `UI/` `Settings/` |
 | `Tests/` | the standalone harnesses — one Swift file each, no XCTest target |
-| `Scripts/` | every executable script: test runner, data generators, lint, format, release signing, editor setup |
+| `Scripts/` | every executable script: test runner, benchmarks, data generators, lint, format, release signing, editor setup |
 
 | Read it before you | Doc |
 | --- | --- |

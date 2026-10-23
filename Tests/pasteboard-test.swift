@@ -8,7 +8,7 @@ struct PasteboardTests {
     static var passes = 0
     static let cap = ClipboardManager.maxCapturedFiles
 
-    static func main() {
+    static func main() async {
         finderCopyReadsAsAFileNotItsName()
         everyFileFlavourIsRead()
         multipleFilesReadNewestLast()
@@ -20,10 +20,11 @@ struct PasteboardTests {
         aModernFileURLSuppressesTheLegacyFallback()
         fileEntriesWriteBackAsFiles()
         aVanishedFileWritesNothing()
-        imageEntriesWriteBackWithTheirFile()
+        await imageEntriesWriteBackWithTheirFile()
         richFlavoursAreCaptured()
         anOversizedFlavourIsDropped()
         richEntriesWriteBackTheirFlavours()
+        thePollBacksOffOnceTheBoardSitsStill()
 
         print("\(passes)/\(passes + failures) passed")
         if failures > 0 { exit(1) }
@@ -309,13 +310,13 @@ struct PasteboardTests {
     }
 
     /// A text-only receiver ignores image data, so the stored file goes out beside it.
-    static func imageEntriesWriteBackWithTheirFile() {
-        withScratch { dir in
+    static func imageEntriesWriteBackWithTheirFile() async {
+        await withScratch { dir in
             let image = dir.appendingPathComponent("shot.png")
             let bytes = Data("png".utf8)
             try? bytes.write(to: image)
             let store = ClipboardStore(directory: dir.appendingPathComponent("store"))
-            store.importEntries([ClipboardItem(imagePath: image.path, sourceBundleID: nil)])
+            await store.importEntries([ClipboardItem(imagePath: image.path, sourceBundleID: nil)])
             let pb = board()
 
             expect(Paster.write(store.items[0], store: store, to: pb), "a present image writes")
@@ -396,6 +397,27 @@ struct PasteboardTests {
         }
     }
 
+    // MARK: - Polling
+
+    static func thePollBacksOffOnceTheBoardSitsStill() {
+        let window = ClipboardManager.activeWindow
+        func interval(_ elapsed: Duration, asleep: Bool = false) -> TimeInterval {
+            ClipboardManager.pollInterval(sinceActivity: elapsed, screensAsleep: asleep)
+        }
+        expect(interval(.zero) == ClipboardManager.activeInterval, "a fresh copy polls fast")
+        expect(
+            interval(window - .milliseconds(1)) == ClipboardManager.activeInterval,
+            "and keeps polling fast through the active window")
+        expect(interval(window) == ClipboardManager.quietInterval, "then backs off")
+        expect(
+            interval(.zero, asleep: true) == ClipboardManager.asleepInterval,
+            "asleep screens poll slowest, whatever happened last")
+        expect(
+            ClipboardManager.activeInterval < ClipboardManager.quietInterval
+                && ClipboardManager.quietInterval < ClipboardManager.asleepInterval,
+            "each tier is slower than the one before")
+    }
+
     // MARK: - Harness
 
     static func board() -> NSPasteboard { NSPasteboard.withUniqueName() }
@@ -406,6 +428,14 @@ struct PasteboardTests {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         body(dir)
+    }
+
+    static func withScratch(_ body: (URL) async -> Void) async {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-pasteboard-test-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await body(dir)
     }
 
     static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

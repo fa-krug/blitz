@@ -22,7 +22,53 @@ struct ChatRenderedText {
         let range: NSRange
         let code: String
         let language: String?
+
+        func moved(by offset: Int) -> CodeBlock {
+            CodeBlock(
+                block: block, range: NSRange(location: range.location + offset, length: range.length),
+                code: code, language: language)
+        }
     }
+
+    /// One top-level block drawn on its own, its ranges counted from its own start.
+    struct Fragment {
+        let string: NSAttributedString
+        let codeBlocks: [CodeBlock]
+        let current: NSRange?
+    }
+
+    /// The fragments' code blocks and find match, placed where the fragments sit end to end.
+    init(string: NSAttributedString, placing fragments: [Fragment]) {
+        var codeBlocks: [CodeBlock] = []
+        var current: NSRange?
+        var offset = 0
+        for fragment in fragments {
+            codeBlocks += fragment.codeBlocks.map { $0.moved(by: offset) }
+            if current == nil, let match = fragment.current {
+                current = NSRange(location: match.location + offset, length: match.length)
+            }
+            offset += fragment.string.length
+        }
+        self.init(string: string, codeBlocks: codeBlocks, current: current)
+    }
+
+    init(string: NSAttributedString, codeBlocks: [CodeBlock], current: NSRange?) {
+        self.string = string
+        self.codeBlocks = codeBlocks
+        self.current = current
+    }
+
+    /// The fragments end to end, less the last paragraph's break, which drew an empty line.
+    static func joined(_ fragments: some Sequence<Fragment>) -> NSMutableAttributedString {
+        let string = NSMutableAttributedString()
+        for fragment in fragments { string.append(fragment.string) }
+        if endsWithBreak(string) {
+            string.deleteCharacters(in: NSRange(location: string.length - 1, length: 1))
+        }
+        return string
+    }
+
+    static func endsWithBreak(_ string: NSAttributedString) -> Bool { string.string.hasSuffix("\n") }
 }
 
 /// Markdown into one attributed string; each text takes `ChatFindIndex.leaves`' path for find.
@@ -40,9 +86,11 @@ struct ChatMarkdownRenderer {
     private let source: ChatMarkdownSource
     private var typography: InterfaceMetrics.Typography { source.metrics.typography }
     private var spacing: InterfaceMetrics.Spacing { source.metrics.spacing }
+    private let mathEngines: MathEngines
 
-    init(_ source: ChatMarkdownSource) {
+    init(_ source: ChatMarkdownSource, mathEngines: MathEngines = MathEngines()) {
         self.source = source
+        self.mathEngines = mathEngines
     }
 
     private final class Output {
@@ -51,11 +99,9 @@ struct ChatMarkdownRenderer {
     }
 
     /// One engine per text size a render meets, since each loads its three fonts.
-    private final class MathEngines {
+    final class MathEngines {
         var bySize: [CGFloat: MathLayoutEngine] = [:]
     }
-
-    private let mathEngines = MathEngines()
 
     /// Where a block sits: the text blocks around it (quote, code, cell) and a list's indent.
     private struct Context {
@@ -66,16 +112,19 @@ struct ChatMarkdownRenderer {
     }
 
     func render() -> ChatRenderedText {
+        let fragments = source.blocks.indices.map(fragment(at:))
+        return ChatRenderedText(string: ChatRenderedText.joined(fragments), placing: fragments)
+    }
+
+    /// Whether the block at `position` is drawn as the failure note, which `failedFrom` starts.
+    func isFailed(at position: Int) -> Bool { position >= (source.failedFrom ?? source.blocks.count) }
+
+    /// Each top-level block draws the same alone as among the others, so it can be kept and reused.
+    func fragment(at position: Int) -> ChatRenderedText.Fragment {
         let output = Output()
-        let split = min(source.failedFrom ?? source.blocks.count, source.blocks.count)
-        render(Array(source.blocks[..<split]), at: source.prefix, in: Context(), into: output)
         render(
-            Array(source.blocks[split...]), at: source.prefix, in: Context(failed: true),
-            into: output, first: split)
-        // The last paragraph's own break would draw an empty line under the reply.
-        if output.string.string.hasSuffix("\n") {
-            output.string.deleteCharacters(in: NSRange(location: output.string.length - 1, length: 1))
-        }
+            [source.blocks[position]], at: source.prefix, in: Context(failed: isFailed(at: position)),
+            into: output, first: position)
         var current: NSRange?
         output.string.enumerateAttribute(
             Self.currentMatch, in: NSRange(location: 0, length: output.string.length)
@@ -84,7 +133,8 @@ struct ChatMarkdownRenderer {
             current = range
             stop.pointee = true
         }
-        return ChatRenderedText(string: output.string, codeBlocks: output.codeBlocks, current: current)
+        return ChatRenderedText.Fragment(
+            string: output.string, codeBlocks: output.codeBlocks, current: current)
     }
 
     private var bodyFont: NSFont { typography.textNSFont(.body) }
