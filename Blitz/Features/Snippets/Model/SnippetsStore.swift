@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 
 @MainActor
@@ -20,12 +19,10 @@ final class SnippetsStore {
     var onSnapshot: ((SnippetRepository.Snapshot) -> Void)?
 
     private var repository: SnippetRepository
-    @ObservationIgnored private var directoryWatcher: DispatchSourceFileSystemObject?
-    @ObservationIgnored private var fileWatchers: [String: DispatchSourceFileSystemObject] = [:]
+    @ObservationIgnored private var folderMonitor: SnippetFolderMonitor?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var watcherRetryTask: Task<Void, Never>?
     private var generation = 0
-    private var watcherGeneration = 0
     private var isStarted = false
 
     init(repository: SnippetRepository = SnippetRepository()) {
@@ -36,8 +33,7 @@ final class SnippetsStore {
     isolated deinit {
         reloadTask?.cancel()
         watcherRetryTask?.cancel()
-        directoryWatcher?.cancel()
-        for source in fileWatchers.values { source.cancel() }
+        folderMonitor?.stop()
     }
 
     func start() async {
@@ -53,7 +49,8 @@ final class SnippetsStore {
         reloadTask = nil
         watcherRetryTask?.cancel()
         watcherRetryTask = nil
-        stopWatchers()
+        folderMonitor?.stop()
+        folderMonitor = nil
     }
 
     /// Moves to another folder; a running store stops, swaps, and loads the new one.
@@ -228,7 +225,8 @@ final class SnippetsStore {
             state = .ready
             onSnapshot?(snapshot)
         }
-        if syncWatchers(with: snapshot) {
+        // Anything written between the load and the arm is caught by one more pass.
+        if armMonitor() {
             scheduleReload(after: .milliseconds(150))
         }
     }
@@ -249,110 +247,25 @@ final class SnippetsStore {
         }
     }
 
-    private func syncWatchers(with snapshot: SnippetRepository.Snapshot) -> Bool {
+    private func armMonitor() -> Bool {
         guard isStarted else { return false }
         watcherRetryTask?.cancel()
         watcherRetryTask = nil
-
-        var changed = false
-        if directoryWatcher == nil {
-            changed = armDirectoryWatcher() || changed
+        guard folderMonitor == nil else { return false }
+        folderMonitor = SnippetFolderMonitor(directory: snippetsDirectory) { [weak self] in
+            self?.noteFilesystemChange()
         }
-
-        let desiredPaths = Set(
-            snapshot.records.map { $0.fileURL.standardizedFileURL.path }
-                + snapshot.issues.map { $0.fileURL.standardizedFileURL.path })
-        for path in Array(fileWatchers.keys) where !desiredPaths.contains(path) {
-            fileWatchers.removeValue(forKey: path)?.cancel()
-            changed = true
-        }
-        for path in desiredPaths where fileWatchers[path] == nil {
-            changed = armFileWatcher(path: path) || changed
-        }
-
-        // Retry while anything is unwatched; a failed file watcher blinds us like a missing one.
-        if directoryWatcher == nil || desiredPaths.contains(where: { fileWatchers[$0] == nil }) {
+        guard folderMonitor != nil else {
             scheduleWatcherRetry()
+            return false
         }
-        return changed
-    }
-
-    @discardableResult
-    private func armDirectoryWatcher() -> Bool {
-        let descriptor = Darwin.open(snippetsDirectory.path, O_EVTONLY)
-        guard descriptor >= 0 else { return false }
-
-        watcherGeneration &+= 1
-        let installedGeneration = watcherGeneration
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .extend, .attrib, .delete, .rename, .revoke],
-            queue: .main)
-        source.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                self?.handleDirectoryEvent(generation: installedGeneration)
-            }
-        }
-        source.setCancelHandler { Darwin.close(descriptor) }
-        directoryWatcher = source
-        source.resume()
         return true
-    }
-
-    @discardableResult
-    private func armFileWatcher(path: String) -> Bool {
-        let descriptor = Darwin.open(path, O_EVTONLY)
-        guard descriptor >= 0 else { return false }
-
-        let installedGeneration = watcherGeneration
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .extend, .attrib, .delete, .rename, .revoke],
-            queue: .main)
-        source.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                self?.handleFileEvent(path: path, generation: installedGeneration)
-            }
-        }
-        source.setCancelHandler { Darwin.close(descriptor) }
-        fileWatchers[path] = source
-        source.resume()
-        return true
-    }
-
-    private func handleDirectoryEvent(generation installedGeneration: Int) {
-        guard isStarted, installedGeneration == watcherGeneration,
-            let events = directoryWatcher?.data
-        else { return }
-
-        if !events.isDisjoint(with: [.delete, .rename, .revoke]) {
-            stopWatchers()
-        }
-        noteFilesystemChange()
-    }
-
-    private func handleFileEvent(path: String, generation installedGeneration: Int) {
-        guard isStarted, installedGeneration == watcherGeneration,
-            let source = fileWatchers[path]
-        else { return }
-
-        if !source.data.isDisjoint(with: [.delete, .rename, .revoke]) {
-            fileWatchers.removeValue(forKey: path)?.cancel()
-        }
-        noteFilesystemChange()
     }
 
     private func noteFilesystemChange() {
+        guard isStarted else { return }
         generation &+= 1
         scheduleReload(after: .milliseconds(150))
-    }
-
-    private func stopWatchers() {
-        watcherGeneration &+= 1
-        directoryWatcher?.cancel()
-        directoryWatcher = nil
-        for source in fileWatchers.values { source.cancel() }
-        fileWatchers.removeAll()
     }
 
     private func scheduleWatcherRetry() {

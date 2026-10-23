@@ -8,6 +8,8 @@ final class SettingsNavigationState {
     private var requests = 0
     /// Bumped by `restart`, so the pane remounts and its appear-time refreshes run again.
     private(set) var session = 0
+    /// False while the window waits hidden; the pane unmounts, so its polling tasks end with it.
+    private(set) var isWindowShown = true
 
     init(tab: SettingsTab) {
         history = SettingsHistory(current: SettingsLocation(tab))
@@ -39,7 +41,12 @@ final class SettingsNavigationState {
         history = SettingsHistory(current: SettingsLocation(tab))
         scrollRequest = nil
         session += 1
+        isWindowShown = true
         select(tab, page: page, revealing: target)
+    }
+
+    func windowDidHide() {
+        isWindowShown = false
     }
 
     func beginFlash(_ target: SettingsTarget) {

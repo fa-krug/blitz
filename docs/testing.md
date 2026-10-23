@@ -402,6 +402,7 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Clipboard
 
 - A copy appears at the top within about a second; an image copy records a thumbnail
+- After a minute untouched, a copy summoned straight away is already at the top of the history
 - Search is correct both under and over three characters
 - The type filter searches from its top band, retains its active checkmark when matched, and shows
   centred **No Results** without changing the clipboard query; its native field supports selection
@@ -424,7 +425,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Copying something else while "Reading text…" shows leaves that copy on the pasteboard, and the
   pill says **Clipboard changed, text not copied**
 - A tall phone screenshot and a full-width Retina screenshot copy each line once, whole, in order
-- A copy from an excluded app (Settings ▸ Clipboard ▸ Disabled Applications) is **not** recorded
+- A copy from an excluded app (Settings ▸ Clipboard ▸ Disabled Applications) is **not** recorded,
+  even when ⌘Tab follows the ⌘C at once
 - Password-manager copies are still not recorded
 - Off (Settings ▸ Clipboard ▸ Enable Clipboard History): nothing new is recorded, the launcher rows
   and their shortcuts are gone, the menu-bar row is gone, and Tab rings straight past the screen
@@ -916,6 +918,8 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
   shows the new state; General's Calculator and Search sections, AI's sections from
   Conversations down appear a frame later and Agent's groups from Mac down one per frame, and a
   search result into one of them still scrolls to and lights its row
+- With Settings open on Permissions, granting Accessibility in System Settings flips the row to
+  Granted within a second; closed, `sample` on the process shows no `PermissionsSettingsView` frames
 - Settings › AI › Providers: each row opens its route's page and Back returns to the list on that
   row; the Overview / Models / Advanced tab stays put from one provider to the next; adding a
   connection opens its page, and removing it from there confirms, then lands on the list. The AI

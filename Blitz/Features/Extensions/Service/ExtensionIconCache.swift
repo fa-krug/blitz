@@ -9,12 +9,31 @@ enum ExtensionIconCache {
     /// `NSCache` is thread-safe but not `Sendable`, so assert the guarantee once here.
     private final class Cache: NSCache<NSString, NSImage>, @unchecked Sendable {}
 
-    /// Its own budget: Detail markdown caches images far larger than a row icon.
-    private static let cache: Cache = {
+    /// Fetched row icons, each a fitted ~36 KB bitmap; kept across palette closes like app icons.
+    private static let icons: Cache = {
         let cache = Cache()
-        cache.totalCostLimit = 16 * 1024 * 1024
+        cache.totalCostLimit = 2 * 1024 * 1024
         return cache
     }()
+
+    /// Originals, Detail markdown images and store screenshots: far larger, so dropped on close.
+    private static let images: Cache = {
+        let cache = Cache()
+        cache.totalCostLimit = 8 * 1024 * 1024
+        return cache
+    }()
+
+    static func purgeImages() {
+        images.removeAllObjects()
+    }
+
+    /// The decoded bitmap's bytes: `size` is in points, which reads a 2× image at a quarter.
+    static func decodedCost(of image: NSImage) -> Int {
+        let pixels = image.representations.reduce(0) { $0 + $1.pixelsWide * $1.pixelsHigh }
+        // A vector rep has no pixels of its own; it rasterizes at the 2× it is drawn at.
+        guard pixels > 0 else { return Int(image.size.width * image.size.height) * 4 * 4 }
+        return pixels * 4
+    }
 
     /// A freshly-decoded, thereafter-immutable `NSImage` is safe to move across the actor boundary.
     private struct Decoded: @unchecked Sendable {
@@ -46,12 +65,12 @@ enum ExtensionIconCache {
     /// Never rasterized: fitting flattens a GIF to its first frame.
     static func loadOriginalAsync(atPath path: String) async -> NSImage? {
         let key = originalKey(path)
-        if let cached = cache.object(forKey: key) { return cached }
+        if let cached = images.object(forKey: key) { return cached }
         let decoded = await Task.detached(priority: .userInitiated) {
             Decoded(image: NSImage(contentsOfFile: path))
         }.value
         guard let image = decoded.image else { return nil }
-        cache.setObject(image, forKey: key, cost: Int(image.size.width * image.size.height * 4))
+        images.setObject(image, forKey: key, cost: decodedCost(of: image))
         return image
     }
 
@@ -117,6 +136,7 @@ enum ExtensionIconCache {
     /// A failure caches nothing, so a transient error retries; `asIcon` is off for markdown images.
     static func loadRemoteAsync(_ url: URL, asIcon: Bool = true) async -> NSImage? {
         let key = remoteKey(url, asIcon: asIcon)
+        let cache = asIcon ? icons : images
         if let cached = cache.object(forKey: key) { return cached }
         guard let (data, _) = try? await session.data(from: url) else { return nil }
         let decoded = await Task.detached(priority: .userInitiated) {
@@ -124,7 +144,7 @@ enum ExtensionIconCache {
         }.value
         guard let source = decoded.image else { return nil }
         guard asIcon else {
-            cache.setObject(source, forKey: key, cost: Int(source.size.width * source.size.height * 4))
+            cache.setObject(source, forKey: key, cost: decodedCost(of: source))
             return source
         }
         let (icon, cost) = IconCache.fitted(source, to: extent)
@@ -135,13 +155,13 @@ enum ExtensionIconCache {
     /// Downsampled at decode: a store screenshot is ~2000px wide and a strip draws it far smaller.
     static func loadThumbnailAsync(_ url: URL, maxPixelSize: CGFloat) async -> NSImage? {
         let key = "thumb:\(Int(maxPixelSize)):\(url.absoluteString)" as NSString
-        if let cached = cache.object(forKey: key) { return cached }
+        if let cached = images.object(forKey: key) { return cached }
         guard let (data, _) = try? await session.data(from: url) else { return nil }
         let decoded = await Task.detached(priority: .userInitiated) {
             Decoded(image: thumbnail(of: data, maxPixelSize: maxPixelSize))
         }.value
         guard let image = decoded.image else { return nil }
-        cache.setObject(image, forKey: key, cost: Int(image.size.width * image.size.height * 4))
+        images.setObject(image, forKey: key, cost: decodedCost(of: image))
         return image
     }
 

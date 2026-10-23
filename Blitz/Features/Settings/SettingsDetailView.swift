@@ -9,38 +9,9 @@ struct SettingsDetailView: View {
     var body: some View {
         // Not a `TabView`: `NSTabView` re-hosts on selection and breaks the recorder.
         Group {
-            switch shown ?? navigation.tab {
-            case .general: GeneralSettingsView()
-            case .appearance: AppearanceSettingsView()
-            case .hyperKey: HyperKeySettingsView()
-            case .applications: ApplicationsSettingsView()
-            case .systemSettings: SystemSettingsSettingsView()
-            case .systemActions: SystemActionsSettingsView()
-            case .commands: CommandsSettingsView()
-            case .quicklinks: QuicklinksSettingsView()
-            case .appleShortcuts: AppleShortcutsSettingsView()
-            case .fallbacks: FallbacksSettingsView()
-            case .ai: AISettingsView()
-            case .agent: AgentSettingsView()
-            case .agentRules: AgentRulesSettingsView()
-            case .agentMemory: AgentMemorySettingsView()
-            case .aiProviders: AIProvidersSettingsView()
-            case .mcpServers: MCPSettingsView()
-            case .quickActions: QuickActionsSettingsView()
-            case .fileSearch: FileSearchSettingsView()
-            case .notes: NotesSettingsView()
-            case .snippets: SnippetsSettingsView()
-            case .navigation: NavigationSettingsView()
-            case .windowManagement: WindowManagementSettingsView()
-            case .clipboard: ClipboardSettingsView()
-            case .emoji: EmojiSettingsView()
-            case .calendar: CalendarSettingsView()
-            case .reminders: RemindersSettingsView()
-            case .contacts: ContactsSettingsView()
-            case .extensions: ExtensionsSettingsView()
-            case .permissions: PermissionsSettingsView()
-            case .backup: BackupSettingsView()
-            case .about: AboutView()
+            // Unmounted while hidden: `orderOut` leaves a tree running, and with it every poll.
+            if navigation.isWindowShown {
+                pane
             }
         }
         // A reopened window keeps its shell, not the pane: appear hooks refresh what a pane shows.
@@ -53,5 +24,42 @@ struct SettingsDetailView: View {
         }
         // One host for every pane, above their scroll views so a callout is never clipped.
         .shortcutRecorderPopoverHost()
+    }
+
+    @ViewBuilder
+    private var pane: some View {
+        switch shown ?? navigation.tab {
+        case .general: GeneralSettingsView()
+        case .appearance: AppearanceSettingsView()
+        case .hyperKey: HyperKeySettingsView()
+        case .applications: ApplicationsSettingsView()
+        case .systemSettings: SystemSettingsSettingsView()
+        case .systemActions: SystemActionsSettingsView()
+        case .commands: CommandsSettingsView()
+        case .quicklinks: QuicklinksSettingsView()
+        case .appleShortcuts: AppleShortcutsSettingsView()
+        case .fallbacks: FallbacksSettingsView()
+        case .ai: AISettingsView()
+        case .agent: AgentSettingsView()
+        case .agentRules: AgentRulesSettingsView()
+        case .agentMemory: AgentMemorySettingsView()
+        case .aiProviders: AIProvidersSettingsView()
+        case .mcpServers: MCPSettingsView()
+        case .quickActions: QuickActionsSettingsView()
+        case .fileSearch: FileSearchSettingsView()
+        case .notes: NotesSettingsView()
+        case .snippets: SnippetsSettingsView()
+        case .navigation: NavigationSettingsView()
+        case .windowManagement: WindowManagementSettingsView()
+        case .clipboard: ClipboardSettingsView()
+        case .emoji: EmojiSettingsView()
+        case .calendar: CalendarSettingsView()
+        case .reminders: RemindersSettingsView()
+        case .contacts: ContactsSettingsView()
+        case .extensions: ExtensionsSettingsView()
+        case .permissions: PermissionsSettingsView()
+        case .backup: BackupSettingsView()
+        case .about: AboutView()
+        }
     }
 }

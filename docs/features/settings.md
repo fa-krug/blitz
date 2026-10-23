@@ -43,7 +43,10 @@ belongs to its feature's own doc; the opt-in `settings.json` mirror is
 
 A restart bumps `SettingsNavigationState.session`, which keys `SettingsDetailView`'s `.id`, so the
 pane remounts and its appear-time reads run again — the Permissions pane shows a grant made while
-the window was closed. Settings has its own lifecycle: neither the palette nor Settings opens or
+the window was closed. Closing unmounts the pane instead of leaving it behind the hidden window:
+`orderOut` keeps a SwiftUI tree running, and with it the once-a-second permission polls in
+Permissions, Quick Actions and Agent, which ran until quit. `isWindowShown` goes false on the hide
+and true again in `restart`, which runs before the reveal so the first frame holds the new pane. Settings has its own lifecycle: neither the palette nor Settings opens or
 closes the other.
 
 `SettingsRootView` is a `NavigationSplitView`: `SettingsSidebarView` on the left,
