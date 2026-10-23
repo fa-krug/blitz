@@ -325,13 +325,10 @@ private struct ChatMessageView: View, @MainActor Equatable {
                     Group {
                         switch segment {
                         case .text(let text):
-                            let blocks = MarkdownBlock.parse(
-                                ChatChoices.split(text).text,
-                                midStream: message.isArriving(segmentAt: offset, of: segments.count))
                             ChatMarkdownText(
-                                blocks: blocks,
-                                failedFrom: message.state == .failed && offset == segments.count - 1
-                                    ? max(blocks.count - 1, 0) : nil)
+                                markdown: ChatChoices.split(text).text,
+                                midStream: message.isArriving(segmentAt: offset, of: segments.count),
+                                failsLastBlock: message.state == .failed && offset == segments.count - 1)
                         case .search(let search):
                             ChatSearchRow(search: search)
                         case .tools(let uses):

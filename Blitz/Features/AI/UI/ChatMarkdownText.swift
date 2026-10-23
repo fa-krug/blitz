@@ -7,8 +7,11 @@ struct ChatMarkdownText: View {
     @Environment(\.chatTextHighlight) private var highlight
     @Environment(\.chatCitations) private var citations
     @Environment(\.chatFindPath) private var path
-    let blocks: [MarkdownBlock]
-    var failedFrom: Int?
+    let markdown: String
+    /// Set while a reply still streams into this text, so an equation still arriving is held back.
+    var midStream = false
+    /// A failed reply's last block is its failure note, drawn as one.
+    var failsLastBlock = false
 
     /// Where the current find match sits in this text, so the transcript can scroll to it.
     @State private var currentMatch: CGRect?
@@ -20,9 +23,9 @@ struct ChatMarkdownText: View {
 
     var body: some View {
         ChatTextRepresentable(
-            source: ChatMarkdownSource(
-                blocks: blocks, highlight: highlight, citations: citations, prefix: path,
-                failedFrom: failedFrom, metrics: metrics)
+            input: ChatMarkdownInput(
+                markdown: markdown, midStream: midStream, failsLastBlock: failsLastBlock,
+                highlight: highlight, citations: citations, prefix: path, metrics: metrics)
         ) { rect in
             if rect != currentMatch { currentMatch = rect }
         }
@@ -37,15 +40,26 @@ struct ChatMarkdownText: View {
     }
 }
 
+/// What the text view is handed; it parses and renders only when this changes.
+struct ChatMarkdownInput: Equatable {
+    let markdown: String
+    let midStream: Bool
+    let failsLastBlock: Bool
+    let highlight: ChatTextHighlight?
+    let citations: [String: Int]
+    let prefix: [Int]
+    let metrics: InterfaceMetrics
+}
+
 private struct ChatTextRepresentable: NSViewRepresentable {
-    let source: ChatMarkdownSource
+    let input: ChatMarkdownInput
     let onCurrentMatch: (CGRect?) -> Void
 
     func makeNSView(context: Context) -> ChatSelectableTextView { ChatSelectableTextView() }
 
     func updateNSView(_ view: ChatSelectableTextView, context: Context) {
         view.onCurrentMatch = onCurrentMatch
-        view.show(source)
+        view.show(input)
     }
 
     /// An open width asks for the ideal, as `Text` answers it: every paragraph on one line.
@@ -60,7 +74,9 @@ private struct ChatTextRepresentable: NSViewRepresentable {
 /// Read-only and backgroundless; it wraps to its frame and leaves scrolling to the transcript.
 final class ChatSelectableTextView: NSTextView {
     var onCurrentMatch: ((CGRect?) -> Void)?
-    private var source: ChatMarkdownSource?
+    private var input: ChatMarkdownInput?
+    private var stream = MarkdownStream()
+    private let renderCache = ChatMarkdownRenderCache()
     private var rendered: ChatRenderedText?
     private var headers: [ChatCodeHeader] = []
     private var codeBoxes: [CGRect] = []
@@ -102,14 +118,16 @@ final class ChatSelectableTextView: NSTextView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// Re-rendered only when its source changed, so a finished reply keeps its selection.
-    func show(_ next: ChatMarkdownSource) {
-        guard next != source else { return }
-        source = next
-        let output = ChatMarkdownRenderer(next).render()
-        rendered = output
+    /// Re-rendered only when its input changed, so a finished reply keeps its selection.
+    func show(_ next: ChatMarkdownInput) {
+        guard next != input, let storage = textStorage else { return }
+        input = next
+        let blocks = stream.blocks(of: next.markdown, midStream: next.midStream)
+        let source = ChatMarkdownSource(
+            blocks: blocks, highlight: next.highlight, citations: next.citations, prefix: next.prefix,
+            failedFrom: next.failsLastBlock ? max(blocks.count - 1, 0) : nil, metrics: next.metrics)
+        rendered = renderCache.update(storage, to: source)
         measured = nil
-        textStorage?.setAttributedString(output.string)
         layoutOverlays()
         needsDisplay = true
     }
@@ -196,7 +214,7 @@ final class ChatSelectableTextView: NSTextView {
     /// A text block paints only around drawn glyphs, so a redraw of its header strip skipped it.
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
-        guard let metrics = source?.metrics, let context = NSGraphicsContext.current?.cgContext else {
+        guard let metrics = input?.metrics, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
         let line = Theme.Size.hairline
@@ -256,7 +274,7 @@ final class ChatSelectableTextView: NSTextView {
             addSubview(header)
             headers.append(header)
         }
-        guard let metrics = source?.metrics else { return }
+        guard let metrics = input?.metrics else { return }
         for (header, (block, box)) in zip(headers, zip(blocks, codeBoxes)) {
             header.show(code: block.code, language: block.language, metrics: metrics)
             let inset = metrics.spacing.xl

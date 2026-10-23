@@ -324,6 +324,26 @@ swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /
 /tmp/ext-performance
 ```
 
+`Tests/chat-markdown-performance.swift` streams a 20 KB reply from `Tests/chat-markdown-fixture.swift`
+— headings, lists, code in five languages, inline and display math, tables and quotes — in
+16-character updates, about what `AIChatState` flushes every 40 ms, and prints the mean cost of an
+update at a quarter, half, three quarters and all of it, split into parse, render and layout. `full`
+parses, renders and lays out the whole reply at every update, as the text view did before
+`MarkdownStream` and `ChatMarkdownRenderCache`; `cached` runs the same three steps through them;
+`view` drives the shipped `ChatSelectableTextView`, its Copy stubbed off the shared pasteboard, with
+the transcript's `ChatChoices.split` as its parse. `--chunk` and `--sections` change the reply, and
+`--incremental-only` skips the two-minute `full` pass:
+
+```sh
+A=Blitz/Features/AI
+swiftc -O -swift-version 6 Blitz/Platform/Appearance.swift Blitz/DesignSystem/{Theme,InterfaceMetrics}.swift \
+    Blitz/Features/Settings/InterfaceSize.swift $A/Model/*.swift \
+    $A/UI/{ChatTextHighlight,ChatMarkdownRenderer,ChatMarkdownRenderCache,ChatMarkdownText}.swift \
+    $A/UI/{MathAttachmentCell,MathBox,MathFont,MathLayoutEngine}.swift \
+    Tests/chat-markdown-fixture.swift Tests/chat-markdown-performance.swift -o /tmp/chat-markdown-performance
+/tmp/chat-markdown-performance
+```
+
 `Signposts.interval` owns an explicit `defer` around the wrapped work on purpose. The obvious spelling
 leaks the interval when the work throws, because the `.end` emit is skipped on the throw path and the
 instrument then shows an interval that never closes.
@@ -343,6 +363,7 @@ Measured on `main`. Useful as orders of magnitude, not as contracts.
 | `palette-selection-test` | 111,684 assertions — a tripwire: a change in this count means the row-order model moved |
 | `SnippetKeywordPolicy` match | 7 µs/keystroke at 50 keywords, 59 µs at 1,000 — the `lowercased()` is 0.09 µs of it |
 | `ClipboardStore.pinnedItems` | 27–127 µs per uncached search, 1,000-row window — no cache earns its invalidation yet |
+| A streaming reply's update, at 20 KB | 0.6 ms through `MarkdownStream` and `ChatMarkdownRenderCache`, 64–89 ms whole; the view's 4 ms is mostly `ChatChoices.split`, still linear |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
 | Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |

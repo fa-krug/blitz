@@ -45,7 +45,7 @@ struct ChatPlanCard: View {
                 if let draft {
                     editor(draft)
                 } else {
-                    ChatMarkdownText(blocks: MarkdownBlock.parse(plan.markdown))
+                    ChatMarkdownText(markdown: plan.markdown)
                         .transition(.opacity)
                 }
             }

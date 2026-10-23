@@ -136,7 +136,7 @@ struct QuickActionResultView: View {
             // One `Text` per chunk would break the wrap, so the runs are styled inside one string.
             prose(Text(attributed(chunks)))
         } else if state.action.rendersMarkdown {
-            ChatMarkdownText(blocks: MarkdownBlock.parse(state.output, midStream: state.isRunning))
+            ChatMarkdownText(markdown: state.output, midStream: state.isRunning)
         } else {
             prose(Text(state.output))
         }

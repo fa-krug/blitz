@@ -230,9 +230,9 @@ Non-activating, so the target app keeps its selection while the panel holds key.
 click-away dismisses like every other borderless surface. A failed reply offers **Retry**, which
 reruns the same selection without reading it again. The panel is anchored by its **top-left** and re-measured as the reply arrives —
 centring on every measure would walk it up the screen. Summarize and custom actions use chat's
-`ChatMarkdownText` and `MarkdownBlock.parse`, keeping the whole result selectable across paragraphs
-and headings, with the same math as chat; `midStream` is on while it runs, so an equation still
-arriving is held back. Edits and translations stay literal (`QuickAction.rendersMarkdown`), and Copy
+`ChatMarkdownText`, keeping the whole result selectable across paragraphs and headings, with the
+same math as chat and the same redrawing of only what arrived; `midStream` is on while it runs, so
+an equation still arriving is held back. Edits and translations stay literal (`QuickAction.rendersMarkdown`), and Copy
 and Replace always use the raw text.
 
 The body is a `ScrollView` with its height **set** rather than capped: a scroll view has no ideal

@@ -176,6 +176,7 @@
 		2FE27D3EF2C1B1AF63CC1231 /* ArmedHover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBFE2AF963346B14B8D15BA /* ArmedHover.swift */; };
 		2FE933C32633EF79525F075E /* SupportReminderSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A62E203DBA107B8DC6AA8C /* SupportReminderSchedule.swift */; };
 		3017A8F95201740E952FE0C2 /* AgentModeInstructions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4391D819CB06055A980C72BB /* AgentModeInstructions.swift */; };
+		3022566035208B70A6B71EBE /* MarkdownStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 313A42A1FCE3CB6313F9DB89 /* MarkdownStream.swift */; };
 		30423DA970C1A829413D6348 /* InterfaceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB34F752A8C8C11EA2BA981 /* InterfaceMetrics.swift */; };
 		306DF0105F52D29DF0FF18F9 /* LauncherList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A421A8C8F04F3CB1BB0D54 /* LauncherList.swift */; };
 		308BD000D1D44B279EC4A48A /* CalcDateFormatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9100BA74728B2B2CEC894449 /* CalcDateFormatters.swift */; };
@@ -812,6 +813,7 @@
 		DD248A7C82832AEBE8A1D59B /* BarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD716A98AC5882B58CB91024 /* BarButton.swift */; };
 		DE227F9605371469FF0B6387 /* ExtensionPagination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870ED3F7B1A9BE7BA27B6B03 /* ExtensionPagination.swift */; };
 		DE34231259A09526F44455EC /* PaletteTabAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE5A231B54AE813CF17460B /* PaletteTabAction.swift */; };
+		DE4D17568EFEC2AAD142D55B /* ChatMarkdownRenderCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A087C0C4BA3DB94F785999A1 /* ChatMarkdownRenderCache.swift */; };
 		DE837A5DCEFF1994982AE5CF /* AgentRefusal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95C6A647F0187E68309F2F0E /* AgentRefusal.swift */; };
 		E06F565149B675FF9FBDFD4F /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F80F550DBCCB6734330DE82 /* JSONValue.swift */; };
 		E103977DD58D81B1B7EBA9A1 /* RootPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF538BCA826F5F893DA0EB96 /* RootPaletteView.swift */; };
@@ -1135,6 +1137,7 @@
 		30B7175186DC16646BACDAF9 /* FeatureCommandsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureCommandsSection.swift; sourceTree = "<group>"; };
 		30C0BBD18EB2A359557DE303 /* FilePreviewStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePreviewStage.swift; sourceTree = "<group>"; };
 		312C8CE30C1AE6A0FD0B0CCD /* ExecutablePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecutablePicker.swift; sourceTree = "<group>"; };
+		313A42A1FCE3CB6313F9DB89 /* MarkdownStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownStream.swift; sourceTree = "<group>"; };
 		314154210C611A9404EBD08D /* CalculatorHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorHistoryStore.swift; sourceTree = "<group>"; };
 		315EE4B8AF127A0A63DDA37F /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		3192A234537826BBC2D5CDAA /* ClipboardTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTextExtractor.swift; sourceTree = "<group>"; };
@@ -1547,6 +1550,7 @@
 		9F7917C86D79080BEE8C7108 /* ClaudeMCPLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeMCPLaunch.swift; sourceTree = "<group>"; };
 		A022156C8104054509F1911D /* ChatFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatFind.swift; sourceTree = "<group>"; };
 		A0545875529651BA89AC2992 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A087C0C4BA3DB94F785999A1 /* ChatMarkdownRenderCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMarkdownRenderCache.swift; sourceTree = "<group>"; };
 		A09781882F9FE5B601A28A60 /* WindowLayoutDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayoutDraft.swift; sourceTree = "<group>"; };
 		A0ED9D244D94B039C85354BA /* MeetingSpan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSpan.swift; sourceTree = "<group>"; };
 		A17573BF92878EA5F34189C8 /* SettingsFileFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFileFormat.swift; sourceTree = "<group>"; };
@@ -2813,6 +2817,7 @@
 				0DFFD0715129B0993525C9A8 /* ChatFindState.swift */,
 				DE1E03FE0A72C8482008F20D /* ChatHistoryScreen.swift */,
 				A3E5805E2FD715C8A28B780E /* ChatHistoryView.swift */,
+				A087C0C4BA3DB94F785999A1 /* ChatMarkdownRenderCache.swift */,
 				A56464C7A13D4145F6C370F9 /* ChatMarkdownRenderer.swift */,
 				78A63E1641AE7AF57CAF813A /* ChatMarkdownText.swift */,
 				AE3104B7D3223460B33BA197 /* ChatPlanCard.swift */,
@@ -3659,6 +3664,7 @@
 				C390D819C334AFAB9DC07368 /* LocalNetworkPolicy.swift */,
 				81776A3A5740E75DA3BF45CB /* MarkdownBlock.swift */,
 				29210CA95DDE83D8C079679D /* MarkdownMath.swift */,
+				313A42A1FCE3CB6313F9DB89 /* MarkdownStream.swift */,
 				4A32E6D5BF0A4E9E6E4E7553 /* MathFormula.swift */,
 				77A18B2630860DAD6DBBF73C /* MathNode.swift */,
 				BA8BF7531AFB36F6E463AB7A /* MathSymbolCatalog.swift */,
@@ -4406,6 +4412,7 @@
 				7DD1A9B2365B58CDE93616B0 /* ChatHistoryScreen.swift in Sources */,
 				B217AE31B396983DF9343917 /* ChatHistoryStore.swift in Sources */,
 				9F0FA2630254D2A84617F985 /* ChatHistoryView.swift in Sources */,
+				DE4D17568EFEC2AAD142D55B /* ChatMarkdownRenderCache.swift in Sources */,
 				A4F8FF36FF5C3471C658DB95 /* ChatMarkdownRenderer.swift in Sources */,
 				0B9FE4E8B2A0F6A8D5777665 /* ChatMarkdownText.swift in Sources */,
 				8F6A5AA86E610603D859686D /* ChatMessage.swift in Sources */,
@@ -4733,6 +4740,7 @@
 				C3E137D4FAD20287FD696E40 /* MarkdownCodeView.swift in Sources */,
 				1294A527FEDA6AB583AD3EA5 /* MarkdownInline.swift in Sources */,
 				BF42153B9F56115ABC9E823B /* MarkdownMath.swift in Sources */,
+				3022566035208B70A6B71EBE /* MarkdownStream.swift in Sources */,
 				C6FF37DF78DEC833BDE226DA /* MarkdownTableView.swift in Sources */,
 				FBB3BE287C26C70105D72656 /* MarkdownView.swift in Sources */,
 				70B448BD019739025A32EBB3 /* MathAttachmentCell.swift in Sources */,
