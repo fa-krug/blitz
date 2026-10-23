@@ -29,8 +29,9 @@ struct ChatHistoryList: View {
     private var rows: [Row] {
         var rows: [Row] = []
         var currentBucket: DateBucket?
+        let buckets = DateBuckets()
         for conversation in results {
-            let bucket = DateBucket(for: conversation.updatedAt)
+            let bucket = buckets.bucket(for: conversation.updatedAt)
             if bucket != currentBucket {
                 rows.append(.header(bucket.title))
                 currentBucket = bucket

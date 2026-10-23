@@ -33,8 +33,8 @@ struct ClipboardList: View {
     }
 
     /// The header an entry sits under; the screen's section jumps break on the same titles.
-    static func sectionTitle(for item: ClipboardItem) -> String {
-        item.isPinned ? "Pinned" : DateBucket(for: item.createdAt).title
+    static func sectionTitle(for item: ClipboardItem, buckets: DateBuckets) -> String {
+        item.isPinned ? "Pinned" : buckets.bucket(for: item.createdAt).title
     }
 
     /// Pins share one header; the rest are newest-first, a header per date bucket.
@@ -42,8 +42,9 @@ struct ClipboardList: View {
         var rows: [Row] = []
         var currentTitle: String?
         var pinnedSlot = 0
+        let buckets = DateBuckets()
         for item in results {
-            let title = Self.sectionTitle(for: item)
+            let title = Self.sectionTitle(for: item, buckets: buckets)
             if title != currentTitle {
                 rows.append(.header(title))
                 currentTitle = title
@@ -115,18 +116,36 @@ enum DateBucket: Int {
         }
     }
 
-    init(for date: Date, now: Date = Date(), calendar: Calendar = .current) {
-        if calendar.isDateInToday(date) {
-            self = .today
-        } else if calendar.isDateInYesterday(date) {
-            self = .yesterday
-        } else if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
-            self = .thisWeek
-        } else if calendar.isDate(date, equalTo: now, toGranularity: .month) {
-            self = .thisMonth
-        } else {
-            self = .earlier
+}
+
+/// The bucket edges around one `now`; a list resolves them once, then buckets by comparison.
+struct DateBuckets {
+    private let today: DateInterval?
+    private let yesterday: DateInterval?
+    private let week: DateInterval?
+    private let month: DateInterval?
+
+    init(now: Date = Date(), calendar: Calendar = .current) {
+        today = calendar.dateInterval(of: .day, for: now)
+        yesterday = calendar.date(byAdding: .day, value: -1, to: now).flatMap {
+            calendar.dateInterval(of: .day, for: $0)
         }
+        week = calendar.dateInterval(of: .weekOfYear, for: now)
+        month = calendar.dateInterval(of: .month, for: now)
+    }
+
+    func bucket(for date: Date) -> DateBucket {
+        if Self.date(date, isIn: today) { return .today }
+        if Self.date(date, isIn: yesterday) { return .yesterday }
+        if Self.date(date, isIn: week) { return .thisWeek }
+        if Self.date(date, isIn: month) { return .thisMonth }
+        return .earlier
+    }
+
+    /// Half-open, as `Calendar.isDate(_:inSameDayAs:)` is: the next day's midnight is not today.
+    private static func date(_ date: Date, isIn interval: DateInterval?) -> Bool {
+        guard let interval else { return false }
+        return date >= interval.start && date < interval.end
     }
 }
 
