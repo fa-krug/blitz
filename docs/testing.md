@@ -217,6 +217,26 @@ in `xctrace export --toc`, and pass preferences as `-key value` arguments. `AppC
 before the recorder does, so its interval sometimes arrives as an `End` alone; Time Profiler samples
 miss time blocked in XPC, which only System Trace's `syscall` table shows.
 
+**The palette benchmark** drives a real palette and needs no Accessibility grant, so it runs with the
+screen locked. `Scripts/palette-benchmark/run.sh build <name>` keeps an optimized dev-channel build of
+the checkout as `<name>`; `compare` injects `driver.m` into each named build, summons through the app
+delegate's URL entry point, posts real key events into the panel and records how long the main run
+loop stays awake per action, then prints the median of every run, interleaved across builds:
+
+```sh
+Scripts/palette-benchmark/run.sh build before      # on the base commit
+Scripts/palette-benchmark/run.sh build after       # on the change
+BLITZ_BENCH_ARGS="-compactMode NO -popToRootTimeout 0" \
+    Scripts/palette-benchmark/run.sh compare launcher 3 before after
+```
+
+`launcher` types, deletes, steps and closes; `modes` summons Clipboard History and the emoji picker;
+`scroll` runs the selection 30–40 rows down each. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
+which overrides the dev channel's own preferences for the run without writing them. Every action also
+emits a `palette-benchmark` Points of Interest interval, so a Time Profiler recording attached to the
+process (`xctrace record --attach <pid>`) can be cut down to one kind of action. Another process
+already holding ktrace — a second recording, say — leaves the trace with no samples.
+
 None of the benchmarks below join the suite, so each is registered in `run-tests.sh` as `run index`
 instead: `--index` hands it editor flags without queueing it, and without that entry nothing in the
 file resolves. Keep the entry's source list matching the command beside it.
@@ -375,8 +395,8 @@ Measured on `main`. Useful as orders of magnitude, not as contracts.
 | A streaming reply's update, at 20 KB | 0.6 ms through `MarkdownStream` and `ChatMarkdownRenderCache`, 64–89 ms whole; the view's 4 ms is mostly `ChatChoices.split`, still linear |
 | Rendered Notes editor, 100,000 characters | 30 ms install and full restyle; 7.5, 5.9 and 3.3 ms per character typed at the end, middle and start (5.2, 3.1 and 0.6 ms with rendering off); 0.6 ms per caret move |
 | `count items of trash` | 5,000 ms against a cold Finder on an *empty* Trash, 110 ms warm — why AppleScript is detached |
-| Palette summon, main thread busy until settled | 75 ms the first after launch; then 30 ms launcher, 50 ms clipboard, 82 ms emoji (a screen swap mounts the list); hide 40–65 ms, spent re-rendering Pop to Root off screen |
-| Palette keystroke, main thread until settled | 31 ms one more letter on a short result list, 45 ms the first letter; an arrow step 14–20 ms |
+| Palette summon, main thread busy (`palette-benchmark`, compact off, Pop to Root immediate) | 60 ms the first after launch; then 23 ms launcher, 52 ms clipboard, 52 ms emoji (a screen swap mounts the list); a close 17 ms untouched, 26 ms after moving, 38–42 ms from clipboard or emoji, which Pop to Root swaps back to the launcher off screen |
+| Palette keystroke, main thread busy (same) | 25 ms the first letter, 20 ms each one after, 21 ms a backspace; 32 ms the first letter in compact mode, which grows the panel; an arrow step 13–14 ms in the launcher, 16–17 ms in clipboard and emoji |
 | Launch, main thread (Debug channel at `-O`, AI on, 33 MB chat history half past retention, 5,000 clips) | `AppCore.init` 13–16 ms; main thread on-CPU ~210 ms over the first 12 s, no SQLite on main |
 
 Allocation counts are not recorded. The signposts are in place, so they can be taken from `main`
