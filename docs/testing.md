@@ -138,6 +138,14 @@ the real store it checks that a remove or a clear mid-copy leaves no copy, that 
 PNG copies stay apart, that a timeout or a cancel frees the queue, and that a failed or unreadable
 copy falls back to the original.
 
+`clipboard-text-test` runs `ClipboardTextIndexer` at `.userInitiated` through its `priority:`
+parameter, because under the parallel suite macOS starves the shipped `.background` QoS for tens of
+seconds at a time. Its scheduler checks wait for completion signals, not a deadline:
+`waitUntilStopped()` returns once the queue has drained and the loop has exited, and the fake
+`canRun` and extractor record into a `Tally` the harness can await. A wait that never finishes is
+reported by line after 60 seconds, instead of surfacing only as the runner's timeout. A harness
+that drives any other `.background` loop should do the same.
+
 A harness that passed before a change passes after it. There is no "I'll fix it next commit" and no
 commenting out a case. If a change genuinely invalidates an assertion, the assertion is rewritten in the
 same commit with the reason in the message.

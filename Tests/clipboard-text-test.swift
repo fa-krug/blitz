@@ -195,39 +195,49 @@ struct ClipboardTextTests {
         let store = ClipboardStore(directory: directory.appendingPathComponent("store"))
         expect(store.setTextSearchEnabled(true), "enable extraction for scheduling fixture")
         var idle = false
-        var calls = 0
+        let checks = Tally()
+        let calls = Tally()
+        // The shipped `.background` starves behind the rest of the suite; scheduling is what's tested.
         let indexer = ClipboardTextIndexer(
-            store: store, delay: .milliseconds(10), canRun: { idle },
+            store: store, delay: .milliseconds(10), priority: .userInitiated,
+            canRun: {
+                checks.record()
+                return idle
+            },
             extract: { _ in
-                await MainActor.run { calls += 1 }
+                await calls.record()
                 try await Task.sleep(for: .milliseconds(80))
                 return "scheduled result"
             })
         store.onItemsChanged = { [weak indexer] in indexer?.schedule() }
         store.addFiles(["/tmp/fixture.pdf"], sourceBundleID: nil)
         indexer.start()
+        await settle { await checks.reach(1) }
         try await Task.sleep(for: .milliseconds(50))
-        expect(calls == 0, "busy input defers extraction")
+        expect(calls.count == 0, "busy input defers extraction")
         idle = true
-        try await waitUntil { calls == 1 }
+        await settle { await calls.reach(1) }
         indexer.stop()
-        await indexer.waitUntilStopped()
-        try await Task.sleep(for: .milliseconds(120))
+        await settle { await indexer.waitUntilStopped() }
         expect(store.nextExtractionItem() != nil, "disable cancels in-flight result")
         indexer.start()
-        try await waitUntil { store.nextExtractionItem() == nil }
-        expect(calls == 2, "reenable resumes cancelled work")
-        try await Task.sleep(for: .milliseconds(50))
-        expect(calls == 2, "completed item is processed once")
+        await settle { await indexer.waitUntilStopped() }
+        expect(store.nextExtractionItem() == nil, "reenable drains the queue")
+        expect(calls.count == 2, "reenable resumes cancelled work")
+        indexer.schedule()
+        await settle { await indexer.waitUntilStopped() }
+        expect(calls.count == 2, "completed item is processed once")
         store.addFiles(["/tmp/second.pdf"], sourceBundleID: nil)
-        try await waitUntil { calls == 3 }
+        await settle { await indexer.waitUntilStopped() }
+        expect(calls.count == 3, "a new capture schedules extraction")
         // `applyClipboardTextSearch` never waits between the two, so a cancelled run must requeue.
         store.addFiles(["/tmp/third.pdf"], sourceBundleID: nil)
-        let restarted = calls
+        let restarted = calls.count
         indexer.stop()
         indexer.start()
-        try await waitUntil { store.nextExtractionItem() == nil }
-        expect(calls > restarted, "stop immediately followed by start drains the queue")
+        await settle { await indexer.waitUntilStopped() }
+        expect(store.nextExtractionItem() == nil, "stop immediately followed by start drains the queue")
+        expect(calls.count > restarted, "stop immediately followed by start extracts again")
         store.clearAll()
         try await Task.sleep(for: .milliseconds(120))
         expect(store.search("scheduled", filter: .all).isEmpty, "clear discards in-flight result")
@@ -240,53 +250,60 @@ struct ClipboardTextTests {
         store.setTextSearchEnabled(true)
         store.addFiles(["/tmp/failure.pdf"], sourceBundleID: nil)
         let failed = store.items[0]
-        var calls = 0
+        let calls = Tally()
         var failing = true
         let indexer = ClipboardTextIndexer(
-            store: store, delay: .milliseconds(10), retryDelay: 0.05, canRun: { true },
+            store: store, delay: .milliseconds(10), retryDelay: 0.05, priority: .userInitiated,
+            canRun: { true },
             extract: { _ in
                 let shouldFail = await MainActor.run {
-                    calls += 1; return failing
+                    calls.record()
+                    return failing
                 }
                 if shouldFail { throw Failure.temporary }
                 return "RECOVERED 4826"
             })
         store.onItemsChanged = { [weak indexer] in indexer?.schedule() }
         indexer.start()
-        try await waitUntil { calls == 3 && store.nextExtractionRetry == nil }
-        try await Task.sleep(for: .milliseconds(100))
-        expect(calls == 3, "persistent failures stop after three attempts")
+        await settle { await indexer.waitUntilStopped() }
+        expect(calls.count == 3, "persistent failures stop after three attempts")
+        expect(store.nextExtractionRetry == nil, "exhausted failure schedules no retry")
         expect(store.nextExtractionItem() == nil, "exhausted failure does not spin in queue")
         indexer.stop()
-        await indexer.waitUntilStopped()
+        await settle { await indexer.waitUntilStopped() }
         store.setTextSearchEnabled(false)
         store.setTextSearchEnabled(true)
         expect(store.nextExtractionItem()?.id == failed.id, "reenabling offers failed item again")
         failing = false
         indexer.start()
-        try await waitUntil { calls == 4 && store.nextExtractionItem() == nil }
+        await settle { await indexer.waitUntilStopped() }
+        expect(calls.count == 4, "reenabled item is extracted again")
+        expect(store.nextExtractionItem() == nil, "recovered item leaves the queue")
         try await waitUntil { store.search("RECOVERED", filter: .file).count == 1 }
         expect(store.nextExtractionRetry == nil, "success removes retry state")
         indexer.stop()
-        await indexer.waitUntilStopped()
+        await settle { await indexer.waitUntilStopped() }
 
         store.clearAll()
         store.addFiles(["/tmp/later.pdf"], sourceBundleID: nil)
         let item = store.items[0]
         let generation = store.extractionGeneration
         let now = Date()
-        store.recordExtractionFailure(for: item, generation: generation, retryAt: now.addingTimeInterval(30))
+        // Far past the stall guard, so a capture that never wakes the sleep cannot pass by outwaiting it.
+        let backoff: TimeInterval = 3600
+        store.recordExtractionFailure(
+            for: item, generation: generation, retryAt: now.addingTimeInterval(backoff))
         expect(store.nextExtractionItem(now: now) == nil, "backoff delays retries")
         expect(
-            store.nextExtractionItem(now: now.addingTimeInterval(31))?.id == item.id, "retry becomes eligible"
-        )
+            store.nextExtractionItem(now: now.addingTimeInterval(backoff + 1))?.id == item.id,
+            "retry becomes eligible")
         indexer.start()
         try await Task.sleep(for: .milliseconds(30))
         store.addFiles(["/tmp/fresh.pdf"], sourceBundleID: nil)
-        try await waitUntil { calls == 5 }
-        expect(calls == 5, "fresh capture wakes retry sleep without waiting thirty seconds")
+        await settle { await calls.reach(5) }
+        expect(calls.count == 5, "fresh capture wakes retry sleep without waiting out the backoff")
         indexer.stop()
-        await indexer.waitUntilStopped()
+        await settle { await indexer.waitUntilStopped() }
         store.remove(item)
         expect(store.nextExtractionRetry == nil, "deletion removes retry state")
         store.recordExtractionFailure(for: item, generation: generation, retryAt: now)
@@ -300,6 +317,17 @@ struct ClipboardTextTests {
         store.setTextSearchEnabled(true)
         expect(store.nextExtractionItem()?.id == empty.id, "reenabling retries earlier empty attempts")
         store.close()
+    }
+
+    /// Names the wait that never finishes, where the runner's kill would only report a timeout.
+    static func settle(line: Int = #line, _ signal: () async -> Void) async {
+        let stall = Task.detached {
+            try await Task.sleep(for: .seconds(60))
+            print("FAIL: scheduler stalled (line \(line))")
+            exit(1)
+        }
+        await signal()
+        stall.cancel()
     }
 
     static func waitUntil(line: Int = #line, _ condition: () -> Bool) async throws {
@@ -372,5 +400,24 @@ struct ClipboardTextTests {
             failures += 1
             print("FAIL: \(message)")
         }
+    }
+}
+
+/// Counts events on the main actor, so a check awaits the count instead of polling a deadline.
+@MainActor
+final class Tally {
+    private(set) var count = 0
+    private var waiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    func record() {
+        count += 1
+        let reached = waiters.filter { $0.target <= count }
+        waiters.removeAll { $0.target <= count }
+        for waiter in reached { waiter.continuation.resume() }
+    }
+
+    func reach(_ target: Int) async {
+        guard count < target else { return }
+        await withCheckedContinuation { waiters.append((target, $0)) }
     }
 }
