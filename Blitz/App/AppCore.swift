@@ -606,6 +606,7 @@ final class AppCore {
 
     func prepareForTermination() {
         settingsFile?.flush()
+        extensions.prepareForTermination()
         clipboardTextIndexer?.stop()
         screenshotIndexer?.stop()
         // Caps Lock first: its remap is the one teardown that outlives the process.

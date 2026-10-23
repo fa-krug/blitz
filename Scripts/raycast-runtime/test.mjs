@@ -24,6 +24,7 @@ import { cpus, freemem, homedir, loadavg, tmpdir, uptime } from "node:os";
 import { lookup } from "node:dns/promises";
 import * as fs from "node:fs";
 import * as zlib from "node:zlib";
+import { resolveTree } from "./src/tree-delta.js";
 
 const runtimePath = [
   resolve("Blitz/Resources/RaycastRuntime.generated.js"),
@@ -36,7 +37,9 @@ const runtime = readFileSync(runtimePath, "utf8");
 export function createHarness({ onRender, onFail, verbose = false, stubs = {} } = {}) {
   const context = createContext({});
   const timers = new Map();
-  const state = { trees: [], failures: [], logs: [], finished: false, hostCalls: [] };
+  const state = { trees: [], failures: [], logs: [], finished: false, hostCalls: [], payloads: [] };
+  // What Swift keeps per session: the last accepted tree's elements, which a delta refers back to.
+  const bases = new Map();
 
   const host = {
     log(level, message) {
@@ -44,9 +47,17 @@ export function createHarness({ onRender, onFail, verbose = false, stubs = {} } 
       if (verbose) console.log(`  [${level}] ${message}`);
     },
     render(sessionId, json) {
-      const tree = JSON.parse(json);
-      state.trees.push(tree);
-      onRender?.(tree);
+      state.payloads.push(json);
+      let resolved;
+      try {
+        resolved = resolveTree(json, bases.get(sessionId) ?? new Map());
+      } catch {
+        return false;
+      }
+      bases.set(sessionId, resolved.nodes);
+      state.trees.push(resolved.tree);
+      onRender?.(resolved.tree);
+      return true;
     },
     failed(sessionId, message) {
       state.failures.push(message);
@@ -114,6 +125,10 @@ export function createHarness({ onRender, onFail, verbose = false, stubs = {} } 
     state,
     call(expression) {
       return runInContext(expression, context);
+    },
+    /// Stands in for a Swift side that lost the base the next delta refers to.
+    forgetBase(sessionId) {
+      bases.delete(sessionId);
     },
     boot(config) {
       return runInContext(`__blitz.boot(${JSON.stringify(JSON.stringify(config))})`, context);

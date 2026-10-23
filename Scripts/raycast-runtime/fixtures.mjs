@@ -183,6 +183,29 @@ export default function Command() {
 }
 `;
 
+const deltaSource = `
+import { List, ActionPanel, Action } from "@raycast/api";
+import { useState } from "react";
+
+export default function Command() {
+  const [count, setCount] = useState(0);
+  const actions = (
+    <ActionPanel>
+      <Action title="Bump" onAction={() => setCount((c) => c + 1)} />
+    </ActionPanel>
+  );
+  return (
+    <List>
+      <List.Item id="changing" title={"Count is " + count} actions={actions} />
+      {["b", "c", "d"].map((id) => (
+        <List.Item key={id} id={id} title={"Row " + id} keywords={[id]} actions={actions} />
+      ))}
+      {count >= 3 && <List.Item id="raw" title="Raw" accessories={[{ $same: 1 }]} />}
+    </List>
+  );
+}
+`;
+
 const batchedSource = `
 import { Detail, ActionPanel, Action } from "@raycast/api";
 import { useEffect, useState } from "react";
@@ -1041,6 +1064,48 @@ export async function runFixtures() {
     harness.dispatch("s1", bump.props.onAction.$fn);
     await wait();
     check("re-renders after the action", describeTree(harness.state.trees.at(-1)).includes("Count is 1"));
+  });
+
+  await run("Unchanged elements cross as references", deltaSource, "view", async (harness) => {
+    const { payloads, trees } = harness.state;
+    const titles = () => {
+      const list = findNode(trees.at(-1), "List");
+      return list.children.map((item) => item.props.title).join("|");
+    };
+    const bump = async () => {
+      harness.dispatch("s1", findNode(trees.at(-1), "Action").props.onAction.$fn);
+      await wait();
+    };
+    check("the first commit crosses whole", !payloads[0].includes('"$same"'), payloads[0].slice(0, 120));
+    const first = payloads.length;
+    await bump();
+    const delta = payloads.at(-1);
+    check("a re-render crosses once", payloads.length === first + 1, String(payloads.length - first));
+    check(
+      "the unchanged rows and the unchanged action panel cross as references",
+      (delta.match(/"\$same"/g) ?? []).length === 4,
+      delta,
+    );
+    check("the delta is smaller than the whole tree", delta.length < payloads[0].length / 2);
+    check("the resolved tree is whole", titles() === "Count is 1|Row b|Row c|Row d", titles());
+    const reused = findNode(trees.at(-1), "List").children[1];
+    check("a referenced row keeps its handlers", !!reused.props.actions?.children[0]?.props.onAction?.$fn);
+
+    harness.forgetBase("s1");
+    const beforeRetry = payloads.length;
+    await bump();
+    check("a rejected delta is resent whole", payloads.length === beforeRetry + 2, String(payloads.length - beforeRetry));
+    check("the resend carries no references", !payloads.at(-1).includes('"$same"'));
+    check("and the tree recovers", titles() === "Count is 2|Row b|Row c|Row d", titles());
+
+    await bump();
+    check("a raw value shaped like a reference disables references", !payloads.at(-1).includes('"delta"'));
+    const raw = findNode(trees.at(-1), "List").children[4];
+    check("and reaches Swift untouched", raw?.props.accessories?.[0]?.$same === 1, JSON.stringify(raw?.props));
+    const beforeSame = payloads.length;
+    harness.call(`__blitz.dispatch("s1", "nope", "[]")`);
+    await wait();
+    check("an unchanged tree is still not resent", payloads.length === beforeSame);
   });
 
   await run("List pagination", paginationSource, "view", async (harness) => {

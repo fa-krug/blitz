@@ -309,6 +309,21 @@ swiftc -O -swift-version 6 Blitz/Platform/{Signposts,Appearance,NotificationToke
 /tmp/notes-editor-performance
 ```
 
+`Tests/ext-performance.swift` times the extension engine where a large list strains it: booting a
+fresh runtime, a one-row update of a 1,000-row list (the JS commit, the hop to the main actor, and the
+decode of a whole commit against a delta), local filtering per keystroke with and without the
+per-tree search index, and the main-actor share of a 1 MB and a 5 MB storage flush. It compiles the
+engine sources `ext-test` does — `X` in `run-tests.sh`, read from there so the list stays single —
+and `EXT_PERF_ROWS` changes the list size. Timings swing with machine load, so compare two builds
+back to back rather than against numbers quoted elsewhere:
+
+```sh
+E=Blitz/Features/Extensions L=Blitz/Features/Launcher/Model
+eval "$(sed -n '/^X="/,/"$/p' Scripts/run-tests.sh)"
+swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /tmp/ext-performance
+/tmp/ext-performance
+```
+
 `Signposts.interval` owns an explicit `defer` around the wrapped work on purpose. The obvious spelling
 leaks the interval when the work throws, because the `.end` emit is skipped on the throw path and the
 instrument then shows an interval that never closes.
