@@ -943,7 +943,7 @@ struct RootPaletteView: View {
 
     /// The one search field — empty it's a drag handle, and any text hands every press to editing.
     private func searchField(prompt: String, hidesField: Bool) -> some View {
-        TextField("", text: Binding(get: { vm.query }, set: typeQuery))
+        TextField("", text: Binding(get: { vm.query }, set: { typeQuery($0) }))
             .textFieldStyle(.plain)
             .font(metrics.typography.searchField)
             .tint(Theme.Colors.textPrimary)
