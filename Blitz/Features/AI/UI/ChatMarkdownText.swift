@@ -8,6 +8,8 @@ struct ChatMarkdownText: View {
     @Environment(\.chatCitations) private var citations
     @Environment(\.chatFindPath) private var path
     let markdown: String
+    /// A reply's own text, whose `choices` fence is the chips' and never drawn.
+    var hidesChoices = false
     /// Set while a reply still streams into this text, so an equation still arriving is held back.
     var midStream = false
     /// A failed reply's last block is its failure note, drawn as one.
@@ -24,8 +26,9 @@ struct ChatMarkdownText: View {
     var body: some View {
         ChatTextRepresentable(
             input: ChatMarkdownInput(
-                markdown: markdown, midStream: midStream, failsLastBlock: failsLastBlock,
-                highlight: highlight, citations: citations, prefix: path, metrics: metrics)
+                markdown: markdown, hidesChoices: hidesChoices, midStream: midStream,
+                failsLastBlock: failsLastBlock, highlight: highlight, citations: citations, prefix: path,
+                metrics: metrics)
         ) { rect in
             if rect != currentMatch { currentMatch = rect }
         }
@@ -43,6 +46,7 @@ struct ChatMarkdownText: View {
 /// What the text view is handed; it parses and renders only when this changes.
 struct ChatMarkdownInput: Equatable {
     let markdown: String
+    let hidesChoices: Bool
     let midStream: Bool
     let failsLastBlock: Bool
     let highlight: ChatTextHighlight?
@@ -75,6 +79,7 @@ private struct ChatTextRepresentable: NSViewRepresentable {
 final class ChatSelectableTextView: NSTextView {
     var onCurrentMatch: ((CGRect?) -> Void)?
     private var input: ChatMarkdownInput?
+    private var choices = ChatChoicesStream()
     private var stream = MarkdownStream()
     private let renderCache = ChatMarkdownRenderCache()
     private var rendered: ChatRenderedText?
@@ -122,7 +127,8 @@ final class ChatSelectableTextView: NSTextView {
     func show(_ next: ChatMarkdownInput) {
         guard next != input, let storage = textStorage else { return }
         input = next
-        let blocks = stream.blocks(of: next.markdown, midStream: next.midStream)
+        let markdown = next.hidesChoices ? choices.split(next.markdown).text : next.markdown
+        let blocks = stream.blocks(of: markdown, midStream: next.midStream)
         let source = ChatMarkdownSource(
             blocks: blocks, highlight: next.highlight, citations: next.citations, prefix: next.prefix,
             failedFrom: next.failsLastBlock ? max(blocks.count - 1, 0) : nil, metrics: next.metrics)

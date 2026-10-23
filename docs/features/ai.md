@@ -603,14 +603,17 @@ and the Actions menu's own chords, and dies with the window.
   `ChatMarkdownRenderer` builds its single attributed string: lists with hanging indents, quotes,
   code as `NSTextBlock`s, tables as an `NSTextTable`, with find's marks and the citation numbers
   in it. Its leaf paths are `ChatFindIndex.leaves`'s, which `chat-markdown-test` pins.
-  The view is handed the segment's Markdown, not its blocks, and redoes only what an update changed,
-  so a long reply costs no more per update than a short one. `MarkdownStream` keeps the top-level
-  blocks whose reading stopped short of the last line — the one a stream still grows — and re-reads
-  only the lines after them; `ChatMarkdownRenderCache` keeps each block's drawn text, typeset math
+  The view is handed the segment's raw text, not its blocks, and redoes only what an update changed,
+  so a long reply costs no more per update than a short one. `ChatChoicesStream` lifts the choices
+  out as `ChatChoices.split` would, but settles leading lines that hold no `choices` fence opener or
+  label once a plain prose line follows them — nothing later can reach back past that line — and
+  re-reads only from it; a reply that opens the fence or writes the label mid-text re-reads from
+  there on. `MarkdownStream` keeps the top-level blocks whose reading stopped short of the last
+  line — the one a stream still grows — and re-reads only the lines after them; `ChatMarkdownRenderCache` keeps each block's drawn text, typeset math
   and colouring included, and replaces the text storage from the first block that changed, so what
   comes before keeps its layout. A changed find query, citation list, path or text size redraws
-  every block. Both must give exactly what a whole parse and render give, and `chat-markdown-test`
-  checks that at every update of a streamed reply, layout included. A code
+  every block. All three must give exactly what a whole split, parse and render give, and
+  `chat-markdown-test` checks that at every update of a streamed reply, layout included. A code
   block's `NSTextBlock` only lays it out: `ChatSelectableTextView.drawBackground(in:)` draws its box,
   a continuous rounded rectangle (`Theme.Radius.codeBlock`) over the block's bounds less its margin
   (the list or quote indent), because a text block paints only around the glyphs being redrawn and

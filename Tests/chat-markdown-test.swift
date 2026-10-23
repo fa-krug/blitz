@@ -55,6 +55,7 @@ struct ChatMarkdownTests {
         wideFormulasShrinkToTheLine()
         equationsStillArrivingHoldTheirPlace()
         streamedPartsParseAsTheWhole()
+        streamedChoicesSplitAsTheWhole()
         cachedRendersMatchAWholeRender()
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -340,6 +341,50 @@ struct ChatMarkdownTests {
         for replaced in ["- a\n\n  cont", "something else entirely\n\n- x", ""] {
             expect(
                 stream.blocks(of: replaced, midStream: true) == MarkdownBlock.parse(replaced, midStream: true),
+                "text that no longer extends the last starts over: \(replaced.debugDescription)")
+        }
+    }
+
+    /// A reply's choices fenced, labelled or only mentioned, after prose that settles first.
+    static let choiceShapes = [
+        "Intro line\n\nMore prose\n\nPick:\n```choices\nYes\nNo\n```\n",
+        "Prose\n```swift\nlet a = 1\n```\n\n```choices\nA\nB\n```\nafter the fence\n",
+        "Your choices matter.\nline two\n\n**Choices:**\n1. Yes\n2. No\n",
+        "Lead\nmore\n```\nchoices\n- A\n- B",
+        "````markdown\n```\n````\ntext\nmore\n```choices\nA\n```",
+        "  \n\u{2028}```\nprose\nline\n```choices\nA",
+        "a\r\nb\r\nc\r\n```choices\r\nA\r\n```\r\n",
+        "Say ```choices``` to me\nand more\nchoices\n- a\n- b\nprose after",
+        "x\n```python\nx = 1\nchoices\n- a\n",
+        "one\ntwo\n```\nthree\nfour\n```choices\nA\n```\n```",
+    ]
+
+    /// Every update a choices stream makes splits as the whole text so far does.
+    static func streamedChoicesSplitAsTheWhole() {
+        func check(_ text: String, chunk: Int, _ name: String) {
+            var stream = ChatChoicesStream()
+            var sent = ""
+            var mismatch: String?
+            for piece in ChatMarkdownFixture.chunks(of: text, size: chunk) {
+                sent += piece
+                if mismatch == nil, stream.split(sent) != ChatChoices.split(sent) { mismatch = sent }
+            }
+            expect(mismatch == nil, "\(name) splits as a whole at \(mismatch.debugDescription)")
+        }
+        for (index, shape) in (choiceShapes + streamedShapes).enumerated() {
+            check(shape, chunk: 1, "shape \(index)")
+            check(shape, chunk: 3, "shape \(index) in threes")
+        }
+        let long = ChatMarkdownFixture.longReply(sections: 3)
+        check(long, chunk: 37, "the long reply")
+        let picked = "Your choices:\n\n\(long)\n\nPick:\n```choices\nYes\nNo\n```"
+        check(picked, chunk: 37, "the long reply with choices")
+        var stream = ChatChoicesStream()
+        _ = stream.split(choiceShapes[0])
+        let replacements = ["Intro line\n\nMore prose\n\nchoices\n- a\n- b", "Intro line\n\nMo", "Other\n", ""]
+        for replaced in replacements {
+            expect(
+                stream.split(replaced) == ChatChoices.split(replaced),
                 "text that no longer extends the last starts over: \(replaced.debugDescription)")
         }
     }
