@@ -24,7 +24,7 @@ struct AIChatTests {
         onlyPDFsSurviveAsDocuments()
         inlinedTextIsFencedAndNamed()
         attachmentPolicyClassifiesWhatCanBeAttached()
-        historyRoundTripsAndRepairsInterruptedReplies()
+        await historyRoundTripsAndRepairsInterruptedReplies()
         savesRewriteOnlyTheStoredTail()
         crashRepairSurvivesTailSaves()
         markdownParsesStreamingFriendlyBlocks()
@@ -36,7 +36,8 @@ struct AIChatTests {
         mathStillArrivingIsHeldBackOnlyAtTheEnd()
         segmentsClampSearchOffsets()
         leavingAConversationDropsItsStagedImages()
-        retentionPrunesByAgeAndCascades()
+        await retentionPrunesByAgeAndCascades()
+        await aSaveRacingRetentionIsKept()
         segmentsInterleaveSearchesAndTools()
         consecutiveToolCallsMerge()
         searchesSeparateToolRuns()
@@ -51,8 +52,8 @@ struct AIChatTests {
         await anUnlimitedToolLoopStopsWhenItsHistoryIsFull()
         await toolOutputIsBoundedBeforeItIsBilled()
         toolUsesPersistAndSettleOnReload()
-        renamesAndPinsSurviveSavesAndSpareRetention()
-        archivedChatsLeaveTheListsAndAreNeverLost()
+        await renamesAndPinsSurviveSavesAndSpareRetention()
+        await archivedChatsLeaveTheListsAndAreNeverLost()
         await archivingLeavesLiveRepliesAndOpenChatsAlone()
         transcriptsExportAndDropOnlyATrailingReply()
         await regenerateAsksTheSameQuestionAgain()
@@ -65,7 +66,7 @@ struct AIChatTests {
         chatsKeepTheirOwnModel()
         choicesComeOutOfTheirFence()
         referencesAreTheLinksAReplyCites()
-        titlesAreCleanedAndNeverBeatARename()
+        await titlesAreCleanedAndNeverBeatARename()
         findWalksMatchesAndWraps()
         chatStepsFollowTheSidebarAndWrap()
         citationsCloseTheSentenceThatCitedThem()
@@ -637,7 +638,7 @@ struct AIChatTests {
             "an inlined file is text, whatever its extension")
     }
 
-    static func historyRoundTripsAndRepairsInterruptedReplies() {
+    static func historyRoundTripsAndRepairsInterruptedReplies() async {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("blitz-ai-chat-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -666,7 +667,7 @@ struct AIChatTests {
         expect(store.search("hello").first?.id == id, "history searches title and preview")
 
         let reopened = ChatHistoryStore(directory: directory)
-        reopened.load()
+        await reopened.load()
         let loaded = reopened.session(id: id)
         expect(loaded?.messages.count == 2, "a transcript survives reopening")
         expect(loaded?.messages.first?.images == [picture], "attached images survive reopening")
@@ -785,7 +786,7 @@ struct AIChatTests {
             "a repaired tail keeps its searches")
     }
 
-    static func retentionPrunesByAgeAndCascades() {
+    static func retentionPrunesByAgeAndCascades() async {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("blitz-ai-prune-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -809,7 +810,7 @@ struct AIChatTests {
 
         let cutoff = AIRetention.month.cutoff(from: now)
         expect(cutoff != nil, "a bounded retention has a cutoff")
-        let removed = store.prune(before: cutoff!)
+        let removed = await store.prune(before: cutoff!)
 
         expect(removed == 1, "only the conversation past the cutoff is pruned, got \(removed)")
         expect(
@@ -827,10 +828,42 @@ struct AIChatTests {
             count(database, "SELECT COUNT(*) FROM message_images") == 0,
             "pruning cascades to message_images, so no picture is orphaned")
 
-        expect(store.prune(before: cutoff!) == 0, "a second prune finds nothing left to remove")
+        let removedAgain = await store.prune(before: cutoff!)
+        expect(removedAgain == 0, "a second prune finds nothing left to remove")
         expect(
             AIRetention.forever.cutoff(from: now) == nil,
             "Forever names no cutoff, so nothing is ever pruned")
+    }
+
+    /// Retention deletes and vacuums on its own connection, so a save landing meanwhile must wait.
+    static func aSaveRacingRetentionIsKept() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blitz-ai-prune-race-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ChatHistoryStore(directory: directory)
+        let now = Date()
+        let old = now.addingTimeInterval(-40 * 86_400)
+        let picture = AIImage(data: Data(repeating: 9, count: 256 * 1_024), mimeType: "image/png")
+        for _ in 0..<20 {
+            var session = ChatSession(id: UUID(), createdAt: old)
+            session.append(ChatMessage(role: .user, text: "old", sentAt: old, images: [picture]))
+            store.save(session)
+        }
+
+        let pruning = Task { await store.prune(before: now.addingTimeInterval(-86_400)) }
+        try? await Task.sleep(for: .milliseconds(2))
+        var racing = ChatSession(id: UUID(), createdAt: now)
+        racing.append(ChatMessage(role: .user, text: "new", sentAt: now))
+        store.save(racing)
+        let removed = await pruning.value
+
+        expect(removed == 20, "retention removes every expired chat, got \(removed)")
+        expect(store.conversations.map(\.id) == [racing.id], "the resident list keeps the new chat")
+        let reopened = ChatHistoryStore(directory: directory)
+        await reopened.load()
+        expect(
+            reopened.conversations.map(\.id) == [racing.id],
+            "a save racing the retention VACUUM reaches the file")
     }
 
     static func count(_ database: URL, _ sql: String) -> Int {
@@ -1257,7 +1290,7 @@ extension AIChatTests {
     }
 
     /// A rename or a pin is the reader's; neither a later save nor a retention sweep may undo it.
-    static func renamesAndPinsSurviveSavesAndSpareRetention() {
+    static func renamesAndPinsSurviveSavesAndSpareRetention() async {
         let (store, directory) = temporaryStore("meta")
         defer { try? FileManager.default.removeItem(at: directory) }
         let now = Date(timeIntervalSince1970: 2_000_000)
@@ -1280,7 +1313,7 @@ extension AIChatTests {
             "saving a later turn keeps the rename")
 
         let reopened = ChatHistoryStore(directory: directory)
-        reopened.load()
+        await reopened.load()
         expect(
             reopened.conversation(id: fresh)?.customTitle == "Trip planning",
             "a rename survives reopening")
@@ -1292,7 +1325,8 @@ extension AIChatTests {
             "a blank rename hands the title back to the first question")
 
         let cutoff = AIRetention.month.cutoff(from: now)!
-        expect(reopened.prune(before: cutoff) == 1, "retention removes only the unpinned old chat")
+        let pruned = await reopened.prune(before: cutoff)
+        expect(pruned == 1, "retention removes only the unpinned old chat")
         expect(reopened.conversation(id: old) == nil, "the old chat is gone")
         expect(reopened.session(id: pinned) != nil, "a pinned chat outlives retention")
 
@@ -1308,7 +1342,7 @@ extension AIChatTests {
     }
 
     /// Archive hides a chat from every list but its own, and only delete or retention removes it.
-    static func archivedChatsLeaveTheListsAndAreNeverLost() {
+    static func archivedChatsLeaveTheListsAndAreNeverLost() async {
         let (store, directory) = temporaryStore("archive")
         defer { try? FileManager.default.removeItem(at: directory) }
         let database = directory.appendingPathComponent("ai-chats.sqlite3")
@@ -1339,7 +1373,7 @@ extension AIChatTests {
         expect(store.session(id: old)?.messages.count == 2, "its transcript is untouched")
 
         let reopened = ChatHistoryStore(directory: directory)
-        reopened.load()
+        await reopened.load()
         expect(reopened.archived.map(\.id) == [old], "the archive survives reopening")
         expect(
             reopened.conversation(id: old)?.archivedAt == now,
@@ -1367,7 +1401,8 @@ extension AIChatTests {
             "Delete All spares pinned and archived chats alike")
 
         let cutoff = AIRetention.month.cutoff(from: now)!
-        expect(reopened.prune(before: cutoff) == 1, "retention still applies to an archived chat")
+        let pruned = await reopened.prune(before: cutoff)
+        expect(pruned == 1, "retention still applies to an archived chat")
         expect(
             reopened.conversation(id: old) == nil && reopened.archived.isEmpty,
             "the old archived chat is gone, from the archive too")
@@ -1708,7 +1743,7 @@ extension AIChatTests {
         expect(reopened.session.model == sonnet, "a later pick is what the chat reopens on")
     }
 
-    static func titlesAreCleanedAndNeverBeatARename() {
+    static func titlesAreCleanedAndNeverBeatARename() async {
         expect(
             ChatTitle.sanitize("Title: \"Weekend Hiking Trip Plan.\"\nmore")
                 == "Weekend Hiking Trip Plan",
@@ -1735,7 +1770,7 @@ extension AIChatTests {
             "a generated title replaces the first question's")
         store.save(session)
         let reopened = ChatHistoryStore(directory: directory)
-        reopened.load()
+        await reopened.load()
         expect(
             reopened.conversation(id: session.id)?.generatedTitle == "Prime factors of 1001",
             "a generated title survives a later save and reopening")

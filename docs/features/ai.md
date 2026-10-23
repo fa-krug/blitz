@@ -388,7 +388,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   always starts fresh. There is no third setting for "immediately" because that *is* `A New
   Conversation` — two controls able to express one state would only ever disagree.
 - **History is local and lazy.** Conversation summaries stay in memory while transcripts load from the
-  system SQLite database only for the opened chat. Empty chats are never saved.
+  system SQLite database only for the opened chat. Empty chats are never saved. The summaries are read
+  at the enable transition by `ChatHistoryStore.load()`, a detached read on a connection of its own;
+  a write that lands on `saved` meanwhile makes it read again, and a `close` in between drops it.
 - **A failed reply ends on a note saying why, and only the note reads as an error.** A cancel, an
   error and a reply cut off by a quit each close the reply's text with a last paragraph (`Cancelled`,
   the error, `Response interrupted.`, which `ChatHistoryStore` adds on load). The transcript hands
@@ -419,7 +421,11 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   fully off" promises the file is untouched. A Mac left off for four months keeps its chats.
   `ChatHistoryStore.prune(before:)` is one `DELETE`, sparing pinned chats but not archived ones, that cascades to messages, images, searches and the archive row,
   and it `VACUUM`s only when something actually went: pictures live inline as BLOBs, so this is the
-  one store where a delete alone frees pages without ever shrinking the file.
+  one store where a delete alone frees pages without ever shrinking the file. The `VACUUM` rewrites
+  every stored image and document, so both run detached on a connection of their own — 120–190 ms
+  of main-thread stall for a 33 MB history before — and the enable transition prunes before it loads,
+  so an expired chat is never listed. Every connection carries a 5 s busy timeout: a save landing
+  mid-`VACUUM` waits it out instead of failing (`aSaveRacingRetentionIsKept` pins this).
 - **Everything but the newest message is bounded.** `ChatSession.boundedContext` sends that message
   whole — truncating what someone just typed is worse than the provider's own error — keeps images
   and documents only on that turn and only up to `AIAttachmentBudget`, inlining an attached text
@@ -988,6 +994,11 @@ so an edit takes the next one, and `AISettingsStore.launchRevisions` lets `AppCo
 the tool that was edited — Codex by stopping its server, which restarts on demand. The
 commands are never installed by Blitz; Settings links to their own install docs and offers a sign-in
 command to copy. `InstalledAIManager` probes Claude, Grok, OpenCode and Cursor off-main, in parallel.
+No probe holds a thread while its child runs: `InstalledAIProbe` and `ExecutableLocator.shellLookup`
+read output through `FileHandle.collect`, a `readabilityHandler`, and await the exit through
+`ProcessExit.exited()`, because each child takes 0.4–1.3 s and a blocking wait inside `Task.detached`
+pins one of the cooperative pool's `hw.ncpu` threads for that long — twelve probes at once took two
+pool-sized batches before, one after.
 Claude's auth status gates an `initialize` control request, and `InstalledAIModel.claudeCatalog` builds
 its model list from the answer. OpenCode must be version 2 or later; past that, its successful
 model list is both its auth check and catalog, and an empty one reads as signed out.

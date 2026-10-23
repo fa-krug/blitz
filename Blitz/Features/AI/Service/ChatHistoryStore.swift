@@ -9,7 +9,9 @@ private let chatSQLiteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.
 @Observable
 final class ChatHistoryStore {
     /// Every saved chat, archived ones included, newest first.
-    private(set) var saved: [ChatConversation] = []
+    private(set) var saved: [ChatConversation] = [] {
+        didSet { revision += 1 }
+    }
     private(set) var isAvailable = true
 
     /// The chats the sidebar and Quick AI's history list; an archived one is left out.
@@ -17,7 +19,7 @@ final class ChatHistoryStore {
 
     var archived: [ChatConversation] { saved.filter(\.isArchived) }
 
-    private static let schema = """
+    nonisolated private static let schema = """
         PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS conversations(
           id TEXT PRIMARY KEY NOT NULL,
@@ -127,6 +129,10 @@ final class ChatHistoryStore {
 
     @ObservationIgnored private let databaseURL: URL
     @ObservationIgnored private var database: OpaquePointer?
+    /// Bumped by every change to `saved`, so a background read can tell it was overtaken.
+    @ObservationIgnored private var revision = 0
+    /// Bumped by `close`, so a read still in flight never refills a store switched off.
+    @ObservationIgnored private var closings = 0
 
     init(directory: URL) {
         databaseURL = directory.appendingPathComponent("ai-chats.sqlite3")
@@ -136,8 +142,25 @@ final class ChatHistoryStore {
         sqlite3_close(database)
     }
 
-    func load() {
-        guard ensureDatabase(), let database else { return }
+    /// The read runs off the main actor on a connection of its own; a write meanwhile reads again.
+    func load() async {
+        let closings = closings
+        while true {
+            let revision = revision
+            let summaries = await Task.detached(priority: .utility) { [databaseURL] in
+                Self.summaries(at: databaseURL)
+            }.value
+            guard closings == self.closings else { return }
+            guard revision == self.revision else { continue }
+            isAvailable = summaries != nil
+            if let summaries { saved = summaries }
+            return
+        }
+    }
+
+    nonisolated private static func summaries(at url: URL) -> [ChatConversation]? {
+        guard let database = openDatabase(at: url) else { return nil }
+        defer { sqlite3_close(database) }
         let sql = """
             SELECT c.id, c.title, c.preview, c.created_at, c.updated_at, c.message_count,
               m.custom_title, COALESCE(m.pinned, 0), m.generated_title, a.archived_at
@@ -146,7 +169,7 @@ final class ChatHistoryStore {
             LEFT JOIN chat_archive a ON a.conversation_id = c.id
             ORDER BY c.updated_at DESC;
             """
-        guard let statement = prepare(sql, in: database) else { return }
+        guard let statement = prepare(sql, in: database) else { return nil }
         defer { sqlite3_finalize(statement) }
         var loaded: [ChatConversation] = []
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -164,13 +187,14 @@ final class ChatHistoryStore {
                         ? nil
                         : Date(timeIntervalSince1970: sqlite3_column_double(statement, 9))))
         }
-        saved = loaded
+        return loaded
     }
 
     /// Off means fully off: the handle and the resident summaries go, the file on disk stays.
     func close() {
         sqlite3_close(database)
         database = nil
+        closings += 1
         saved = []
     }
 
@@ -196,12 +220,12 @@ final class ChatHistoryStore {
     func archive(_ id: UUID, at now: Date = Date()) -> Bool {
         guard var conversation = conversation(id: id), !conversation.isPinned,
             !conversation.isArchived, ensureDatabase(), let database,
-            let statement = prepare(
+            let statement = Self.prepare(
                 "INSERT OR IGNORE INTO chat_archive(conversation_id, archived_at) VALUES(?, ?);",
                 in: database)
         else { return false }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         sqlite3_bind_double(statement, 2, now.timeIntervalSince1970)
         guard sqlite3_step(statement) == SQLITE_DONE else { return false }
         conversation.archivedAt = now
@@ -221,11 +245,11 @@ final class ChatHistoryStore {
 
     private func unarchive(_ id: UUID, in database: OpaquePointer) -> Bool {
         guard
-            let statement = prepare(
+            let statement = Self.prepare(
                 "DELETE FROM chat_archive WHERE conversation_id = ?;", in: database)
         else { return false }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         return sqlite3_step(statement) == SQLITE_DONE
     }
 
@@ -264,9 +288,9 @@ final class ChatHistoryStore {
         let conversationSQL = """
             SELECT created_at, updated_at FROM conversations WHERE id = ? LIMIT 1;
             """
-        guard let conversation = prepare(conversationSQL, in: database) else { return nil }
+        guard let conversation = Self.prepare(conversationSQL, in: database) else { return nil }
         defer { sqlite3_finalize(conversation) }
-        bind(id.uuidString, to: conversation, at: 1)
+        Self.bind(id.uuidString, to: conversation, at: 1)
         guard sqlite3_step(conversation) == SQLITE_ROW else { return nil }
         let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(conversation, 0))
         let updatedAt = Date(timeIntervalSince1970: sqlite3_column_double(conversation, 1))
@@ -275,9 +299,9 @@ final class ChatHistoryStore {
             SELECT id, role, text, state, sent_at FROM messages
             WHERE conversation_id = ? ORDER BY position;
             """
-        guard let messagesStatement = prepare(messageSQL, in: database) else { return nil }
+        guard let messagesStatement = Self.prepare(messageSQL, in: database) else { return nil }
         defer { sqlite3_finalize(messagesStatement) }
-        bind(id.uuidString, to: messagesStatement, at: 1)
+        Self.bind(id.uuidString, to: messagesStatement, at: 1)
         let images = images(forConversation: id, in: database)
         let documents = documents(forConversation: id, in: database)
         let searches = searches(forConversation: id, in: database)
@@ -289,11 +313,11 @@ final class ChatHistoryStore {
         var messages: [ChatMessage] = []
         while sqlite3_step(messagesStatement) == SQLITE_ROW {
             guard
-                let messageID = UUID(uuidString: text(messagesStatement, 0)),
-                let role = ChatMessage.Role(rawValue: text(messagesStatement, 1)),
-                let storedState = ChatMessage.State(rawValue: text(messagesStatement, 3))
+                let messageID = UUID(uuidString: Self.text(messagesStatement, 0)),
+                let role = ChatMessage.Role(rawValue: Self.text(messagesStatement, 1)),
+                let storedState = ChatMessage.State(rawValue: Self.text(messagesStatement, 3))
             else { continue }
-            var body = text(messagesStatement, 2)
+            var body = Self.text(messagesStatement, 2)
             let state: ChatMessage.State
             if storedState == .streaming {
                 state = .failed
@@ -373,28 +397,28 @@ final class ChatHistoryStore {
             INSERT INTO conversation_details(conversation_id, \(column)) VALUES(?, ?)
             ON CONFLICT(conversation_id) DO UPDATE SET \(column) = excluded.\(column);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         switch meta {
-        case .customTitle(let title): if let title { bind(title, to: statement, at: 2) }
-        case .generatedTitle(let title): bind(title, to: statement, at: 2)
+        case .customTitle(let title): if let title { Self.bind(title, to: statement, at: 2) }
+        case .generatedTitle(let title): Self.bind(title, to: statement, at: 2)
         case .pinned(let pinned): sqlite3_bind_int64(statement, 2, pinned ? 1 : 0)
         case .model(let model):
             guard let json = try? JSONEncoder().encode(model),
                 let encoded = String(bytes: json, encoding: .utf8)
             else { return false }
-            bind(encoded, to: statement, at: 2)
+            Self.bind(encoded, to: statement, at: 2)
         }
         return sqlite3_step(statement) == SQLITE_DONE
     }
 
     func remove(id: UUID) {
         guard ensureDatabase(), let database,
-            let statement = prepare("DELETE FROM conversations WHERE id = ?;", in: database)
+            let statement = Self.prepare("DELETE FROM conversations WHERE id = ?;", in: database)
         else { return }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         guard sqlite3_step(statement) == SQLITE_DONE else { return }
         saved.removeAll { $0.id == id }
     }
@@ -410,56 +434,72 @@ final class ChatHistoryStore {
         saved.removeAll { !$0.isPinned && !$0.isArchived }
     }
 
-    private static let pinnedIDs =
+    nonisolated private static let pinnedIDs =
         "SELECT conversation_id FROM conversation_details WHERE pinned = 1"
     private static let archivedIDs = "SELECT conversation_id FROM chat_archive"
 
-    /// Inline BLOBs make this the one store where a delete frees pages without shrinking the file.
+    /// Its own connection off the main actor: the VACUUM rewrites every stored image and file.
     @discardableResult
-    func prune(before cutoff: Date) -> Int {
-        guard ensureDatabase(), let database,
+    func prune(before cutoff: Date) async -> Int {
+        let closings = closings
+        let removed = await Task.detached(priority: .utility) { [databaseURL] in
+            Self.deleteConversations(before: cutoff, at: databaseURL)
+        }.value
+        guard removed > 0, closings == self.closings else { return removed }
+        saved.removeAll { $0.updatedAt < cutoff && !$0.isPinned }
+        return removed
+    }
+
+    /// Inline BLOBs make this the one store where a delete frees pages without shrinking the file.
+    nonisolated private static func deleteConversations(before cutoff: Date, at url: URL) -> Int {
+        guard let database = openDatabase(at: url) else { return 0 }
+        defer { sqlite3_close(database) }
+        guard
             let statement = prepare(
-                "DELETE FROM conversations WHERE updated_at < ? AND id NOT IN (\(Self.pinnedIDs));",
+                "DELETE FROM conversations WHERE updated_at < ? AND id NOT IN (\(pinnedIDs));",
                 in: database)
         else { return 0 }
-        var removed = 0
-        defer {
-            sqlite3_finalize(statement)
-            if removed > 0 { sqlite3_exec(database, "VACUUM", nil, nil, nil) }
-        }
         sqlite3_bind_double(statement, 1, cutoff.timeIntervalSince1970)
-        guard sqlite3_step(statement) == SQLITE_DONE else { return 0 }
-        removed = Int(sqlite3_changes(database))
-        guard removed > 0 else { return 0 }
-        saved.removeAll { $0.updatedAt < cutoff && !$0.isPinned }
+        let deleted = sqlite3_step(statement) == SQLITE_DONE
+        sqlite3_finalize(statement)
+        guard deleted else { return 0 }
+        let removed = Int(sqlite3_changes(database))
+        if removed > 0 { sqlite3_exec(database, "VACUUM", nil, nil, nil) }
         return removed
     }
 
     private func ensureDatabase() -> Bool {
         if database != nil { return true }
+        database = Self.openDatabase(at: databaseURL)
+        isAvailable = database != nil
+        return isAvailable
+    }
+
+    /// Every connection waits out another's write, so a save never loses to a pruning VACUUM.
+    nonisolated private static func openDatabase(at url: URL) -> OpaquePointer? {
         do {
             try FileManager.default.createDirectory(
-                at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
-            isAvailable = false
-            return false
+            return nil
         }
+        var database: OpaquePointer?
         guard
             sqlite3_open_v2(
-                databaseURL.path, &database,
+                url.path, &database,
                 SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
+            sqlite3_busy_timeout(database, busyTimeoutMilliseconds) == SQLITE_OK,
             sqlite3_exec(database, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nil, nil, nil)
                 == SQLITE_OK,
-            sqlite3_exec(database, Self.schema, nil, nil, nil) == SQLITE_OK
+            sqlite3_exec(database, schema, nil, nil, nil) == SQLITE_OK
         else {
             sqlite3_close(database)
-            database = nil
-            isAvailable = false
-            return false
+            return nil
         }
-        isAvailable = true
-        return true
+        return database
     }
+
+    nonisolated private static let busyTimeoutMilliseconds: Int32 = 5_000
 
     private func saveConversation(_ session: ChatSession, in database: OpaquePointer) -> Bool {
         let sql = """
@@ -471,12 +511,12 @@ final class ChatHistoryStore {
               updated_at = excluded.updated_at,
               message_count = excluded.message_count;
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         let summary = session.summary
-        bind(summary.id.uuidString, to: statement, at: 1)
-        bind(summary.title, to: statement, at: 2)
-        bind(summary.preview, to: statement, at: 3)
+        Self.bind(summary.id.uuidString, to: statement, at: 1)
+        Self.bind(summary.title, to: statement, at: 2)
+        Self.bind(summary.preview, to: statement, at: 3)
         sqlite3_bind_double(statement, 4, summary.createdAt.timeIntervalSince1970)
         sqlite3_bind_double(statement, 5, summary.updatedAt.timeIntervalSince1970)
         sqlite3_bind_int64(statement, 6, Int64(summary.messageCount))
@@ -489,10 +529,10 @@ final class ChatHistoryStore {
         // A store holding more rows than memory is foreign state; rewrite it whole, never splice.
         let rewriteFrom = stored > session.messages.count ? 0 : max(stored - 1, 0)
         guard
-            let deletion = prepare(
+            let deletion = Self.prepare(
                 "DELETE FROM messages WHERE conversation_id = ? AND position >= ?;", in: database)
         else { return false }
-        bind(session.id.uuidString, to: deletion, at: 1)
+        Self.bind(session.id.uuidString, to: deletion, at: 1)
         sqlite3_bind_int64(deletion, 2, Int64(rewriteFrom))
         let deleted = sqlite3_step(deletion) == SQLITE_DONE
         sqlite3_finalize(deletion)
@@ -502,15 +542,15 @@ final class ChatHistoryStore {
             INSERT INTO messages(id, conversation_id, position, role, text, state, sent_at)
             VALUES(?, ?, ?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for (position, message) in session.messages.enumerated().dropFirst(rewriteFrom) {
-            bind(message.id.uuidString, to: statement, at: 1)
-            bind(session.id.uuidString, to: statement, at: 2)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(session.id.uuidString, to: statement, at: 2)
             sqlite3_bind_int64(statement, 3, Int64(position))
-            bind(message.role.rawValue, to: statement, at: 4)
-            bind(message.text, to: statement, at: 5)
-            bind(message.state.rawValue, to: statement, at: 6)
+            Self.bind(message.role.rawValue, to: statement, at: 4)
+            Self.bind(message.text, to: statement, at: 5)
+            Self.bind(message.state.rawValue, to: statement, at: 6)
             sqlite3_bind_double(statement, 7, message.sentAt.timeIntervalSince1970)
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
             sqlite3_reset(statement)
@@ -529,11 +569,11 @@ final class ChatHistoryStore {
 
     private func storedMessageCount(of id: UUID, in database: OpaquePointer) -> Int {
         guard
-            let statement = prepare(
+            let statement = Self.prepare(
                 "SELECT COUNT(*) FROM messages WHERE conversation_id = ?;", in: database)
         else { return 0 }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         guard sqlite3_step(statement) == SQLITE_ROW else { return 0 }
         return Int(sqlite3_column_int64(statement, 0))
     }
@@ -544,12 +584,12 @@ final class ChatHistoryStore {
             INSERT INTO message_searches(message_id, position, query, text_offset)
             VALUES(?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for search in message.searches {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(search.sequence))
-            if let query = search.query { bind(query, to: statement, at: 3) }
+            if let query = search.query { Self.bind(query, to: statement, at: 3) }
             sqlite3_bind_int64(statement, 4, Int64(search.textOffset))
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
             sqlite3_reset(statement)
@@ -567,13 +607,13 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = s.message_id
             WHERE m.conversation_id = ? ORDER BY s.message_id, s.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var searches: [UUID: [ChatSearch]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
-            let query = optionalText(statement, 1)
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)) else { continue }
+            let query = Self.optionalText(statement, 1)
             searches[messageID, default: []].append(
                 ChatSearch(
                     query: query, isComplete: true,
@@ -590,15 +630,15 @@ final class ChatHistoryStore {
               message_id, position, call_id, origin, title, state, text_offset)
             VALUES(?, ?, ?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for use in message.toolUses {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(use.sequence))
-            bind(use.callID, to: statement, at: 3)
-            bind(use.origin, to: statement, at: 4)
-            bind(use.title, to: statement, at: 5)
-            bind(use.state.rawValue, to: statement, at: 6)
+            Self.bind(use.callID, to: statement, at: 3)
+            Self.bind(use.origin, to: statement, at: 4)
+            Self.bind(use.title, to: statement, at: 5)
+            Self.bind(use.state.rawValue, to: statement, at: 6)
             sqlite3_bind_int64(statement, 7, Int64(use.textOffset))
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
             sqlite3_reset(statement)
@@ -617,17 +657,17 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = t.message_id
             WHERE m.conversation_id = ? ORDER BY t.message_id, t.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var uses: [UUID: [ChatToolUse]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
-            let stored = ChatToolUse.State(rawValue: text(statement, 4)) ?? .failed
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)) else { continue }
+            let stored = ChatToolUse.State(rawValue: Self.text(statement, 4)) ?? .failed
             uses[messageID, default: []].append(
                 ChatToolUse(
-                    callID: text(statement, 1), origin: text(statement, 2),
-                    title: text(statement, 3), state: stored == .running ? .failed : stored,
+                    callID: Self.text(statement, 1), origin: Self.text(statement, 2),
+                    title: Self.text(statement, 3), state: stored == .running ? .failed : stored,
                     textOffset: Int(sqlite3_column_int64(statement, 5)),
                     sequence: Int(sqlite3_column_int64(statement, 6))))
         }
@@ -642,18 +682,18 @@ final class ChatHistoryStore {
               message_id, position, question, options, multi_select, selected, answer, text_offset)
             VALUES(?, ?, ?, ?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for asked in message.questions {
             guard let options = Self.json(asked.question.options) else { return false }
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(asked.sequence))
-            bind(asked.question.question, to: statement, at: 3)
-            bind(options, to: statement, at: 4)
+            Self.bind(asked.question.question, to: statement, at: 3)
+            Self.bind(options, to: statement, at: 4)
             sqlite3_bind_int64(statement, 5, asked.question.multiSelect ? 1 : 0)
             if let answer = asked.answer {
-                bind(Self.json(answer.selected) ?? "[]", to: statement, at: 6)
-                if let text = answer.text { bind(text, to: statement, at: 7) }
+                Self.bind(Self.json(answer.selected) ?? "[]", to: statement, at: 6)
+                if let text = answer.text { Self.bind(text, to: statement, at: 7) }
             }
             sqlite3_bind_int64(statement, 8, Int64(asked.textOffset))
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
@@ -674,23 +714,23 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = q.message_id
             WHERE m.conversation_id = ? ORDER BY q.message_id, q.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var questions: [UUID: [ChatQuestion]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)),
-                let options = Self.decoded([String].self, text(statement, 2))
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)),
+                let options = Self.decoded([String].self, Self.text(statement, 2))
             else { continue }
-            let selected = optionalText(statement, 4).flatMap { Self.decoded([Int].self, $0) }
+            let selected = Self.optionalText(statement, 4).flatMap { Self.decoded([Int].self, $0) }
             let question = AskUserToolCatalog.Question(
-                id: UUID(), question: text(statement, 1), options: options,
+                id: UUID(), question: Self.text(statement, 1), options: options,
                 multiSelect: sqlite3_column_int64(statement, 3) != 0)
             questions[messageID, default: []].append(
                 ChatQuestion(
                     question: question,
                     answer: ChatQuestion.Answer(
-                        selected: selected ?? [], text: optionalText(statement, 5)),
+                        selected: selected ?? [], text: Self.optionalText(statement, 5)),
                     textOffset: Int(sqlite3_column_int64(statement, 6)),
                     sequence: Int(sqlite3_column_int64(statement, 7))))
         }
@@ -704,13 +744,13 @@ final class ChatHistoryStore {
               message_id, position, title, markdown, updated_at, text_offset)
             VALUES(?, ?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for written in message.plans {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(written.sequence))
-            bind(written.plan.title, to: statement, at: 3)
-            bind(written.plan.markdown, to: statement, at: 4)
+            Self.bind(written.plan.title, to: statement, at: 3)
+            Self.bind(written.plan.markdown, to: statement, at: 4)
             sqlite3_bind_double(statement, 5, written.plan.updatedAt.timeIntervalSince1970)
             sqlite3_bind_int64(statement, 6, Int64(written.textOffset))
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
@@ -729,14 +769,14 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = p.message_id
             WHERE m.conversation_id = ? ORDER BY p.message_id, p.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var plans: [UUID: [ChatWrittenPlan]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)) else { continue }
             let plan = ChatPlan(
-                title: text(statement, 1), markdown: text(statement, 2),
+                title: Self.text(statement, 1), markdown: Self.text(statement, 2),
                 updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)))
             plans[messageID, default: []].append(
                 ChatWrittenPlan(
@@ -754,12 +794,12 @@ final class ChatHistoryStore {
             UPDATE message_plans SET title = ?, markdown = ?, updated_at = ?
             WHERE message_id = ? AND position = ?;
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
-        bind(written.plan.title, to: statement, at: 1)
-        bind(written.plan.markdown, to: statement, at: 2)
+        Self.bind(written.plan.title, to: statement, at: 1)
+        Self.bind(written.plan.markdown, to: statement, at: 2)
         sqlite3_bind_double(statement, 3, written.plan.updatedAt.timeIntervalSince1970)
-        bind(messageID.uuidString, to: statement, at: 4)
+        Self.bind(messageID.uuidString, to: statement, at: 4)
         sqlite3_bind_int64(statement, 5, Int64(written.sequence))
         return sqlite3_step(statement) == SQLITE_DONE && sqlite3_changes(database) == 1
     }
@@ -781,15 +821,15 @@ final class ChatHistoryStore {
     /// A route removed since is the coordinator's to repair; an unreadable one is simply absent.
     private func model(forConversation id: UUID, in database: OpaquePointer) -> AIModelSelection? {
         guard
-            let statement = prepare(
+            let statement = Self.prepare(
                 "SELECT model FROM conversation_details WHERE conversation_id = ? AND model IS NOT NULL;",
                 in: database)
         else { return nil }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
         return try? JSONDecoder().decode(
-            AIModelSelection.self, from: Data(text(statement, 0).utf8))
+            AIModelSelection.self, from: Data(Self.text(statement, 0).utf8))
     }
 
     /// A chat already saved changes model between turns; one not yet saved takes it on its first.
@@ -804,12 +844,12 @@ final class ChatHistoryStore {
             INSERT INTO message_thinking(message_id, position, text, text_offset, duration)
             VALUES(?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for (position, block) in message.reasoning.enumerated() {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(position))
-            bind(block.text, to: statement, at: 3)
+            Self.bind(block.text, to: statement, at: 3)
             sqlite3_bind_int64(statement, 4, Int64(block.textOffset))
             if let duration = block.duration { sqlite3_bind_double(statement, 5, duration) }
             guard sqlite3_step(statement) == SQLITE_DONE else { return false }
@@ -827,18 +867,19 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = r.message_id
             WHERE m.conversation_id = ? ORDER BY r.message_id, r.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var reasoning: [UUID: [ChatReasoning]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)) else { continue }
             let duration =
                 sqlite3_column_type(statement, 3) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 3)
             reasoning[messageID, default: []].append(
                 ChatReasoning(
-                    text: text(statement, 1), textOffset: Int(sqlite3_column_int64(statement, 2)),
+                    text: Self.text(statement, 1),
+                    textOffset: Int(sqlite3_column_int64(statement, 2)),
                     duration: duration))
         }
         return reasoning
@@ -852,10 +893,10 @@ final class ChatHistoryStore {
               cached_tokens, reasoning_tokens, context_window, cost_usd)
             VALUES(?, ?, ?, ?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
-        bind(message.id.uuidString, to: statement, at: 1)
-        if let scope = message.toolScope { bind(scope, to: statement, at: 2) }
+        Self.bind(message.id.uuidString, to: statement, at: 1)
+        if let scope = message.toolScope { Self.bind(scope, to: statement, at: 2) }
         if let usage = message.usage {
             let counts = [
                 usage.inputTokens, usage.outputTokens, usage.cachedInputTokens,
@@ -879,22 +920,22 @@ final class ChatHistoryStore {
             FROM message_details x JOIN messages m ON m.id = x.message_id
             WHERE m.conversation_id = ?;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         func count(_ column: Int32) -> Int? {
             sqlite3_column_type(statement, column) == SQLITE_NULL
                 ? nil : Int(sqlite3_column_int64(statement, column))
         }
         var meta: [UUID: (toolScope: String?, usage: AIUsage?)] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)) else { continue }
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)) else { continue }
             let usage = AIUsage(
                 inputTokens: count(2), outputTokens: count(3), cachedInputTokens: count(4),
                 reasoningTokens: count(5), contextWindow: count(6),
                 costUSD: sqlite3_column_type(statement, 7) == SQLITE_NULL
                     ? nil : sqlite3_column_double(statement, 7))
-            meta[messageID] = (optionalText(statement, 1), usage == AIUsage() ? nil : usage)
+            meta[messageID] = (Self.optionalText(statement, 1), usage == AIUsage() ? nil : usage)
         }
         return meta
     }
@@ -904,12 +945,12 @@ final class ChatHistoryStore {
         let sql = """
             INSERT INTO message_images(message_id, position, mime_type, data) VALUES(?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for (position, image) in message.images.enumerated() {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(position))
-            bind(image.mimeType, to: statement, at: 3)
+            Self.bind(image.mimeType, to: statement, at: 3)
             let bound = image.data.withUnsafeBytes { bytes in
                 sqlite3_bind_blob(
                     statement, 4, bytes.baseAddress, Int32(bytes.count), chatSQLiteTransient)
@@ -927,13 +968,13 @@ final class ChatHistoryStore {
             INSERT INTO message_documents(message_id, position, name, mime_type, data)
             VALUES(?, ?, ?, ?, ?);
             """
-        guard let statement = prepare(sql, in: database) else { return false }
+        guard let statement = Self.prepare(sql, in: database) else { return false }
         defer { sqlite3_finalize(statement) }
         for (position, document) in message.documents.enumerated() {
-            bind(message.id.uuidString, to: statement, at: 1)
+            Self.bind(message.id.uuidString, to: statement, at: 1)
             sqlite3_bind_int64(statement, 2, Int64(position))
-            bind(document.name, to: statement, at: 3)
-            bind(document.mimeType, to: statement, at: 4)
+            Self.bind(document.name, to: statement, at: 3)
+            Self.bind(document.mimeType, to: statement, at: 4)
             let bound = document.data.withUnsafeBytes { bytes in
                 sqlite3_bind_blob(
                     statement, 5, bytes.baseAddress, Int32(bytes.count), chatSQLiteTransient)
@@ -953,17 +994,18 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = d.message_id
             WHERE m.conversation_id = ? ORDER BY d.message_id, d.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var documents: [UUID: [AIDocument]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)),
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)),
                 let bytes = sqlite3_column_blob(statement, 3)
             else { continue }
             let data = Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 3)))
             documents[messageID, default: []].append(
-                AIDocument(data: data, mimeType: text(statement, 2), name: text(statement, 1)))
+                AIDocument(
+                    data: data, mimeType: Self.text(statement, 2), name: Self.text(statement, 1)))
         }
         return documents
     }
@@ -976,35 +1018,42 @@ final class ChatHistoryStore {
             JOIN messages m ON m.id = i.message_id
             WHERE m.conversation_id = ? ORDER BY i.message_id, i.position;
             """
-        guard let statement = prepare(sql, in: database) else { return [:] }
+        guard let statement = Self.prepare(sql, in: database) else { return [:] }
         defer { sqlite3_finalize(statement) }
-        bind(id.uuidString, to: statement, at: 1)
+        Self.bind(id.uuidString, to: statement, at: 1)
         var images: [UUID: [AIImage]] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
-            guard let messageID = UUID(uuidString: text(statement, 0)),
+            guard let messageID = UUID(uuidString: Self.text(statement, 0)),
                 let bytes = sqlite3_column_blob(statement, 2)
             else { continue }
             let data = Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 2)))
-            images[messageID, default: []].append(AIImage(data: data, mimeType: text(statement, 1)))
+            images[messageID, default: []].append(
+                AIImage(data: data, mimeType: Self.text(statement, 1)))
         }
         return images
     }
 
-    private func prepare(_ sql: String, in database: OpaquePointer) -> OpaquePointer? {
+    nonisolated private static func prepare(
+        _ sql: String, in database: OpaquePointer
+    ) -> OpaquePointer? {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
         return statement
     }
 
-    private func bind(_ value: String, to statement: OpaquePointer?, at index: Int32) {
+    nonisolated private static func bind(
+        _ value: String, to statement: OpaquePointer?, at index: Int32
+    ) {
         sqlite3_bind_text(statement, index, value, -1, chatSQLiteTransient)
     }
 
-    private func optionalText(_ statement: OpaquePointer?, _ index: Int32) -> String? {
-        sqlite3_column_type(statement, index) == SQLITE_NULL ? nil : text(statement, index)
+    nonisolated private static func optionalText(
+        _ statement: OpaquePointer?, _ index: Int32
+    ) -> String? {
+        sqlite3_column_type(statement, index) == SQLITE_NULL ? nil : Self.text(statement, index)
     }
 
-    private func text(_ statement: OpaquePointer?, _ index: Int32) -> String {
+    nonisolated private static func text(_ statement: OpaquePointer?, _ index: Int32) -> String {
         guard let value = sqlite3_column_text(statement, index) else { return "" }
         return String(cString: value)
     }

@@ -8,7 +8,20 @@ final class RemindersStore {
     /// Every open reminder on a list that is switched on, in `ReminderAgenda.sorted` order.
     private(set) var reminders: [ReminderItem] = []
     private(set) var lists: [ReminderList] = []
-    private(set) var access: CalendarAccess = Permissions.remindersAccess()
+    /// Asked on first read, not at launch: the TCC answer is an XPC round trip.
+    private(set) var access: CalendarAccess {
+        get {
+            access(keyPath: \.access)
+            if let knownAccess { return knownAccess }
+            let current = Permissions.remindersAccess()
+            knownAccess = current
+            return current
+        }
+        set {
+            withMutation(keyPath: \.access) { knownAccess = newValue }
+        }
+    }
+    @ObservationIgnored private var knownAccess: CalendarAccess?
     /// False until the first fetch lands, so an empty list never claims there is nothing to do.
     private(set) var hasLoaded = false
 
@@ -137,7 +150,8 @@ final class RemindersStore {
     }
 
     private func publish(_ next: [ReminderItem]) {
-        if access == .granted, !hasLoaded { hasLoaded = true }
+        // The cache, not `access`: a disabled launch's empty publish must not ask TCC.
+        if knownAccess == .granted, !hasLoaded { hasLoaded = true }
         guard next != reminders else { return }
         reminders = next
     }

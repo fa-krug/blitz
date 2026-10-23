@@ -164,9 +164,23 @@ final class AppSettings {
         }
     }
 
+    /// Read on first use: the login item's status is an XPC round trip launch need not wait on.
     var launchAtLogin: Bool {
-        didSet { LaunchAtLogin.set(launchAtLogin) }
+        get {
+            access(keyPath: \.launchAtLogin)
+            if let launchAtLoginStatus { return launchAtLoginStatus }
+            let status = LaunchAtLogin.isEnabled
+            launchAtLoginStatus = status
+            return status
+        }
+        set {
+            withMutation(keyPath: \.launchAtLogin) {
+                launchAtLoginStatus = newValue
+                LaunchAtLogin.set(newValue)
+            }
+        }
     }
+    @ObservationIgnored private var launchAtLoginStatus: Bool?
 
     /// The launcher icon's visibility; dragging the icon out of the menu bar turns it off.
     var showInMenuBar: Bool {
@@ -663,7 +677,6 @@ final class AppSettings {
         clipboardDefaultAction =
             defaults.string(forKey: Key.clipboardDefaultAction.rawValue)
             .flatMap(ClipboardDefaultAction.init) ?? .paste
-        launchAtLogin = LaunchAtLogin.isEnabled
         showInMenuBar =
             defaults.object(forKey: Key.showInMenuBar.rawValue) == nil
             || defaults.bool(forKey: Key.showInMenuBar.rawValue)

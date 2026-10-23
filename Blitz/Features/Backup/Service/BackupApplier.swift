@@ -25,7 +25,7 @@ enum BackupApplier {
         }
         if categories.contains(.clipboard) {
             summary.clipboard = await importClipboard(bundle, into: core.clipboardStore)
-            if summary.clipboard > 0 { core.clipboardStore.load() }
+            if summary.clipboard > 0 { await core.clipboardStore.load() }
         }
         if categories.contains(.snippets) {
             do {
