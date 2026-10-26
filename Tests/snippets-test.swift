@@ -897,6 +897,12 @@ struct SnippetsTests {
                 attempt: 79,
                 hadPreviousState: true,
                 readStateAfterPaste: true))
+        check(
+            "a target answering within the budget is polled for paste confirmation",
+            PasteConfirmationPolicy.canObserve(readCost: .milliseconds(5)))
+        check(
+            "a target answering slower than the budget is never polled",
+            !PasteConfirmationPolicy.canObserve(readCost: .milliseconds(250)))
 
         let backingPasteboard = NSPasteboard(
             name: .init("blitz-snippets-tests-\(UUID().uuidString)"))

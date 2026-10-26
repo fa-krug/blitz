@@ -315,6 +315,8 @@ failure handler, so automatic expansion stays silent.
   and confirm the selection is **replaced** rather than appended to.
 - Select text in a Blitz floating note and run Fix Grammar by shortcut and launcher row. Confirm
   replacement, Undo, and that changing the note before pressing Replace copies instead.
+- In an Outlook compose window, Fix Grammar a paragraph of several lines: the text is replaced
+  within about a second of the spinner clearing, not after a long pause.
 - In a Chromium target, run one on a **short** selection whose result stays under 100 characters on
   one line: the whole result lands, not its first four characters.
 - Replace mode, with a slow route selected: the message pill says `Fixing Grammar…` with a blue
