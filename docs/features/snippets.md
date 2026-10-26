@@ -392,7 +392,13 @@ poller keeps seeing the user's own copy.
 
 When Accessibility text state is readable, a long paste waits for evidence that the target changed.
 If the editor cannot expose post-paste text state, a successfully posted paste is accepted only after
-a conservative delay instead of being treated as a permanent failure. Cursor movement starts after
+a conservative delay instead of being treated as a permanent failure.
+
+**A target too slow to read is not polled.** Each read is timed, and one slower than
+`PasteConfirmationPolicy.maxObservationCost` ends the polling, so the paste falls back to that same
+delay. Outlook's web-based compose body takes a fraction of a second per read. Polled every 25 ms,
+it stretched the 80-attempt wait from two seconds to over twenty, and it did not handle the ⌘V until
+the reads let up. Cursor movement starts after
 that confirmation or delay and after pasteboard restoration. Delivery completion is reported exactly
 once only after the Accessibility replacement or event fallback (including requested cursor movement)
 finishes successfully. Disabling automatic expansion or
