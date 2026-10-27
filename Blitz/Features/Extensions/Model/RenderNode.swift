@@ -96,27 +96,27 @@ enum RenderValue: Sendable, Hashable {
     }
 
     init(json: Any) {
-        switch json {
-        case let value as String:
-            self = .string(value)
-        case let value as NSNumber:
-            // NSNumber erases Bool; CFBoolean identity is the only reliable discriminator.
-            if CFGetTypeID(value) == CFBooleanGetTypeID() {
-                self = .bool(value.boolValue)
-            } else {
-                self = .number(value.doubleValue)
-            }
-        case let value as [Any]:
-            self = .array(value.map(RenderValue.init(json:)))
-        case let value as [String: Any]:
-            if let handler = value["$fn"] as? String {
+        let object = json as AnyObject
+        switch CFGetTypeID(object) {
+        case CFStringGetTypeID():
+            self = .string(unsafeDowncast(object, to: NSString.self) as String)
+        // NSNumber erases Bool; CFBoolean identity is the only reliable discriminator.
+        case CFBooleanGetTypeID():
+            self = .bool(unsafeDowncast(object, to: NSNumber.self).boolValue)
+        case CFNumberGetTypeID():
+            self = .number(unsafeDowncast(object, to: NSNumber.self).doubleValue)
+        case CFArrayGetTypeID():
+            self = .array(unsafeDowncast(object, to: NSArray.self).map(RenderValue.init(json:)))
+        case CFDictionaryGetTypeID():
+            let value = unsafeDowncast(object, to: NSDictionary.self)
+            if let handler = value.string("$fn") {
                 self = .handler(handler)
-            } else if let iso = value["$date"] as? String {
+            } else if let iso = value.string("$date") {
                 self = .date(RenderValue.parseDate(iso) ?? Date())
             } else if let node = RenderNode(json: value), node.isElement {
                 self = .node(node)
             } else {
-                self = .object(value.mapValues(RenderValue.init(json:)))
+                self = .object(value.renderValues(RenderValue.init(json:)))
             }
         default:
             self = .null
@@ -125,7 +125,7 @@ enum RenderValue: Sendable, Hashable {
 
     /// A delta's prop: the value itself, or each item of an array, is an element position.
     fileprivate init(prop json: Any, base: [RenderNode.ID: RenderNode]) throws {
-        guard let items = json as? [Any] else {
+        guard let items = json as? NSArray else {
             self = try RenderValue(position: json, base: base)
             return
         }
@@ -134,7 +134,8 @@ enum RenderValue: Sendable, Hashable {
 
     /// Below a position nothing is a reference, which the runtime guarantees by sending whole.
     private init(position json: Any, base: [RenderNode.ID: RenderNode]) throws {
-        guard let object = json as? [String: Any], object["$fn"] == nil, object["$date"] == nil,
+        guard let object = json as? NSDictionary, object["$fn"] == nil,
+            object["$date"] == nil,
             let node = try RenderNode(position: object, base: base), node.isElement
         else {
             self = RenderValue(json: json)
@@ -177,41 +178,45 @@ struct RenderNode: Sendable, Hashable, Identifiable {
     }
 
     init?(json: [String: Any]) {
+        self.init(json: json as NSDictionary)
+    }
+
+    init?(json: NSDictionary) {
         // A nil base reads nothing as a reference, so this cannot throw.
         guard let node = try? RenderNode(json: json, base: nil) else { return nil }
         self = node
     }
 
     /// `base` is set only for a delta, whose `{"$same": id}` at an element position reuses a node.
-    fileprivate init?(json: [String: Any], base: [ID: RenderNode]?) throws {
-        guard let type = json["type"] as? String else { return nil }
+    fileprivate init?(json: NSDictionary, base: [ID: RenderNode]?) throws {
+        guard let type = json.string("type") else { return nil }
         if type == "#text" {
-            self.init(id: 0, type: type, text: json["text"] as? String ?? "")
+            self.init(id: 0, type: type, text: json.string("text") ?? "")
             return
         }
-        guard let id = json["id"] as? Int, let rawProps = json["props"] as? [String: Any],
-            let rawChildren = json["children"] as? [Any]
+        guard let id = json.int("id"), let rawProps = json["props"] as? NSDictionary,
+            let rawChildren = json["children"] as? NSArray
         else { return nil }
         guard let base else {
             self.init(
                 id: id, type: type,
-                props: rawProps.mapValues(RenderValue.init(json:)),
+                props: rawProps.renderValues(RenderValue.init(json:)),
                 children: rawChildren.compactMap {
-                    ($0 as? [String: Any]).flatMap(RenderNode.init(json:))
+                    ($0 as? NSDictionary).flatMap(RenderNode.init(json:))
                 })
             return
         }
         self.init(
             id: id, type: type,
-            props: try rawProps.mapValues { try RenderValue(prop: $0, base: base) },
+            props: try rawProps.renderValues { try RenderValue(prop: $0, base: base) },
             children: try rawChildren.compactMap { try RenderNode(position: $0, base: base) })
     }
 
     /// An element position in a delta: a reference to the previous tree, or a node of its own.
     fileprivate init?(position json: Any, base: [ID: RenderNode]) throws {
-        guard let object = json as? [String: Any] else { return nil }
-        if let reference = object["$same"] {
-            guard let id = reference as? Int, let node = base[id] else {
+        guard let object = json as? NSDictionary else { return nil }
+        if object["$same"] != nil {
+            guard let id = object.int("$same"), let node = base[id] else {
                 throw RenderTree.DecodeError.missingBase
             }
             self = node
@@ -271,15 +276,15 @@ struct RenderTree: Sendable, Equatable {
     /// `previous` is `referenceableNodes` of the last tree decoded for this session.
     init(json: String, reusing previous: [RenderNode.ID: RenderNode]) throws(DecodeError) {
         guard let data = json.data(using: .utf8),
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let children = root["children"] as? [Any]
+            let root = try? JSONSerialization.jsonObject(with: data) as? NSDictionary,
+            let children = root["children"] as? NSArray
         else { throw .malformed }
         let base = root["delta"] as? Bool == true ? previous : nil
         let nodes: [RenderNode]
         do {
             nodes = try children.compactMap { child in
                 guard let base else {
-                    return (child as? [String: Any]).flatMap(RenderNode.init(json:))
+                    return (child as? NSDictionary).flatMap(RenderNode.init(json:))
                 }
                 return try RenderNode(position: child, base: base)
             }
@@ -320,4 +325,33 @@ struct RenderTree: Sendable, Equatable {
     }
 
     var depth: Int { max(screens.count, 1) }
+}
+
+/// A big tree decodes per commit, and Swift's dynamic casts from `Any` cost more than the parse.
+extension NSDictionary {
+    fileprivate func string(_ key: NSString) -> String? {
+        guard let value = object(forKey: key) as AnyObject?,
+            CFGetTypeID(value) == CFStringGetTypeID()
+        else { return nil }
+        return unsafeDowncast(value, to: NSString.self) as String
+    }
+
+    fileprivate func int(_ key: NSString) -> Int? {
+        guard let value = object(forKey: key) as AnyObject?,
+            CFGetTypeID(value) == CFNumberGetTypeID()
+        else { return nil }
+        return unsafeDowncast(value, to: NSNumber.self).intValue
+    }
+
+    fileprivate func renderValues(
+        _ transform: (Any) throws -> RenderValue
+    ) rethrows -> [String: RenderValue] {
+        var values = [String: RenderValue](minimumCapacity: count)
+        for (key, value) in self {
+            let key = key as AnyObject
+            guard CFGetTypeID(key) == CFStringGetTypeID() else { continue }
+            values[unsafeDowncast(key, to: NSString.self) as String] = try transform(value)
+        }
+        return values
+    }
 }
