@@ -490,15 +490,15 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Search is correct both under and over three characters
 - The type filter searches from its top band, retains its active checkmark when matched, and shows
   centred **No Results** without changing the clipboard query; its native field supports selection
-- ⌘. pins and the highlight follows the row into Pinned; ⌘⌫ deletes; ⌘↵ copies without pasting
+- ⌘. pins and the highlight follows the row into Pinned; ⌘⌫ deletes
 - With enough pins to fill the list, opening it — the first show after launch too — highlights the
   newest clip, centred with pins above; clearing a query or the filter lands there again
 - ⌃X deletes the selected entry and ⌃⇧X clears the history, from the list and from an open ⌘K menu
 - ⌃⇧X asks first, through Blitz's own dialog; Cancel and Esc both leave every entry in place
-- ↵ pastes into the previous app; ⌥↵ pastes without closing the palette
-- ⌃⌘↵ pastes as plain text: a text entry as typed, a file entry as its path rather than the file
-- Default action ▸ Paste as Plain Text: ↵ pastes plain, ⌃⌘↵ pastes, ⌘↵ still copies; an image
-  entry's ↵ still pastes the image and its ⌘K menu has no plain row
+- ↵ pastes as plain text into the previous app: a text entry as typed, a file entry as its path
+  rather than the file; ⌘↵ pastes with formatting, ⌃⌘↵ copies, ⌥↵ pastes without closing the palette
+- An image entry's ↵ still pastes the image and its ⌘K menu has no plain row
+- Default action ▸ Paste: ↵ pastes, ⌘↵ copies, ⌃⌘↵ pastes plain
 - ⇧⌘T on an image row and on an image-file row copies the recognized text, and the ⌘K menu carries
   the same Copy Text row
 - The "Reading text…" progress pill appears while the helper runs and is replaced by the outcome:

@@ -463,10 +463,11 @@ final class TextInjector {
                 promptForInteractiveAccessibility: false)
         else { return false }
 
-        let stateBeforePaste = accessibilityTextState(in: targetApp)
+        let stateBeforePaste = timedTextState(in: targetApp)
         Paster.postCommandV(toPid: targetApp?.processIdentifier)
         return await waitForPasteConfirmation(
-            previousState: stateBeforePaste,
+            previousState: PasteConfirmationPolicy.canObserve(readCost: stateBeforePaste.cost)
+                ? stateBeforePaste.state : nil,
             pasteboardLease: lease,
             targetApp: targetApp,
             automaticGeneration: automaticGeneration)
@@ -770,6 +771,7 @@ final class TextInjector {
         targetApp: NSRunningApplication?,
         automaticGeneration: AutomaticGeneration?
     ) async -> Bool {
+        var observedState = previousState
         var readStateAfterPaste = false
         for attempt in 0..<80 {
             guard pasteboardLease.isOwned,
@@ -779,15 +781,17 @@ final class TextInjector {
                     promptForInteractiveAccessibility: false)
             else { return false }
 
-            if let previousState,
-                let currentState = accessibilityTextState(in: targetApp)
-            {
-                readStateAfterPaste = true
-                if currentState != previousState { return true }
+            if let before = observedState {
+                let current = timedTextState(in: targetApp)
+                if let state = current.state {
+                    readStateAfterPaste = true
+                    if state != before { return true }
+                }
+                if !PasteConfirmationPolicy.canObserve(readCost: current.cost) { observedState = nil }
             }
             if PasteConfirmationPolicy.acceptsUnconfirmedDelivery(
                 attempt: attempt,
-                hadPreviousState: previousState != nil,
+                hadPreviousState: observedState != nil,
                 readStateAfterPaste: readStateAfterPaste)
             {
                 return true
@@ -795,6 +799,14 @@ final class TextInjector {
             guard await wait(for: .milliseconds(25)) else { return false }
         }
         return false
+    }
+
+    private func timedTextState(
+        in targetApp: NSRunningApplication?
+    ) -> (state: AccessibilityTextState?, cost: Duration) {
+        var state: AccessibilityTextState?
+        let cost = ContinuousClock().measure { state = accessibilityTextState(in: targetApp) }
+        return (state, cost)
     }
 
     private func accessibilityTextState(
@@ -1001,6 +1013,13 @@ enum UnicodeTypingChunk {
 }
 
 enum PasteConfirmationPolicy {
+    /// Polling a slower target keeps it too busy to handle the paste the poll is waiting for.
+    static let maxObservationCost = Duration.milliseconds(50)
+
+    static func canObserve(readCost: Duration) -> Bool {
+        readCost <= maxObservationCost
+    }
+
     static func acceptsUnconfirmedDelivery(
         attempt: Int,
         hadPreviousState: Bool,

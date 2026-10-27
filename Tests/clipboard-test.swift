@@ -741,7 +741,7 @@ struct ClipboardTests {
         }
     }
 
-    /// The default takes ↵ and Paste its chord; the Paste and Copy defaults keep their old pair.
+    /// The default takes ↵ and the other two follow in case order, so plain text puts Paste on ⌘↵.
     static func defaultActionChords() {
         let text = ClipboardItem(text: "hello", sourceBundleID: nil)
         let file = ClipboardItem(filePath: "/Users/me/report.pdf", sourceBundleID: nil)
@@ -749,7 +749,7 @@ struct ClipboardTests {
         let expected: [ClipboardDefaultAction: [ClipboardDefaultAction]] = [
             .paste: [.paste, .copy, .pastePlainText],
             .copy: [.copy, .paste, .pastePlainText],
-            .pastePlainText: [.pastePlainText, .copy, .paste]
+            .pastePlainText: [.pastePlainText, .paste, .copy]
         ]
         for (defaultAction, actions) in expected {
             for item in [text, file] {

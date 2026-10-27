@@ -136,7 +136,7 @@ enum ClipboardRetention: Int, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// What ↵ does on a clipboard entry; Paste takes the chord the chosen action leaves free.
+/// What ↵ does on a clipboard entry; ⌘↵ and ⌃⌘↵ run the other two in case order.
 enum ClipboardDefaultAction: String, CaseIterable, Identifiable, Sendable {
     case paste
     case copy
@@ -157,23 +157,14 @@ enum ClipboardDefaultAction: String, CaseIterable, Identifiable, Sendable {
         let hasPlainText = item.plainText != nil
         // An image has no text, so a plain-text default pastes it as it is.
         let resolved: Self = self == .pastePlainText && !hasPlainText ? .paste : self
+        let others = Self.allCases.filter { $0 != resolved }
         let action: Self =
             switch chord {
             case .return: resolved
-            case resolved.ownChord: .paste
-            case .command: .copy
-            case .controlCommand: .pastePlainText
+            case .command: others[0]
+            case .controlCommand: others[1]
             }
         return action == .pastePlainText && !hasPlainText ? nil : action
-    }
-
-    /// The chord an action answers while Paste is the default.
-    private var ownChord: ClipboardChord {
-        switch self {
-        case .paste: .return
-        case .copy: .command
-        case .pastePlainText: .controlCommand
-        }
     }
 }
 

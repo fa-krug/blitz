@@ -8,15 +8,16 @@
   `ClipboardCoordinator.applyEnabled()` is the single place that applies it.
 - **↵, ⌘↵ and ⌃⌘↵ trade places around one setting, and
   `ClipboardDefaultAction.action(for:on:)` is the only place that says which chord runs what.**
-  Paste owns ↵, Copy ⌘↵ and Paste as Plain Text ⌃⌘↵; `clipboardDefaultAction` moves one to ↵ and
-  Paste takes the chord it left, so a Copy default keeps the ↵/⌘↵ swap it always had.
+  `clipboardDefaultAction` takes ↵ and the other two follow in Paste, Copy, Plain Text order on ⌘↵
+  and ⌃⌘↵. It ships as Paste as Plain Text, so ↵ pastes unformatted and ⌘↵ keeps the formatting.
   `ClipboardCoordinator.activate(_:chord:)` runs it, and ⌘1…⌘0 on a pin and a double-click go
   through the same call, so no surface can drift from the setting; ⌥↵ pastes regardless, since
   keeping the window open is a paste-only idea. The ⌘K menu lists the three in chord order, which
   puts the default first with the ↵ chip.
 - **Paste as Plain Text writes `ClipboardItem.plainText` and nothing else**: the text itself, or a
   file entry's path without its `public.file-url`. An image has none, so it gets no plain row, a
-  plain-text default pastes it as it is, and ⌃⌘↵ on it falls back to ⌘↵ as on every other screen.
+  plain-text default pastes it as it is, and the chord that would paste it plain falls back to ⌘↵
+  as on every other screen.
 - **Clipboard writes stamp a private `internalType` marker** so the poller skips Blitz's own writes.
   If the writer and the poller ever disagree, the app re-captures its own pastes in a loop.
 - **Paste Sequentially never promotes, and its walk is frozen at the first press.** `PasteSequence`
@@ -351,11 +352,11 @@ row is inserted once they land, as an image's is. A repeat copy discards the fil
 `Kind` stays `.text`; a stored flavour makes the entry rich, which the row tile (`doc.richtext`) and
 the Information block's Type say.
 
-**Paste.** ↵ and every other paste declare the stored flavours, then `.string`, then the internal
-marker, so the receiver takes the richest it reads — the original formatting, as Raycast does. A rich
-entry's ⌘K adds a **Paste as** section: Rich Text and HTML, each only when stored, and Plain Text. A
-flavour whose file has gone is skipped and the text still pastes. Paste as Plain Text (⌃⌘↵) is
-unchanged.
+**Paste.** Paste (⌘↵ under the shipped default) and every other paste but Paste as Plain Text
+declare the stored flavours, then `.string`, then the internal marker, so the receiver takes the
+richest it reads — the original formatting, as Raycast does. A rich entry's ⌘K adds a **Paste as**
+section: Rich Text and HTML, each only when stored, and Plain Text. A flavour whose file has gone is
+skipped and the text still pastes.
 
 **Lifetime.** The files go with their row: `remove` deletes them in place, and Clear History and a
 retention cut read their paths before the delete — the cascade takes the rows — and delete them off
