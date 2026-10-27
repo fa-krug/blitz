@@ -46,6 +46,47 @@ async function run(name, source, mode, verify, options) {
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
+const lazyPanelSource = `
+import { List, ActionPanel, Action, showHUD } from "@raycast/api";
+import { useState } from "react";
+
+function Panel({ name, pinned, onPin }) {
+  return (
+    <ActionPanel>
+      <ActionPanel.Section>
+        <Action title="Open" onAction={() => showHUD(name)} />
+        <Action title="Copy" onAction={() => {}} />
+      </ActionPanel.Section>
+      <ActionPanel.Section>
+        <Action title={pinned ? "Unpin" : "Pin"} onAction={onPin} />
+        <Action title="Delete" onAction={() => {}} />
+      </ActionPanel.Section>
+      {name === "c" ? (
+        <ActionPanel.Submenu title="More">
+          <Action title="Run" shortcut={{ modifiers: ["cmd"], key: "return" }} onAction={() => {}} />
+        </ActionPanel.Submenu>
+      ) : null}
+    </ActionPanel>
+  );
+}
+
+export default function Command() {
+  const [pinned, setPinned] = useState(null);
+  return (
+    <List>
+      {["a", "b", "c"].map((name) => (
+        <List.Item
+          key={name}
+          id={name}
+          title={pinned === name ? name + " (pinned)" : name}
+          actions={<Panel name={name} pinned={pinned === name} onPin={() => setPinned(name)} />}
+        />
+      ))}
+    </List>
+  );
+}
+`;
+
 const listSource = `
 import { List, ActionPanel, Action, Icon } from "@raycast/api";
 import { useState } from "react";
@@ -312,6 +353,7 @@ export default function Command() {
     String(Buffer.from(Buffer.from("😀 日本 é".repeat(5000)).toString("base64"), "base64").toString() === "😀 日本 é".repeat(5000)),
     String(atob(btoa("x".repeat(200000))).length),
     Buffer.from("aGV\\nsbG8", "base64").toString(),
+    Buffer.from("aGV*sbG8", "base64").toString(),
     String(new TextEncoder().encode("😀").buffer.byteLength),
     fileURLToPath("file:///Applications/Blitz%20Beta.app"),
     fileURLToPath(new URL("file:///tmp/%ED%95%9C%EA%B8%80.txt")),
@@ -882,7 +924,12 @@ export default async function Command() {
     bytesWritten: sink.bytesWritten,
     onDisk: fs.readFileSync(target, "utf8"),
     piped: read.join(""),
+    rereads: [fs.readFileSync(target, "utf8") === fs.readFileSync(target, { encoding: "utf8" })],
   };
+  fs.writeFileSync(target, "first");
+  globalThis.__stream.rereads.push(fs.readFileSync(target, "utf8"));
+  fs.writeFileSync(target, "FIRST");
+  globalThis.__stream.rereads.push(fs.readFileSync(target, "utf8"));
   fs.unlinkSync(target);
 }
 `;
@@ -1247,6 +1294,7 @@ export async function runFixtures() {
       "true",
       "200000",
       "hello",
+      "hello",
       "4",
       "/Applications/Blitz Beta.app",
       "/tmp/한글.txt",
@@ -1603,6 +1651,11 @@ export async function runFixtures() {
       check("every byte reaches the file", result?.bytesWritten === indexBody.length, String(result?.bytesWritten));
       check("the file matches the response", result?.onDisk === indexBody);
       check("reading it back through a Transform preserves it", result?.piped === indexBody.toUpperCase());
+      check(
+        "a text read sees every rewrite, a same-size one included",
+        JSON.stringify(result?.rereads) === JSON.stringify([true, "first", "FIRST"]),
+        JSON.stringify(result?.rereads),
+      );
     },
     {
       stubs: {
@@ -1753,11 +1806,59 @@ export async function runFixtures() {
     check("the error reaches the console", harness.state.logs.some((line) => line.includes("async kaboom")));
   });
 
+  await run("Items carry previews; the selected one's whole panel crosses alone", lazyPanelSource, "view", async (harness) => {
+    const items = () => findAll(harness.state.trees.at(-1), "List.Item");
+    const titles = (panel) => findAll(panel, "Action").map((action) => action.props.title);
+    const [first, second, third] = items();
+    check("an item carries its first two actions", titles(first.props.actions).join() === "Open,Copy", titles(first.props.actions).join());
+    check(
+      "and any action claiming ⌘↵, wherever it sits",
+      titles(third.props.actions).join() === "Open,Copy,Run",
+      titles(third.props.actions).join(),
+    );
+    check("its sections survive around them", findAll(second.props.actions, "ActionPanel.Section").length === 1);
+    check("no panel crosses before Swift names an item", harness.state.panels.length === 0);
+
+    const trees = harness.state.trees.length;
+    harness.call(`__blitz.focusItem("s1", ${second.id})`);
+    const sent = harness.state.panels.at(-1);
+    check("naming one sends its whole panel", sent?.itemId === second.id && titles(sent.panel).join() === "Open,Copy,Pin,Delete");
+    check("without a new tree", harness.state.trees.length === trees);
+    harness.call(`__blitz.focusItem("s1", ${second.id})`);
+    check("naming it again sends nothing", harness.state.panels.length === 1);
+
+    const pin = findAll(sent.panel, "Action").find((action) => action.props.title === "Pin");
+    harness.dispatch("s1", pin.props.onAction.$fn);
+    await wait();
+    check("a whole panel's action dispatches", harness.state.trees.length > trees);
+    check("a commit that changes the panel resends it", titles(harness.state.panels.at(-1).panel).includes("Unpin"));
+    const panels = harness.state.panels.length;
+    harness.dispatch("s1", findAll(items()[0].props.actions, "Action")[0].props.onAction.$fn);
+    await wait();
+    check("a preview action dispatches too", harness.state.hostCalls.includes("feedback.showHUD"));
+    check("and a commit that leaves the panel alone does not resend it", harness.state.panels.length === panels);
+  });
+
   await runModuleFixtures(check);
 
   console.log(failures === 0 ? "\nAll runtime fixtures passed." : `\n${failures} check(s) failed.`);
   if (import.meta.url === `file://${process.argv[1]}`) process.exit(failures === 0 ? 0 : 1);
   return failures;
+}
+
+function findAll(tree, type) {
+  const found = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === type) found.push(node);
+    (node.children ?? []).forEach(visit);
+    for (const value of Object.values(node.props ?? {})) {
+      if (value && typeof value === "object" && (value.type || Array.isArray(value))) visit(value);
+    }
+  };
+  visit(tree);
+  return found;
 }
 
 function findNode(tree, type) {

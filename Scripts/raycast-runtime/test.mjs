@@ -37,7 +37,7 @@ const runtime = readFileSync(runtimePath, "utf8");
 export function createHarness({ onRender, onFail, verbose = false, stubs = {} } = {}) {
   const context = createContext({});
   const timers = new Map();
-  const state = { trees: [], failures: [], logs: [], finished: false, hostCalls: [], payloads: [] };
+  const state = { trees: [], panels: [], failures: [], logs: [], finished: false, hostCalls: [], payloads: [] };
   // What Swift keeps per session: the last accepted tree's elements, which a delta refers back to.
   const bases = new Map();
 
@@ -58,6 +58,9 @@ export function createHarness({ onRender, onFail, verbose = false, stubs = {} } 
       state.trees.push(resolved.tree);
       onRender?.(resolved.tree);
       return true;
+    },
+    panel(sessionId, itemId, json) {
+      state.panels.push({ itemId: Number(itemId), panel: JSON.parse(json) });
     },
     failed(sessionId, message) {
       state.failures.push(message);
@@ -178,8 +181,13 @@ function syncHostCall(api, method, args) {
     case "fs.chmod":
       fs.chmodSync(args[0], args[1]);
       return null;
-    case "fs.readFile":
-      return fs.readFileSync(args[0]).toString("base64");
+    case "fs.readFile": {
+      if (args[1] !== "utf8") return fs.readFileSync(args[0]).toString("base64");
+      const status = fs.statSync(args[0], { bigint: true, throwIfNoEntry: false });
+      const stamp = status?.isFile() ? `${status.dev}:${status.ino}:${status.size}:${status.ctimeNs}` : null;
+      if (stamp && stamp === args[2]) return { stamp };
+      return { text: fs.readFileSync(args[0], "utf8"), stamp };
+    }
     case "fs.writeFile":
       fs[args[2] ? "appendFileSync" : "writeFileSync"](args[0], Buffer.from(args[1], "base64"));
       return null;

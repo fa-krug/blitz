@@ -114,9 +114,8 @@ struct MessageHUDView: View {
                 .foregroundStyle(tone.tint)
         case .progress:
             // A `ProgressView` spinner is drawn by AppKit and ignores every tint it is given.
-            Image(systemName: "progress.indicator")
+            Spinner()
                 .foregroundStyle(Theme.Colors.progress)
-                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing)
         }
     }
 }

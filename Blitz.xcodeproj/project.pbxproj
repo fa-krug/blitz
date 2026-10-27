@@ -203,6 +203,7 @@
 		340EB1E06EFB9A88D3B3F5CD /* InstalledCLIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55698890691F814C3FDB3F2E /* InstalledCLIProvider.swift */; };
 		342FB031440BA2B8716F20B8 /* AgentRulesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FBDAC570CF7D75D3FE53E5E /* AgentRulesSettingsView.swift */; };
 		345750DBF9D46ED6796D79BD /* BackupComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DCE1ED955C03083582D83D /* BackupComposer.swift */; };
+		34B6F0FC2B7E2E002028EE91 /* Spinner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8CCC2CE22CC57A52A15384E /* Spinner.swift */; };
 		357D6E9933A1E00374D4CBE2 /* AgentNotificationPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E151DE727FE32CDD3052298 /* AgentNotificationPresenter.swift */; };
 		35A3CA23104B3A621B878651 /* ColorSwatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992EBB343E854A7010A78EE6 /* ColorSwatch.swift */; };
 		35CEA2029BDA18DD19BB6542 /* ChatTextHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D6BC94E84E716F6EE2367 /* ChatTextHighlight.swift */; };
@@ -1859,6 +1860,7 @@
 		F763D41BCC7713865A5D78CA /* ToolRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolRunner.swift; sourceTree = "<group>"; };
 		F795131AE93D7CCAAE025BC3 /* EmojiGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiGridView.swift; sourceTree = "<group>"; };
 		F7DFB127C1D77F35E9F3E39F /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
+		F8CCC2CE22CC57A52A15384E /* Spinner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spinner.swift; sourceTree = "<group>"; };
 		F9827B7B250CC7762596A27A /* ExtensionListing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionListing.swift; sourceTree = "<group>"; };
 		F9A9476B5E75FC927D24D17B /* NotesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		F9FF64BC2560C54744D419F9 /* NoteBlockLayoutFragment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteBlockLayoutFragment.swift; sourceTree = "<group>"; };
@@ -3383,6 +3385,7 @@
 				C195ACDDF48F20693E507B48 /* RedactedText.swift */,
 				39CBADDEA1EB11033573DFB1 /* RevealableSecureField.swift */,
 				8E633A1E927D8BC22B6A21EE /* SettingsComponents.swift */,
+				F8CCC2CE22CC57A52A15384E /* Spinner.swift */,
 				CFAB07B2B29FB76CCC38ED6E /* SteadySegmentedPicker.swift */,
 				CD5E800AD819B7F674D4BF45 /* SymbolImage.swift */,
 				767174326604117F9E4FF199 /* SymbolPicker.swift */,
@@ -5035,6 +5038,7 @@
 				BF9610604733375036C2FDCA /* SnippetsStore.swift in Sources */,
 				6EE6666D3DAB8DEA7E5AA70E /* SpaceGesture.swift in Sources */,
 				9EBA632C4C7E6AA4BB5A63C6 /* SpaceSwitcher.swift in Sources */,
+				34B6F0FC2B7E2E002028EE91 /* Spinner.swift in Sources */,
 				0BCE1E76A640960CCFFF4EB1 /* SpotlightHandoffSession.swift in Sources */,
 				BEF7B606C59A83427B40335D /* SpotlightShortcut.swift in Sources */,
 				AF2B24D52631FACB25C72DE2 /* SpotlightShortcutGuide.swift in Sources */,

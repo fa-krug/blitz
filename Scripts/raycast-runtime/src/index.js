@@ -78,6 +78,7 @@ class Session {
       (tree) => this.sendTree(tree),
       (error) => this.fail(error),
       (error) => this.actionFailed(error),
+      (itemId, json) => this.host.panel(this.id, itemId, json),
     );
     this.surface.render(
       createElement(NavigationRoot, {
@@ -115,6 +116,7 @@ class Session {
 
 const hostCalls = {
   render: (sessionId, json) => globalThis.__blitzHost.render(sessionId, json),
+  panel: (sessionId, itemId, json) => globalThis.__blitzHost.panel(sessionId, String(itemId), json),
   failed: (sessionId, message) => globalThis.__blitzHost.failed(sessionId, message),
   navigationDepthChanged: (sessionId, depth) =>
     globalThis.__blitzHost.navigationDepthChanged(sessionId, String(depth)),
@@ -195,6 +197,12 @@ globalThis.__blitz = {
       session.fail(error);
       return "0";
     }
+  },
+
+  /// The List or Grid item Swift selected, whose whole action panel then crosses on its own.
+  focusItem(sessionId, nodeId) {
+    sessions.get(sessionId)?.surface?.focusItem(Number(nodeId));
+    return "ok";
   },
 
   /// Escape / the back chevron in a pushed screen.

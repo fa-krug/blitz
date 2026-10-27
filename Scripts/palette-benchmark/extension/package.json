@@ -1,0 +1,10 @@
+{
+  "name": "blitz-bench",
+  "title": "Blitz Bench",
+  "author": "blitz",
+  "description": "A GitLab-sized list the palette benchmark drives.",
+  "commands": [
+    { "name": "search-list", "title": "Bench Search List", "mode": "view" },
+    { "name": "filter-list", "title": "Bench Filter List", "mode": "view" }
+  ]
+}

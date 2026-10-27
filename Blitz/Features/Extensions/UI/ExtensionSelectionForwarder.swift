@@ -13,6 +13,16 @@ struct ExtensionSelectionForwarder: ViewModifier {
         screen.items.isEmpty ? 0 : min(max(selection, 0), screen.items.count - 1)
     }
 
+    /// A form's fields are items too, but carry no panel of their own.
+    private var focusedItemID: RenderNode.ID? {
+        switch screen.kind {
+        case .list, .grid:
+            return screen.items.indices.contains(selectedIndex) ? screen.items[selectedIndex].node.id : nil
+        default:
+            return nil
+        }
+    }
+
     private var context: String? {
         guard let running = extensions.running, let root = screen.root else { return nil }
         return "\(running.entryID):\(root.id)"
@@ -30,6 +40,9 @@ struct ExtensionSelectionForwarder: ViewModifier {
             }
             let argument: Any = change.itemID.map { $0 as Any } ?? NSNull()
             extensions.dispatch(handler: change.handler, arguments: [argument])
+        }
+        .onChange(of: focusedItemID, initial: true) { _, id in
+            if let id { extensions.focusItem(id) }
         }
         .onChange(of: selectedIndex) { _, index in reach(index) }
         // A load that settles with its last rows already in view would otherwise never page again.

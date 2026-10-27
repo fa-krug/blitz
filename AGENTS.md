@@ -91,8 +91,8 @@ feature's doc, under its own `## Invariants`.
   import cannot grant keystroke listening.
 - **Extension isolation is one-way.** `Features/Extensions/` may build on what the app shares —
   `Theme` tokens, `InterfaceMetrics`, `Platform/`, and shared components such as `edgeDissolve`,
-  `thinScrollbar`, `SectionHeader`, `EmptyResults`, `BarButton`, `KeyCapChip`, `armedHover`,
-  `frosted` and `tooltip`. Nothing flows back: a view, row, menu, geometry or sizing constant that
+  `thinScrollbar`, `SectionHeader`, `EmptyResults`, `BarButton`, `KeyCapChip`, `Spinner`,
+  `armedHover`, `frosted` and `tooltip`. Nothing flows back: a view, row, menu, geometry or sizing constant that
   exists for an extension is written and owned there — never added to `DesignSystem/`, never bolted
   onto `Theme`, and never lifted somewhere another feature can build on it. Another surface may render
   an extension view as an opaque box — `LauncherScreen` does exactly that with

@@ -37,6 +37,9 @@ struct ExtensionPerformance {
             failures.append(message)
         }
         func runtime(_ runtime: ExtensionRuntime, session: String, navigationDepth: Int) {}
+        func runtime(
+            _ runtime: ExtensionRuntime, session: String, item: RenderNode.ID, panel: RenderNode
+        ) {}
         func runtime(_ runtime: ExtensionRuntime, session: String, didFinish: Void) {}
         func runtime(_ runtime: ExtensionRuntime, log level: String, message: String) {
             logs.append(message)

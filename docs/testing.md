@@ -239,7 +239,12 @@ BLITZ_BENCH_ARGS="-compactMode NO -popToRootTimeout 0" \
 ```
 
 `launcher` types, deletes, steps and closes; `modes` summons Clipboard History and the emoji picker;
-`scroll` runs the selection 30–40 rows down each. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
+`scroll` runs the selection 30–40 rows down each. `extension` opens the two commands of
+`Scripts/palette-benchmark/extension/` — 600 GitLab-shaped rows, one filtered by the extension through
+a throttled `onSearchTextChange`, one by Blitz — then types, deletes, steps, scrolls and opens ⌘K,
+and ends with ⌘K in the launcher for comparison; `run.sh` installs it into the dev channel first,
+and it needs `-extensionsEnabled YES` in `BLITZ_BENCH_ARGS`. An extension's keys get a 1.5 s window,
+since its answer arrives after `throttle` and its own thread. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
 which overrides the dev channel's own preferences for the run without writing them. Every action also
 emits a `palette-benchmark` Points of Interest interval, so a Time Profiler recording attached to the
 process (`xctrace record --attach <pid>`) can be cut down to one kind of action. Another process
@@ -358,8 +363,12 @@ back to back rather than against numbers quoted elsewhere:
 E=Blitz/Features/Extensions L=Blitz/Features/Launcher/Model
 eval "$(sed -n '/^X="/,/"$/p' Scripts/run-tests.sh)"
 swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /tmp/ext-performance
+codesign -f -s - -o runtime --entitlements Blitz/Blitz.entitlements /tmp/ext-performance
 /tmp/ext-performance
 ```
+
+The `codesign` line matters: JavaScriptCore compiles nothing without `allow-jit`, and JS then runs
+about 15× slower than in the app. The same goes for timing a real extension through `ext-test`.
 
 `Tests/chat-markdown-performance.swift` streams a 20 KB reply from `Tests/chat-markdown-fixture.swift`
 — headings, lists, code in five languages, inline and display math, tables and quotes — in

@@ -35,6 +35,9 @@ produces, rendered natively into the palette. No Electron, no browser, no Node.j
   stays in `Features/Extensions/`, which is why `ExtensionActionsPanel`, `ExtensionGridGeometry` and
   `ExtensionColors` exist. Another surface may render an extension's view as an opaque box — the
   launcher's `ExtensionArgumentsAccessory` — but never reaches inside it.
+- **A List or Grid item's `actions` in the tree is a preview** of what ↵ and ⌘↵ fire. The whole panel
+  exists only for the selected item, as `ExtensionManager.wholePanel`; code that needs another item's
+  names it through `ExtensionManager.focusItem` and reads what arrives there.
 - **`ExtensionScreen` is the only place extension row order is decided**, so the flat palette selection
   keeps matching the visible rows — the same invariant every other palette screen holds.
 - **Off means off.** `extensionsEnabled` is opt-in, and `ExtensionManager.setEnabled(false)` stops the
@@ -83,6 +86,18 @@ Two conventions make the Raycast component surface expressible in a tree:
 Only the active `__screen` crosses in full: a screen covered by a pushed one keeps its React state but
 arrives as an empty stub, and a commit whose serialized tree matches the last one is not sent at all.
 
+**Items carry a preview of their action panel; the selected one's whole panel crosses on its
+own.** Every `List.Item` and `Grid.Item` still mounts its `actions`, so hooks inside a panel run as
+they always did, but the tree holds only a preview: the first two actions, any action claiming ⌘↵,
+and the sections and submenus around those — what ↵, ⌘↵ and the footer need at once.
+`ExtensionSelectionForwarder` names the selected item through `__blitz.focusItem`; the surface then
+sends that item's whole panel through `__blitzHost.panel`, and again after any commit that changes
+it. `ExtensionManager.wholePanel` holds it beside the tree, and `ExtensionCommandScreen` prefers it
+for the item it belongs to. Apart from the tree, so a selection change leaves the tree — and the
+list SwiftUI diffs — alone: carried in the tree, each arrow cost the main thread ~5 ms more. Whole
+panels were most of a big list's tree: GitLab's 574 projects crossed as 3 MB, and clearing its
+search blocked the JS thread for ~265 ms; with previews it is ~105 ms.
+
 **A commit crosses as a delta.** `src/tree-delta.js` compares each element with the one of the same
 id in the last tree Swift accepted, and an element whose own content and every descendant are
 unchanged crosses as `{"$same": id}`; `RenderTree(json:reusing:)` puts back the node it decoded for
@@ -115,7 +130,7 @@ same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node
 
 | File | What it is |
 | --- | --- |
-| `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
+| `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `focusItem`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
 | `src/host.js` | the JS→Swift seam: async `hostCall`, blocking `hostCallSync`, logging |
 | `src/reconciler.js` | `react-reconciler` host config that commits into a JSON tree |
 | `src/tree-delta.js` | the delta each commit crosses as, and the resolver the Node harness applies it with |
@@ -144,6 +159,13 @@ Two host-call flavours:
 - **Blocking** (`invokeSync`) for the synchronous Node shims only — `fs.readFileSync`,
   `execSync`, `createHash`, `gunzipSync`. Safe because Swift services these entirely on the JS thread;
   nothing there touches the main actor, so a blocking answer cannot deadlock.
+
+Bytes cross both ways as base64, decoded with the engine's own `Uint8Array.fromBase64` and
+`toBase64` rather than a loop written in JS. A read with a UTF-8 encoding skips bytes altogether:
+Swift answers the text with a stamp — device, inode, size and ctime, which no write preserves — and
+`readFileSync` keeps the last text per path, so an unchanged file costs a `stat` and its stamp. That
+path is hot: `@raycast/utils`' `createDeeplink` reads `package.json` on every call, which GitLab's
+project list makes once per row on every render.
 
 ## The Swift host
 
@@ -304,7 +326,7 @@ screens hold (see [palette.md](palette.md)).
   `ExtensionManager.loadMore`. Its `ExtensionPagination.Latch` asks once per item count, never while
   `isLoading` or once `hasMore` is false, and remembers how far the user reached, so a load that
   settles with the last rows already on screen asks again without a scroll. While `isLoading` is set
-  over rows already shown — and on any Detail or Form — a `progress.indicator` sits in the header
+  over rows already shown — and on any Detail or Form — a `Spinner` sits in the header
   beside the search accessory (`ExtensionCommandScreen.loadingIndicator`); an empty list keeps its
   "Loading…" body instead.
 - **Search-bar dropdown** — `List.Dropdown` and `Grid.Dropdown` draw as
@@ -793,6 +815,10 @@ with nothing due costs a comparison. Three guards keep it cheap:
 - A tick never preempts a running command — foreground first, the tick waits for the next due.
 - A hung run dies before its successor is due, and a background run shows no toast, HUD, alert or
   window call, since those would fire on a timer.
+- A run a manual launch preempted never touches the runtime again: `runInBackground` rechecks its
+  session after every `await`, since a late `start` would land in the manual command's context and
+  `configureSystem` would swap that command's preferences for its own. It is recorded as a success,
+  so the schedule survives the preemption.
 
 `ExtensionRefreshPolicy` is where the parsing, due dates, backoff and Refresh Now's refusals live,
 driven by `Tests/ext-refresh-test.swift`; `Tests/ext-metadata-test.swift` covers the store behind it. Menu-bar
