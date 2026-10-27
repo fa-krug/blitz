@@ -311,7 +311,7 @@ screens hold (see [palette.md](palette.md)).
   `ExtensionManager.loadMore`. Its `ExtensionPagination.Latch` asks once per item count, never while
   `isLoading` or once `hasMore` is false, and remembers how far the user reached, so a load that
   settles with the last rows already on screen asks again without a scroll. While `isLoading` is set
-  over rows already shown — and on any Detail or Form — a `progress.indicator` sits in the header
+  over rows already shown — and on any Detail or Form — a `Spinner` sits in the header
   beside the search accessory (`ExtensionCommandScreen.loadingIndicator`); an empty list keeps its
   "Loading…" body instead.
 - **Search-bar dropdown** — `List.Dropdown` and `Grid.Dropdown` draw as

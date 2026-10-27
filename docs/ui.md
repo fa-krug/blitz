@@ -597,9 +597,12 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
   than a tone, which is why `MessageHUDView.Accessory` exists — a tone says how something *went*, and
   nothing has gone anywhere yet. When `onCancel` is provided, hovering over the pill lights it up,
   turns the spinner into an `xmark`, and clicking anywhere on the pill cancels the in-flight task.
-  The spinner is **`progress.indicator` with
-  `.symbolEffect(.variableColor)`, never a `ProgressView`**: AppKit draws that one itself and ignores
-  every tint given to it, so a blue spinner is only reachable as a symbol. Progress has no natural
+  The spinner is **`Spinner`, never a `ProgressView`**: AppKit draws that one itself and ignores
+  every tint given to it, so a blue spinner is only reachable as a symbol. `Spinner` steps a
+  half-lit `progress.indicator` round by rotation rather than animating it with a symbol effect: an
+  animated `.symbolEffect` is redrawn in software every frame, and each redraw blocks the main thread
+  until the window server has shown the last one — half its time, measured under a loading
+  extension list. Extension screens and toasts use the same `Spinner`. Progress has no natural
   dwell, so it is shown with `dwells: false` and stays up until something replaces it or
   `HUDPresenter.dismiss()` runs — the caller owns that, and `QuickActionCoordinator.produce` pairs the
   two with a `defer` so a throw or a cancellation cannot strand it.

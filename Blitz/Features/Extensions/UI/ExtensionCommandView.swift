@@ -221,8 +221,7 @@ struct ExtensionToastPill: View {
         case .success: Image(systemName: "checkmark")
         case .failure: Image(systemName: "exclamationmark")
         case .animated:
-            Image(systemName: "progress.indicator")
-                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing)
+            Spinner()
         }
     }
 }

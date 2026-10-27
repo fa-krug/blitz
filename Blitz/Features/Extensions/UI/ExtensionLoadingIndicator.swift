@@ -8,8 +8,7 @@ struct ExtensionLoadingIndicator: View {
     var tooltipEdge: VerticalEdge = .top
 
     var body: some View {
-        Image(systemName: "progress.indicator")
-            .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing)
+        Spinner()
             .font(metrics.typography.menuIcon)
             .foregroundStyle(Theme.Colors.progress)
             .tooltip(label, alignment: .trailing, edge: tooltipEdge)
