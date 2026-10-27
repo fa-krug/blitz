@@ -156,7 +156,7 @@ final class AppSettings {
         didSet { defaults.set(clipboardDisabledApps, forKey: Key.clipboardDisabledApps.rawValue) }
     }
 
-    /// What ↵ does on a clipboard entry; Paste takes the chord the chosen action leaves free.
+    /// What ↵ does on a clipboard entry; ⌘↵ and ⌃⌘↵ run the other two.
     var clipboardDefaultAction: ClipboardDefaultAction {
         didSet {
             defaults.set(
@@ -676,7 +676,7 @@ final class AppSettings {
             ?? ["com.apple.keychainaccess", "com.apple.Passwords"]
         clipboardDefaultAction =
             defaults.string(forKey: Key.clipboardDefaultAction.rawValue)
-            .flatMap(ClipboardDefaultAction.init) ?? .paste
+            .flatMap(ClipboardDefaultAction.init) ?? .pastePlainText
         showInMenuBar =
             defaults.object(forKey: Key.showInMenuBar.rawValue) == nil
             || defaults.bool(forKey: Key.showInMenuBar.rawValue)
