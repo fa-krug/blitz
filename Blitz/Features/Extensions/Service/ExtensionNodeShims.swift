@@ -158,10 +158,14 @@ final class ExtensionNodeShims: @unchecked Sendable {
 
         case "readFile":
             let target = try path(0)
+            let asText = arguments[safe: 1] as? String == "utf8"
+            let stamp = asText ? Self.stamp(of: target) : nil
+            if let stamp, stamp == arguments[safe: 2] as? String { return ["stamp": stamp] }
             guard let data = fileManager.contents(atPath: target) else {
                 throw readError("open", target)
             }
-            return data.base64EncodedString()
+            guard asText else { return data.base64EncodedString() }
+            return ["text": String(decoding: data, as: UTF8.self), "stamp": stamp as Any? ?? NSNull()]
 
         case "writeFile":
             let target = try path(0)
@@ -363,6 +367,16 @@ final class ExtensionNodeShims: @unchecked Sendable {
         EINVAL: "EINVAL", ENOENT: "ENOENT", ENOSPC: "ENOSPC", ENOTDIR: "ENOTDIR", EPERM: "EPERM",
         ESRCH: "ESRCH"
     ]
+
+    /// No write keeps a ctime; taken before the read, so a racing write only costs a refetch.
+    private static func stamp(of path: String) -> String? {
+        var status = Darwin.stat()
+        guard fstatat(AT_FDCWD, path, &status, 0) == 0, status.st_mode & S_IFMT == S_IFREG else {
+            return nil
+        }
+        let changed = status.st_ctimespec
+        return "\(status.st_dev):\(status.st_ino):\(status.st_size):\(changed.tv_sec).\(changed.tv_nsec)"
+    }
 
     private func stat(path: String, followLinks: Bool) throws -> [String: Any] {
         var status = Darwin.stat()

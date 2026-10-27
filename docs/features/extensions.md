@@ -145,6 +145,13 @@ Two host-call flavours:
   `execSync`, `createHash`, `gunzipSync`. Safe because Swift services these entirely on the JS thread;
   nothing there touches the main actor, so a blocking answer cannot deadlock.
 
+Bytes cross both ways as base64, decoded with the engine's own `Uint8Array.fromBase64` and
+`toBase64` rather than a loop written in JS. A read with a UTF-8 encoding skips bytes altogether:
+Swift answers the text with a stamp — device, inode, size and ctime, which no write preserves — and
+`readFileSync` keeps the last text per path, so an unchanged file costs a `stat` and its stamp. That
+path is hot: `@raycast/utils`' `createDeeplink` reads `package.json` on every call, which GitLab's
+project list makes once per row on every render.
+
 ## The Swift host
 
 `Blitz/Features/Extensions/`, split the same way as every other feature:

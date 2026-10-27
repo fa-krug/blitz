@@ -759,30 +759,25 @@ export function unitsToString(units, length = units.length) {
 }
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-const B64_CODES = Uint8Array.from(B64, (char) => char.charCodeAt(0));
 const B64_VALUES = new Int8Array(128).fill(-1);
 for (let i = 0; i < B64.length; i++) B64_VALUES[B64.charCodeAt(i)] = i;
-const PAD = 0x3d;
 
 export function bytesToBase64(bytes) {
-  const length = bytes.length;
-  const out = new Uint8Array(Math.ceil(length / 3) * 4);
-  let o = 0;
-  for (let i = 0; i < length; i += 3) {
-    const a = bytes[i];
-    const b = i + 1 < length ? bytes[i + 1] : undefined;
-    const c = i + 2 < length ? bytes[i + 2] : undefined;
-    out[o++] = B64_CODES[a >> 2];
-    out[o++] = B64_CODES[((a & 3) << 4) | ((b ?? 0) >> 4)];
-    out[o++] = b === undefined ? PAD : B64_CODES[((b & 15) << 2) | ((c ?? 0) >> 6)];
-    out[o++] = c === undefined ? PAD : B64_CODES[c & 63];
-  }
-  return unitsToString(out, o);
+  return (bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes)).toBase64();
 }
 
 /// Anything outside the alphabet, padding and line breaks included, is skipped.
 export function base64ToBytes(text) {
   const input = String(text);
+  try {
+    return Uint8Array.fromBase64(input);
+  } catch {
+    return lenientBase64ToBytes(input);
+  }
+}
+
+/// Every host payload decodes natively; only input the strict decoder refuses walks this loop.
+function lenientBase64ToBytes(input) {
   let digits = 0;
   for (let i = 0; i < input.length; i++) {
     const code = input.charCodeAt(i);

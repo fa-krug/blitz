@@ -364,6 +364,10 @@ function fsMode(mode) {
 }
 
 const FILE_STREAM_CHUNK = 64 * 1024;
+/// `@raycast/utils`' `createDeeplink` reads package.json once per row; an unchanged file costs a stat.
+const textReads = new Map();
+const TEXT_READ_LIMIT = 1 << 20;
+const TEXT_READ_ENTRIES = 64;
 const FS_CONSTANTS = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1, O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2, O_APPEND: 8, O_NOFOLLOW: 256, O_CREAT: 512, O_TRUNC: 1024, O_EXCL: 2048 };
 const { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND, O_CREAT, O_TRUNC, O_EXCL } = FS_CONSTANTS;
 const OPEN_FLAGS = {
@@ -396,7 +400,18 @@ const fs = {
     return hostCallSync("fs", "write", [fd, bytesToBase64(buffer.subarray(offset, offset + length)), position]);
   },
   readFileSync(file, options) {
-    return decodeFileResult(hostCallSync("fs", "readFile", [fsPath(file)]), options);
+    const encoding = typeof options === "string" ? options : options?.encoding;
+    if (!/^utf-?8$/i.test(encoding ?? "")) return decodeFileResult(hostCallSync("fs", "readFile", [fsPath(file)]), options);
+    const target = fsPath(file);
+    const known = textReads.get(target);
+    const answer = hostCallSync("fs", "readFile", [target, "utf8", known?.stamp ?? null]);
+    if (answer.text === undefined) return known.text;
+    textReads.delete(target);
+    if (answer.stamp && answer.text.length <= TEXT_READ_LIMIT) {
+      if (textReads.size >= TEXT_READ_ENTRIES) textReads.delete(textReads.keys().next().value);
+      textReads.set(target, answer);
+    }
+    return answer.text;
   },
   writeFileSync(file, data, options) {
     hostCallSync("fs", "writeFile", [fsPath(file), encodeFileData(data, options), false]);

@@ -312,6 +312,7 @@ export default function Command() {
     String(Buffer.from(Buffer.from("😀 日本 é".repeat(5000)).toString("base64"), "base64").toString() === "😀 日本 é".repeat(5000)),
     String(atob(btoa("x".repeat(200000))).length),
     Buffer.from("aGV\\nsbG8", "base64").toString(),
+    Buffer.from("aGV*sbG8", "base64").toString(),
     String(new TextEncoder().encode("😀").buffer.byteLength),
     fileURLToPath("file:///Applications/Blitz%20Beta.app"),
     fileURLToPath(new URL("file:///tmp/%ED%95%9C%EA%B8%80.txt")),
@@ -882,7 +883,12 @@ export default async function Command() {
     bytesWritten: sink.bytesWritten,
     onDisk: fs.readFileSync(target, "utf8"),
     piped: read.join(""),
+    rereads: [fs.readFileSync(target, "utf8") === fs.readFileSync(target, { encoding: "utf8" })],
   };
+  fs.writeFileSync(target, "first");
+  globalThis.__stream.rereads.push(fs.readFileSync(target, "utf8"));
+  fs.writeFileSync(target, "FIRST");
+  globalThis.__stream.rereads.push(fs.readFileSync(target, "utf8"));
   fs.unlinkSync(target);
 }
 `;
@@ -1247,6 +1253,7 @@ export async function runFixtures() {
       "true",
       "200000",
       "hello",
+      "hello",
       "4",
       "/Applications/Blitz Beta.app",
       "/tmp/한글.txt",
@@ -1603,6 +1610,11 @@ export async function runFixtures() {
       check("every byte reaches the file", result?.bytesWritten === indexBody.length, String(result?.bytesWritten));
       check("the file matches the response", result?.onDisk === indexBody);
       check("reading it back through a Transform preserves it", result?.piped === indexBody.toUpperCase());
+      check(
+        "a text read sees every rewrite, a same-size one included",
+        JSON.stringify(result?.rereads) === JSON.stringify([true, "first", "FIRST"]),
+        JSON.stringify(result?.rereads),
+      );
     },
     {
       stubs: {

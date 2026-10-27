@@ -358,8 +358,12 @@ back to back rather than against numbers quoted elsewhere:
 E=Blitz/Features/Extensions L=Blitz/Features/Launcher/Model
 eval "$(sed -n '/^X="/,/"$/p' Scripts/run-tests.sh)"
 swiftc -O -swift-version 6 -parse-as-library $X Tests/ext-performance.swift -o /tmp/ext-performance
+codesign -f -s - -o runtime --entitlements Blitz/Blitz.entitlements /tmp/ext-performance
 /tmp/ext-performance
 ```
+
+The `codesign` line matters: JavaScriptCore compiles nothing without `allow-jit`, and JS then runs
+about 15× slower than in the app. The same goes for timing a real extension through `ext-test`.
 
 `Tests/chat-markdown-performance.swift` streams a 20 KB reply from `Tests/chat-markdown-fixture.swift`
 — headings, lists, code in five languages, inline and display math, tables and quotes — in

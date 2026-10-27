@@ -296,6 +296,28 @@ struct ExtensionTests {
         if geteuid() != 0 {
             check("fs.readFile of an unreadable file is EACCES", code("readFile", [locked]) == "EACCES")
         }
+
+        let text = directory.appendingPathComponent("text").path
+        FileManager.default.createFile(atPath: text, contents: Data([0x68, 0xC3, 0xA9, 0xFF, 0x21]))
+        func readText(_ stamp: String?) -> [String: Any]? {
+            let argsJSON = (try? JSONSerialization.data(withJSONObject: [text, "utf8", stamp as Any? ?? NSNull()]))
+                .flatMap { String(bytes: $0, encoding: .utf8) } ?? "[]"
+            let result = ExtensionNodeShims().perform(api: "fs", method: "readFile", argsJSON: argsJSON)
+            return (try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])?["value"]
+                as? [String: Any]
+        }
+        let first = readText(nil)
+        check(
+            "fs.readFile as utf8 answers text, a malformed byte as U+FFFD",
+            first?["text"] as? String == "hé\u{FFFD}!")
+        let unchanged = readText(first?["stamp"] as? String)
+        check(
+            "fs.readFile as utf8 answers only the stamp for an unchanged file",
+            unchanged?["text"] == nil && unchanged?["stamp"] as? String == first?["stamp"] as? String)
+        try? Data("Hé?!".utf8).write(to: URL(fileURLWithPath: text))
+        check(
+            "fs.readFile as utf8 rereads a same-size rewrite in place",
+            readText(first?["stamp"] as? String)?["text"] as? String == "Hé?!")
     }
 
     static func fsStatChecks() {

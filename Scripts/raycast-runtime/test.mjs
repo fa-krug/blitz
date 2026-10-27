@@ -178,8 +178,13 @@ function syncHostCall(api, method, args) {
     case "fs.chmod":
       fs.chmodSync(args[0], args[1]);
       return null;
-    case "fs.readFile":
-      return fs.readFileSync(args[0]).toString("base64");
+    case "fs.readFile": {
+      if (args[1] !== "utf8") return fs.readFileSync(args[0]).toString("base64");
+      const status = fs.statSync(args[0], { bigint: true, throwIfNoEntry: false });
+      const stamp = status?.isFile() ? `${status.dev}:${status.ino}:${status.size}:${status.ctimeNs}` : null;
+      if (stamp && stamp === args[2]) return { stamp };
+      return { text: fs.readFileSync(args[0], "utf8"), stamp };
+    }
     case "fs.writeFile":
       fs[args[2] ? "appendFileSync" : "writeFileSync"](args[0], Buffer.from(args[1], "base64"));
       return null;
