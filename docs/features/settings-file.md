@@ -93,7 +93,7 @@ because the app rewrites the file.
   "clipboard": {
     "enabled": true,
     "retentionDays": 90,
-    "defaultAction": "paste",
+    "defaultAction": "pastePlainText",
     "disabledApps": [
       "com.apple.keychainaccess",
       "com.apple.Passwords"

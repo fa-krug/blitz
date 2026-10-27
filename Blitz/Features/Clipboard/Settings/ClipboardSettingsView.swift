@@ -38,7 +38,7 @@ struct ClipboardSettingsView: View {
                     }
                 } label: {
                     SettingsRowTitle(.clipboardHistory, "Default action")
-                    Text("↵ does this, and Paste takes its shortcut.")
+                    Text("↵ does this; ⌘↵ and ⌃⌘↵ do the other two.")
                 }
             } header: {
                 SettingsSectionHeader(.clipboardHistory)

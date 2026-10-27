@@ -95,13 +95,13 @@ struct ClipboardScreen: PaletteScreen {
         return true
     }
 
-    /// ⌘↵ — the action ↵ is not set to.
+    /// ⌘↵ — Paste, or Copy while Paste is the default.
     func secondary(at selection: Int) -> Bool {
         guard let item = item(at: selection) else { return false }
         return core.clipboardCoordinator.activate(item, chord: .command)
     }
 
-    /// ⌃⌘↵ — Paste as Plain Text, or Paste while that is the default.
+    /// ⌃⌘↵ — Paste as Plain Text, or Copy while that is the default.
     func tertiary(at selection: Int) -> Bool {
         guard let item = item(at: selection) else { return false }
         return core.clipboardCoordinator.activate(item, chord: .controlCommand)
