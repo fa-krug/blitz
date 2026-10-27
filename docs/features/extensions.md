@@ -800,6 +800,10 @@ with nothing due costs a comparison. Three guards keep it cheap:
 - A tick never preempts a running command — foreground first, the tick waits for the next due.
 - A hung run dies before its successor is due, and a background run shows no toast, HUD, alert or
   window call, since those would fire on a timer.
+- A run a manual launch preempted never touches the runtime again: `runInBackground` rechecks its
+  session after every `await`, since a late `start` would land in the manual command's context and
+  `configureSystem` would swap that command's preferences for its own. It is recorded as a success,
+  so the schedule survives the preemption.
 
 `ExtensionRefreshPolicy` is where the parsing, due dates, backoff and Refresh Now's refusals live,
 driven by `Tests/ext-refresh-test.swift`; `Tests/ext-metadata-test.swift` covers the store behind it. Menu-bar

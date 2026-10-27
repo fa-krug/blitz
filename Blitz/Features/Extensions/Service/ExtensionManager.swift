@@ -811,17 +811,21 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         backgroundFailure = nil
         var succeeded = false
         defer {
+            // A manual run that aborted this one owns the runtime; the schedule survives it.
+            let settled = succeeded || backgroundSessionID != session
             // Gone mid-run means uninstalled: recording would resurrect its storage file.
             if extensionNamed(reference.extensionName) != nil {
                 commandMetadata.recordBackgroundResult(
                     extension: reference.extensionName, command: reference.commandName,
-                    success: succeeded, error: succeeded ? nil : (backgroundFailure ?? "Timed out."),
+                    success: settled, error: settled ? nil : (backgroundFailure ?? "Timed out."),
                     now: Date())
             }
-            backgroundSessionID = nil
-            backgroundRef = nil
-            backgroundFailure = nil
-            backgroundContinuation = nil
+            if backgroundSessionID == session {
+                backgroundSessionID = nil
+                backgroundRef = nil
+                backgroundFailure = nil
+                backgroundContinuation = nil
+            }
             publishLauncherEntries()
             storage.flush()
             commandMetadata.flush()
@@ -836,6 +840,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         let code = await Task.detached(priority: .utility) {
             (try? String(contentsOf: bundle, encoding: .utf8)) ?? ""
         }.value
+        // Every await is a chance for a manual run to abort this one and take the runtime over.
+        guard backgroundSessionID == session else { return }
         guard !code.isEmpty else {
             backgroundFailure = ExtensionLaunchError.notBuilt(command.title).localizedDescription
             return
@@ -845,17 +851,18 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
             launchType: .background)
         await runtime.start(
             session: session, code: code, file: bundle, mode: command.mode, context: context)
+        guard backgroundSessionID == session else { return }
         succeeded = await waitForBackgroundResult(
-            timeout: ExtensionRefreshPolicy.timeout(interval: interval))
+            session: session, timeout: ExtensionRefreshPolicy.timeout(interval: interval))
         // An abort tore the session down; touching the runtime would take a manual run's context.
         guard backgroundSessionID == session else { return }
         await runtime.stop(session: session)
         runtime.shutdown()
     }
 
-    private func waitForBackgroundResult(timeout: TimeInterval) async -> Bool {
+    private func waitForBackgroundResult(session: String, timeout: TimeInterval) async -> Bool {
         await withTaskGroup(of: Bool.self, returning: Bool.self) { group in
-            group.addTask { [weak self] in await self?.backgroundSettled() ?? false }
+            group.addTask { [weak self] in await self?.backgroundSettled(session) ?? false }
             group.addTask { [weak self] in
                 do {
                     try await Task.sleep(for: .seconds(timeout))
@@ -873,8 +880,10 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     }
 
     /// Suspends until the run settles, times out or is preempted; `resumeBackground` is every exit.
-    private func backgroundSettled() async -> Bool {
-        await withCheckedContinuation { continuation in backgroundContinuation = continuation }
+    private func backgroundSettled(_ session: String) async -> Bool {
+        // An abort landing before this child task runs had no continuation to resume.
+        guard backgroundSessionID == session else { return true }
+        return await withCheckedContinuation { continuation in backgroundContinuation = continuation }
     }
 
     /// Ends the in-flight background run as a success so its schedule survives the preemption.
