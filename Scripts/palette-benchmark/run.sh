@@ -2,7 +2,7 @@
 # Palette main-thread cost per keystroke, arrow, summon and close. See docs/testing.md.
 #
 #   run.sh build <name>                       optimized dev build of this checkout, kept as <name>
-#   run.sh compare <scenario> <runs> <name>…  interleaved runs; scenario is launcher, modes or scroll
+#   run.sh compare <scenario> <runs> <name>…  interleaved runs; launcher, modes, scroll or extension
 #
 # BLITZ_BENCH_ARGS is passed to the app, so `-compactMode NO -popToRootTimeout 0` overrides the
 # dev channel's own preferences for the run without writing them.
@@ -35,6 +35,15 @@ compare)
     scenario=${2:?scenario} runs=${3:?runs}
     shift 3
     driver
+    # Each command's bundle is the shared rows plus its own body: a bundle carries no relative require.
+    if [ "$scenario" = extension ]; then
+        bench="$HOME/Library/Application Support/de.fa-krug.blitz.dev/extensions/blitz-bench"
+        rm -rf "$bench" && mkdir -p "$bench"
+        cp "$HERE/extension/package.json" "$bench/"
+        for command in search-list filter-list; do
+            cat "$HERE/extension/rows.js" "$HERE/extension/$command.js" > "$bench/$command.js"
+        done
+    fi
     for run in $(seq 1 "$runs"); do
         for name in "$@"; do
             # Never by name: `xctrace --launch` and `open` resolve the bundle id to another copy.

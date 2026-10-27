@@ -35,7 +35,7 @@ static void installObservers(void) {
 
 static void runNext(void);
 
-static void measure(NSString *name, void (^action)(void)) {
+static void measureFor(NSString *name, double window, void (^action)(void)) {
     [steps addObject:^{
         invalid = NO;
         os_signpost_id_t signpost = os_signpost_id_generate(pointsOfInterest);
@@ -45,7 +45,7 @@ static void measure(NSString *name, void (^action)(void)) {
         busyTotal = 0;
         busyStart = actionStart;
         action();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(windowMs * NSEC_PER_MSEC)),
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(window * NSEC_PER_MSEC)),
             dispatch_get_main_queue(), ^{
                 os_signpost_interval_end(pointsOfInterest, signpost, "action");
                 if (invalid) {
@@ -58,6 +58,8 @@ static void measure(NSString *name, void (^action)(void)) {
             });
     }];
 }
+
+static void measure(NSString *name, void (^action)(void)) { measureFor(name, windowMs, action); }
 
 static void idle(double ms) {
     [steps addObject:^{
@@ -139,6 +141,22 @@ static void escape(NSString *name) { measure(name, ^{ postKey(@"\x1b", 53, 0); }
 
 static void summon(NSString *name, NSString *link) { measure(name, ^{ openLink(link); }); }
 
+// An extension answers on its own thread, after `throttle`'s 300 ms, so its keys need a longer look.
+static const double extensionWindowMs = 1500;
+
+static void extensionKey(NSString *name, unichar c) {
+    measureFor(name, extensionWindowMs,
+        ^{ postKey([NSString stringWithCharacters:&c length:1], letterCode(c), 0); });
+}
+
+static void extensionBackspace(NSString *name) {
+    measureFor(name, extensionWindowMs, ^{ postKey(@"\x7f", 51, 0); });
+}
+
+static void commandK(NSString *name) {
+    measure(name, ^{ postKey(@"k", 40, NSEventModifierFlagCommand); });
+}
+
 static NSString *const launcher = @"blitz://run/togglePalette";
 static NSString *const clipboard = @"blitz://run/command:clipboard-history";
 static NSString *const emoji = @"blitz://run/command:search-emoji";
@@ -206,6 +224,28 @@ static void scrollRound(void) {
     idle(300);
 }
 
+// Blitz Bench, which run.sh installs: 600 GitLab-shaped rows, filtered by the extension or by Blitz.
+static void extensionRound(NSString *command) {
+    measureFor([@"open." stringByAppendingString:command], 3000,
+        ^{ openLink([@"blitz://extensions/blitz-bench/" stringByAppendingString:command]); });
+    idle(500);
+    extensionKey([@"key.first." stringByAppendingString:command], 'd');
+    extensionKey([@"key.more." stringByAppendingString:command], 'a');
+    extensionKey([@"key.more." stringByAppendingString:command], 's');
+    extensionBackspace([@"key.backspace." stringByAppendingString:command]);
+    extensionBackspace([@"key.backspace." stringByAppendingString:command]);
+    extensionBackspace([@"key.backspace_to_empty." stringByAppendingString:command]);
+    arrow([@"arrow." stringByAppendingString:command], NSDownArrowFunctionKey, 125, 10);
+    arrow([@"arrow." stringByAppendingString:command], NSUpArrowFunctionKey, 126, 10);
+    arrow([@"arrow_long." stringByAppendingString:command], NSDownArrowFunctionKey, 125, 40);
+    commandK([@"actions.open." stringByAppendingString:command]);
+    idle(200);
+    escape([@"actions.close." stringByAppendingString:command]);
+    idle(200);
+    escape([@"leave." stringByAppendingString:command]);
+    idle(300);
+}
+
 static void buildScenario(void) {
     NSString *scenario = env(@"BLITZ_BENCH_SCENARIO") ?: @"launcher";
     int rounds = env(@"BLITZ_BENCH_ROUNDS").intValue ?: 6;
@@ -217,6 +257,18 @@ static void buildScenario(void) {
         if ([scenario isEqual:@"launcher"]) launcherRound();
         if ([scenario isEqual:@"modes"]) modesRound();
         if ([scenario isEqual:@"scroll"]) scrollRound();
+        if ([scenario isEqual:@"extension"]) {
+            extensionRound(@"search-list");
+            extensionRound(@"filter-list");
+            summon(@"summon.launcher", launcher);
+            idle(300);
+            commandK(@"actions.open.launcher");
+            idle(200);
+            escape(@"actions.close.launcher");
+            idle(200);
+            escape(@"hide.untouched");
+            idle(300);
+        }
     }
 }
 

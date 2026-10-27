@@ -239,7 +239,12 @@ BLITZ_BENCH_ARGS="-compactMode NO -popToRootTimeout 0" \
 ```
 
 `launcher` types, deletes, steps and closes; `modes` summons Clipboard History and the emoji picker;
-`scroll` runs the selection 30–40 rows down each. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
+`scroll` runs the selection 30–40 rows down each. `extension` opens the two commands of
+`Scripts/palette-benchmark/extension/` — 600 GitLab-shaped rows, one filtered by the extension through
+a throttled `onSearchTextChange`, one by Blitz — then types, deletes, steps, scrolls and opens ⌘K,
+and ends with ⌘K in the launcher for comparison; `run.sh` installs it into the dev channel first,
+and it needs `-extensionsEnabled YES` in `BLITZ_BENCH_ARGS`. An extension's keys get a 1.5 s window,
+since its answer arrives after `throttle` and its own thread. `BLITZ_BENCH_ARGS` reaches the app's argument domain,
 which overrides the dev channel's own preferences for the run without writing them. Every action also
 emits a `palette-benchmark` Points of Interest interval, so a Time Profiler recording attached to the
 process (`xctrace record --attach <pid>`) can be cut down to one kind of action. Another process
