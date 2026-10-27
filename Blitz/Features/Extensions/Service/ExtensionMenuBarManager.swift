@@ -408,6 +408,9 @@ final class ExtensionMenuBarManager: ExtensionRuntimeDelegate {
     }
 
     func runtime(_ runtime: ExtensionRuntime, session: String, navigationDepth: Int) {}
+    func runtime(
+        _ runtime: ExtensionRuntime, session: String, item: RenderNode.ID, panel: RenderNode
+    ) {}
 
     func runtime(_ runtime: ExtensionRuntime, session: String, didFinish: Void) {
         guard let active, active.id == session else { return }

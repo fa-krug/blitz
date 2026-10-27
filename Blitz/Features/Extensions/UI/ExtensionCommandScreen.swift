@@ -102,7 +102,18 @@ struct ExtensionCommandScreen: PaletteScreen {
         return [toast.primaryAction, toast.secondaryAction].compactMap(\.self)
     }
 
+    /// The selection's whole panel once the extension has sent it; its tree preview until then.
     private func panelActions(at selection: Int) -> [ExtensionAction] {
+        if screen.items.indices.contains(selection), let whole = extensions.wholePanel,
+            whole.item == screen.items[selection].node.id
+        {
+            return ExtensionScreen.actions(in: whole.panel)
+        }
+        return previewActions(at: selection)
+    }
+
+    /// ↵, ⌘↵ and the footer read only this, so a whole panel landing never redraws the palette.
+    private func previewActions(at selection: Int) -> [ExtensionAction] {
         ExtensionScreen.actions(in: screen.actionPanel(forItemAt: selection))
     }
 
@@ -135,7 +146,7 @@ struct ExtensionCommandScreen: PaletteScreen {
 
     /// The primary action is the panel's first `Action`.
     private func primaryAction(at selection: Int) -> ExtensionAction? {
-        panelActions(at: selection).first
+        previewActions(at: selection).first
     }
 
     /// A submenu reached first is a grouping device, so its title stands in for the leaf's.
@@ -231,7 +242,7 @@ struct ExtensionCommandScreen: PaletteScreen {
             failureEntries(failure)[1].run()
             return true
         }
-        let actions = panelActions(at: selection)
+        let actions = previewActions(at: selection)
         guard
             let index = ExtensionActionKeys.secondary(in: actions.map(\.keySlot), isForm: isForm),
             let handler = actions[index].handler

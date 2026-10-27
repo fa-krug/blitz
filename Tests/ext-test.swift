@@ -92,6 +92,7 @@ struct ExtensionTests {
     @MainActor
     final class Recorder: ExtensionRuntimeDelegate {
         var trees: [RenderTree] = []
+        var panels: [(item: RenderNode.ID, panel: RenderNode)] = []
         var failures: [String] = []
         var logs: [String] = []
         var finished = false
@@ -103,6 +104,11 @@ struct ExtensionTests {
             failures.append(message)
         }
         func runtime(_ runtime: ExtensionRuntime, session: String, navigationDepth: Int) {}
+        func runtime(
+            _ runtime: ExtensionRuntime, session: String, item: RenderNode.ID, panel: RenderNode
+        ) {
+            panels.append((item, panel))
+        }
         func runtime(_ runtime: ExtensionRuntime, session: String, didFinish: Void) { finished = true }
         func runtime(_ runtime: ExtensionRuntime, log level: String, message: String) {
             logs.append("[\(level)] \(message)")
@@ -202,6 +208,7 @@ struct ExtensionTests {
         fsStatChecks()
         await runtimeChecks()
         await searchAccessoryRuntimeChecks()
+        await wholePanelChecks()
         await bundledModuleChecks()
         await nodeContractChecks()
         await webAssemblyChecks()
@@ -1561,6 +1568,54 @@ struct ExtensionTests {
                 ExtensionSearchAccessory(node: $0.activeRoot?.node("searchBarAccessory"))?.nodeID
             } == accessory.nodeID)
         await runtime.stop(session: "sAccessory")
+    }
+
+    /// Through JavaScriptCore and the host's `panel` hop: previews in the tree, the whole one apart.
+    @MainActor
+    static func wholePanelChecks() async {
+        let (runtime, _, recorder) = makeRuntime()
+        do {
+            try await runtime.boot(
+                config: .current(supportDirectory: FileManager.default.temporaryDirectory))
+        } catch {
+            check("whole panel runtime boots", false, error.localizedDescription)
+            return
+        }
+        let command = """
+            "use strict";
+            const { List, ActionPanel, Action } = require("@raycast/api");
+            const h = require("react").createElement;
+            const panel = (name) => h(ActionPanel, null,
+              ["Open", "Copy", "Pin", "Delete"].map((title) =>
+                h(Action, { key: title, title: title + " " + name, onAction: () => {} })));
+            module.exports.default = () => h(List, null,
+              ["a", "b"].map((name) => h(List.Item, { key: name, title: name, actions: panel(name) })));
+            """
+        await runtime.start(
+            session: "sPanel", code: command, file: URL(fileURLWithPath: "/tmp/panel.js"),
+            mode: .view, context: launchContext())
+        await settle()
+        guard let tree = recorder.trees.last else {
+            check("a panelled list renders", false)
+            return
+        }
+        let screen = ExtensionScreen(tree: tree, query: "")
+        let preview = ExtensionScreen.actions(in: screen.actionPanel(forItemAt: 1)).map(\.title)
+        check("an item's tree panel is its preview", preview == ["Open b", "Copy b"], "\(preview)")
+
+        let trees = recorder.trees.count
+        let second = screen.items[1].node.id
+        await runtime.focusItem(session: "sPanel", nodeID: second)
+        await settle()
+        let whole = recorder.panels.last
+        check(
+            "focusing an item delivers its whole panel",
+            whole?.item == second
+                && ExtensionScreen.actions(in: whole?.panel).map(\.title)
+                    == ["Open b", "Copy b", "Pin b", "Delete b"],
+            "\(whole.map { ExtensionScreen.actions(in: $0.panel).map(\.title) } ?? [])")
+        check("without another tree", recorder.trees.count == trees)
+        await runtime.stop(session: "sPanel")
     }
 
     /// Installed through the catalog, so the copy and the resolver are exercised together.

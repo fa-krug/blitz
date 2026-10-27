@@ -35,6 +35,9 @@ produces, rendered natively into the palette. No Electron, no browser, no Node.j
   stays in `Features/Extensions/`, which is why `ExtensionActionsPanel`, `ExtensionGridGeometry` and
   `ExtensionColors` exist. Another surface may render an extension's view as an opaque box — the
   launcher's `ExtensionArgumentsAccessory` — but never reaches inside it.
+- **A List or Grid item's `actions` in the tree is a preview** of what ↵ and ⌘↵ fire. The whole panel
+  exists only for the selected item, as `ExtensionManager.wholePanel`; code that needs another item's
+  names it through `ExtensionManager.focusItem` and reads what arrives there.
 - **`ExtensionScreen` is the only place extension row order is decided**, so the flat palette selection
   keeps matching the visible rows — the same invariant every other palette screen holds.
 - **Off means off.** `extensionsEnabled` is opt-in, and `ExtensionManager.setEnabled(false)` stops the
@@ -83,6 +86,18 @@ Two conventions make the Raycast component surface expressible in a tree:
 Only the active `__screen` crosses in full: a screen covered by a pushed one keeps its React state but
 arrives as an empty stub, and a commit whose serialized tree matches the last one is not sent at all.
 
+**Items carry a preview of their action panel; the selected one's whole panel crosses on its
+own.** Every `List.Item` and `Grid.Item` still mounts its `actions`, so hooks inside a panel run as
+they always did, but the tree holds only a preview: the first two actions, any action claiming ⌘↵,
+and the sections and submenus around those — what ↵, ⌘↵ and the footer need at once.
+`ExtensionSelectionForwarder` names the selected item through `__blitz.focusItem`; the surface then
+sends that item's whole panel through `__blitzHost.panel`, and again after any commit that changes
+it. `ExtensionManager.wholePanel` holds it beside the tree, and `ExtensionCommandScreen` prefers it
+for the item it belongs to. Apart from the tree, so a selection change leaves the tree — and the
+list SwiftUI diffs — alone: carried in the tree, each arrow cost the main thread ~5 ms more. Whole
+panels were most of a big list's tree: GitLab's 574 projects crossed as 3 MB, and clearing its
+search blocked the JS thread for ~265 ms; with previews it is ~105 ms.
+
 **A commit crosses as a delta.** `src/tree-delta.js` compares each element with the one of the same
 id in the last tree Swift accepted, and an element whose own content and every descendant are
 unchanged crosses as `{"$same": id}`; `RenderTree(json:reusing:)` puts back the node it decoded for
@@ -115,7 +130,7 @@ same arrangement as `EmojiData.generated.swift`: building Blitz never needs Node
 
 | File | What it is |
 | --- | --- |
-| `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
+| `src/index.js` | the `__blitz` object Swift calls into (`boot`, `start`, `dispatch`, `focusItem`, `popNavigation`, `settle`, `fireTimer`, `stop`) |
 | `src/host.js` | the JS→Swift seam: async `hostCall`, blocking `hostCallSync`, logging |
 | `src/reconciler.js` | `react-reconciler` host config that commits into a JSON tree |
 | `src/tree-delta.js` | the delta each commit crosses as, and the resolver the Node harness applies it with |

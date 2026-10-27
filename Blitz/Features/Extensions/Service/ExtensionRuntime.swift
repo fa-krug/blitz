@@ -26,6 +26,7 @@ extension ExtensionHostAPI {
 @MainActor
 protocol ExtensionRuntimeDelegate: AnyObject {
     func runtime(_ runtime: ExtensionRuntime, session: String, didRender tree: RenderTree)
+    func runtime(_ runtime: ExtensionRuntime, session: String, item: RenderNode.ID, panel: RenderNode)
     func runtime(_ runtime: ExtensionRuntime, session: String, didFail message: String)
     func runtime(_ runtime: ExtensionRuntime, session: String, navigationDepth: Int)
     func runtime(_ runtime: ExtensionRuntime, session: String, didFinish: Void)
@@ -165,6 +166,14 @@ final class ExtensionRuntime: @unchecked Sendable {
         }
     }
 
+    /// The selected List or Grid item, whose whole action panel then arrives through `panel`.
+    func focusItem(session: String, nodeID: RenderNode.ID) async {
+        await onQueue { context in
+            _ = context.objectForKeyedSubscript("__blitz")?
+                .invokeMethod("focusItem", withArguments: [session, nodeID])
+        }
+    }
+
     /// Escape or the back chevron inside a pushed screen; true when one was popped.
     func popNavigation(session: String) async -> Bool {
         await withCheckedContinuation { continuation in
@@ -216,6 +225,9 @@ final class ExtensionRuntime: @unchecked Sendable {
         let render: @convention(block) (String, String) -> Bool = { [weak self] session, json in
             self?.deliverRender(session: session, json: json) ?? true
         }
+        let panel: @convention(block) (String, String, String) -> Void = { [weak self] session, item, json in
+            self?.deliverPanel(session: session, item: item, json: json)
+        }
         let failed: @convention(block) (String, String) -> Void = { [weak self] session, message in
             guard let self else { return }
             let delegate = self.delegate
@@ -254,6 +266,7 @@ final class ExtensionRuntime: @unchecked Sendable {
 
         host?.setObject(log, forKeyedSubscript: "log" as NSString)
         host?.setObject(render, forKeyedSubscript: "render" as NSString)
+        host?.setObject(panel, forKeyedSubscript: "panel" as NSString)
         host?.setObject(failed, forKeyedSubscript: "failed" as NSString)
         host?.setObject(navigation, forKeyedSubscript: "navigationDepthChanged" as NSString)
         host?.setObject(finished, forKeyedSubscript: "finished" as NSString)
@@ -362,6 +375,15 @@ final class ExtensionRuntime: @unchecked Sendable {
             delegate.runtime(self, session: session, didRender: tree)
         }
         return true
+    }
+
+    /// One item's whole action panel, decoded here like a tree so main only stores it.
+    private func deliverPanel(session: String, item: String, json: String) {
+        guard let delegate, let item = Int(item),
+            let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)),
+            let panel = RenderValue(json: object).nodeValue
+        else { return }
+        Task { @MainActor in delegate.runtime(self, session: session, item: item, panel: panel) }
     }
 
     private func report(level: String, message: String) {

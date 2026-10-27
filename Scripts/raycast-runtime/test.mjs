@@ -37,7 +37,7 @@ const runtime = readFileSync(runtimePath, "utf8");
 export function createHarness({ onRender, onFail, verbose = false, stubs = {} } = {}) {
   const context = createContext({});
   const timers = new Map();
-  const state = { trees: [], failures: [], logs: [], finished: false, hostCalls: [], payloads: [] };
+  const state = { trees: [], panels: [], failures: [], logs: [], finished: false, hostCalls: [], payloads: [] };
   // What Swift keeps per session: the last accepted tree's elements, which a delta refers back to.
   const bases = new Map();
 
@@ -58,6 +58,9 @@ export function createHarness({ onRender, onFail, verbose = false, stubs = {} } 
       state.trees.push(resolved.tree);
       onRender?.(resolved.tree);
       return true;
+    },
+    panel(sessionId, itemId, json) {
+      state.panels.push({ itemId: Number(itemId), panel: JSON.parse(json) });
     },
     failed(sessionId, message) {
       state.failures.push(message);

@@ -45,6 +45,8 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
     private(set) var toasts: [ExtensionToast] = []
     /// Depth of the extension's own navigation stack; >1 means Escape should pop rather than close.
     private(set) var navigationDepth = 1
+    /// The selected item's whole action panel; trees carry only a preview of every item's.
+    private(set) var wholePanel: (item: RenderNode.ID, panel: RenderNode)?
     /// Each search-bar dropdown's choice, keyed by node so a pushed screen keeps its own.
     private(set) var accessoryValues: [Int: String] = [:]
 
@@ -628,6 +630,7 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         toasts = []
         hudToastIDs = []
         navigationDepth = 1
+        wholePanel = nil
         accessoryValues = [:]
         paginationLatch = ExtensionPagination.Latch()
     }
@@ -911,6 +914,12 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         Task { await runtime.dispatch(session: sessionID, handler: handler, payload: payload) }
     }
 
+    /// Other items carry only what ↵ and ⌘↵ need, so the selection asks for its whole panel.
+    func focusItem(_ nodeID: RenderNode.ID) {
+        guard let sessionID else { return }
+        Task { await runtime.focusItem(session: sessionID, nodeID: nodeID) }
+    }
+
     /// Once per item count, never mid-load: a page that adds nothing must not ask again by itself.
     func loadMore(
         _ pagination: ExtensionPagination, reaching index: Int?, itemCount: Int, isLoading: Bool
@@ -993,6 +1002,13 @@ final class ExtensionManager: ExtensionRuntimeDelegate, ExtensionHostContext {
         state = .rendered(tree)
         navigationDepth = tree.depth
         seedSearchBarAccessory(in: tree)
+    }
+
+    func runtime(
+        _ runtime: ExtensionRuntime, session: String, item: RenderNode.ID, panel: RenderNode
+    ) {
+        guard session == sessionID else { return }
+        wholePanel = (item, panel)
     }
 
     func runtime(_ runtime: ExtensionRuntime, session: String, didFail message: String) {

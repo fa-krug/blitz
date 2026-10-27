@@ -11,6 +11,20 @@ import { reportUncaught } from "./polyfills.js";
 
 export const SLOT_TYPE = "__slot";
 
+const ITEM_TYPES = new Set(["List.Item", "Grid.Item"]);
+const ACTION_GROUPS = new Set(["ActionPanel.Section", "ActionPanel.Submenu"]);
+const MODIFIERS = new Set(["cmd", "ctrl", "opt", "alt", "shift"]);
+
+/// Swift's `ExtensionKeyShortcut.isCommandReturn`: exactly ⌘, on return or enter.
+function claimsCommandReturn(shortcut) {
+  const resolved = shortcut?.macOS ?? shortcut;
+  if (resolved?.key !== "return" && resolved?.key !== "enter") return false;
+  const modifiers = new Set(
+    (resolved.modifiers ?? []).filter((name) => MODIFIERS.has(name)).map((name) => (name === "alt" ? "opt" : name)),
+  );
+  return modifiers.size === 1 && modifiers.has("cmd");
+}
+
 let nextInstanceId = 1;
 
 function createNode(type, props) {
@@ -137,12 +151,16 @@ const reconciler = Reconciler(hostConfig);
 /// go through `handlers`, which is rebuilt on each serialization so a dispatch always hits the
 /// callback from the newest render.
 export class Surface {
-  constructor(onTree, onError, onActionError = onError) {
+  constructor(onTree, onError, onActionError = onError, onPanel = () => {}) {
     this.handlers = new Map();
     this.onTree = onTree;
+    this.onPanel = onPanel;
     this.onError = onError;
     this.onActionError = onActionError;
     this.container = { id: 0, type: "#root", props: {}, children: [], onCommit: () => this.flush() };
+    // Items carry previews; the selected one's whole panel crosses alone, so its list stays put.
+    this.focusedItem = null;
+    this.sentPanel = null;
     this.root = reconciler.createContainer(
       this.container,
       0, // LegacyRoot — extensions never opt into concurrent-only behaviour
@@ -174,6 +192,65 @@ export class Surface {
     this.handlers.clear();
     const children = this.container.children.map((child) => this.serializeScreen(child)).filter(Boolean);
     this.onTree({ children });
+    this.sendPanel();
+  }
+
+  /// Swift's selection moved to another List or Grid item.
+  focusItem(id) {
+    if (id === this.focusedItem) return;
+    this.focusedItem = id;
+    this.sentPanel = null;
+    this.sendPanel();
+  }
+
+  /// Serializing registers the panel's handlers on every flush; it crosses only when it changed.
+  sendPanel() {
+    const item = this.mountedItem(this.focusedItem);
+    const slot = item?.children.find((child) => child.type === SLOT_TYPE && child.props?.name === "actions");
+    if (!slot) return;
+    const contents = slot.children.map((entry) => this.serialize(entry)).filter(Boolean);
+    if (!contents.length) return;
+    const json = JSON.stringify(slot.props.single ? mergeSingleSlot(contents) : contents[0]);
+    if (json === this.sentPanel) return;
+    this.sentPanel = json;
+    this.onPanel(item.id, json);
+  }
+
+  mountedItem(id) {
+    if (id === null) return null;
+    let found = null;
+    const visit = (node) => {
+      if (found) return;
+      if (ITEM_TYPES.has(node.type)) {
+        if (node.id === id) found = node;
+        return;
+      }
+      for (const child of node.children) visit(child);
+    };
+    for (const screen of this.container.children) {
+      if (screen.type !== "__screen" || screen.props.active !== false) visit(screen);
+    }
+    return found;
+  }
+
+  /// What ↵, ⌘↵ and the footer read off an item: its first two actions and any claiming ⌘↵.
+  previewPanel(panel) {
+    const kept = new Set();
+    let position = 0;
+    const visit = (node, path) => {
+      for (const child of node.children) {
+        if (child.type === "Action") {
+          if (position++ < 2 || claimsCommandReturn(child.props.shortcut)) {
+            kept.add(child);
+            for (const group of path) kept.add(group);
+          }
+        } else if (ACTION_GROUPS.has(child.type)) {
+          visit(child, [...path, child]);
+        }
+      }
+    };
+    visit(panel, []);
+    return this.serialize(panel, kept);
   }
 
   /// Swift renders only the active screen; a covered one keeps its React state but crosses as a stub.
@@ -199,7 +276,8 @@ export class Surface {
     return true;
   }
 
-  serialize(node) {
+  /// `kept` prunes a preview panel to the actions it holds and the groups around them.
+  serialize(node, kept) {
     if (node.type === "#text") return { type: "#text", text: String(node.text) };
 
     const props = {};
@@ -215,11 +293,15 @@ export class Surface {
       if (child.type === SLOT_TYPE) {
         const name = child.props?.name;
         if (!name) continue;
-        const contents = child.children.map((entry) => this.serialize(entry)).filter(Boolean);
+        const preview = name === "actions" && ITEM_TYPES.has(node.type);
+        const contents = child.children
+          .map((entry) => (preview ? this.previewPanel(entry) : this.serialize(entry)))
+          .filter(Boolean);
         if (contents.length) props[name] = child.props.single ? mergeSingleSlot(contents) : contents;
         continue;
       }
-      const serialized = this.serialize(child);
+      if (kept && !kept.has(child)) continue;
+      const serialized = this.serialize(child, child.type === "Action" ? undefined : kept);
       if (serialized) children.push(serialized);
     }
 
