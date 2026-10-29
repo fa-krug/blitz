@@ -344,12 +344,7 @@ struct ClipboardPreview: View {
             if let color = item.colorValue {
                 ColorPreview(color: color, text: item.text ?? "")
             } else {
-                ScrollView {
-                    Text(item.text ?? "")
-                        .font(.system(.subheadline, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
+                ClipTextSurface(text: item.text ?? "")
             }
         case .image:
             AsyncThumbnail(
@@ -373,6 +368,47 @@ struct ClipboardPreview: View {
         case .file:
             if let path = item.filePath { FilePreviewStage(path: path) }
         }
+    }
+}
+
+/// TextKit 2 lays out only the visible lines; SwiftUI's `Text` took 10 s to show a 200 KB copy.
+private struct ClipTextSurface: NSViewRepresentable {
+    let text: String
+
+    private static let attributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedSystemFont(
+            ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular),
+        .foregroundColor: NSColor.labelColor
+    ]
+
+    /// The text last set, so a re-render compares Swift strings rather than bridging the view's.
+    final class Coordinator {
+        var shown: String?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        // Unselectable, as File Search's text preview is: selecting would take the field's caret.
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.drawsBackground = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard context.coordinator.shown != text,
+            let textView = scrollView.documentView as? NSTextView
+        else { return }
+        context.coordinator.shown = text
+        textView.textStorage?.setAttributedString(
+            NSAttributedString(string: text, attributes: Self.attributes))
+        textView.scroll(.zero)
     }
 }
 

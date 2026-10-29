@@ -105,8 +105,8 @@ Where a reset leaves the highlight is the screen's to say too. Every reset — a
 new filter — goes through `RootPaletteView.land()`, a typed query from the field's setter, which reads `landingSelection`, so handlers that
 fire in one update agree whatever order they run in. `onAppear` lands as well, for a summon that beats
 the launch-time prewarm: that one builds the view after `prepare` has run, so no handler sees the reset. The landing is row 0 on
-every screen but two: the clipboard lands past its pins
-([clipboard.md](clipboard.md#pinned-entries)), and Search Quicklinks lands on the row a prompt names
+every screen but two: the clipboard lands past its pins, or back on the entry a cleared search had
+highlighted ([clipboard.md](clipboard.md#pinned-entries)), and Search Quicklinks lands on the row a prompt names
 ([quicklinks.md](quicklinks.md#arguments)).
 
 | Mode | Screen | Inner list |

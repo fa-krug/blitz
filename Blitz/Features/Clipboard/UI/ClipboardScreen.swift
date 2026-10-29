@@ -12,7 +12,20 @@ struct ClipboardScreen: PaletteScreen {
 
     var rows: [ClipboardItem] { store.search(vm.query, filter: vm.clipboardFilter) }
 
-    var landingSelection: Int { store.landingIndex(in: vm.query, filter: vm.clipboardFilter) }
+    /// A query or a type filter hides part of the history; the bare list shows all of it.
+    private var isNarrowed: Bool {
+        !vm.query.trimmingCharacters(in: .whitespaces).isEmpty || vm.clipboardFilter != .all
+    }
+
+    var landingSelection: Int {
+        // Clearing a search keeps its find highlighted, so the entries copied beside it are in view.
+        if !isNarrowed, let id = vm.clipboardNarrowedSelection,
+            let index = rows.firstIndex(where: { $0.id == id })
+        {
+            return index
+        }
+        return store.landingIndex(in: vm.query, filter: vm.clipboardFilter)
+    }
 
     /// Pinned, then one section per date bucket, as `ClipboardList` heads them.
     var sectionStarts: [Int] {
@@ -164,6 +177,7 @@ struct ClipboardScreen: PaletteScreen {
             EmptyResults(text: vm.clipboardFilter.emptyMessage)
         } else {
             let selected = item(at: selection)
+            let narrowedSelection = NarrowedSelectionKey(id: selected?.id, narrowed: isNarrowed)
             HStack(spacing: 0) {
                 ClipboardList(
                     results: rows,
@@ -184,6 +198,9 @@ struct ClipboardScreen: PaletteScreen {
                     .frame(width: 1)
                 ClipboardPreview(item: selected)
             }
+            .onChange(of: narrowedSelection, initial: true) { _, key in
+                vm.clipboardNarrowedSelection = key.narrowed ? key.id : nil
+            }
         }
     }
 }
@@ -192,6 +209,12 @@ struct ClipboardScreen: PaletteScreen {
 private struct ClipFollowKey: Equatable {
     let id: ClipboardItem.ID?
     let token: UUID
+}
+
+/// Change key for recording the narrowed list's highlight, which the bare list then clears.
+private struct NarrowedSelectionKey: Equatable {
+    let id: ClipboardItem.ID?
+    let narrowed: Bool
 }
 
 /// Actions menu for an entry, shown bottom-right on right-click like `AppActionsMenu`.
@@ -357,7 +380,7 @@ enum ClipboardActionsMenu {
         switch item.kind {
         case .text:
             // Collapse whitespace so a multi-line copy stays a clean one-line title.
-            let oneLine = (item.text ?? "").split(whereSeparator: \.isWhitespace).joined(
+            let oneLine = (item.text ?? "").prefix(400).split(whereSeparator: \.isWhitespace).joined(
                 separator: " ")
             return String(oneLine.prefix(40))
         case .image: return "Image"
