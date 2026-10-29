@@ -30,6 +30,8 @@ struct RemindersTests {
         drafts()
         replies()
         replyDates()
+        dayWords()
+        titles()
         instructions()
         toolDates()
         chatToolOffer()
@@ -182,57 +184,105 @@ struct RemindersTests {
     static func replies() {
         let plain = SmartReminderPrompt.draft(
             from: #"{"title": "Give Greg a cake", "when": "tomorrow", "due": "2026-10-04"}"#,
-            note: "Greg wants tomorrow a cake", calendar: calendar)
+            note: "Greg wants tomorrow a cake", now: now, calendar: calendar)
         expect(plain?.title == "Give Greg a cake", "the title is read")
         expect(plain?.due == ReminderDue(year: 2026, month: 10, day: 4), "and the day it is due")
         expect(plain?.trimmedNotes == nil, "a null note stays empty")
 
         let fenced = SmartReminderPrompt.draft(
             from: "Sure!\n```json\n{\"title\": \"Call mum\", \"due\": null}\n```", note: "call mum",
-            calendar: calendar)
+            now: now, calendar: calendar)
         expect(fenced?.title == "Call mum", "prose and a code fence around the object are ignored")
         expect(fenced?.due == nil, "a null due date means no due date")
 
         let timed = SmartReminderPrompt.draft(
             from:
                 #"{"title": "Gym", "when": "Monday evening", "due": "2026-10-05T18:00", "notes": "bring towel"}"#,
-            note: "gym monday evening, bring towel", calendar: calendar)
+            note: "gym monday evening, bring towel", now: now, calendar: calendar)
         expect(
             timed?.due == ReminderDue(year: 2026, month: 10, day: 5, time: .init(hour: 18, minute: 0)),
             "a time rides along when the reply gives one")
         expect(timed?.notes == "bring towel", "and so do notes")
 
         let numericDue = SmartReminderPrompt.draft(
-            from: #"{"title": "Pay rent", "when": "Monday", "due": 20261005}"#,
-            note: "pay rent monday", calendar: calendar)
+            from: #"{"title": "Pay rent", "when": "the 5th", "due": 20261005}"#,
+            note: "pay rent on the 5th", now: now, calendar: calendar)
         expect(
             numericDue?.title == "Pay rent" && numericDue?.due == nil,
             "a due date of the wrong type is dropped, not the whole reminder")
         expect(
             SmartReminderPrompt.draft(
-                from: #"{"title": "  ", "due": "2026-10-04"}"#, note: "", calendar: calendar) == nil,
+                from: #"{"title": "  ", "due": "2026-10-04"}"#, note: "", now: now, calendar: calendar)
+                == nil,
             "a reply with no title is no reminder")
         expect(
-            SmartReminderPrompt.draft(from: "I can't help with that.", note: "x", calendar: calendar)
+            SmartReminderPrompt.draft(
+                from: "I can't help with that.", note: "x", now: now, calendar: calendar)
                 == nil,
             "a refusal is no reminder")
 
         let echoed = SmartReminderPrompt.draft(
             from: #"{"title": "Accept the CFA invitation", "when": null, "due": "2026-10-03T14:00"}"#,
-            note: "Invitation to CFA", calendar: calendar)
+            note: "Invitation to CFA", now: now, calendar: calendar)
         expect(
             echoed?.title == "Accept the CFA invitation" && echoed?.due == nil,
             "a due date the note never names is dropped, not the reminder")
         let invented = SmartReminderPrompt.draft(
             from: #"{"title": "Accept the CFA invitation", "when": "today", "due": "2026-10-03"}"#,
-            note: "Invitation to CFA", calendar: calendar)
+            note: "Invitation to CFA", now: now, calendar: calendar)
         expect(invented?.due == nil, "and so is one whose quoted words are not in the note")
         let german = SmartReminderPrompt.draft(
             from: #"{"title": "Zahnarzt anrufen", "when": "Übermorgen", "due": "2026-10-05"}"#,
-            note: "übermorgen zahnarzt anrufen", calendar: calendar)
+            note: "übermorgen zahnarzt anrufen", now: now, calendar: calendar)
         expect(
             german?.due == ReminderDue(year: 2026, month: 10, day: 5),
             "the quote matches whatever its case, in any language")
+
+        let miscounted = SmartReminderPrompt.draft(
+            from:
+                #"{"title": "Talk tomorrow with Matze about Observability", "when": "tomorrow", "due": "2026-10-06T14:00"}"#,
+            note: "Talk tomorrow with Matze about Observabilitiy", now: now, calendar: calendar)
+        expect(
+            miscounted?.due == ReminderDue(year: 2026, month: 10, day: 4),
+            "tomorrow is tomorrow whatever day the model counted, and now's clock is no time")
+        expect(
+            miscounted?.title == "Talk with Matze about Observability",
+            "and the words naming the day leave the title")
+        let undated = SmartReminderPrompt.draft(
+            from: #"{"title": "Call mum", "when": "Friday", "due": null}"#,
+            note: "call mum on Friday", now: now, calendar: calendar)
+        expect(
+            undated?.due == ReminderDue(year: 2026, month: 10, day: 9),
+            "a weekday it quoted but never dated is dated anyway")
+        let timedTonight = SmartReminderPrompt.draft(
+            from: #"{"title": "Bins out", "when": "heute Abend", "due": "2026-10-05T20:00"}"#,
+            note: "heute Abend Müll raus", now: now, calendar: calendar)
+        expect(
+            timedTonight?.due == ReminderDue(year: 2026, month: 10, day: 3, time: .init(hour: 20, minute: 0)),
+            "the day is overruled, the time it named is kept")
+    }
+
+    static func dayWords() {
+        let offset = { SmartReminderPrompt.dayOffset(named: $0, now: now, calendar: calendar) }
+        expect(offset("today") == 0 && offset("tonight") == 0, "today and tonight are today")
+        expect(offset("Tomorrow morning") == 1 && offset("morgen früh") == 1, "tomorrow is one day on")
+        expect(offset("heute Morgen") == 0, "German this morning is not tomorrow")
+        expect(offset("day after tomorrow") == 2 && offset("Übermorgen") == 2, "and two days on")
+        expect(offset("next Monday") == 2 && offset("am Freitag") == 6, "a weekday is the next one")
+        expect(offset("Saturday") == 7, "today's weekday means a week from now")
+        expect(offset("next week") == nil && offset("Oct 12") == nil, "anything else is the model's")
+        expect(offset("morgens") == nil, "a word only counts whole")
+    }
+
+    static func titles() {
+        let title = SmartReminderPrompt.title(_:without:)
+        expect(title("Call Anna on Friday", "Friday") == "Call Anna", "a dangling preposition goes too")
+        expect(title("Tomorrow call mum", "tomorrow") == "Call mum", "the capital moves up")
+        expect(
+            title("Prep tomorrow's demo", "tomorrow") == "Prep tomorrow's demo",
+            "only whole words are cut")
+        expect(title("Tomorrow", "tomorrow") == "Tomorrow", "a title never empties")
+        expect(title("Call Anna", nil) == "Call Anna", "no quoted words, nothing cut")
     }
 
     static func replyDates() {

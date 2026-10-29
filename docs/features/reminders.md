@@ -41,7 +41,11 @@ whose **Open** shows it in Reminders.
   to the last `}` and decodes it field by field. No title is no reminder; a due date that is not a
   real day is dropped rather than guessed, and so is one whose `when` — the words the model quotes as
   naming it — is not found in the typed sentence, because a small model will otherwise echo the
-  prompt's own `Now` as the due date. A clean reply is written straight away — the reader typed
+  prompt's own `Now` as the due date. The quoted words also overrule the model where they name a
+  day outright — today, tonight, tomorrow, the day after, a weekday, in English or German — since a
+  small model miscounts even `tomorrow`; a time equal to `Now`'s clock is dropped unless the words
+  hold a digit; and the words, with an `on`/`at`/`am`/`um` before them, are cut from the title when
+  the model left them in. A clean reply is written straight away — the reader typed
   the sentence and asked for it — and the banner shows what landed, its **Open** the way to fix a
   misread. Whatever fails, the sentence is not lost: `Write It Myself` opens the New Reminder prompt
   with it as the title.
@@ -84,7 +88,8 @@ is one JSON object — `title`, `due` as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, `no
 added only when the sentence names one, with `morning`, `noon`, `afternoon`, `evening` and `tonight`
 pinned to fixed hours; a time with no day is today. **No day named is no due date**: the instructions forbid defaulting to today or
 tomorrow, and a second example with `"due": null` shows it, since a small model copies its one
-example's date otherwise.
+example's date otherwise. The title fixes obvious misspellings but keeps every name, and that
+second example carries a typo to show it.
 
 The progress pill says the model is working and its ✕ cancels the run. Guardrails are
 `.permissiveContentTransformations`: the sentence is the reader's own, which the default filter can

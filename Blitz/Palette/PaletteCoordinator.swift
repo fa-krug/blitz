@@ -39,6 +39,7 @@ final class PaletteCoordinator {
     // MARK: - Palette control
 
     var isVisible: Bool { windowController.isVisible }
+    var isKey: Bool { windowController.isKey }
 
     var panelFrame: CGRect? { windowController.visibleFrame }
 
