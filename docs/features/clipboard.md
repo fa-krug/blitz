@@ -166,6 +166,20 @@ write the `ImageDerivative` copy it needs, 256px for a row or 1080px for the pre
 `images/.thumbnails/` (excluded from backup); later draws decode those. Without a readable copy — a
 failed or timed-out helper, an original no larger than the copy, or a size past 1080px — the app
 decodes the original itself, unless the tile was scrolled away first. The preview cache is 8 MB and the rows' 4 MB, since a preview is a copy.
+
+**A text preview is a TextKit 2 `NSTextView`, never SwiftUI `Text`.** `Text` lays out the whole
+string on the main actor, worse than linearly — measured at 10 s for 200 KB and minutes for 1 MB —
+so arrowing onto a large copy froze the list. `ClipTextSurface` lays out only the lines in view
+and sets a 10 MB copy in about 4 ms.
+
+**Its text is selectable, yet the view never takes the keyboard.** The panel reads whichever
+`NSTextView` is first responder as the search field's editor, so `PreviewTextView` refuses first
+responder, and AppKit's own drag selection only runs in the first responder. It therefore tracks
+the press itself: a drag selects characters, a double click words, a triple click paragraphs. ⌘C
+reaches it as a key equivalent ahead of the field, and only while something is selected; it goes to
+`ClipboardCoordinator.copyPreviewSelection`, which closes the palette, copies unmarked so the
+excerpt enters history as its own entry, and confirms with a **Copied text** pill, as Copy Path
+does. A right-click raises no menu, since the palette draws only its own.
 Copies are made and deleted on one serial `ImageDerivative.queue`, so a copy's delete waits out the
 copy in flight; the blob itself is still deleted at once. The helper's wait runs on that queue, off
 the cooperative pool, with a 10 s deadline and the caller's cancellation. `load` sweeps copies whose
@@ -490,6 +504,12 @@ Pins change five things:
   clearing the query, changing the type filter — lands on the newest clip below the Pinned section
   (`ClipboardStore.landingIndex`), and the palette centres it so the pins stay in view above. A typed
   query lands on its first match instead, pinned or not: the pins are results then, not a shelf.
+  **Widening back to the whole history keeps the find.** Clearing the query or setting the filter
+  back to All lands on the entry the narrowed list had highlighted, so the clips copied beside it
+  are in view. `ClipboardScreen` records that entry's id in `PaletteState.clipboardNarrowedSelection`
+  after each render while the list is narrowed, and `land()` reads it before the next render, so it
+  is still the row the reader saw. Opening the screen clears it, and an entry older than the
+  resident window falls back to the newest clip.
 
 Pasting a pinned entry deliberately does **not** promote it: it holds its place in the Pinned
 section, so `promote` skips pinned rows instead of rewriting the row and its FTS entry for no

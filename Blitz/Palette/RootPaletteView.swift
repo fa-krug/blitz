@@ -469,6 +469,7 @@ struct RootPaletteView: View {
             }
             .onChange(of: vm.mode) {
                 vm.clipboardFilter = .all
+                vm.clipboardNarrowedSelection = nil
                 vm.fileSearchFilter = .all
                 vm.emojiCategoryFilter = .all
                 vm.quicklinkTagFilter = nil

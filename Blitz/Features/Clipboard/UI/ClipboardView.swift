@@ -323,6 +323,7 @@ struct ClipboardPreview: View {
     @Environment(\.metrics) private var metrics
     let item: ClipboardItem?
     @Environment(ClipboardStore.self) private var store
+    @Environment(AppCore.self) private var core
 
     var body: some View {
         if let item {
@@ -344,11 +345,8 @@ struct ClipboardPreview: View {
             if let color = item.colorValue {
                 ColorPreview(color: color, text: item.text ?? "")
             } else {
-                ScrollView {
-                    Text(item.text ?? "")
-                        .font(.system(.subheadline, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                ClipTextSurface(text: item.text ?? "") {
+                    core.clipboardCoordinator.copyPreviewSelection($0)
                 }
             }
         case .image:
@@ -373,6 +371,91 @@ struct ClipboardPreview: View {
         case .file:
             if let path = item.filePath { FilePreviewStage(path: path) }
         }
+    }
+}
+
+/// TextKit 2 lays out only the visible lines; SwiftUI's `Text` took 10 s to show a 200 KB copy.
+private struct ClipTextSurface: NSViewRepresentable {
+    let text: String
+    let onCopy: (String) -> Void
+
+    private static let attributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedSystemFont(
+            ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular),
+        .foregroundColor: NSColor.labelColor
+    ]
+
+    /// The text last set, so a re-render compares Swift strings rather than bridging the view's.
+    final class Coordinator {
+        var shown: String?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = PreviewTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        textView.isEditable = false
+        textView.drawsBackground = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? PreviewTextView else { return }
+        textView.onCopy = onCopy
+        guard context.coordinator.shown != text else { return }
+        context.coordinator.shown = text
+        textView.textStorage?.setAttributedString(
+            NSAttributedString(string: text, attributes: Self.attributes))
+        textView.scroll(.zero)
+    }
+}
+
+/// Selectable but never focused: the palette takes any focused text view for its search field.
+private final class PreviewTextView: NSTextView {
+    var onCopy: ((String) -> Void)?
+
+    override var acceptsFirstResponder: Bool { false }
+
+    /// The palette draws its own menus, so a right-click must not raise AppKit's.
+    override func menu(for event: NSEvent) -> NSMenu? { nil }
+
+    /// AppKit selects only in the first responder, so the drag is tracked here instead.
+    override func mouseDown(with event: NSEvent) {
+        let granularity: NSSelectionGranularity =
+            switch event.clickCount {
+            case 2: .selectByWord
+            case 3...: .selectByParagraph
+            default: .selectByCharacter
+            }
+        let anchor = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        select(from: anchor, to: event, by: granularity)
+        while let next = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            autoscroll(with: next)
+            select(from: anchor, to: next, by: granularity)
+            if next.type == .leftMouseUp { break }
+        }
+    }
+
+    private func select(from anchor: Int, to event: NSEvent, by granularity: NSSelectionGranularity) {
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        let proposed = NSRange(location: min(anchor, index), length: abs(index - anchor))
+        setSelectedRange(selectionRange(forProposedRange: proposed, granularity: granularity))
+    }
+
+    /// ⌘C arrives as a key equivalent, which reaches this view though the field holds the keyboard.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let range = selectedRange()
+        guard range.length > 0, let onCopy,
+            event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+            (ASCIIKeyboardLayout.character(for: event) ?? event.charactersIgnoringModifiers)?
+                .lowercased() == "c"
+        else { return super.performKeyEquivalent(with: event) }
+        onCopy((string as NSString).substring(with: range))
+        return true
     }
 }
 

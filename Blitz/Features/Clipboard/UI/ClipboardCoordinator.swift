@@ -206,6 +206,13 @@ final class ClipboardCoordinator {
         core.showMessage("Copied color")
     }
 
+    /// ⌘C on text selected in the preview; unmarked, so the excerpt enters history as its own entry.
+    func copyPreviewSelection(_ text: String) {
+        paletteCoordinator.hidePalette(restoreFocus: false)
+        Paster.copyPlainText(text)
+        core.showMessage("Copied text")
+    }
+
     func revealClip(_ item: ClipboardItem) {
         guard let url = clipURL(for: item) else { return }
         paletteCoordinator.hidePalette(restoreFocus: false)
