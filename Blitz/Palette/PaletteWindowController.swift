@@ -45,6 +45,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
+    var isKey: Bool { panel?.isKeyWindow ?? false }
 
     /// Where the panel sits in screen coordinates, so an overlay drawn under it can avoid it.
     var visibleFrame: CGRect? { panel.flatMap { $0.isVisible ? $0.frame : nil } }

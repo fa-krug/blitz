@@ -451,6 +451,8 @@ struct RootPaletteView: View {
             .modifier(FocusTokenObserver {
                 // The key re-bump lands after the pending field took the caret, so re-assert it.
                 if focusPendingArgument() {
+                    // Kept until key: from another app the palette shows first, then becomes key.
+                    guard core.paletteCoordinator.isKey else { return }
                     // A turn later, so a `land()` in this same update still reads the row it names.
                     Task { @MainActor in vm.pendingArgumentEntryID = nil }
                     return

@@ -16,7 +16,7 @@ enum SmartReminderPrompt {
             "notes": "…" or null}
 
             title: a short task to act on, starting with a verb, in the language of the note. \
-            Keep every name, and leave the date and time out of it.
+            Keep every name, fix obvious misspellings, and leave the date and time out of it.
             when: the exact words of the note that name a day or time, copied letter for letter, \
             or null when it names none.
             due: only the day or time those words name, resolved against the dates below. \
@@ -30,7 +30,7 @@ enum SmartReminderPrompt {
             Example: "Greg wants tomorrow a cake" becomes \
             {"title": "Give Greg a cake", "when": "tomorrow", "due": "\(day(tomorrow, calendar))", \
             "notes": null}
-            Example: "ask Anna about the slides" becomes \
+            Example: "ask Anna about the sildes" becomes \
             {"title": "Ask Anna about the slides", "when": null, "due": null, "notes": null}
 
             Now: \(weekday(now, calendar)) \(day(now, calendar)) \(clock(now, calendar)), \
@@ -40,23 +40,30 @@ enum SmartReminderPrompt {
     }
 
     /// Nil when the reply holds no title; a due date it cannot read or ground is dropped.
-    static func draft(from reply: String, note: String, calendar: Calendar) -> ReminderDraft? {
+    static func draft(
+        from reply: String, note: String, now: Date, calendar: Calendar
+    ) -> ReminderDraft? {
         guard let open = reply.firstIndex(of: "{"), let close = reply.lastIndex(of: "}"),
             open < close,
             let decoded = try? JSONDecoder().decode(Reply.self, from: Data(reply[open...close].utf8))
         else { return nil }
+        let when = groundedWhen(decoded.when, in: note)
         let draft = ReminderDraft(
-            title: decoded.title ?? "", notes: decoded.notes ?? "",
-            due: isGrounded(decoded.when, in: note)
-                ? decoded.due.flatMap { due(from: $0, calendar: calendar) } : nil)
+            title: title(decoded.title ?? "", without: when), notes: decoded.notes ?? "",
+            due: when.flatMap {
+                corrected(
+                    decoded.due.flatMap { due(from: $0, calendar: calendar) }, when: $0, now: now,
+                    calendar: calendar)
+            })
         return draft.isValid ? draft : nil
     }
 
     /// Small models echo the prompt's own `Now` as a due date, so a date must quote the note.
-    static func isGrounded(_ when: String?, in note: String) -> Bool {
-        guard let when = when?.trimmingCharacters(in: .whitespacesAndNewlines), !when.isEmpty
-        else { return false }
-        return note.range(of: when, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    static func groundedWhen(_ when: String?, in note: String) -> String? {
+        guard let when = when?.trimmingCharacters(in: .whitespacesAndNewlines), !when.isEmpty,
+            note.range(of: when, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        else { return nil }
+        return when
     }
 
     /// `YYYY-MM-DD`, optionally followed by `THH:MM`; the same spelling every Blitz tool reads.
@@ -82,6 +89,65 @@ enum SmartReminderPrompt {
             due = try? container.decodeIfPresent(String.self, forKey: .due)
             notes = try? container.decodeIfPresent(String.self, forKey: .notes)
         }
+    }
+
+    // MARK: - Overruling the model
+
+    /// A small model miscounts days and copies `Now`'s clock, so the quoted words overrule it.
+    private static func corrected(
+        _ due: ReminderDue?, when: String, now: Date, calendar: Calendar
+    ) -> ReminderDue? {
+        let clock = calendar.dateComponents([.hour, .minute], from: now)
+        let echoesNow =
+            due?.time == ReminderDue.Time(hour: clock.hour ?? -1, minute: clock.minute ?? -1)
+            && !when.contains(where: \.isNumber)
+        let time = echoesNow ? nil : due?.time
+        let named = dayOffset(named: when, now: now, calendar: calendar).flatMap {
+            calendar.date(byAdding: .day, value: $0, to: now)
+        }
+        guard let named else {
+            return due.map { ReminderDue(year: $0.year, month: $0.month, day: $0.day, time: time) }
+        }
+        let parts = calendar.dateComponents([.year, .month, .day], from: named)
+        return ReminderDue(
+            year: parts.year ?? 1, month: parts.month ?? 1, day: parts.day ?? 1, time: time)
+    }
+
+    /// Days from today for the words that name one outright; nil leaves the model's answer.
+    static func dayOffset(named when: String, now: Date, calendar: Calendar) -> Int? {
+        let folded = when.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let words = Set(folded.split { !$0.isLetter }.map(String.init))
+        if folded.contains("day after tomorrow") || words.contains("ubermorgen") { return 2 }
+        // Before `morgen`: German `heute morgen` is this morning, not tomorrow.
+        if !words.isDisjoint(with: ["today", "tonight", "heute"]) { return 0 }
+        if !words.isDisjoint(with: ["tomorrow", "morgen"]) { return 1 }
+        guard let weekday = words.lazy.compactMap({ weekdays[$0] }).first else { return nil }
+        let ahead = (weekday - calendar.component(.weekday, from: now) + 7) % 7
+        return ahead == 0 ? 7 : ahead
+    }
+
+    /// `Calendar` weekday numbers, Sunday first, in the two languages Blitz is typed in most.
+    private static let weekdays: [String: Int] = [
+        "sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6,
+        "saturday": 7, "sonntag": 1, "montag": 2, "dienstag": 3, "mittwoch": 4, "donnerstag": 5,
+        "freitag": 6, "samstag": 7, "sonnabend": 7
+    ]
+
+    /// The instructions keep the date out of the title, but a small model copies the note whole.
+    static func title(_ title: String, without when: String?) -> String {
+        guard let when else { return title }
+        let pattern =
+            #"(?:(?<!\w)(?:on|at|by|am|um)\s+)?(?<!\w)"#
+            + NSRegularExpression.escapedPattern(for: when) + #"(?![\w'’])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        else { return title }
+        let stripped = regex.stringByReplacingMatches(
+            in: title, range: NSRange(title.startIndex..., in: title), withTemplate: "")
+        let words = stripped.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .trimmingCharacters(in: CharacterSet(charactersIn: ",;:-").union(.whitespaces))
+        guard let first = words.first else { return title }
+        guard title.first?.isUppercase == true else { return words }
+        return first.uppercased() + words.dropFirst()
     }
 
     // MARK: - Dates, spelled the way the reply must spell them
