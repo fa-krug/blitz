@@ -452,9 +452,16 @@ struct RootPaletteView: View {
                 // The key re-bump lands after the pending field took the caret, so re-assert it.
                 if focusPendingArgument() {
                     // Kept until key: from another app the palette shows first, then becomes key.
-                    guard core.paletteCoordinator.isKey else { return }
-                    // A turn later, so a `land()` in this same update still reads the row it names.
-                    Task { @MainActor in vm.pendingArgumentEntryID = nil }
+                    guard core.paletteCoordinator.isKey,
+                        let field = headerAccessory?.firstIncompleteField
+                    else { return }
+                    // The pre-key assign set the same value, so SwiftUI won't re-apply it once the
+                    // field is finally live and key; push through nil to force the field editor on.
+                    argumentFocused = nil
+                    Task { @MainActor in
+                        argumentFocused = field
+                        vm.pendingArgumentEntryID = nil
+                    }
                     return
                 }
                 searchFocused = !screen.hidesSearchField

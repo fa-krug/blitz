@@ -287,7 +287,9 @@ also sets `argumentEntryID`, which lists that row alone in root search while the
 Both are set **after** `showPalette`, since `prepare` clears them. A summon from hidden re-bumps
 `focusToken` a turn after the panel goes key, which would put the caret back in the search field, so
 the pending id is cleared only while the panel is key — by that bump, as it re-asserts the field — or
-when focus leaves the ring. Both the focus and the clear wait a turn: every `land()` the show fired reads the id first, and no search
+when focus leaves the ring. From another app the pre-key bump assigns the field before it is live, and
+re-assigning the same value is a no-op, so the key bump pushes `argumentFocused` through `nil` to force
+the field editor on. Both the focus and the clear wait a turn: every `land()` the show fired reads the id first, and no search
 refocus from a mode change can take the caret back.
 
 The flat `selection` index is the single source of truth for highlight / activation and **must always
