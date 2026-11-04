@@ -243,9 +243,6 @@ struct RootPaletteView: View {
                 PopoverMenuItem(title: "About Blitz", systemImage: "info.circle") {
                     core.settingsCoordinator.showAbout()
                 },
-                PopoverMenuItem(title: "Support Blitz", systemImage: "heart") {
-                    core.supportCoordinator.showSupport()
-                },
                 PopoverMenuItem(title: "Settings", systemImage: "gearshape", shortcut: "⌘,") {
                     core.settingsCoordinator.showSettings()
                 },

@@ -237,8 +237,8 @@ and Replace always use the raw text.
 
 The body is a `ScrollView` with its height **set** rather than capped: a scroll view has no ideal
 height, so `NSHostingView.fittingSize` measures it as nothing and the body collapses to a slot. The
-content's ideal height is measured with `fixedSize` + `onGeometryChange`, the way the Support and
-Updates windows size themselves.
+content's ideal height is measured with `fixedSize` + `onGeometryChange`, the way the Updates
+window sizes itself.
 
 The scroll view owns the **whole** panel and the bars are overlays on top, so a result dissolves
 beneath them rather than stopping at a line. The mask is clear for each bar's height, ramps over

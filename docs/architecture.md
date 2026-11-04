@@ -30,7 +30,7 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ SettingsFile{JSON,Key,Value,Format,Binding,Issue,Identity} ·               │
 │ HotKeySpelling · WindowManagementFileFormat ·                              │
 │ MeetingLink · MeetingEvent · UpcomingWindow · MeetingDay · MenuBarSummary  │
-│ AutoJoinPolicy · EventDraft · SupportReminderSchedule ·                    │
+│ AutoJoinPolicy · EventDraft ·                                              │
 │ Reminders/Model/* · Contacts/Model/* ·                                     │
 │ MenuSearch{Item,Shortcut,Query,Target} · MenuTreeNode ·                    │
 │ MenuSnapshotPolicy ·                                                       │
@@ -50,7 +50,7 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ CalendarStore · MeetingLauncher · MeetingClock · CameraSession ·           │
 │ RemindersStore · ReminderLauncher · SmartReminderRunner ·                  │
 │ ContactsStore · ContactLauncher ·                                          │
-│ SupportReminderStore · AXMenuAccess · WindowZOrder · WindowSwitchSweep ·   │
+│ AXMenuAccess · WindowZOrder · WindowSwitchSweep ·                          │
 │ AppleShortcutRunner · SettingsFileRepository · SettingsFileMonitor ·       │
 │ WindowManagementSettingsFile                                               │
 └──────────────────────────────────┬─────────────────────────────────────────┘
@@ -181,10 +181,6 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
   actor, and the presenter refuses a second dialog while one is up — that, not a flag, is what stops a
   held hotkey stacking dialogs. Click-away dismisses; the draft forms' kept edits live on
   `DialogController` too, in one `FormDraftMemory` per form. See [ui.md](ui.md#dialogs--hud).
-- **Support** — a titled `AppWindowController` window owned by `SupportCoordinator`, sized to the
-  height its content measured. Every route into it — the palette's menu circle, Settings → About, the
-  menu bar, the launcher, and the 30-day reminder — lands on `showSupport()`, which is what moves the
-  reminder's anchor. See [features/support.md](features/support.md).
 - **Terminal windows** — one titled `AppWindowController` window per custom-command terminal run,
   each owned by its own `CommandTerminalPresenter` together with the SwiftTerm view and the pty
   session behind it. `CustomCommandCoordinator` keeps the open presenters as a list, oldest first;
@@ -242,7 +238,7 @@ Blitz/
     Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Camera/ Emoji/ Dictionary/
     FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/
     AppleShortcuts/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ TextInjection/
-    WindowManagement/ AI/ QuickActions/ MCP/ Backup/ Onboarding/ Updates/ Support/ Settings/
+    WindowManagement/ AI/ QuickActions/ MCP/ Backup/ Onboarding/ Updates/ Settings/
     Extensions/
         Model/      pure — the harness inputs
         Service/    effects — stores, monitors, runners, AppKit glue

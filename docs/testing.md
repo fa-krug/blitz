@@ -112,7 +112,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `syntax-highlight-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
 | settings, backup and the settings file | `settings-*`, `backup-archive-test`, `window-file-test` |
-| updates, support, onboarding | `updates-test`, `update-check-test`, `support-test`, `onboarding-test` |
+| updates and onboarding | `updates-test`, `update-check-test`, `onboarding-test` |
 
 The subprocess harnesses bring their own stub servers from `Tests/ai-fixtures/`: `codex-stub.js`
 (`codex-turn-test`), `installed-cli-stub.js` (`installed-ai-test`) and `mcp-stub.js`

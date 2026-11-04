@@ -22,8 +22,7 @@ launcher. It opens once on its own, and on request afterwards.
   from `PaletteTabAction.resolve(mode: .launcher, …)` with the live `aiEnabled` and
   `clipboardEnabled`, the same resolver the palette uses.
 - **The card look is Onboarding's own.** `OnboardingCard`, `OnboardingRow` and `OnboardingKeycaps`
-  are private to this window; Settings panes are stock `Form` sections, and
-  [Support](support.md) does not borrow these either.
+  are private to this window; Settings panes are stock `Form` sections.
 
 ## The pages
 

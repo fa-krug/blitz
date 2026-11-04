@@ -54,7 +54,6 @@ enum CommandID: String, CaseIterable, Sendable {
     case welcomeTour = "command:welcome-tour"
     case settings = "command:settings"
     case about = "command:about"
-    case support = "command:support"
     case quit = "command:quit"
 
     var name: String {
@@ -111,7 +110,6 @@ enum CommandID: String, CaseIterable, Sendable {
         case .welcomeTour: return "Show Welcome Tour"
         case .settings: return "Blitz Settings"
         case .about: return "About Blitz"
-        case .support: return "Support Blitz"
         case .quit: return "Quit Blitz"
         }
     }
@@ -169,7 +167,6 @@ enum CommandID: String, CaseIterable, Sendable {
         case .welcomeTour: return "hand.wave"
         case .settings: return "gearshape"
         case .about: return "info.circle"
-        case .support: return "heart"
         case .quit: return "power"
         }
     }
