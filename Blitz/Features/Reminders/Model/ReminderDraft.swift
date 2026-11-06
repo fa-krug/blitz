@@ -5,6 +5,8 @@ struct ReminderDraft: Sendable, Equatable {
     var title = ""
     var notes = ""
     var due: ReminderDue?
+    /// Written only when a reminder is created, so an edit never strips a link set elsewhere.
+    var url: URL?
 
     /// A blank title is the one thing that cannot be written; everything else may be empty.
     var isValid: Bool { !trimmedTitle.isEmpty }

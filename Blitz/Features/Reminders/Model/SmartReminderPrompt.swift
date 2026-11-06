@@ -26,6 +26,8 @@ enum SmartReminderPrompt {
             default to today or tomorrow: a reminder without a due date is a valid answer.
             notes: any detail of the note the title leaves out, otherwise null. \
             Never add anything the note does not say.
+            A link in the note is attached to the reminder on its own: say what it is for, \
+            but never copy the link into the title or the notes.
 
             Example: "Greg wants tomorrow a cake" becomes \
             {"title": "Give Greg a cake", "when": "tomorrow", "due": "\(day(tomorrow, calendar))", \
@@ -48,14 +50,55 @@ enum SmartReminderPrompt {
             let decoded = try? JSONDecoder().decode(Reply.self, from: Data(reply[open...close].utf8))
         else { return nil }
         let when = groundedWhen(decoded.when, in: note)
-        let draft = ReminderDraft(
-            title: title(decoded.title ?? "", without: when), notes: decoded.notes ?? "",
+        let found = link(in: note)
+        let spellings = found.map(\.spellings) ?? []
+        var draft = ReminderDraft(
+            title: title(text(decoded.title ?? "", without: spellings), without: when),
+            notes: text(decoded.notes ?? "", without: spellings),
             due: when.flatMap {
                 corrected(
                     decoded.due.flatMap { due(from: $0, calendar: calendar) }, when: $0, now: now,
                     calendar: calendar)
-            })
+            },
+            url: found?.url)
+        if !draft.isValid, let host = found?.url.host() {
+            draft.title = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
         return draft.isValid ? draft : nil
+    }
+
+    /// The first web link typed in the note, with every way a model might copy it back.
+    static func link(in note: String) -> (url: URL, spellings: [String])? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return nil }
+        let range = NSRange(note.startIndex..., in: note)
+        for match in detector.matches(in: note, range: range) {
+            guard let url = match.url, ["http", "https"].contains(url.scheme?.lowercased()),
+                let typed = Range(match.range, in: note)
+            else { continue }
+            let full = url.absoluteString
+            let bare = full.replacing(/^https?:\/\//, with: "")
+            let spellings = Set([String(note[typed]), full, bare].flatMap { [$0, trailingSlashless($0)] })
+            return (url, spellings.sorted { $0.count > $1.count })
+        }
+        return nil
+    }
+
+    private static func trailingSlashless(_ text: String) -> String {
+        text.hasSuffix("/") ? String(text.dropLast()) : text
+    }
+
+    /// The link is stored in its own field, so a copy the model left in the text is cut out.
+    static func text(_ text: String, without spellings: [String]) -> String {
+        guard !spellings.isEmpty else { return text }
+        var stripped = text
+        for spelling in spellings where !spelling.isEmpty {
+            stripped = stripped.replacingOccurrences(of: spelling, with: "", options: .caseInsensitive)
+        }
+        guard stripped != text else { return text }
+        return stripped.replacing(/[ \t]+/, with: " ")
+            .replacing(/\(\s*\)|<\s*>/, with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: ",;:-").union(.whitespacesAndNewlines))
     }
 
     /// Small models echo the prompt's own `Now` as a due date, so a date must quote the note.
