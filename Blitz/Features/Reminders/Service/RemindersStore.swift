@@ -223,6 +223,7 @@ final class RemindersStore {
         }
         let reminder = EKReminder(eventStore: store)
         reminder.calendar = list
+        reminder.url = draft.url
         apply(draft, to: reminder, dueChanged: true)
         guard save(reminder, in: store) else { return nil }
         return reminder.calendarItemIdentifier

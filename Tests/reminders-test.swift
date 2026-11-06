@@ -32,6 +32,7 @@ struct RemindersTests {
         replyDates()
         dayWords()
         titles()
+        links()
         instructions()
         toolDates()
         chatToolOffer()
@@ -285,6 +286,38 @@ struct RemindersTests {
         expect(title("Call Anna", nil) == "Call Anna", "no quoted words, nothing cut")
     }
 
+    static func links() {
+        let article = SmartReminderPrompt.draft(
+            from:
+                #"{"title": "Read the article https://example.com/post?id=7", "when": "tomorrow", "due": "2026-10-04", "notes": "from https://example.com/post?id=7"}"#,
+            note: "read https://example.com/post?id=7 tomorrow", now: now, calendar: calendar)
+        expect(
+            article?.url == URL(string: "https://example.com/post?id=7"),
+            "a link in the note is the reminder's URL")
+        expect(article?.title == "Read the article", "and leaves the title when the model copied it")
+        expect(article?.trimmedNotes == "from", "and the notes")
+        expect(article?.due == ReminderDue(year: 2026, month: 10, day: 4), "the date still reads")
+
+        let bare = SmartReminderPrompt.draft(
+            from: #"{"title": "Review github.com/fa-krug/blitz/pull/12", "when": null}"#,
+            note: "review github.com/fa-krug/blitz/pull/12", now: now, calendar: calendar)
+        expect(
+            bare?.url?.host() == "github.com" && bare?.url?.path() == "/fa-krug/blitz/pull/12",
+            "a link typed without a scheme is still a link")
+        expect(bare?.title == "Review", "and is cut however it was typed")
+
+        let onlyLink = SmartReminderPrompt.draft(
+            from: #"{"title": "https://www.example.com/"}"#, note: "https://www.example.com/",
+            now: now, calendar: calendar)
+        expect(onlyLink?.title == "example.com", "a title that was only the link names its site")
+
+        let plain = SmartReminderPrompt.draft(
+            from: #"{"title": "Email Bob"}"#, note: "email bob@example.com", now: now,
+            calendar: calendar)
+        expect(plain?.url == nil, "an email address is not a link")
+        expect(plain?.title == "Email Bob", "and a note without one keeps its title as written")
+    }
+
     static func replyDates() {
         let due = { SmartReminderPrompt.due(from: $0, calendar: calendar) }
         expect(due("2026-10-04") == ReminderDue(year: 2026, month: 10, day: 4), "a bare day reads")
@@ -315,6 +348,7 @@ struct RemindersTests {
         expect(
             text.contains(#""when": null, "due": null"#) && text.contains("Never guess one"),
             "and a second example names no day, so no date is an answer rather than a gap")
+        expect(text.contains("never copy the link"), "a link is kept out of the title")
     }
 
     // MARK: - Chat tools

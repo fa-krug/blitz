@@ -29,7 +29,8 @@ whose **Open** shows it in Reminders.
   whole day for a day-only one.
 - **An edit writes only what changed.** Title and notes always go back; the due date — and the dated
   alarm that follows it — only when the draft's due differs from the reminder's, so fixing a typo never
-  strips an alarm set in Reminders.app. Location and relative alarms are never touched.
+  strips an alarm set in Reminders.app. Location and relative alarms are never touched, and nor is
+  the URL: `ReminderDraft.url` is written only when a reminder is created.
 - **Smart Reminder exists only while AI is on.** It runs on `AISettingsStore.smartReminderRoute`
   through `AppCore.smartReminderProvider`: the model chosen in the Reminders pane, or the AI default
   when none is, or when the chosen one's route is switched off. A connection, model or route that
@@ -45,7 +46,9 @@ whose **Open** shows it in Reminders.
   day outright — today, tonight, tomorrow, the day after, a weekday, in English or German — since a
   small model miscounts even `tomorrow`; a time equal to `Now`'s clock is dropped unless the words
   hold a digit; and the words, with an `on`/`at`/`am`/`um` before them, are cut from the title when
-  the model left them in. A clean reply is written straight away — the reader typed
+  the model left them in. A web link in the sentence is found by `NSDataDetector`, not the model,
+  and becomes the reminder's URL; any copy of it the model left in the title or notes is cut, and a
+  title that was only the link becomes the link's site. A clean reply is written straight away — the reader typed
   the sentence and asked for it — and the banner shows what landed, its **Open** the way to fix a
   misread. Whatever fails, the sentence is not lost: `Write It Myself` opens the New Reminder prompt
   with it as the title.
