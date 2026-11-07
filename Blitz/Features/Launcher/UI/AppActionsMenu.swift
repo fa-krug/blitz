@@ -69,6 +69,14 @@ enum AppActionsMenu {
                 PopoverMenuItem(title: "Edit Quicklink", systemImage: "pencil", shortcut: "⌘E") {
                     core.quicklinkCoordinator.editQuicklink(quicklink)
                 })
+            // No ⌘⌫ here: the screen sees it before the field, so it would eat "clear the query".
+            items.append(
+                PopoverMenuItem(
+                    title: "Delete Quicklink", systemImage: "trash", startsSection: true,
+                    isDestructive: true
+                ) {
+                    Task { await core.quicklinkCoordinator.deleteQuicklink(id: quicklink.id) }
+                })
         }
         if running, app.kind == .application {
             items.append(

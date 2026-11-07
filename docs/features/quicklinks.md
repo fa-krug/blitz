@@ -257,9 +257,11 @@ position in root search would need a second `AppEntry.Kind`, which the kind inva
 feature. The Search Quicklinks screen gives pins their own section, like the clipboard's.
 
 A root-search row's ⌘K menu adds **Copy Link** (`⌃⌘C`, see [Search Quicklinks](#search-quicklinks)),
-**Edit Quicklink** (`⌘E`), opening the same editor as Search Quicklinks, and **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
+**Edit Quicklink** (`⌘E`), opening the same editor as Search Quicklinks, **Hide from Root Search** (`⇧⌘H`), which clears `showsInRootSearch` rather than
 writing `VisibilityStore` — the editor's switch is its undo besides the banner's, and the row stays in
-Search Quicklinks.
+Search Quicklinks — and **Delete Quicklink**, which honours the confirm-before-deleting setting. It
+carries no `⌘⌫`: the launcher answers row chords before its search field, so the chord would take
+"clear the query" away whenever a quicklink is the top hit.
 
 ## Search Quicklinks
 
