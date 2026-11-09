@@ -1357,6 +1357,8 @@ struct RootPaletteView: View {
     /// Every reset lands here, so handlers that fire together agree in whatever order they run.
     /// Lands in the keystroke's own transaction: from `onChange` it costs a second full render.
     private func typeQuery(_ text: String) {
+        // Resigning the field writes its text back unchanged, which must not re-land the selection.
+        guard text != vm.query else { return }
         vm.query = text
         guard !text.contains(where: \.isNewline) else { return }
         land()

@@ -255,11 +255,15 @@ these invariants:
   of its ring — moving the selection, Escape, Tab past the last field, or an arrow at its edge — goes through
   `returnFocusToSearchField()`, because the row that owned those fields is about to stop being
   selected and a field that unmounts while focused leaves the panel with no first responder at all.
-  ↵ on a blank required argument focuses it instead of launching.
+  ↵ on a blank required argument focuses it instead of launching, and so does a click on the
+  row, which selects it and then acts as ↵ a turn later, once its fields are mounted.
 - **Never read a `@FocusState` back in the tick that writes it.** It still reports the old field, so
   `searchFocused = argumentFocused == nil` resolved to `false` and Tab out of the last argument
   focused nothing; AppKit's key-view loop then answered the next presses instead. Both writes come
   from one local value.
+- **A query write that changes nothing lands nothing.** The search field writes its text back as
+  it resigns, so `typeQuery` returns early on an unchanged value; re-landing there snapped the
+  selection to the top row as ↵ or ⇥ moved into a field, unmounting the strip it was focusing.
 - **Space after an alias is a second way in.** A bare space with the caret at the end of a query that
   spells a row's alias outright (`LauncherOrder.spellsAlias`, rule 1's own test) is swallowed by
   `PalettePanel.onTrailingSpace` before the field editor types it; the row is selected and its first
