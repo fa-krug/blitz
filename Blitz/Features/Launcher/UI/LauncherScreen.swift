@@ -620,10 +620,16 @@ struct LauncherScreen: PaletteScreen {
                 vm.selection = 0
                 openActions()
             },
-            onActivate: {
+            // A click is ↵ on that row, a turn later so a field it still owes is mounted to focus.
+            onActivate: { app in
+                if let index = rows.firstIndex(of: .entry(app)) {
+                    vm.selection = index
+                    Task { @MainActor in activateSelection() }
+                    return
+                }
                 recordQuery()
                 core.launcherCoordinator.launch(
-                    $0, searchQuery: vm.query, arguments: argumentValues(for: $0))
+                    app, searchQuery: vm.query, arguments: argumentValues(for: app))
             },
             onActions: { app in
                 if let index = rows.firstIndex(of: .entry(app)) { vm.selection = index }
