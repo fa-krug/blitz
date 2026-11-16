@@ -63,7 +63,7 @@ camera preview, and individual events as searchable launcher entries.
 `Model/` holds the whole decision, with every clock read injected:
 
 - **`MeetingLink`** — the join link plus its `Provider` and the account whose calendar carried it.
-  Ten named services, plus `.generic` for any other `http(s)` link the event carries.
+  Eleven named services, plus `.generic` for any other `http(s)` link the event carries.
 - **`MeetingEvent`** — one occurrence, flattened out of `EKEvent`.
 - **`UpcomingWindow`** — `agenda`, `carded`, `joinable`, `countdown` and a row's `rowPill`.
 - **`MeetingDay`** — the day a meeting falls on, titled `Today, Oct 2`, `Tomorrow, Oct 3`, then
