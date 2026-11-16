@@ -143,7 +143,7 @@ final class PaletteCoordinator {
         windowController.popToRootNow()
     }
 
-    /// True for the slim compact bar: compact on, launcher root, empty, not overflowed.
+    /// True for the slim compact bar: compact on, launcher root, empty, not held open.
     var paletteIsCollapsed: Bool {
         settings.compactMode
             && !palette.forceExpanded
@@ -151,7 +151,7 @@ final class PaletteCoordinator {
             && palette.query.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// The compact bar's overflow: expand into the full launcher without typing.
+    /// The compact bar's ↓: expand into the full launcher without typing.
     func expandFromCompact() {
         palette.forceExpanded = true
     }

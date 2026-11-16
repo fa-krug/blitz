@@ -30,15 +30,30 @@ struct PaletteEscapeTests {
     static func resolve(
         menuOpen: Bool = false, menuQuery: String = "", argumentFocused: Bool = false,
         query: String = "", mode: PaletteMode = .launcher, canGoBack: Bool = false,
-        expandedFromCompact: Bool = false, behavior: EscapeKeyBehavior = .navigateBackOrClose
+        behavior: EscapeKeyBehavior = .navigateBackOrClose, compactRootExpanded: Bool = false
     ) -> PaletteEscapeAction {
         PaletteEscapeAction.resolve(
             menuOpen: menuOpen, menuQuery: menuQuery, argumentFocused: argumentFocused,
-            query: query, mode: mode, canGoBack: canGoBack,
-            expandedFromCompact: expandedFromCompact, behavior: behavior)
+            query: query, mode: mode, canGoBack: canGoBack, behavior: behavior,
+            compactRootExpanded: compactRootExpanded)
     }
 
     static func main() {
+        for behavior in EscapeKeyBehavior.allCases {
+            expect(
+                resolve(query: "notes", behavior: behavior, compactRootExpanded: true),
+                .clearQuery, "compact root clears text before collapsing under either preference")
+            expect(
+                resolve(behavior: behavior, compactRootExpanded: true),
+                .collapsePalette, "empty expanded compact root collapses under either preference")
+            expect(resolve(behavior: behavior), .hidePalette, "collapsed root closes on the next Escape")
+            expect(
+                resolve(menuOpen: true, behavior: behavior, compactRootExpanded: true),
+                .closeMenu, "menus still outrank root collapse")
+            expect(
+                resolve(argumentFocused: true, behavior: behavior, compactRootExpanded: true),
+                .leaveArgumentField, "argument focus still outranks root collapse")
+        }
         expect(
             resolve(menuOpen: true, menuQuery: "paste"),
             .clearMenuQuery,
@@ -91,19 +106,10 @@ struct PaletteEscapeTests {
             .clearQuery,
             "a typed query still clears before the back step it would otherwise skip")
 
-        // ↓ expanded the compact bar, so Escape folds it back before anything closes.
         expect(
-            resolve(expandedFromCompact: true),
-            .collapseToCompact,
-            "an empty launcher expanded from the compact bar collapses before it hides")
-        expect(
-            resolve(expandedFromCompact: true, behavior: .closeAndPopToRoot),
-            .collapseToCompact,
-            "collapsing is the first press under either behavior, like clearing the query")
-        expect(
-            resolve(query: "notes", expandedFromCompact: true),
-            .clearQuery,
-            "a typed query still clears before the compact bar returns")
+            resolve(canGoBack: true, compactRootExpanded: true),
+            .collapsePalette,
+            "a launcher reached through the Tab ring still collapses before it steps back")
 
         // Close and pop to root: one press ends the session, whatever it was opened over.
         expect(

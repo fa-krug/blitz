@@ -101,8 +101,9 @@ Most panes live in their feature's `Settings/` folder. The ones with no feature 
   behaviour, input-source switching, the Welcome Tour, the calculator's number format, and search behaviour.
 - **Appearance** — Theme (`AppAppearance`; `.system` maps to a `nil` `NSApp.appearance` so AppKit
   follows macOS), Show animations ([ui.md](../ui.md#non-negotiable-invariants)), Interface Size,
-  window mode, favorites in compact mode, following the cursor across displays, and dragging the
-  palette.
+  window mode, following the cursor across displays and dragging the palette, then **Compact
+  Shortcuts** — the compact bar's buttons, shown only while Compact is the window mode
+  ([palette.md](palette.md#the-compact-bar)).
 - **Permissions** — Accessibility, Calendars, Reminders, Contacts and Microphone. The statuses are
   read together in a `Task.detached`, because each is a round trip to TCC, and polled each second
   while the pane is open, since nothing announces a grant made in System Settings.

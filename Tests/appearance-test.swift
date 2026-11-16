@@ -49,6 +49,10 @@ struct AppearanceTests {
         dark("dialogDimming", c.dialogDimming, is: Color.black.opacity(0.34))
         dark("tooltipShadow", c.tooltipShadow, is: Color.black.opacity(0.18))
         dark("selection", c.selection, is: Color.white.opacity(0.10))
+        dark("compactShortcutSelectedInk", c.compactShortcutSelectedInk, is: Color.white)
+        dark(
+            "compactShortcutSelectionTint", c.compactShortcutSelectionTint,
+            is: Color(.sRGB, white: 0.55, opacity: 1))
         dark("rowHover", c.rowHover, is: Color.white.opacity(0.05))
         dark("menuHover", c.menuHover, is: Color.white.opacity(0.10))
         dark("separator", c.separator, is: Color.white.opacity(0.10))

@@ -2,6 +2,12 @@ import SwiftUI
 
 /// Central design tokens; every dark colour is the literal the forced-dark build shipped.
 enum Theme {
+    /// macOS 26 glass casts its own shadow; on 27 bare glass has none and needs the window's.
+    static var glassCastsShadow: Bool {
+        if #available(macOS 27, *) { return false }
+        return true
+    }
+
     enum Spacing {
         static let xxs: CGFloat = 2
         static let xs: CGFloat = 4
@@ -88,7 +94,8 @@ enum Theme {
         static let noteTrafficLightInset: CGFloat = 20
         /// Fraction of visible height above the palette's top edge; it grows downward.
         static let paletteTopMarginFraction: CGFloat = 0.18
-        static let headerHeight: CGFloat = 44
+        /// The search row; padded alike above and below, it is the compact bar's whole height.
+        static let headerHeight: CGFloat = 36
         /// Fixed slot for the header glyph, so the field starts at one x in every mode.
         static let headerIconSlot: CGFloat = 22
         /// The narrowest a strip squeezes the search field to: the caret and a few characters.
@@ -97,6 +104,8 @@ enum Theme {
         static let headerPadding: CGFloat = 10
         /// Collapsed compact bar: the search row centered in symmetric `headerPadding` slack.
         static let compactHeight: CGFloat = headerHeight + headerPadding * 2
+        /// Native glass contours and interaction effects draw outside their layout bounds.
+        static let paletteGlassOutset: CGFloat = 4
         /// How close a dragged palette must be to the invisible vertical centre line.
         static let paletteSnapDistance: CGFloat = 8
         /// A restored position needs this much bar on a display to still be grabbable.
@@ -202,6 +211,7 @@ enum Theme {
         /// The narrowest the pane column may get before a grouped row's control starts colliding.
         static let settingsDetailMinimum: CGFloat = 420
         static let settingsRowIcon: CGFloat = 20
+        static let settingsRowButton: CGFloat = 24
         /// A sidebar glyph in its tinted tile; the tile's inset brings it to the row icon's size.
         static let settingsSidebarGlyph: CGFloat = 14
         /// AI Chat's opening size; the user owns it from there, autosaved.
@@ -356,6 +366,29 @@ enum Theme {
         static let glide = Animation.timingCurve(0.2, 0, 0, 1, duration: Theme.Duration.roomGlide)
     }
 
+    enum CompactBarMotion {
+        /// Under the 10pt gap, so resting buttons stand apart and only moving ones fuse.
+        static let blend: CGFloat = 8
+        /// Parked inside the capsule's end this small, so each button pinches out of it.
+        static let parkedScale: CGFloat = 0.36
+        /// One button after another, beaded off the capsule.
+        static let stagger: TimeInterval = 0.055
+        /// A summon lands first; the buttons extrude once the window has arrived.
+        static let revealDelay: TimeInterval = 0.12
+        /// The glyph surfaces once its glass has formed, and blurs in rather than popping.
+        static let glyphDelay: TimeInterval = 0.24
+        static let glyphFade: TimeInterval = 0.16
+        static let glyphBlur: CGFloat = 4
+        /// Both springs rest within this, so the window's shadow is recut from the settled shapes.
+        static let settle: TimeInterval = 0.9
+        /// Past the window's own close animation, so parking the buttons is never seen.
+        static let parkAfterHide: TimeInterval = 0.3
+        /// The capsule undershoots as it shortens, then settles.
+        static let capsule = Animation.spring(response: 0.44, dampingFraction: 0.62)
+        /// The buttons barely overshoot: the last rests on the window's edge, which would clip it.
+        static let button = Animation.spring(response: 0.44, dampingFraction: 0.86)
+    }
+
     enum MenuMotion {
         /// Starts promptly and eases gently into the chevron's final direction.
         static let chevronAnimation = Animation.timingCurve(
@@ -370,7 +403,8 @@ enum Theme {
         /// `NSFont` is not `Sendable`, hence the isolation; every reader is a view anyway.
         @MainActor static let searchFieldNSFont = NSFont.systemFont(
             ofSize: searchFieldSize, weight: .regular)
-        static let headerIcon = Font.system(size: 18, weight: .medium)
+        static let headerIconSize: CGFloat = 18
+        static let headerIcon = Font.system(size: headerIconSize, weight: .medium)
         static let rowTitle = Font.body
         static let rowTrailing = Font.callout
         static let sectionHeader = Font.subheadline.weight(.medium)
@@ -448,6 +482,11 @@ enum Theme {
         static let controlHover = ramp(dark: 0.16, light: 0.14)
         /// A held control is stronger than hover, so mouse-down always reads.
         static let controlPressed = ramp(dark: 0.24, light: 0.20)
+        /// Tints the selected button's own glass, so the material draws face and contour together.
+        static let compactShortcutSelectionTint = adaptive(
+            dark: .srgbInk(0.55, alpha: 1), light: .srgbInk(0, alpha: 0.40))
+        static let compactShortcutSelectedInk = adaptive(
+            dark: .srgbInk(1, alpha: 1), light: .srgbInk(1, alpha: 1))
         /// Control borders: outlined kbd chips.
         static let border = ramp(dark: 0.20, light: 0.18)
         /// Alpha 1, so a call site can dim it with `.opacity` and land on the value it replaced.

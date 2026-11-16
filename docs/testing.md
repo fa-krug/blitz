@@ -97,7 +97,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | Touching | Run |
 | --- | --- |
 | launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
-| the palette shell and shared views | `palette-*`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
+| the palette shell and shared views | `palette-*`, `compact-bar-test`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
@@ -446,13 +446,27 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A bare ⌫ in an empty field walks the same path Escape does
 - General ▸ Escape Key Behavior set to `Close window and pop to root`: Escape on any screen closes
   the window, and reopening lands on the root search whatever Pop to Root Search says
+- Compact mode: Escape at the expanded launcher root clears the text, then collapses, then closes,
+  under both Escape preferences
 - Reopening focuses the search field with an empty query, in the same position and at the same size
 - Compact mode: typing expands it, and the search bar does **not** shift vertically during the swap
+- Compact mode: a round button per enabled configured shortcut beads out of the capsule on summon;
+  ←/→ walk Search and the buttons without wrapping, ↓ expands Search or opens the selected button, ↵
+  opens only a button, and typing, pasting or clicking Search returns to Search. Show Notes opens its
+  own window
+- Compact mode: with an argument field focused on an expanded row, ←/→ at the text's ends still walk
+  the Tab ring, and ← / → with text typed move the caret
+- Appearance ▸ Compact Shortcuts: add, replace, remove and reorder zero to four shortcuts, in Light
+  and Dark; the section disappears while Expanded is the window mode. Turning a feature off hides
+  its button without losing its position, and Settings marks it Off in the list and lists it under
+  Off in both menus
+- A fresh install opens compact, with Clipboard History and Search Emoji & Symbols on the bar
 - With a CJK IME: the placeholder clears as soon as composition starts and the composing text never
   overlaps it; cancelling composition brings the placeholder back, and the list filters only once the
   candidate is committed — check on a second summon too, where first responder never moved
 - Typing filters instantly; ↑/↓ move the highlight and scroll it into view without yanking the list
-- ⌃N/⌃P move the highlight as ↓/↑ do; ⌃F/⌃B step the emoji grid's selection, and the caret elsewhere
+- ⌃N/⌃P move the highlight as ↓/↑ do; ⌃F/⌃B step compact shortcuts or the emoji grid's selection,
+  and the caret elsewhere
 - The highlight always sits on the row the footer pill describes
 - With a calculation typed, the calculator card is first and is selected first
 - ⌘↵ on a number, unit or money card puts the answer in the search bar with the caret after it, so

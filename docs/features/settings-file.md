@@ -119,6 +119,7 @@ Where a number has a special case, the case is a word:
 | `windowManagement.gap` | 0 to 64 |
 | `snippets.folder`, `notes.folder` | an absolute or `~/` path, or `null` for Application Support |
 | `snippets.defaultAction` | `"paste"`, `"copy"` — what ↵ does in Search Snippets |
+| `appearance.compactBarCommands` | an ordered array of zero to four unique `command:` identifiers from Compact Shortcuts; `[]` empties the bar, and an unknown, duplicate, unsupported or fifth entry rejects the whole value |
 
 ## Shortcut chords
 
