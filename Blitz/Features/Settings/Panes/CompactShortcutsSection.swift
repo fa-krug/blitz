@@ -51,19 +51,29 @@ struct CompactShortcutsSection: View {
                 Text("Off").foregroundStyle(.secondary)
             }
             Spacer(minLength: Theme.Spacing.lg)
-            Button("Move Up", systemImage: "chevron.up") { move(command, by: -1) }
-                .help("Move Up")
+            rowButton("Move Up", systemImage: "chevron.up") { move(command, by: -1) }
                 .disabled(settings.compactBarCommands.first == command)
-            Button("Move Down", systemImage: "chevron.down") { move(command, by: 1) }
-                .help("Move Down")
+            rowButton("Move Down", systemImage: "chevron.down") { move(command, by: 1) }
                 .disabled(settings.compactBarCommands.last == command)
-            Button("Remove", systemImage: "minus") {
+            rowButton("Remove", systemImage: "minus.circle.fill") {
                 settings.compactBarCommands.removeAll { $0 == command }
             }
-            .help("Remove")
+            .foregroundStyle(Theme.Colors.destructive)
         }
         .buttonStyle(.borderless)
         .labelStyle(.iconOnly)
+    }
+
+    /// A borderless button hits only its glyph's bounds, and a chevron's is a few points tall.
+    private func rowButton(
+        _ title: String, systemImage: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(width: Theme.Size.settingsRowButton, height: Theme.Size.settingsRowButton)
+                .contentShape(Rectangle())
+        }
+        .help(title)
     }
 
     /// An off feature stays selectable, so its slot is ready the moment the feature turns on.
