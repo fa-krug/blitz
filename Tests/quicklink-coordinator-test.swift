@@ -15,6 +15,7 @@ struct QuicklinkCoordinatorTests {
         try await combinedArguments()
         try await plainLink()
         try await promptOnRestoredScreen()
+        try hotKeyToggles()
         try copying()
         try editing()
         try revealing()
@@ -146,6 +147,33 @@ struct QuicklinkCoordinatorTests {
         fixture.coordinator.openQuicklink(id: fixture.link.id)
         try await Task.sleep(for: .milliseconds(1))
         expect(fixture.core.palette.selection == 0, "a row the filter hides falls back to the top")
+    }
+
+    static func hotKeyToggles() throws {
+        let fixture = try Fixture(link: "https://example.com/?q={argument}")
+        defer { fixture.cleanUp() }
+        let otherRow = fixture.store.enabled.firstIndex { $0.id != fixture.link.id } ?? 0
+        fixture.coordinator.openQuicklinkFromHotKey(id: fixture.link.id, values: [:])
+        expect(fixture.window.isVisible, "a shortcut owing values opens the prompt")
+        fixture.coordinator.openQuicklinkFromHotKey(id: fixture.link.id, values: [:])
+        expect(
+            !fixture.window.isVisible && fixture.palette.shows == 1,
+            "the same shortcut again hides its own prompt")
+
+        fixture.coordinator.openQuicklinkFromHotKey(id: fixture.link.id, values: [:])
+        fixture.core.palette.selection = otherRow
+        fixture.coordinator.openQuicklinkFromHotKey(id: fixture.link.id, values: [:])
+        expect(
+            fixture.window.isVisible && fixture.palette.shows == 3,
+            "another row selected lands back on the shortcut's own row")
+
+        fixture.coordinator.openQuicklink(id: fixture.link.id)
+        expect(fixture.window.isVisible, "a launcher activation never toggles the prompt")
+
+        fixture.core.palette.query = "wiki"
+        fixture.core.palette.selection = 0
+        fixture.coordinator.openQuicklinkFromHotKey(id: fixture.link.id, values: [:])
+        expect(!fixture.window.isVisible, "the selected row is read through the query's filter")
     }
 
     static func copying() throws {
@@ -384,9 +412,10 @@ final class PaletteWindowController {
     var previousApp: NSRunningApplication? { nil }
 }
 
-enum PaletteMode { case quicklinks }
+enum PaletteMode { case launcher, quicklinks }
 @MainActor
 final class PaletteState {
+    var mode = PaletteMode.launcher
     var selection = 0
     var query = ""
     var quicklinkTagFilter: String?
@@ -407,9 +436,11 @@ final class PaletteCoordinator {
         self.state = state
     }
     var isVisible: Bool { window.isVisible }
+    func isShowing(_ mode: PaletteMode) -> Bool { window.isVisible && state.mode == mode }
     func showPalette(mode: PaletteMode) {
         shows += 1
         window.isVisible = true
+        state.mode = mode
         guard !restoresScreen else { return }
         state.selection = 0
         state.query = ""
@@ -417,7 +448,7 @@ final class PaletteCoordinator {
         state.commandArguments = [:]
         state.pendingArgumentEntryID = nil
     }
-    func hidePalette(restoreFocus: Bool) { window.isVisible = false }
+    func hidePalette(restoreFocus: Bool = true) { window.isVisible = false }
 }
 
 @MainActor
@@ -442,6 +473,7 @@ struct QuicklinkEditRequest {
     var quicklink: Quicklink?
     var browserTab: BrowserTab?
     var name = ""
+    var link = ""
 }
 enum DialogTone { case danger, neutral, success }
 
