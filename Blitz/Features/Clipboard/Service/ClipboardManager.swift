@@ -257,18 +257,7 @@ final class ClipboardManager {
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             guard text.count <= Self.maxTextLength else { return }
-            let formats = Self.richFormats(on: pb)
-            guard !formats.isEmpty else {
-                store.addText(text, sourceBundleID: sourceBundleID)
-                return
-            }
-            let store = store
-            let directory = store.formatsDirectory
-            // Like an image's PNG, the flavour files are written off the poll.
-            Task.detached(priority: .utility) {
-                let written = ClipboardStore.writeFormats(formats, into: directory)
-                await store.addText(text, sourceBundleID: sourceBundleID, formats: written)
-            }
+            recordText(text, formats: Self.richFormats(on: pb), sourceBundleID: sourceBundleID)
             return
         }
 
@@ -284,6 +273,42 @@ final class ClipboardManager {
                 guard let png else { return }
                 await store.addImage(png, sourceBundleID: sourceBundleID)
             }
+            return
         }
+
+        guard let text = Self.plainText(fromRichTextOn: pb),
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            text.count <= Self.maxTextLength
+        else { return }
+        recordText(text, formats: Self.richFormats(on: pb), sourceBundleID: sourceBundleID)
+    }
+
+    private func recordText(
+        _ text: String, formats: [ClipboardRichFormat: Data], sourceBundleID: String?
+    ) {
+        guard !formats.isEmpty else {
+            store.addText(text, sourceBundleID: sourceBundleID)
+            return
+        }
+        let store = store
+        let directory = store.formatsDirectory
+        // Like an image's PNG, the flavour files are written off the poll.
+        Task.detached(priority: .utility) {
+            let written = ClipboardStore.writeFormats(formats, into: directory)
+            await store.addText(text, sourceBundleID: sourceBundleID, formats: written)
+        }
+    }
+
+    /// The HTML importer runs WebKit on the main actor, so a bigger fragment would stall the poll.
+    private static let maxImportedHTMLBytes = 256 * 1024
+
+    /// For a copy with no `.string`, such as a web page's HTML-only Clipboard API write.
+    static func plainText(fromRichTextOn pasteboard: NSPasteboard) -> String? {
+        if let rtf = pasteboard.data(forType: .rtf) {
+            return NSAttributedString(rtf: rtf, documentAttributes: nil)?.string
+        }
+        guard let html = pasteboard.data(forType: .html), html.count <= maxImportedHTMLBytes
+        else { return nil }
+        return NSAttributedString(html: html, documentAttributes: nil)?.string
     }
 }

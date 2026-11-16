@@ -85,6 +85,13 @@ sensitive-type guards, which stay unconditional — a secret must never be recor
 arrives in. A bare screenshot carries no file URL and still falls through to the `.png`/`.tiff`
 branch untouched.
 
+**Rich text is the last resort.** A copy with no file URL, plain text or image, such as a web page's
+HTML-only Clipboard API write, is converted through `NSAttributedString`, RTF before HTML
+(`ClipboardManager.plainText(fromRichTextOn:)`), and recorded as a text entry that keeps the
+original flavours, so ↵ still pastes the formatting. It sits after the image branch because a
+browser's image copy carries an `<img>` fragment beside the pixels. The HTML importer runs WebKit on
+the main actor, so fragments over 256 KB are skipped to bound the stall.
+
 `ClipboardManager.fileURLs(on:volatileRoots:)` takes both the pasteboard and the roots as
 parameters, so `pasteboard-test` can drive an `NSPasteboard.withUniqueName()` and its own scratch
 tree: a harness that touched `NSPasteboard.general` would land in the reader's own running Blitz
@@ -359,7 +366,8 @@ anchors it to the palette's trailing edge, and the palette stays up under it.
 ## Rich text
 
 **Capture.** When the poller records a text entry it also reads `public.rtf` and `public.html`
-(`ClipboardManager.richFormats(on:)`). A flavour over `ClipboardRichFormat.maxBytes` (1 MB) is
+(`ClipboardManager.richFormats(on:)`) — including an RTF- or HTML-only copy, whose text the
+[poll's last branch](#poll-based-capture) derives from the flavour itself. A flavour over `ClipboardRichFormat.maxBytes` (1 MB) is
 dropped and the entry keeps its plain text. The flavours are written off the poll
 (`ClipboardStore.writeFormats`) to `imagesDir/formats/<uuid>.<ext>`, so `owns` covers them, and the
 row is inserted once they land, as an image's is. A repeat copy discards the files it wrote.
