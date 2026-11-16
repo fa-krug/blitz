@@ -51,10 +51,6 @@ if [ "${1:-}" = "--exec" ]; then
     exit 0
 fi
 
-QUEUE="$BIN/queue"
-: > "$QUEUE"
-rm -f "$BIN"/*.failed "$BIN"/*.running
-
 failed=()
 ran=0
 only="${1:-}"
@@ -68,6 +64,13 @@ if [ "$only" = "--index" ]; then
     emit_db=1
     only=""
     printf '[' > "$DB"
+fi
+
+QUEUE="$BIN/queue"
+# `--index` queues nothing, so it must never reset the state of a suite already running.
+if [ "$emit_db" -eq 0 ]; then
+    : > "$QUEUE"
+    rm -f "$BIN"/*.failed "$BIN"/*.running
 fi
 
 # run [slow] [-O] [index] <name> <source...> — queue the harness. `slow` dispatches it in the first
