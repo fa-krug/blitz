@@ -456,7 +456,10 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Compact mode: with an argument field focused on an expanded row, ←/→ at the text's ends still walk
   the Tab ring, and ← / → with text typed move the caret
 - Appearance ▸ Compact Shortcuts: add, replace, remove and reorder zero to four shortcuts, in Light
-  and Dark; the section disappears while Expanded is the window mode
+  and Dark; the section disappears while Expanded is the window mode. Turning a feature off hides
+  its button without losing its position, and Settings marks it Off in the list and lists it under
+  Off in both menus
+- A fresh install opens compact, with Clipboard History and Search Emoji & Symbols on the bar
 - With a CJK IME: the placeholder clears as soon as composition starts and the composing text never
   overlaps it; cancelling composition brings the placeholder back, and the list filters only once the
   candidate is committed — check on a second summon too, where first responder never moved
