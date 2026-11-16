@@ -54,6 +54,7 @@ enum SettingsFileKey: String, CaseIterable, Sendable {
     case notesFolder = "notes.folder"
     case snippetsShowInLauncher = "snippets.showInLauncher"
     case snippetsFolder = "snippets.folder"
+    case snippetDefaultAction = "snippets.defaultAction"
     case navigationEnabled = "navigation.enabled"
     case menuSearchShowsAppleMenu = "navigation.menuSearchShowsAppleMenu"
     case menuSearchDisabledApps = "navigation.menuSearchDisabledApps"

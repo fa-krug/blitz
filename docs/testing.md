@@ -759,6 +759,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
   field first** rather than doing nothing
 - Editing a snippet file externally reloads it
+- In Search Snippets, ⌘. pins a snippet under **Pinned** and the highlight follows it; editing it in
+  Settings keeps the pin. ⌘↵ copies (asking for arguments first) and the copy lands in clipboard
+  history; with **Default action** on Copy, ↵ copies and ⌘↵ pastes. ⌘F shows the file in Finder
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
   expands to nothing

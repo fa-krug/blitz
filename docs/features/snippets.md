@@ -99,7 +99,8 @@ Template body
 ```
 
 `name` is optional when reading and defaults from the filename, and `keyword` is optional. `enabled`
-defaults to `true`; `show_confirmation` defaults to `false`.
+defaults to `true`; `show_confirmation` defaults to `false`. `pinned` defaults to `false` and is
+written, last, only when `true`, so an unpinned snippet serializes exactly as before.
 
 String values must use double quotes. The codec escapes and decodes `\\`, `\"`, `\n`, `\r`, and
 `\t`; unsupported escapes, unquoted strings, duplicate or unknown keys, non-exact delimiters, and
@@ -246,25 +247,43 @@ global shortcut recorded in **Settings → Snippets**. Like Search Quicklinks it
 cycle and exits with Escape or a bare backspace, and like the clipboard it splits into a list and a
 preview.
 
-The list is every **enabled** snippet — a disabled one is absent here exactly as it is absent from the
-launcher — filtered by name *or* keyword. Substring matching, not the launcher's fuzzy scorer: this is
-a library being browsed rather than a query racing apps and commands for a rank.
+The list is `SnippetsStore.browserRows(matching:)`: every **enabled** snippet — a disabled one is
+absent here exactly as it is absent from the launcher — filtered by name *or* keyword, pinned ones
+first, each block in the store's name order under a **Pinned** or **Snippets** header, as Quicklinks
+does. Substring matching, not the launcher's fuzzy scorer: this is a library being browsed rather
+than a query racing apps and commands for a rank. Launcher search ignores pins.
+
+A pin is the `pinned` frontmatter key, so it lives in the file and follows it across a folder change.
+`toggleSnippetPinned` (⌘.) is an ordinary revision-checked save; afterwards the selection follows the
+row into or out of the pinned block. The pane's editor carries the pin through a save, and a
+duplicate starts unpinned.
 
 The preview shows the **raw template**, never an expansion. Expanding per selection would capture the
 clipboard, read the target's selected text and burn a `{uuid}` on every arrow key, and a snippet
 carrying `{argument}` would raise its prompt just to draw a pane. Beside it sits the name, keyword,
 shortcut, file name and character count.
 
-↵ and the ⌘K menu's **Paste Snippet** both go through `SnippetCoordinator.expandSnippetFromPalette`,
-which reads `previousApp` before hiding the panel and then calls the same `expandSnippet` funnel a
-launcher row does — so template expansion, cursor placement, the Accessibility prompt, the
-confirmation HUD and the pasteboard lease are the ones described below, not a second copy of them.
+↵ runs `AppSettings.snippetDefaultAction` (**Settings → Snippets → Default action**, Paste unless
+changed) and ⌘↵ the other one, as the clipboard's **Default action** swaps its chords; the ⌘K menu
+lists the two in that order with those keycaps. Both go through
+`SnippetCoordinator.performFromPalette`. **Paste Snippet** is `expandSnippetFromPalette`, which reads
+`previousApp` before hiding the panel and then calls the same `expandSnippet` funnel a launcher row
+does — so template expansion, cursor placement, the Accessibility prompt, the confirmation HUD and
+the pasteboard lease are the ones described below, not a second copy of them.
+
+**Copy Snippet** is `copySnippetFromPalette`: the same context capture, browser-tab read and argument
+prompt (`resolveExpansion`, which hands `promptSnippetArguments` an `onCancel` and an `onExpanded`),
+then `Paster.copyPlainText`, unmarked so the result enters clipboard history like any copy. It needs
+no Accessibility and borrows no ⌘C, so `{selection}` reads only through Accessibility and `{cursor}`
+is dropped. `show_confirmation` raises a "Copied" HUD instead of "Inserted". Keyword expansion,
+snippet shortcuts and launcher rows always paste.
+
 The rest of the menu is **Edit Snippet** (⌘E) and **Create Snippet** (⌘N), which hand off to the
-pane's editor through `AppCore.pendingSnippetEdit`, **Duplicate Snippet**, **Show in Finder** and
-**Delete Snippet** (⌘⌫). A duplicate is a new file named "… Copy" (then "… Copy 2", …), and it
-leaves the keyword behind, since two snippets can't both answer one. Delete always confirms through
-Blitz's own dialog, as the pane's delete button does, and a failed duplicate or delete says so in
-a notice.
+pane's editor through `AppCore.pendingSnippetEdit`, **Duplicate Snippet**, **Pin Snippet** /
+**Unpin Snippet** (⌘.), **Show in Finder** (⌘F) and **Delete Snippet** (⌘⌫). A duplicate is a
+new file named "… Copy" (then "… Copy 2", …), and it leaves the keyword behind, since two snippets
+can't both answer one. Delete always confirms through Blitz's own dialog, as the pane's delete
+button does, and a failed duplicate or delete says so in a notice.
 
 ⌘N answers with no rows too, since the palette swallows ⌘K on an empty screen, and the empty library
 says so ("Press ⌘N to create one"). From the key, a non-empty search becomes the new snippet's name,

@@ -118,6 +118,7 @@ Where a number has a special case, the case is a word:
 | `calendar.hideCurrentEventAfterMinutes` | `"never"`, 0 (as it starts), 5, 10, 30 |
 | `windowManagement.gap` | 0 to 64 |
 | `snippets.folder`, `notes.folder` | an absolute or `~/` path, or `null` for Application Support |
+| `snippets.defaultAction` | `"paste"`, `"copy"` — what ↵ does in Search Snippets |
 
 ## Shortcut chords
 
