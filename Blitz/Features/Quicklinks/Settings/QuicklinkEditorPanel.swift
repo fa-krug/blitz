@@ -9,6 +9,8 @@ struct QuicklinkEditRequest: Identifiable {
     var browserTab: BrowserTab?
     /// A new quicklink's name, typed into the search field before ⌘N.
     var name = ""
+    /// A new quicklink's link, typed into the launcher as an address.
+    var link = ""
 }
 
 /// Add / edit panel for a single quicklink, presented from the Quicklinks pane.
@@ -33,10 +35,13 @@ struct QuicklinkEditorPanel: View {
     @State private var isReadingBrowserTab = false
     @State private var tagList: String
 
-    init(quicklink: Quicklink?, browserTab: BrowserTab? = nil, draftName: String = "") {
+    init(
+        quicklink: Quicklink?, browserTab: BrowserTab? = nil, draftName: String = "",
+        draftLink: String = ""
+    ) {
         self.quicklink = quicklink
         _name = State(initialValue: quicklink?.name ?? browserTab?.title ?? draftName)
-        _link = State(initialValue: quicklink?.link ?? browserTab?.url ?? "")
+        _link = State(initialValue: quicklink?.link ?? browserTab?.url ?? draftLink)
         _iconSymbol = State(initialValue: quicklink?.iconSymbol)
         _favicon = State(initialValue: quicklink?.favicon)
         _faviconImage = State(initialValue: quicklink?.favicon.flatMap(NSImage.init(data:)))

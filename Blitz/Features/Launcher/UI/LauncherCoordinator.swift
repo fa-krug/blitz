@@ -90,6 +90,10 @@ final class LauncherCoordinator {
                 }
                 return
             }
+            if id == .createQuicklinkFromURL {
+                quicklinkCoordinator.createQuicklink(link: app.url)
+                return
+            }
             runCommand(id, arguments: arguments)
             return
         }
@@ -239,7 +243,7 @@ final class LauncherCoordinator {
         case .checkForExtensionUpdates:
             dismissPalette()
             extensionCoordinator.checkForUpdatesNow()
-        case .openInBrowser, .runShellCommand, .searchWeb:
+        case .openInBrowser, .createQuicklinkFromURL, .runShellCommand, .searchWeb:
             break  // Query-driven: each runs where the typed text is, never through this funnel.
         case .joinNextMeeting:
             calendarCoordinator.joinNextMeeting()

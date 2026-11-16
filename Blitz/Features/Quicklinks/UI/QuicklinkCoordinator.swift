@@ -348,11 +348,18 @@ final class QuicklinkCoordinator {
         }
     }
 
-    /// Opens the Quicklinks editor on `quicklink`; nil is a new one, named `name`.
-    func editQuicklink(_ quicklink: Quicklink?, name: String = "") {
+    /// Opens the Quicklinks editor on `quicklink`; nil is a new one, seeded with `name` and `link`.
+    func editQuicklink(_ quicklink: Quicklink?, name: String = "", link: String = "") {
         if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
-        core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name)
+        core.pendingQuicklinkEdit = QuicklinkEditRequest(quicklink: quicklink, name: name, link: link)
         settingsCoordinator.showSettings(tab: .quicklinks)
+    }
+
+    /// From a typed address: the editor starts on it, named after its host.
+    func createQuicklink(link: URL) {
+        let host = link.host() ?? ""
+        let name = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        editQuicklink(nil, name: name, link: link.absoluteString)
     }
 
     /// Over a supported browser the editor starts from its front tab; a failed read starts blank.

@@ -314,13 +314,17 @@ ran, and learning it would teach every window command the same term.
 ### Contextual commands
 
 A **query-driven** command is one the typed text is the input for, so it is built where it is
-offered and never sits in the index. `CommandID.isQueryDriven` names three — **Open in Browser**,
-**Run Shell Command** and **Search Web** — `CommandCatalog.all` filters them out, and
-`CommandCatalog.isQueryDriven(_:)` is how the launcher asks it of a row. The last two are
-[fallbacks](#fallbacks); Open in Browser is the **contextual** one, which `LauncherScreen` offers per
+offered and never sits in the index. `CommandID.isQueryDriven` names four — **Open in Browser**,
+**Create Quicklink** (`createQuicklinkFromURL`), **Run Shell Command** and **Search Web** —
+`CommandCatalog.all` filters them out, and `CommandCatalog.isQueryDriven(_:)` is how the
+launcher asks it of a row. The last two are [fallbacks](#fallbacks); the first two are the
+**contextual** pair, which `CommandCatalog.urlCommands(for:)` builds and `LauncherScreen` offers per
 keystroke ahead of the ranked matches, because nothing the index holds answers a typed address
-better. Typing a web address or a bare host puts it on top, and activating it hands the URL to the
-system's default handler through `AppLauncher.open`.
+better. Typing a web address or a bare host puts both on top: Open in Browser hands the URL to the
+system's default handler through `AppLauncher.open`, and Create Quicklink opens the Quicklinks
+editor on it (see [quicklinks.md](quicklinks.md#creating-from-a-typed-address)). Create Quicklink
+also needs `quicklinksEnabled`, and is a separate case from the catalog's own Create Quicklink so
+the two rows never share an id.
 
 The shape a query has to have is `QuicklinkDestination.detect` returning `.web`, reused rather than
 re-written so `github.com` and `https://…` mean the same thing here as they do in a quicklink. The
@@ -838,7 +842,8 @@ and every feature's own switch and confirmation gate it identically. That is als
 reach Quit or a query-driven command: `CommandID.hotKeyAction` withholds them from chords, so the
 inverse never produces them. An app link toggles the app, as its shortcut does. The row is offered —
 and the chord answers — only where `AppEntry.deepLink` is non-nil: never on a meeting, a contact,
-Open in Browser or a fallback. The link is copied unmarked, so it enters clipboard history; it is
+a contextual URL row or a fallback.
+The link is copied unmarked, so it enters clipboard history; it is
 copied in order to be pasted somewhere else.
 
 **A link can carry values**, in Raycast's own `arguments` query parameter — URL-encoded JSON, read

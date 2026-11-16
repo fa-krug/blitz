@@ -26,10 +26,12 @@ enum CommandCatalog {
         command(for: entry)?.isQueryDriven ?? false
     }
 
-    /// The row a typed web address earns; unlike a catalog entry, its URL is the real destination.
-    static func openInBrowser(for query: String) -> AppEntry? {
-        guard case .web(let url)? = QuicklinkDestination.detect(query) else { return nil }
-        return makeEntry(.openInBrowser, url: url, subtitle: "URL")
+    /// The rows a typed web address earns; unlike a catalog entry's, their URL is the destination.
+    static func urlCommands(for query: String) -> [AppEntry] {
+        guard case .web(let url)? = QuicklinkDestination.detect(query) else { return [] }
+        return [CommandID.openInBrowser, .createQuicklinkFromURL].map {
+            makeEntry($0, url: url, subtitle: "URL")
+        }
     }
 
     /// A command's row, built rather than looked up — `all` holds none of the query-driven ones.

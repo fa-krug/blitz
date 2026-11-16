@@ -20,6 +20,7 @@ enum CommandID: String, CaseIterable, Sendable {
     case openCamera = "command:open-camera"
     case scanQRCode = "command:scan-qr-code"
     case openInBrowser = "command:open-in-browser"
+    case createQuicklinkFromURL = "command:create-quicklink-from-url"
     case runShellCommand = "command:run-shell-command"
     case searchWeb = "command:search-web"
     case define = "command:define"
@@ -76,6 +77,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .openCamera: return "Open Camera"
         case .scanQRCode: return "Scan QR Code"
         case .openInBrowser: return "Open in Browser"
+        case .createQuicklinkFromURL: return "Create Quicklink"
         case .runShellCommand: return "Run Shell Command"
         case .searchWeb: return "Search the Web"
         case .define: return "Define Word"
@@ -152,7 +154,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .captureWindowLayout: return "macwindow.badge.plus"
         case .switchRoom: return "door.left.hand.open"
         case .createRoom: return "rectangle.stack.badge.plus"
-        case .createQuicklink: return "link.badge.plus"
+        case .createQuicklink, .createQuicklinkFromURL: return "link.badge.plus"
         case .searchQuicklinks: return Quicklink.sfSymbol
         case .importQuicklinks: return "square.and.arrow.down"
         case .exportQuicklinks: return "square.and.arrow.up"
@@ -214,7 +216,10 @@ enum CommandID: String, CaseIterable, Sendable {
 
     /// Query-driven: the typed text is their input, so they are built where offered, never listed.
     var isQueryDriven: Bool {
-        self == .openInBrowser || self == .runShellCommand || self == .searchWeb
+        switch self {
+        case .openInBrowser, .createQuicklinkFromURL, .runShellCommand, .searchWeb: true
+        default: false
+        }
     }
 
     /// A chord carries no query, and none should be able to terminate the app outright.
