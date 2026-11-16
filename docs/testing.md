@@ -705,16 +705,17 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Edit one note, switch to a shorter note, then Undo and Redo: the new note remains intact and the app
   does not terminate
 - With rendering on and off, ⌘Z undoes and ⇧⌘Z redoes typing, deletion and paste while another app's
-  menu bar is visible; both update the footer count and autosave the restored source. Editing after
+  menu bar is visible; both update the footer counts and autosave the restored source. Editing after
   an undo discards redo
 - Marked-text input, emoji, combining marks, Copy, Cut, Paste, Select All, Undo, and Redo preserve
   exact source; ⌘F finds occurrences in the active note with rendering on and off, and Escape closes
   the find bar before hiding Notes
 - An empty note shows `Start writing…`; ⌘F moves it below the find bar without overlap, and closing Find
-  restores its position. The footer count is right after typing, pasting and undoing
-- With Render Markdown and Show Formatting Bar on, the band under a note holds the character count on
-  the left and the round formatting button on the right; with either setting off, the centred count
-  footer shows instead and nothing else moved
+  restores its position. The footer's word and character counts are right after typing, pasting and
+  undoing, and after switching notes
+- With Render Markdown and Show Formatting Bar on, the band under a note holds the word and character
+  counts on the left and the round formatting button on the right; with either setting off, the
+  centred counts footer shows instead and nothing else moved
 - The bar starts collapsed, ⌥⌘T and the round button both expand and collapse it, the buttons slide out
   from behind that button, and the state survives switching notes, hiding the window and a relaunch
 - Every bar button applies its formatting, undoes in one step with ⌘Z, and autosaves; clicking keeps the
@@ -726,9 +727,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - The heading menu opens above the capsule, aligned to its left edge, shows the current level checked,
   and applies a level on click; it closes on Escape, on a click anywhere in the note window (including
   the heading button itself, which must not reopen it), on typing, on ⌘P, and when another app is clicked
-- At the smallest window size all eleven controls show and the count is hidden, the note's text keeps
+- At the smallest window size all eleven controls show and the counts are hidden, the note's text keeps
   its inset in both states, the heading menu still opens in full above the capsule, and widening the
-  window brings the count back
+  window brings the counts back
 - ⌥⌘C and ⇧⌘B toggle a code block and a quote; with Render Markdown off they do nothing special
 - Settings > Notes > Show Formatting Bar is disabled while Render Markdown is off, Settings search for
   "formatting" lands on it, and a backup round trip restores it
@@ -743,7 +744,7 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Command-Q does nothing anywhere; with Settings in front, Command-W closes Settings
 - Hiding restores the previous external app or Blitz window
 - Open Notes Folder opens Finder with the active Markdown file selected, or the folder with no note
-- Deleting every note closes the browse list and leaves one clean empty state with no character count;
+- Deleting every note closes the browse list and leaves one clean empty state with no counts;
   Command-N from there creates and selects one note
 - The browse list fades only at its bottom edge and rests opaque once it reaches the end
 - Quitting inside the debounce window saves the last edit

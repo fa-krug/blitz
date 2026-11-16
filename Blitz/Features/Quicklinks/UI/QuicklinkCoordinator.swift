@@ -154,6 +154,19 @@ final class QuicklinkCoordinator {
         performQuicklinkOpen(quicklink, link: expansion.text, handler: handler)
     }
 
+    /// Launcher rows never come through here: only a shortcut toggles its own prompt shut.
+    func openQuicklinkFromHotKey(id: UUID, values: [String: String]) {
+        guard !isPrompting(for: id) else { return paletteCoordinator.hidePalette() }
+        openQuicklink(id: id, values: values)
+    }
+
+    private func isPrompting(for id: UUID) -> Bool {
+        guard paletteCoordinator.isShowing(.quicklinks) else { return false }
+        let rows = store.listed(matching: core.palette.query, tag: core.palette.quicklinkTagFilter)
+        let selection = core.palette.selection
+        return rows.indices.contains(selection) && rows[selection].id == id
+    }
+
     /// The fallback row's query, which fills the first `{argument}` the link declares.
     func openQuicklink(id: UUID, filling seed: String) {
         guard let quicklink = store.quicklink(id: id),

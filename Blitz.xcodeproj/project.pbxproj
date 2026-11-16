@@ -87,6 +87,7 @@
 		17E70FBB0811837B0E9BD964 /* MCPComposerAddress.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1AC3F2BB0A1631B6AA4FFE /* MCPComposerAddress.swift */; };
 		1885D63DAFD9BEB45903C9C5 /* LauncherScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92D7874E26A7045FC2AB0738 /* LauncherScreen.swift */; };
 		1892ABCFC371F46244D6BA62 /* Tooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D26FE3E988A7EA1CFC7BFD /* Tooltip.swift */; };
+		1894AC6118E60C3645786DE3 /* NoteWordCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45EB992C41976B8D0DF2C318 /* NoteWordCount.swift */; };
 		1905AC9541ACB0D8BF2BBD2F /* ClipboardTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3192A234537826BBC2D5CDAA /* ClipboardTextExtractor.swift */; };
 		191BA8DD8EB8D8AE1422B394 /* ApplicationsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 787D6A7C2DE5402AD15D711C /* ApplicationsSettingsView.swift */; };
 		1978D4A53F82DC05E1238388 /* ExtensionFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3405CBC9C55604C224D3EC50 /* ExtensionFetcher.swift */; };
@@ -1209,6 +1210,7 @@
 		45774BCF12AE72CE88861F90 /* AIScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIScreen.swift; sourceTree = "<group>"; };
 		458617D6997C3179C011E9AB /* PaletteMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteMode.swift; sourceTree = "<group>"; };
 		45B0EA08A4A4403C524B31D2 /* ClipboardFilterButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardFilterButton.swift; sourceTree = "<group>"; };
+		45EB992C41976B8D0DF2C318 /* NoteWordCount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteWordCount.swift; sourceTree = "<group>"; };
 		462EFFB4CC24685078129824 /* ReminderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderList.swift; sourceTree = "<group>"; };
 		464C21851340333251716381 /* CalculatorHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorHistoryScreen.swift; sourceTree = "<group>"; };
 		46D41DD3C55C775A4B0B6F57 /* UpdateCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCoordinator.swift; sourceTree = "<group>"; };
@@ -1919,6 +1921,7 @@
 				51E4B9BB81F580884CC81015 /* NoteTitle.swift */,
 				AAD2541CDF8AD0617688B107 /* NoteToolCatalog.swift */,
 				8F3CDEFB9996843AA05A762F /* NoteWindowPlacement.swift */,
+				45EB992C41976B8D0DF2C318 /* NoteWordCount.swift */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -4775,6 +4778,7 @@
 				E136CA8CA1AC9AEE568C1198 /* NoteTitle.swift in Sources */,
 				12FBFEFDDB2694EE2B460F66 /* NoteToolCatalog.swift in Sources */,
 				6C62EA41273AF57A2E036521 /* NoteWindowPlacement.swift in Sources */,
+				1894AC6118E60C3645786DE3 /* NoteWordCount.swift in Sources */,
 				B0E63F82FAE3B814C839CD6E /* NotesCoordinator.swift in Sources */,
 				52CB71CF7DE8E3106D6D64B1 /* NotesPanel.swift in Sources */,
 				5FB1EEAEC07AC724A902A384 /* NotesRepository.swift in Sources */,

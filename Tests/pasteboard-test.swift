@@ -24,6 +24,7 @@ struct PasteboardTests {
         richFlavoursAreCaptured()
         anOversizedFlavourIsDropped()
         richEntriesWriteBackTheirFlavours()
+        richTextWithoutPlainTextReadsAsText()
         thePollBacksOffOnceTheBoardSitsStill()
 
         print("\(passes)/\(passes + failures) passed")
@@ -363,6 +364,31 @@ struct PasteboardTests {
         let formats = ClipboardManager.richFormats(on: pb)
         expect(formats[.rtf] == nil, "a flavour over the cap is dropped")
         expect(formats[.html]?.count == ClipboardRichFormat.maxBytes, "one at the cap is kept")
+    }
+
+    /// A web page's Clipboard API write can carry HTML alone, with no `.string` to record.
+    static func richTextWithoutPlainTextReadsAsText() {
+        let page = board()
+        page.declareTypes([.html], owner: nil)
+        page.setString("<style>p{}</style><p>brew update</p><div>ls &amp;&amp; pwd</div>", forType: .html)
+        expect(
+            ClipboardManager.plainText(fromRichTextOn: page) == "brew update\nls && pwd\n",
+            "HTML reads as its text, without its style")
+        expect(
+            ClipboardManager.richFormats(on: page)[.html] != nil,
+            "and keeps its markup for a formatted paste")
+
+        let document = board()
+        document.declareTypes([.rtf], owner: nil)
+        document.setData(rtf, forType: .rtf)
+        expect(ClipboardManager.plainText(fromRichTextOn: document) == "bold text", "RTF reads as its text")
+
+        let huge = board()
+        huge.declareTypes([.html], owner: nil)
+        huge.setString(String(repeating: "<p>x</p>", count: 40_000), forType: .html)
+        expect(ClipboardManager.plainText(fromRichTextOn: huge) == nil, "oversized HTML is skipped")
+
+        expect(ClipboardManager.plainText(fromRichTextOn: board()) == nil, "an empty board is nil")
     }
 
     /// ↵ pastes with the formatting; a "Paste as" row narrows it to one flavour.

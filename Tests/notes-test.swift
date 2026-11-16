@@ -9,6 +9,7 @@ struct NotesTests {
     static func main() async throws {
         try testRepositoryAndSearch()
         testDerivedTitles()
+        testWordCount()
         testMarkdownParser()
         testMarkdownEditing()
         testMarkdownFormatting()
@@ -134,6 +135,18 @@ struct NotesTests {
         check(
             "loading an empty collection creates no file",
             (try FileManager.default.contentsOfDirectory(atPath: empty.notesDirectory.path)).isEmpty)
+    }
+
+    private static func testWordCount() {
+        check("an empty note has no words", NoteWordCount.count(in: "") == 0)
+        check("whitespace alone has no words", NoteWordCount.count(in: "  \n\t \n") == 0)
+        check(
+            "Markdown markers and punctuation are not words",
+            NoteWordCount.count(in: "# Plan\n- **bold** and _italic_ — don't stop.\n- [ ] task") == 7)
+        check("numbers and accented words count", NoteWordCount.count(in: "café naïve 42 3.14") == 4)
+        check(
+            "text without spaces still splits into words",
+            NoteWordCount.count(in: "我今天去商店买东西") > 1)
     }
 
     private static func testDerivedTitles() {

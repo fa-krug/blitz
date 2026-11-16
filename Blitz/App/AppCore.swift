@@ -407,7 +407,7 @@ final class AppCore {
                 self?.windowCommandCoordinator.runCustomWindowSize(id: id)
             }
             hotKeys.onOpenQuicklink = { [weak self] id, arguments in
-                self?.quicklinkCoordinator.openQuicklink(id: id, values: arguments)
+                self?.quicklinkCoordinator.openQuicklinkFromHotKey(id: id, values: arguments)
             }
             hotKeys.onRunQuickAction = { [weak self] id, arguments in
                 self?.quickActionCoordinator.run(id: id, values: arguments)

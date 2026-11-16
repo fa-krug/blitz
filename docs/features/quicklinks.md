@@ -159,6 +159,12 @@ the row is reached from root search, from Search Quicklinks or from a hotkey. A 
 system default, or an app from the Open With section — survives that trip as a `HandlerOverride` on
 `pendingHandlerOverride`, keyed by the quicklink it applies to.
 
+**Pressing the shortcut again while Search Quicklinks has that row selected hides the palette**, as the
+Snippets and Clipboard History shortcuts do; any other row or screen still lands on the shortcut's own
+row. The hotkey reaches the funnel through `openQuicklinkFromHotKey(id:values:)`, which reads the
+selected row through the same `QuicklinkStore.listed` filter the screen draws. A launcher row and a deep
+link call `openQuicklink` directly and never toggle.
+
 **A launcher fallback fills the first argument.** Declaring a placeholder is exactly what puts a
 quicklink in the `Use “…” with…` section (see [launcher.md](launcher.md#fallbacks));
 `openQuicklink(id:filling:)` assigns the query to the first declared argument and opens at once when
