@@ -205,6 +205,14 @@ running browser whose window is frontmost (`BrowserTabs.mostRecentBrowser`, whic
 list front to back), replacing the link and filling the name only when it is empty; its failures,
 including a refused Automation prompt, show under the form.
 
+## Creating from a typed address
+
+A web address typed into the launcher earns a **Create Quicklink** row under Open in Browser (see
+[launcher.md](launcher.md#contextual-commands)). It runs
+`QuicklinkCoordinator.createQuicklink(link:)`, which hands the URL to the pane on
+`QuicklinkEditRequest.link` and names the draft after its host, `www.` dropped; nothing is saved
+until the editor is.
+
 ⌘N on Search Quicklinks hands over `QuicklinkEditRequest.name` instead of a tab — the search text,
 seeding only a new quicklink's name, so the editor still reads **Add Quicklink**.
 

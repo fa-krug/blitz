@@ -352,7 +352,9 @@ struct DoubleTapDetectorTests {
             "microphone and output mute take independent hotkeys")
         let unbindable = Set(CommandID.allCases.filter { $0.hotKeyAction == nil })
         expect(
-            unbindable == [.openInBrowser, .runShellCommand, .searchWeb, .quit],
+            unbindable == [
+                .openInBrowser, .createQuicklinkFromURL, .runShellCommand, .searchWeb, .quit
+            ],
             "only the query-driven commands and Quit are unbindable — got \(unbindable.map(\.name))")
         expect(
             CommandID.allCases.allSatisfy {

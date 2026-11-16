@@ -74,11 +74,14 @@ struct LauncherScreen: PaletteScreen {
         var results = ordered.entries
         var matchCount = ordered.matchCount
         // A typed web address leads: nothing the index holds answers it better.
-        if pinned == nil, let browser = CommandCatalog.openInBrowser(for: vm.query),
-            visibility.isVisible(browser)
-        {
-            results.insert(browser, at: 0)
-            matchCount += 1
+        if pinned == nil {
+            let urlRows = CommandCatalog.urlCommands(for: vm.query).filter {
+                visibility.isVisible($0)
+                    && ($0.id != CommandID.createQuicklinkFromURL.rawValue
+                        || core.settings.quicklinksEnabled)
+            }
+            results.insert(contentsOf: urlRows, at: 0)
+            matchCount += urlRows.count
         }
         // No card over a pinned row: its fields hang off the selection, which must start on it.
         let calc =
