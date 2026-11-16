@@ -141,6 +141,16 @@ struct PaletteMenuClickTests {
         check(view.received.count == 2, "without a dismissal callback the press passes through")
         state.menuOpen = false
 
+        check(panel.animationBehavior == .documentWindow, "the panel animates while motion is on")
+        Motion.isEnabled = false
+        panel.followMotion()
+        check(panel.animationBehavior == .none, "the panel stops animating once motion is off")
+        check(Motion.duration(0.2) == 0, "an animation group lands at once while motion is off")
+        Motion.isEnabled = true
+        panel.followMotion()
+        check(panel.animationBehavior == .documentWindow, "the panel animates again once motion is on")
+        check(Motion.duration(0.2) == 0.2, "an animation group keeps its duration while motion is on")
+
         print("Palette menu click tests: \(passes) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }

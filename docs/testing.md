@@ -733,6 +733,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - ⌥⌘C and ⇧⌘B toggle a code block and a quote; with Render Markdown off they do nothing special
 - Settings > Notes > Show Formatting Bar is disabled while Render Markdown is off, Settings search for
   "formatting" lands on it, and a backup round trip restores it
+- With Show in Menu Bar on, the Notes icon appears at once; a click shows Notes and a second click
+  hides it, and right-, Control- and Option-click open Create Note and Search Notes. Turning the
+  setting or Notes off removes the icon, and a ⌘-dragged position survives a relaunch
 - With VoiceOver, the bar reads as "Formatting" with each button named, lit ones as selected, the round
   button announcing Expanded or Collapsed, and the heading button its level; menu rows read their titles
   and the current one as selected
@@ -760,6 +763,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
   field first** rather than doing nothing
 - Editing a snippet file externally reloads it
+- In Search Snippets, ⌘. pins a snippet under **Pinned** and the highlight follows it; editing it in
+  Settings keeps the pin. ⌘↵ copies (asking for arguments first) and the copy lands in clipboard
+  history; with **Default action** on Copy, ↵ copies and ⌘↵ pastes. ⌘F shows the file in Finder
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
   expands to nothing
@@ -997,6 +1003,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Settings and backup
 
 - Every pane renders and the sidebar switches without flicker
+- Appearance › Show animations off: the palette, its ⌘K menu, a dialog, a HUD, Notes and a Settings
+  editor appear and leave at once, with no row or expansion animation; back on, they animate again
+  without a relaunch, and spinners keep turning either way
 - Closing and reopening Settings lands on the pane it was on, with Back disabled and the sidebar
   search empty;
   an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)

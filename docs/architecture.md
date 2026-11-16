@@ -138,6 +138,8 @@ each inserted by one preference and independent of the other, Blitz's carrying o
 state, the agent's waiting dot ([ui.md](ui.md#the-app-icon)); everything else visible is driven
 imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owned entirely by
 `Features/Extensions/`, through `ExtensionManager`, with no scene or lifecycle wiring in the core.
+Notes' optional item is an `NSStatusItem` too, owned by `NotesCoordinator`
+([features/notes.md](features/notes.md)), since a `MenuBarExtra` cannot act on a plain click.
 
 - **Command palette** — a borderless floating `NSPanel` (`Palette/PalettePanel.swift`) hosting SwiftUI
   via `NSHostingView`, managed by `PaletteWindowController`. It toggles between a compact bar and the
@@ -198,7 +200,9 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
 
 `NSAlert` is never used, and that is load-bearing. Appearance is a setting: `AppCore.applyAppearance()`
 assigns `NSApp.appearance` from `AppSettings.appearance`, and `.system` assigns `nil` so AppKit follows
-macOS by itself. Nothing else in the app sets an appearance.
+macOS by itself. Nothing else in the app sets an appearance. Animations take the same shape:
+`AppCore.applyMotion()` projects `AppSettings.animationsEnabled` into `Motion.isEnabled` and re-points
+every live `AnimatedPanel` (see [ui.md](ui.md#non-negotiable-invariants)).
 
 ## Observation and concurrency
 
@@ -220,8 +224,8 @@ everything that feature owns.
 Blitz/
   App/              @main, AppDelegate, AppCore — the composition root
   DesignSystem/     Theme (the token source), InterfaceMetrics, KeyCapChip, BarButton, Tooltip,
-                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/,
-                    Interaction/
+                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Motion,
+                    Scrolling/, Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
                     AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
                     HealthTicker, Memo, ActivationPolicy, AppActivation, ProcessExit,

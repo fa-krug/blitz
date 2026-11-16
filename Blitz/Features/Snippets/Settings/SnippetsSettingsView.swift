@@ -43,6 +43,16 @@ struct SnippetsSettingsView: View {
             }
 
             Group {
+                Section {
+                    Picker(selection: $settings.snippetDefaultAction) {
+                        ForEach(SnippetDefaultAction.allCases) { action in
+                            Text(action.title).tag(action)
+                        }
+                    } label: {
+                        SettingsRowTitle(.snippetsSnippets, "Default action")
+                        Text("↵ in Search Snippets does this; ⌘↵ does the other.")
+                    }
+                }
                 FeatureCommandsSection(owner: .snippets, anchor: .snippetsCommands)
                 library
                 libraryNotices
@@ -235,6 +245,8 @@ private struct SnippetEditorPanel: View {
     @State private var selection: TextSelection?
     @State private var isEnabled: Bool
     @State private var showsConfirmation: Bool
+    /// Not an editor field, but carried so a save never unpins.
+    private let isPinned: Bool
     @State private var errorMessage: String?
     @State private var isSaving = false
     /// Text brought in from elsewhere may hold braces the engine reads as placeholders.
@@ -250,6 +262,7 @@ private struct SnippetEditorPanel: View {
         _text = State(initialValue: snippet?.text ?? "")
         _isEnabled = State(initialValue: snippet?.isEnabled ?? true)
         _showsConfirmation = State(initialValue: snippet?.showsConfirmation ?? false)
+        isPinned = record?.snippet.isPinned ?? false
     }
 
     var body: some View {
@@ -403,7 +416,8 @@ private struct SnippetEditorPanel: View {
             text: text,
             keyword: trimmedOrNil(keyword),
             isEnabled: isEnabled,
-            showsConfirmation: showsConfirmation)
+            showsConfirmation: showsConfirmation,
+            isPinned: isPinned)
     }
 
     private func trimmedOrNil(_ value: String) -> String? {

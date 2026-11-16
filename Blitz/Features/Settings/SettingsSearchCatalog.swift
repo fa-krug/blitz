@@ -165,6 +165,9 @@ enum SettingsSearchCatalog {
             .appearanceAppearance, "Theme",
             keywords: ["dark", "light", "mode", "appearance"]),
         .init(
+            .appearanceAppearance, "Show animations",
+            keywords: ["motion", "transitions", "reduce motion", "effects", "instant"]),
+        .init(
             .appearanceAppearance, "Interface size",
             keywords: ["text size", "font size", "scale", "zoom", "bigger", "larger", "legible"]),
         .init(
@@ -507,6 +510,9 @@ enum SettingsSearchCatalog {
             .notesOptions, "Show Formatting Bar",
             keywords: ["toolbar", "format bar", "buttons", "bold", "heading", "markdown"]),
         .init(
+            .notesOptions, "Show in Menu Bar",
+            keywords: ["status bar", "menu bar icon", "status item", "toolbar icon"]),
+        .init(
             .notesOptions, "Notes Folder",
             keywords: ["location", "path", "dotfiles", "files", "markdown"]),
         .init(
@@ -521,6 +527,9 @@ enum SettingsSearchCatalog {
         .init(
             .snippetsSnippets, "Enable snippets",
             keywords: ["expansion", "keystrokes", "accessibility"]),
+        .init(
+            .snippetsSnippets, "Default action",
+            keywords: ["enter", "return", "paste", "copy", "primary"]),
         .init(
             group: .snippetsCommands, "Snippet commands",
             keywords: ["shortcut", "hotkey", "launcher", "browser"]),

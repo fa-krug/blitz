@@ -287,6 +287,11 @@ final class AppSettings {
         didSet { defaults.set(paletteDraggable, forKey: Key.paletteDraggable.rawValue) }
     }
 
+    /// Off, every surface changes at once; on, Reduce Motion still trims movement where it did.
+    var animationsEnabled: Bool {
+        didSet { defaults.set(animationsEnabled, forKey: Key.animationsEnabled.rawValue) }
+    }
+
     /// Where a drag left the panel's top-left, per display and relative to it.
     var palettePositions: [String: [Double]] {
         didSet { defaults.set(palettePositions, forKey: Key.palettePosition.rawValue) }
@@ -370,6 +375,10 @@ final class AppSettings {
         didSet { defaults.set(notesShowsFormattingBar, forKey: Key.notesShowsFormattingBar.rawValue) }
     }
 
+    var notesShowsInMenuBar: Bool {
+        didSet { defaults.set(notesShowsInMenuBar, forKey: Key.notesShowsInMenuBar.rawValue) }
+    }
+
     /// The notes folder as the user wrote it, `~` allowed; nil keeps it in Application Support.
     var notesFolder: String? {
         didSet { defaults.set(notesFolder, forKey: Key.notesFolder.rawValue) }
@@ -417,6 +426,12 @@ final class AppSettings {
     /// The snippets folder as the user wrote it, `~` allowed; nil keeps it in Application Support.
     var snippetsFolder: String? {
         didSet { defaults.set(snippetsFolder, forKey: Key.snippetsFolder.rawValue) }
+    }
+
+    var snippetDefaultAction: SnippetDefaultAction {
+        didSet {
+            defaults.set(snippetDefaultAction.rawValue, forKey: Key.snippetDefaultAction.rawValue)
+        }
     }
 
     var navigationEnabled: Bool {
@@ -730,6 +745,9 @@ final class AppSettings {
             || defaults.bool(forKey: Key.openOnCursorScreen.rawValue)
         autoSwitchInputSourceID = defaults.string(forKey: Key.autoSwitchInputSource.rawValue)
         paletteDraggable = defaults.bool(forKey: Key.paletteDraggable.rawValue)
+        animationsEnabled =
+            defaults.object(forKey: Key.animationsEnabled.rawValue) == nil
+            || defaults.bool(forKey: Key.animationsEnabled.rawValue)
         palettePositions =
             defaults.dictionary(forKey: Key.palettePosition.rawValue)
             as? [String: [Double]] ?? [:]
@@ -753,6 +771,7 @@ final class AppSettings {
         notesShowsFormattingBar =
             defaults.object(forKey: Key.notesShowsFormattingBar.rawValue) == nil
             || defaults.bool(forKey: Key.notesShowsFormattingBar.rawValue)
+        notesShowsInMenuBar = defaults.bool(forKey: Key.notesShowsInMenuBar.rawValue)
         notesFolder = defaults.string(forKey: Key.notesFolder.rawValue)
         aiEnabled = defaults.bool(forKey: Key.aiEnabled.rawValue)
         mcpEnabled = defaults.bool(forKey: Key.mcpEnabled.rawValue)
@@ -770,6 +789,9 @@ final class AppSettings {
             defaults.object(forKey: Key.snippetsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.snippetsShowInLauncher.rawValue)
         snippetsFolder = defaults.string(forKey: Key.snippetsFolder.rawValue)
+        snippetDefaultAction =
+            defaults.string(forKey: Key.snippetDefaultAction.rawValue)
+            .flatMap(SnippetDefaultAction.init) ?? .paste
         // Opt-in, unlike its siblings: until it is asked for, nothing about extensions is loaded.
         extensionsEnabled = defaults.bool(forKey: Key.extensionsEnabled.rawValue)
         extensionsShowInLauncher =

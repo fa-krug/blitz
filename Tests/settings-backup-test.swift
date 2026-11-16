@@ -61,6 +61,9 @@ struct SettingsBackupTest {
         check(
             "screenshot text recognition never rides a backup",
             excluded[AppSettingsKey.screenshotTextSearchEnabled.rawValue] != nil)
+        check(
+            "Show animations rides the settings backup",
+            mirrored["animationsEnabled"] == .animationsEnabled)
         check("notes enablement rides the settings backup", mirrored["notesEnabled"] == .notesEnabled)
         check(
             "Markdown rendering rides the settings backup",
@@ -68,6 +71,9 @@ struct SettingsBackupTest {
         check(
             "the formatting bar rides the settings backup",
             mirrored["notesShowsFormattingBar"] == .notesShowsFormattingBar)
+        check(
+            "the Notes menu bar item rides the settings backup",
+            mirrored["notesShowsInMenuBar"] == .notesShowsInMenuBar)
         check(
             "clipboard enablement rides the settings backup",
             mirrored["clipboardEnabled"] == .clipboardEnabled)

@@ -46,6 +46,7 @@ struct SettingsBackup: Codable {
         var openOnCursorScreen: Bool?
         // Safe to carry: it grants no permission class, just repositions the window.
         var paletteDraggable: Bool?
+        var animationsEnabled: Bool?
         var fileSearchEnabled: Bool?
         var fileSearchScopes: [String]?
         var fileSearchIgnorePatterns: [String]?
@@ -54,10 +55,12 @@ struct SettingsBackup: Codable {
         var notesEnabled: Bool?
         var notesRendersMarkdown: Bool?
         var notesShowsFormattingBar: Bool?
+        var notesShowsInMenuBar: Bool?
         // `snippetsEnabled` is absent: an import must not enable keystroke listening.
         var customCommandsEnabled: Bool?
         var customCommandsShowInLauncher: Bool?
         var snippetsShowInLauncher: Bool?
+        var snippetDefaultAction: String?
         // Safe to carry: it grants no permission class paste doesn't already prompt for.
         var navigationEnabled: Bool?
         var menuSearchDisabledApps: [String]?
@@ -162,6 +165,7 @@ extension SettingsBackup {
             rootSearchSensitivity: s.rootSearchSensitivity.rawValue,
             openOnCursorScreen: s.openOnCursorScreen,
             paletteDraggable: s.paletteDraggable,
+            animationsEnabled: s.animationsEnabled,
             fileSearchEnabled: s.fileSearchEnabled,
             fileSearchScopes: s.fileSearchScopes,
             fileSearchIgnorePatterns: s.fileSearchIgnorePatterns,
@@ -170,9 +174,11 @@ extension SettingsBackup {
             notesEnabled: s.notesEnabled,
             notesRendersMarkdown: s.notesRendersMarkdown,
             notesShowsFormattingBar: s.notesShowsFormattingBar,
+            notesShowsInMenuBar: s.notesShowsInMenuBar,
             customCommandsEnabled: s.customCommandsEnabled,
             customCommandsShowInLauncher: s.customCommandsShowInLauncher,
             snippetsShowInLauncher: s.snippetsShowInLauncher,
+            snippetDefaultAction: s.snippetDefaultAction.rawValue,
             navigationEnabled: s.navigationEnabled,
             menuSearchDisabledApps: s.menuSearchDisabledApps,
             menuSearchShowsAppleMenu: s.menuSearchShowsAppleMenu,
@@ -415,6 +421,10 @@ extension SettingsBackup {
             settings.paletteDraggable = flag
             count += 1
         }
+        if let flag = s.animationsEnabled {
+            settings.animationsEnabled = flag
+            count += 1
+        }
         // Writing through AppSettings is enough; AppCore's sinks re-project the rest.
         if let flag = s.fileSearchEnabled {
             settings.fileSearchEnabled = flag
@@ -448,6 +458,10 @@ extension SettingsBackup {
             settings.notesShowsFormattingBar = flag
             count += 1
         }
+        if let flag = s.notesShowsInMenuBar {
+            settings.notesShowsInMenuBar = flag
+            count += 1
+        }
         if let flag = s.customCommandsEnabled {
             settings.customCommandsEnabled = flag
             count += 1
@@ -458,6 +472,10 @@ extension SettingsBackup {
         }
         if let flag = s.snippetsShowInLauncher {
             settings.snippetsShowInLauncher = flag
+            count += 1
+        }
+        if let raw = s.snippetDefaultAction, let action = SnippetDefaultAction(rawValue: raw) {
+            settings.snippetDefaultAction = action
             count += 1
         }
         if let flag = s.navigationEnabled {

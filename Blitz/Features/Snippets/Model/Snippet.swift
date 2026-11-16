@@ -6,19 +6,22 @@ struct Snippet: Sendable, Hashable {
     var keyword: String?
     var isEnabled: Bool
     var showsConfirmation: Bool
+    var isPinned: Bool
 
     init(
         name: String,
         text: String,
         keyword: String? = nil,
         isEnabled: Bool = true,
-        showsConfirmation: Bool = false
+        showsConfirmation: Bool = false,
+        isPinned: Bool = false
     ) {
         self.name = name
         self.text = text
         self.keyword = keyword
         self.isEnabled = isEnabled
         self.showsConfirmation = showsConfirmation
+        self.isPinned = isPinned
     }
 
     /// How long a name taken from a clip's first line may run.
@@ -41,6 +44,7 @@ struct Snippet: Sendable, Hashable {
         var copy = self
         copy.name = name + " Copy"
         copy.keyword = nil
+        copy.isPinned = false
         var suffix = 2
         while taken.contains(copy.name.folding(options: .caseInsensitive, locale: nil)) {
             copy.name = "\(name) Copy \(suffix)"
@@ -48,6 +52,23 @@ struct Snippet: Sendable, Hashable {
         }
         return copy
     }
+}
+
+/// What ↵ does in Search Snippets; ⌘↵ runs the other one.
+enum SnippetDefaultAction: String, CaseIterable, Identifiable, Sendable {
+    case paste
+    case copy
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .paste: "Paste"
+        case .copy: "Copy to Clipboard"
+        }
+    }
+
+    var alternate: Self { self == .paste ? .copy : .paste }
 }
 
 /// Fingerprint of a snippet file's bytes, detecting an external edit before a save or delete.

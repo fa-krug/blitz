@@ -355,6 +355,7 @@ run palette-menu-click-test Blitz/Platform/Appearance.swift \
                            Blitz/Platform/WindowLevel.swift \
                            Blitz/Platform/NotificationToken.swift \
                            Blitz/DesignSystem/Interaction/KeyboardFocus.swift \
+                           Blitz/DesignSystem/Motion.swift \
                            Blitz/Palette/PalettePanel.swift
 run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
 run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
