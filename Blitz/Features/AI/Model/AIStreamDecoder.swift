@@ -61,6 +61,7 @@ struct AIStreamDecoder: Sendable {
     private let secrets: [String]
     private var parser = SSEParser()
     private var thinkTags = AIThinkTagDecoder()
+    private var responses: AIResponsesDecoder
     private var usage = AIUsage()
     private var partialToolCalls: [Int: PartialToolCall] = [:]
     /// Anthropic's server-run searches, kept apart so one can never reach Blitz's tool loop.
@@ -71,6 +72,7 @@ struct AIStreamDecoder: Sendable {
     init(shape: AIHTTPConfiguration.APIShape, secrets: [String] = []) {
         self.shape = shape
         self.secrets = secrets
+        responses = AIResponsesDecoder(secrets: secrets)
     }
 
     /// Assembled in index order, so a turn's calls reach the loop as the model listed them.
@@ -98,7 +100,8 @@ struct AIStreamDecoder: Sendable {
     private mutating func decode(_ payloads: [String]) throws -> [AIStreamEvent] {
         var events: [AIStreamEvent] = []
         for payload in payloads where !isTerminal {
-            if payload == "[DONE]" {
+            // Responses ends on `response.completed`; a `[DONE]` there is malformed, not success.
+            if payload == "[DONE]", shape != .openAIResponses {
                 isTerminal = true
                 if shape == .openAICompatible { events += thinkTags.finish() }
                 events.append(contentsOf: flushToolCalls())
@@ -108,6 +111,14 @@ struct AIStreamDecoder: Sendable {
             switch shape {
             case .openAICompatible:
                 events.append(contentsOf: try decodeOpenAI(payload))
+            case .openAIResponses:
+                do {
+                    events.append(contentsOf: try responses.decode(payload))
+                    isTerminal = responses.isTerminal
+                } catch {
+                    isTerminal = true
+                    throw error
+                }
             case .anthropic:
                 events.append(contentsOf: try decodeAnthropic(payload))
             }
@@ -128,7 +139,8 @@ struct AIStreamDecoder: Sendable {
             isTerminal = true
             throw AIProviderError.responseFailed(
                 AIProviderFailure.providerMessage(in: data)
-                    .map { AIProviderFailure.kept($0, secrets: secrets) } ?? Self.stopped)
+                    .map { AIProviderFailure.kept($0, secrets: secrets) }
+                    ?? AIProviderFailure.stopped)
         }
         var events: [AIStreamEvent] = []
         if let choice = chunk.choices?.first {
@@ -229,13 +241,11 @@ struct AIStreamDecoder: Sendable {
         }
     }
 
-    private static let stopped = "The provider stopped the response with an error."
-
     private static func anthropicErrorMessage(_ type: String?) -> String {
         switch type {
         case "authentication_error": return "API key rejected — check it in Settings."
         case "rate_limit_error": return "Rate limit reached — try again later."
-        default: return stopped
+        default: return AIProviderFailure.stopped
         }
     }
 }

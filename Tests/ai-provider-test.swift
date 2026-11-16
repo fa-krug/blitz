@@ -49,7 +49,7 @@ struct AIProviderTests {
         let openAI = AIRequestBody.make(
             turn,
             configuration: AIHTTPConfiguration(
-                provider: .openAI, baseURL: URL(string: "https://api.openai.com/v1")!,
+                provider: .openAICompatible, baseURL: URL(string: "https://api.openai.com/v1")!,
                 model: "gpt"))
         let parts =
             (openAI["messages"] as? [[String: Any]])?.first?["content"] as? [[String: Any]] ?? []
@@ -68,7 +68,7 @@ struct AIProviderTests {
         let documentOnly = AIRequestBody.make(
             AIRequest(messages: [AIMessage(role: .user, text: "", documents: [pdf])]),
             configuration: AIHTTPConfiguration(
-                provider: .openAI, baseURL: URL(string: "https://api.openai.com/v1")!,
+                provider: .openAICompatible, baseURL: URL(string: "https://api.openai.com/v1")!,
                 model: "gpt"))
         expect(
             ((documentOnly["messages"] as? [[String: Any]])?.first?["content"]
@@ -122,6 +122,10 @@ struct AIProviderTests {
         claudeControlFramesAnswerOneTool()
         aGatewayOffersNoneAsItsReasoningEffort()
         declaredLevelsNeverReachAVendorOrOutliveTheirDeclaration()
+        responsesStayOnOpenAIsOwnHost()
+        responsesBodiesCarryTurnsAttachmentsAndTools()
+        responsesStreamsReleaseOnlyCompletedCalls()
+        responsesFailuresNeverReleaseTools()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -390,7 +394,7 @@ struct AIProviderTests {
         let openAI = AIRequestBody.make(
             turn,
             configuration: AIHTTPConfiguration(
-                provider: .openAI, baseURL: URL(string: "https://api.openai.com/v1")!,
+                provider: .openAICompatible, baseURL: URL(string: "https://api.openai.com/v1")!,
                 model: "gpt-5"))
         let catalog = (openAI["tools"] as? [[String: Any]])?.first
         expect(
@@ -579,9 +583,252 @@ struct AIProviderTests {
             "OpenRouter at any URL does not, because its catalog names the levels")
     }
 
+    static let responses = AIHTTPConfiguration(
+        provider: .openAI, baseURL: URL(string: "https://api.openai.com/v1")!, model: "gpt-5")
+    static let readTool = AITool(
+        name: "files__read", description: "Read a file",
+        parameters: .object([
+            "type": .string("object"),
+            "properties": .object(["path": .object(["type": .string("string")])])
+        ]), origin: "Files")
+
+    /// Only OpenAI's own host takes Responses; a gateway behind the preset never migrates.
+    static func responsesStayOnOpenAIsOwnHost() {
+        for path in ["/v1", "/v1/", "/v1/chat/completions", "/v1/responses", "/v1/responses/"] {
+            let url = URL(string: "https://api.openai.com" + path)!
+            let native = AIHTTPConfiguration(provider: .openAI, baseURL: url, model: "any")
+            expect(native.shape == .openAIResponses, "direct OpenAI uses Responses at \(path)")
+            expect(
+                native.endpointURL.path == "/v1/responses",
+                "a saved base or full endpoint resolves Responses once at \(path)")
+            expect(
+                !AIConnection(provider: .openAI, baseURL: url.absoluteString).takesThinkingField,
+                "OpenAI's own host is never sent a gateway's thinking field at \(path)")
+        }
+        for (provider, url) in [
+            (AIProviderKind.openAI, "https://gateway.example/v1"),
+            (.openAI, "https://api.openai.com.example/v1"),
+            (.openAICompatible, "https://api.openai.com/v1"),
+            (.gemini, AIProviderKind.gemini.defaultBaseURL),
+            (.openRouter, AIProviderKind.openRouter.defaultBaseURL)
+        ] {
+            let compatible = AIHTTPConfiguration(
+                provider: provider, baseURL: URL(string: url)!, model: "gpt-5")
+            expect(compatible.shape == .openAICompatible, "\(url) keeps Chat Completions")
+            expect(
+                compatible.endpointURL.path.hasSuffix("/chat/completions"),
+                "\(url) keeps its completions endpoint")
+        }
+        let query = try? AIModelDiscovery.query(
+            provider: .openAI, baseURL: responses.endpointURL, apiKey: "", appTitle: "Tests")
+        expect(query?.request.url?.path == "/v1/models", "a full Responses URL still lists models")
+    }
+
+    static func responsesBodiesCarryTurnsAttachmentsAndTools() {
+        let image = AIImage(data: Data([1, 2]), mimeType: "image/png")
+        let pdf = AIDocument(data: Data("%PDF".utf8), mimeType: "application/pdf", name: "a.pdf")
+        let body = AIRequestBody.make(
+            AIRequest(
+                instructions: "Answer briefly",
+                messages: [
+                    AIMessage(role: .user, text: "read", images: [image], documents: [pdf]),
+                    AIMessage(role: .assistant, text: "Earlier answer")
+                ], tools: [readTool]), configuration: responses)
+        expect(body["store"] as? Bool == false, "nothing is stored server-side")
+        expect(body["stream"] as? Bool == true, "Responses streams")
+        expect(body["instructions"] as? String == "Answer briefly", "instructions are top-level")
+        expect(body["messages"] == nil, "Responses never receives Chat Completions messages")
+        expect(body["reasoning"] == nil, "no effort leaves the model's own default")
+        let input = body["input"] as? [[String: Any]] ?? []
+        let parts = input.first?["content"] as? [[String: Any]] ?? []
+        expect(
+            parts.compactMap { $0["type"] as? String } == ["input_text", "input_image", "input_file"],
+            "text, images and PDFs use native input parts")
+        expect(parts.dropFirst().first?["image_url"] as? String == image.dataURL, "an image keeps its data")
+        expect(
+            parts.last?["filename"] as? String == pdf.name
+                && parts.last?["file_data"] as? String == pdf.dataURL,
+            "a PDF keeps its name and data")
+        expect(
+            input.last?["role"] as? String == "assistant"
+                && input.last?["content"] as? String == "Earlier answer",
+            "an earlier answer is plain assistant input")
+        let function = (body["tools"] as? [[String: Any]])?.first ?? [:]
+        expect(
+            function["type"] as? String == "function" && function["name"] as? String == "files__read"
+                && function["function"] == nil,
+            "a function definition is flat, with no Chat Completions wrapper")
+        expect(function["strict"] as? Bool == false, "optional MCP arguments stay optional")
+        expect(
+            function["parameters"].map(JSONValue.init) == readTool.parameters,
+            "the server's schema is handed through unrewritten")
+
+        let plain = AIRequestBody.make(AIRequest(messages: []), configuration: responses)
+        expect(
+            plain["instructions"] == nil && plain["tools"] == nil,
+            "a turn with nothing to say adds no fields")
+        for (effort, sent) in [("high", "high"), ("default", nil)] as [(String, String?)] {
+            let reasoning = AIRequestBody.make(
+                AIRequest(messages: []),
+                configuration: AIHTTPConfiguration(
+                    provider: .openAI, baseURL: responses.baseURL, model: "gpt-5", effort: effort))
+            expect(
+                (reasoning["reasoning"] as? [String: String])?["effort"] == sent,
+                "effort \(effort) sends \(sent ?? "no reasoning field")")
+            expect(reasoning["reasoning_effort"] == nil, "and never the completions spelling")
+        }
+
+        let round = AIRequestBody.make(
+            AIRequest(messages: [
+                AIMessage(role: .user, text: "read it"),
+                AIMessage(
+                    role: .assistant, text: "Checking",
+                    toolCalls: [AIToolCall(id: "call_1", name: "files__read", arguments: "{}")]),
+                AIMessage(
+                    role: .tool, text: "",
+                    toolResult: AIToolResult(callID: "call_1", content: "contents", isError: false))
+            ]), configuration: responses)
+        let items = round["input"] as? [[String: Any]] ?? []
+        expect(
+            items.map { $0["type"] as? String ?? $0["role"] as? String ?? "?" }
+                == ["user", "assistant", "function_call", "function_call_output"],
+            "a tool round replays the question, the text, the call and its result in order")
+        expect(
+            items.dropFirst(2).first?["call_id"] as? String == "call_1" && items.dropFirst(2).first?["id"] == nil,
+            "a call is addressed by call_id and carries no item id, since nothing is stored")
+        expect(
+            items.last?["call_id"] as? String == "call_1"
+                && items.last?["output"] as? String == "contents",
+            "the result answers its call")
+    }
+
+    static func responsesStreamsReleaseOnlyCompletedCalls() {
+        let call: [String: Any] = [
+            "type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "files__read",
+            "arguments": "{}"
+        ]
+        let reasoning: [String: Any] = ["type": "reasoning", "id": "rs_1", "summary": []]
+        let deltas =
+            responsesFrame(["type": "response.output_item.added", "item": reasoning])
+            + responsesFrame(["type": "response.output_text.delta", "delta": "Checking…"])
+            + responsesFrame(["type": "response.function_call_arguments.delta", "delta": "{\"pa"])
+        let complete = responsesCompleted(
+            [reasoning, call],
+            usage: [
+                "input_tokens": 12, "output_tokens": 8,
+                "input_tokens_details": ["cached_tokens": 4],
+                "output_tokens_details": ["reasoning_tokens": 5]
+            ])
+        for slice in [1, 7, deltas.count + complete.count] {
+            var decoder = AIStreamDecoder(shape: .openAIResponses)
+            let before = feed(deltas, slice: slice, decoder: &decoder)
+            expect(!decoder.isTerminal, "deltas do not complete a response (slice \(slice))")
+            expect(
+                !before.contains {
+                    if case .toolCallRequested = $0 { return true } else { return false }
+                },
+                "partial arguments cannot invoke a tool")
+            let events = before + feed(complete, slice: slice, decoder: &decoder)
+            expect(
+                decoder.isTerminal && events.last == .finished,
+                "response.completed ends the stream")
+            expect(answerText(events) == "Checking…", "answer text streams once")
+            expect(events.contains(.thinking), "a reasoning item still reports thinking")
+            expect(
+                events.contains(
+                    .toolCallRequested(AIToolCall(id: "call_1", name: "files__read", arguments: "{}"))),
+                "the completed call is addressed by call_id, not the item id")
+            let usage = AIUsage(inputTokens: 12, outputTokens: 8, reasoningTokens: 5)
+            expect(events.contains(.usage(usage)), "cached input is already inside input_tokens")
+            expect(usage.contextTokens == 20, "so it is never counted twice")
+            expect(
+                (try? decoder.feed(complete))?.isEmpty == true,
+                "a repeated terminal event cannot repeat a call")
+        }
+        var refusal = AIStreamDecoder(shape: .openAIResponses)
+        let refused = try? refusal.feed(
+            responsesFrame(["type": "response.refusal.delta", "delta": "Cannot help"]))
+        expect(refused == [.text("Cannot help")], "a refusal is visible answer text")
+    }
+
+    static func responsesFailuresNeverReleaseTools() {
+        let call: [String: Any] = [
+            "type": "function_call", "call_id": "must-not-run", "name": "files__read",
+            "arguments": "{}"
+        ]
+        for type in ["response.failed", "response.incomplete", "error"] {
+            var decoder = AIStreamDecoder(shape: .openAIResponses, secrets: ["fixture-secret"])
+            let failure: [String: Any] =
+                type == "error"
+                ? ["type": type, "message": "Failed with fixture-secret"]
+                : [
+                    "type": type,
+                    "response": [
+                        "error": ["message": "Failed with fixture-secret"], "output": [call]
+                    ]
+                ]
+            do {
+                _ = try decoder.feed(responsesFrame(failure))
+                expect(false, "\(type) must throw")
+            } catch {
+                expect(decoder.isTerminal, "\(type) ends the decoder")
+                expect(
+                    !error.localizedDescription.contains("fixture-secret")
+                        && error.localizedDescription.contains("[redacted]"),
+                    "\(type) shows the provider's words with the key redacted")
+            }
+        }
+        var incomplete = AIStreamDecoder(shape: .openAIResponses)
+        do {
+            _ = try incomplete.feed(
+                responsesFrame([
+                    "type": "response.incomplete",
+                    "response": [
+                        "error": NSNull(), "incomplete_details": ["reason": "max_output_tokens"]
+                    ]
+                ]))
+            expect(false, "an output limit is a failed turn")
+        } catch {
+            expect(
+                error.localizedDescription.contains("max_output_tokens"),
+                "the incomplete reason is shown")
+        }
+        var closed = AIStreamDecoder(shape: .openAIResponses)
+        _ = try? closed.feed(responsesFrame(["type": "response.output_text.delta", "delta": "part"]))
+        _ = try? closed.finish()
+        expect(!closed.isTerminal, "EOF never turns a truncated response into success")
+        var done = AIStreamDecoder(shape: .openAIResponses)
+        do {
+            _ = try done.feed(Data("data: [DONE]\n\n".utf8))
+            expect(false, "the Chat Completions terminator is not a Responses completion")
+        } catch {
+            expect(
+                error as? AIProviderError == .malformedResponse,
+                "a [DONE] on Responses fails as malformed")
+        }
+    }
+
+    static func responsesFrame(_ value: [String: Any]) -> Data {
+        let json = (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]))
+        return Data("data: ".utf8) + (json ?? Data()) + Data("\n\n".utf8)
+    }
+
+    static func responsesCompleted(_ output: [[String: Any]], usage: [String: Any] = [:]) -> Data {
+        responsesFrame(["type": "response.completed", "response": ["output": output, "usage": usage]])
+    }
+
+    static func feed(_ data: Data, slice: Int, decoder: inout AIStreamDecoder) -> [AIStreamEvent] {
+        var events: [AIStreamEvent] = []
+        for offset in stride(from: 0, to: data.count, by: slice) {
+            let piece = data.subdata(in: offset..<min(offset + slice, data.count))
+            events += (try? decoder.feed(piece)) ?? []
+        }
+        return events
+    }
+
     static func providerPresetsResolveEndpoints() {
         let expected: [(AIProviderKind, String)] = [
-            (.openAI, "https://api.openai.com/v1/chat/completions"),
+            (.openAI, "https://api.openai.com/v1/responses"),
             (.anthropic, "https://api.anthropic.com/v1/messages"),
             (.gemini, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"),
             (.openRouter, "https://openrouter.ai/api/v1/chat/completions"),

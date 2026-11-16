@@ -29,8 +29,13 @@ enum AIProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
         }
     }
 
-    var apiShape: AIHTTPConfiguration.APIShape {
-        self == .anthropic ? .anthropic : .openAICompatible
+    /// Only OpenAI's own host speaks Responses; a gateway behind the preset keeps Chat Completions.
+    func apiShape(for baseURL: URL?) -> AIHTTPConfiguration.APIShape {
+        if self == .anthropic { return .anthropic }
+        if self == .openAI, baseURL?.host()?.lowercased() == "api.openai.com" {
+            return .openAIResponses
+        }
+        return .openAICompatible
     }
 }
 
@@ -88,7 +93,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
 
     /// A preset pointed away from its own API is a gateway; only a gateway takes a thinking field.
     var takesThinkingField: Bool {
-        provider.apiShape == .openAICompatible
+        provider.apiShape(for: URL(string: baseURL)) == .openAICompatible
             && baseURL.trimmingCharacters(in: .whitespacesAndNewlines) != provider.defaultBaseURL
     }
 
@@ -361,6 +366,7 @@ enum AIModelSelection: Codable, Equatable, Hashable, Sendable {
 struct AIHTTPConfiguration: Equatable, Sendable {
     enum APIShape: String, Sendable {
         case openAICompatible
+        case openAIResponses
         case anthropic
     }
 
@@ -381,10 +387,17 @@ struct AIHTTPConfiguration: Equatable, Sendable {
         self.disablesThinking = disablesThinking
     }
 
-    var shape: APIShape { provider.apiShape }
+    var shape: APIShape { provider.apiShape(for: baseURL) }
 
     var endpointURL: URL {
         switch shape {
+        case .openAIResponses:
+            if baseURL.path.hasSuffix("/responses") { return baseURL }
+            if baseURL.path.hasSuffix("/chat/completions") {
+                return baseURL.deletingLastPathComponent().deletingLastPathComponent()
+                    .appending(path: "responses")
+            }
+            return baseURL.appending(path: "responses")
         case .openAICompatible:
             if baseURL.path.hasSuffix("/chat/completions") { return baseURL }
             return baseURL.appending(path: "chat/completions")

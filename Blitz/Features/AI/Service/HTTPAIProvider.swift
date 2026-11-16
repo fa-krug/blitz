@@ -83,7 +83,7 @@ struct HTTPAIProvider: AIProvider {
     /// Every route's credential and its own identifying headers; the body knows none of this.
     private func applyAuthentication(to request: inout URLRequest) {
         switch configuration.shape {
-        case .openAICompatible:
+        case .openAICompatible, .openAIResponses:
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             if configuration.provider == .gemini {
                 request.setValue(Self.googleClientHeader, forHTTPHeaderField: "x-goog-api-client")

@@ -451,7 +451,7 @@ custom OpenAI-compatible route.
 | Grok | installed `grok --prompt-file` | user's Grok login |
 | OpenCode | installed `opencode run --standalone` (OpenCode 2) | providers already configured in OpenCode |
 | Cursor | installed `agent -p --mode ask` | user's Cursor login |
-| OpenAI API | OpenAI Chat Completions | `https://api.openai.com/v1` |
+| OpenAI API | OpenAI Responses at `api.openai.com`, Chat Completions anywhere else | `https://api.openai.com/v1` |
 | Anthropic Claude | Anthropic Messages | `https://api.anthropic.com` |
 | Google Gemini | Gemini's OpenAI-compatible API | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` |
@@ -461,6 +461,13 @@ The base URL stays editable for every preset because gateways and organization p
 destinations. `AIHTTPConfiguration.endpointURL` accepts a complete endpoint or appends the transport's
 completion path. Gemini requests identify Blitz through `x-goog-api-client`; OpenRouter requests
 carry the app title.
+
+Only the OpenAI preset pointed at `api.openai.com` speaks Responses (`APIShape.openAIResponses`):
+OpenAI's reasoning models refuse function tools on Chat Completions, which the agent's tools need.
+The same preset pointed at a gateway, and OpenAI Compatible at any address, keep Chat Completions,
+since a gateway is not known to implement Responses. A saved `/chat/completions` endpoint on
+OpenAI's own host resolves to `/responses` without rewriting the connection, and model discovery
+strips a full `/responses` endpoint back to `/models`.
 
 Each connection has an ordered, deduplicated list of exact model identifiers. While its editor is open,
 Blitz asks the configured provider for the models available to the entered key and uses the result
@@ -515,6 +522,20 @@ into answer text. `AIThinkTagDecoder` holds back a tag split across deltas, drop
 between the closing tag and the answer, and flushes an unclosed block as reasoning. Anthropic
 system messages are lifted into its top-level `system` field; the other HTTP routes keep system
 messages in the OpenAI message array.
+
+The Responses route is stateless: every request sets `store: false` and resends the turn as
+`input` items — text, `input_image` and `input_file` parts, `function_call` items by `call_id` and
+`function_call_output` results — with the instructions top-level and function tools flat, with
+`strict: false` so an MCP server's optional parameters stay optional. No output item is replayed:
+with nothing stored an item id points at nothing, and a reasoning item could only travel encrypted,
+so between tool rounds the model keeps its calls and text but not its reasoning. A `reasoning`
+object goes out only for an effort the route is handed, and since OpenAI's own host is a vendor
+API, which is offered no levels, it keeps the model's default. `AIResponsesDecoder` turns text and
+refusal deltas into text and a reasoning item into `.thinking` — no summary is requested, since
+OpenAI gates summaries on a verified organization — and releases function calls only from
+`response.completed`, never from argument deltas. A failed or incomplete response, an `error`
+event, a `[DONE]` or a stream that ends before completion fails the turn and releases no call.
+Its usage reports cached input inside `input_tokens`, so none is added on top.
 
 `AIProviderFactory` resolves the selection, validates an API endpoint, reads an API key at the last
 possible moment and returns `AppleIntelligenceProvider`, `HTTPAIProvider`, `CodexInstalledProvider`
@@ -1102,7 +1123,7 @@ transport code at all.
 | OpenCode command | never | a private file per picture, through `--file`, only for models whose catalog lists `image` input | never | the global config still loads — the `blitz` agent's deny-all rule drops every tool |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
 | OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
-| OpenAI | not offered | `image_url` part, assumed supported | `file` part with `filename` and a `file_data` data URL | `tools` + `role: "tool"` turns |
+| OpenAI | not offered | `input_image` part, assumed supported; `image_url` on a gateway | `input_file` part with `filename` and a `file_data` data URL; a `file` part on a gateway | flat `function` tools + `function_call_output` items; `tools` + `role: "tool"` turns on a gateway |
 | Gemini / compatible | not offered | `image_url` part, assumed supported | never — a gateway that has not implemented the part bills the upload before rejecting it | `tools` + `role: "tool"` turns |
 | Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
 
