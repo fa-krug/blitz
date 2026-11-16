@@ -10,6 +10,7 @@ enum AIProviderFactory {
         subscription: CodexSubscriptionManager,
         installedAI: InstalledAIManager,
         keyStore: KeychainSecretStore = .aiAPIKeys,
+        headerStore: KeychainSecretStore = .aiRequestHeaders,
         guardrails: SystemLanguageModel.Guardrails = .default,
         toolServers: AIToolServerSession? = nil
     ) throws -> any AIProvider {
@@ -69,7 +70,15 @@ enum AIProviderFactory {
             } catch {
                 throw AIProviderError.unavailable("The API key could not be read from Keychain.")
             }
-            guard AIEndpointPolicy.isLoopback(connection.baseURL) || !key.isEmpty else {
+            let headers: [String: String]
+            do {
+                headers = try headerStore.values(for: connection.id)
+            } catch {
+                throw AIProviderError.unavailable(
+                    "The request headers could not be read from Keychain.")
+            }
+            guard AIEndpointPolicy.isLoopback(connection.baseURL) || !key.isEmpty || !headers.isEmpty
+            else {
                 throw AIProviderError.unavailable("Add an API key in Settings.")
             }
             let effort = connection.offeredEffort(savedEffort, for: model)
@@ -77,7 +86,8 @@ enum AIProviderFactory {
                 configuration: AIHTTPConfiguration(
                     provider: connection.provider, baseURL: baseURL, model: model, effort: effort,
                     disablesThinking: effort == AIConnection.ReasoningOptions.noEffort
-                        && connection.takesThinkingField),
+                        && connection.takesThinkingField,
+                    headers: headers),
                 apiKey: key)
         }
     }

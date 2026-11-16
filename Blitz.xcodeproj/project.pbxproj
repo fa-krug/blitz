@@ -270,6 +270,7 @@
 		4BA5A0ABAC11F7ECC409424B /* CurrencyFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FEBFCB26407BE08EFF7523 /* CurrencyFeed.swift */; };
 		4BF1A5F535C1D29B8831440E /* ExtensionGridGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4C18ED37957C170AACF222 /* ExtensionGridGeometry.swift */; };
 		4C50F7A37899013B04025CA0 /* FormDraftMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F22ED027B6DDA64EF9FA091 /* FormDraftMemory.swift */; };
+		4C5CB7A7299CA6C158D8DB3C /* AIRequestHeaders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12C390AEE7E922909A6817A5 /* AIRequestHeaders.swift */; };
 		4D107D4D2FD17CE2DD883028 /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975EE263236783DAD60A7F2A /* AIProvider.swift */; };
 		4D5036C26D85703E50099D6B /* AppleShortcutRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AA725BCBDA38FB342ECEA9 /* AppleShortcutRunner.swift */; };
 		4D5E22EF5CF0D0A5B71B93E3 /* QuickActionPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0AE84F5689B1D4F2E5C276 /* QuickActionPrompt.swift */; };
@@ -1023,6 +1024,7 @@
 		12A5288C28C5A6AF34E05844 /* HyperKeyTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperKeyTap.swift; sourceTree = "<group>"; };
 		12B4DA6A1559BCB312E78130 /* AICitationLinker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICitationLinker.swift; sourceTree = "<group>"; };
 		12BE604FC45965A453B051B3 /* FileSearchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSearchSession.swift; sourceTree = "<group>"; };
+		12C390AEE7E922909A6817A5 /* AIRequestHeaders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRequestHeaders.swift; sourceTree = "<group>"; };
 		12DC600FCE99F8F2D45BFBBE /* QuicklinkListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkListView.swift; sourceTree = "<group>"; };
 		12DE90A39A3189C4D241ED98 /* CalendarToolEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarToolEvent.swift; sourceTree = "<group>"; };
 		12EA83E408EB615090D6627A /* FileIconStamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileIconStamp.swift; sourceTree = "<group>"; };
@@ -3609,6 +3611,7 @@
 				23FD4CBCBCAF324184D8855D /* AIProviderFailure.swift */,
 				A6B87F7B3BEF818EDEA92E86 /* AIRequest.swift */,
 				2D32A16652A27B25763EE637 /* AIRequestBody.swift */,
+				12C390AEE7E922909A6817A5 /* AIRequestHeaders.swift */,
 				6C848A6530EFC63A793762C6 /* AIResponsesDecoder.swift */,
 				EA56AAB699E3CBB1C0F88A23 /* AIRetention.swift */,
 				45634FDB70EA3CC99A84EFF4 /* AIStreamDecoder.swift */,
@@ -4224,6 +4227,7 @@
 				96F3E1A159258217AD6151AA /* AIProvidersSettingsView.swift in Sources */,
 				4DD2EEB9E7551F13E2F5F9F7 /* AIRequest.swift in Sources */,
 				23B5A267A798FCCAF37A565A /* AIRequestBody.swift in Sources */,
+				4C5CB7A7299CA6C158D8DB3C /* AIRequestHeaders.swift in Sources */,
 				D46E2E2957C2144B17DF174A /* AIResponsesDecoder.swift in Sources */,
 				6781DFC713E014EF7EAFB584 /* AIRetention.swift in Sources */,
 				3741BA89C73ADC3D121C07C8 /* AIScreen.swift in Sources */,

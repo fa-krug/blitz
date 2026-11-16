@@ -79,6 +79,7 @@ struct AIProviderTests {
     static func main() {
         providerPresetsResolveEndpoints()
         modelCatalogBuildsProviderRequests()
+        requestHeadersAreValidated()
         modelCatalogDecodesProviderResponses()
         modelCatalogBrowsesAndSearches()
         exactMatchNamesOnlyAWholeModel()
@@ -1017,6 +1018,52 @@ struct AIProviderTests {
         expect(
             local?.url?.absoluteString == "http://localhost:11434/models",
             "a root endpoint appends one model path separator")
+        let headerOnly = try? AIModelDiscovery.query(
+            provider: .anthropic, baseURL: URL(string: "https://gateway.example.com")!,
+            apiKey: "", appTitle: "Blitz",
+            headers: ["anthropic-version": "2024-01-01", "X-Tenant": "acme"]
+        ).request
+        expect(
+            headerOnly?.value(forHTTPHeaderField: "x-api-key") == nil,
+            "an empty key sends no credential header")
+        expect(
+            headerOnly?.value(forHTTPHeaderField: "Anthropic-Version") == "2024-01-01"
+                && headerOnly?.value(forHTTPHeaderField: "x-tenant") == "acme",
+            "custom headers are sent and replace a default of the same name in any case")
+    }
+
+    static func requestHeadersAreValidated() {
+        typealias Headers = AIRequestHeaders
+        expect(
+            (try? Headers.validated([
+                (" X-Tenant ", " acme\n"), ("", " "), ("Authorization", "Bearer\ttoken")
+            ])) == ["X-Tenant": "acme", "Authorization": "Bearer\ttoken"],
+            "names and values are trimmed, a blank row is dropped and a tab is kept")
+        expect(
+            (try? Headers.validated([("", "value")])) == nil
+                && (try? Headers.validated([("X Tenant", "acme")])) == nil,
+            "a missing name or one outside the HTTP token set is refused")
+        expect(
+            (try? Headers.validated([("X-Tenant", "a"), ("x-tenant", "b")])) == nil,
+            "a name repeated in another case is refused")
+        expect(
+            (try? Headers.validated([("X-Tenant", "a\r\nX-Injected: b")])) == nil,
+            "a value cannot carry a line break into another header")
+        let headers = ["X-Tenant": "tenant-secret-value"]
+        let gateway = AIHTTPConfiguration(
+            provider: .openAICompatible, baseURL: URL(string: "https://gateway.example/v1")!,
+            model: "m", headers: headers)
+        expect(gateway.headers == headers, "a route carries its connection's headers")
+        var decoder = AIStreamDecoder(shape: .openAICompatible, secrets: Array(headers.values))
+        do {
+            _ = try decoder.feed(
+                Data((#"data: {"error":{"message":"bad tenant tenant-secret-value"}}"# + "\n\n").utf8))
+            expect(false, "a mid-stream error throws")
+        } catch {
+            expect(
+                !error.localizedDescription.contains("tenant-secret-value"),
+                "a header value handed over as a secret is redacted from a provider's error")
+        }
     }
 
     static func modelCatalogDecodesProviderResponses() {
@@ -1208,38 +1255,51 @@ struct AIProviderTests {
         local.baseURL = "http://localhost:11434/v1"
         var moved = remote
         moved.baseURL = "https://gateway.example.com/v1"
-        typealias Policy = AIConnectionKeyPolicy
+        func resolve(
+            _ key: String, _ connection: AIConnection, saved: AIConnection?, hasStoredKey: Bool,
+            hasHeaders: Bool = false
+        ) -> AIConnectionKeyPolicy.Outcome {
+            AIConnectionKeyPolicy.resolve(
+                enteredKey: key, connection: connection, saved: saved, hasStoredKey: hasStoredKey,
+                hasHeaders: hasHeaders)
+        }
 
         expect(
-            Policy.resolve(enteredKey: "  sk-new \n", connection: remote, saved: nil, hasStoredKey: false)
+            resolve("  sk-new \n", remote, saved: nil, hasStoredKey: false)
                 == .store("sk-new"),
             "a typed key is stored trimmed")
         expect(
-            Policy.resolve(enteredKey: "sk-new", connection: moved, saved: remote, hasStoredKey: true)
+            resolve("sk-new", moved, saved: remote, hasStoredKey: true)
                 == .store("sk-new"),
             "a retarget that brings its own key replaces the old one")
         expect(
-            Policy.resolve(enteredKey: " ", connection: moved, saved: remote, hasStoredKey: true)
+            resolve(" ", moved, saved: remote, hasStoredKey: true)
                 == .reject("Enter an API key for this endpoint — the saved key stays with the old one."),
             "a remote retarget without a key is refused, so the old key never reaches the new host")
         expect(
-            Policy.resolve(enteredKey: "", connection: local, saved: remote, hasStoredKey: true)
+            resolve("", local, saved: remote, hasStoredKey: true)
                 == .removeStored,
             "a retarget to loopback drops the key issued for the remote endpoint")
         expect(
-            Policy.resolve(enteredKey: "", connection: remote, saved: nil, hasStoredKey: false)
+            resolve("", remote, saved: nil, hasStoredKey: false)
                 == .reject("Enter an API key for this remote provider."),
             "a new remote connection needs a key")
         expect(
-            Policy.resolve(enteredKey: "", connection: local, saved: nil, hasStoredKey: false) == .keep,
+            resolve("", local, saved: nil, hasStoredKey: false) == .keep,
             "a loopback endpoint saves without a key")
         expect(
-            Policy.resolve(enteredKey: "", connection: remote, saved: remote, hasStoredKey: true) == .keep,
+            resolve("", remote, saved: remote, hasStoredKey: true) == .keep,
             "an unchanged endpoint keeps its saved key")
         expect(
-            Policy.resolve(enteredKey: "", connection: moved, saved: remote, hasStoredKey: false)
+            resolve("", moved, saved: remote, hasStoredKey: false)
                 == .reject("Enter an API key for this remote provider."),
             "with no saved key there is nothing to retarget, only a missing key")
+        expect(
+            resolve("", remote, saved: nil, hasStoredKey: false, hasHeaders: true) == .keep,
+            "request headers can authenticate a remote endpoint without a key")
+        expect(
+            resolve("", moved, saved: remote, hasStoredKey: true, hasHeaders: true) == .removeStored,
+            "a retarget authenticated by headers drops the old key rather than carry it over")
     }
 
     static func sseFramesSurviveSplits() {
