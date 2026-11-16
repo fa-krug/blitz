@@ -5,6 +5,27 @@ import Foundation
 @Observable
 final class HotKeyManager {
     var onTogglePalette: (() -> Void)?
+    var onDictationPressed: (() -> Void)?
+    /// A hold-to-talk binding coming up: the Carbon key-up, or the held modifier's release.
+    var onDictationReleased: (() -> Void)?
+    /// A hold interrupted by another key, modifier or click, which must insert nothing.
+    var onDictationCancelled: (() -> Void)?
+    /// Mirrors `AppSettings.dictationEnabled`, so a disabled feature reserves no modifier.
+    var dictationEnabled = false {
+        didSet {
+            guard dictationEnabled != oldValue else { return }
+            if !dictationEnabled { onDictationCancelled?() }
+            syncModifierTaps()
+        }
+    }
+    /// Mirrors `AppSettings.dictationMode == .hold`: the dictation binding is held, not tapped.
+    var dictationHoldsToTalk = false {
+        didSet {
+            guard dictationHoldsToTalk != oldValue else { return }
+            onDictationCancelled?()
+            syncModifierTaps()
+        }
+    }
     /// The launcher's own command funnel, so a shortcut and a palette row run the same thing.
     var onRunCommand: ((CommandID) -> Void)?
     var onRunCustomCommand: ((UUID, [String: String]) -> Void)?
@@ -28,6 +49,8 @@ final class HotKeyManager {
         didSet {
             guard recordingAction != oldValue else { return }
             let recording = recordingAction != nil
+            // A paused engine never reports a held dictation's release, so end the hold now.
+            if recording, dictationHoldsToTalk { onDictationCancelled?() }
             center.isPaused = recording
             modifierTapMonitor.isPaused = recording
             if let recordingAction {
@@ -161,6 +184,7 @@ final class HotKeyManager {
     /// Persists or clears the binding and swaps live registration.
     func setBinding(_ binding: HotKeyBinding?, for action: HotKeyAction) {
         let previous = bindings[action]
+        if action == .dictation, binding != previous { onDictationCancelled?() }
         if let binding,
             let data = try? encoder.encode(binding),
             let json = String(data: data, encoding: .utf8)
@@ -199,7 +223,7 @@ final class HotKeyManager {
             index(id, bound: binding != nil, key: boundSnippetKey)
         case .extensionCommand(let entryID):
             index(entryID, bound: binding != nil, key: boundExtensionCommandKey)
-        case .togglePalette, .command, .systemAction, .windowCommand:
+        case .togglePalette, .dictation, .command, .systemAction, .windowCommand:
             break
         }
         candidateActionsCache = nil
@@ -256,6 +280,8 @@ final class HotKeyManager {
         switch action {
         case .togglePalette:
             return "App Launcher"
+        case .dictation:
+            return "Dictation"
         case .command(let id):
             return id.name
         case .app(let bundleID), .settingsPane(let bundleID):
@@ -298,6 +324,7 @@ final class HotKeyManager {
         modifierTaps = [:]
         for action in candidateActions {
             guard let binding = binding(for: action), binding.usesModifierTapMonitor else { continue }
+            if action == .dictation, !dictationEnabled { continue }
             modifierTaps[binding] = action
         }
         modifierTapMonitor.update(bound: Set(modifierTaps.keys))
@@ -309,6 +336,7 @@ final class HotKeyManager {
         guard allowsAction?(action) ?? true else { return }
         switch action {
         case .togglePalette: onTogglePalette?()
+        case .dictation: onDictationPressed?()
         case .command(let id): onRunCommand?(id)
         case .app(let bundleID): AppLauncher.toggle(bundleID: bundleID)
         case .settingsPane(let bundleID): AppLauncher.openSettingsPane(bundleID: bundleID)

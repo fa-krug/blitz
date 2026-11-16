@@ -22,6 +22,14 @@ enum HotKeyBinding: Hashable, Sendable, Codable {
         return nil
     }
 
+    /// Hold-to-talk needs a release to watch for: a Carbon chord's key-up, or Globe coming up.
+    var supportsHold: Bool {
+        switch self {
+        case .combo, .globe: true
+        case .doubleTap, .doubleGlobe: false
+        }
+    }
+
     var usesModifierTapMonitor: Bool {
         switch self {
         case .combo: false
