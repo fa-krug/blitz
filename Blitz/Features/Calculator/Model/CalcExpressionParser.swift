@@ -258,7 +258,9 @@ struct CalcExpressionParser {
                 unit: CalcUnits.baseUnits[dimension] ?? inverted)
         case (.unit(let lhs), .unit(let rhs)):
             if !lhs.isCompatible(with: rhs) || lhs.currency != nil || rhs.currency != nil {
-                return combine(left, right, dividing: true)
+                var ratio = combine(left, right, dividing: true)
+                ratio?.isFuelRatio = Set([lhs.category, rhs.category]) == [.volume, .length]
+                return ratio
             }
             guard lhs.category != .temperature else {
                 return fail("Division of temperature values is not supported.")
@@ -616,6 +618,12 @@ struct CalcExpressionParser {
             return nil
         case .unit(let from):
             if let to = CalcUnits.byName[targetName] ?? compoundTarget(targetName) {
+                if !from.isCompatible(with: to), CalcUnits.reciprocal(from, to, fuelRatio: value.isFuelRatio)
+                {
+                    guard let output = CalcUnits.reciprocalValue(value.effective, from: from, to: to)
+                    else { return nil }
+                    return CalcValue(amount: output, kind: .unit(to))
+                }
                 guard from.isCompatible(with: to) else {
                     return fail(
                         "Cannot convert \(from.category.displayName) to \(to.category.displayName).")
