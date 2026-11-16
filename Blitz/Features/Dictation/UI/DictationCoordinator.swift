@@ -330,7 +330,6 @@ final class DictationCoordinator {
         liveTask = nil
         pendingLive?.cancel()
         let current = token
-        let pendingInstall = installTask
         transcriptionTask = Task { [weak self] in
             guard let self else { return }
             await pendingLive?.value
@@ -345,7 +344,8 @@ final class DictationCoordinator {
                 return
             }
             do {
-                try await pendingInstall?.value
+                // Polled, not awaited: a download outlives a cancel, which must not wait for it.
+                while installTask != nil { try await Task.sleep(for: .milliseconds(100)) }
                 let transcript = try await DictationTranscriber.transcribe(tail, locale: locale)
                 guard token == current else { return }
                 deliver(transcript, to: destination, token: current)
