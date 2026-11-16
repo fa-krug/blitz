@@ -706,10 +706,12 @@ and the Actions menu's own chords, and dies with the window.
   The title bar keeps the system's own band, as a native document window's does.
   Transcript text runs `spacing.chatLine` apart, both surfaces. `ChatComposerTextView` is an `NSTextView`, not a `TextEditor`: its delegate sees
   `insertNewline:` only outside input-method composition, so Return sends and ⇧↩ or ⌥↩ breaks the
-  line without Return ever stealing an IME's confirm. It grows with its text to
+  line without Return ever stealing an IME's confirm. Its text view is a `ComposerTextView`, an
+  `InjectableTextView` like a note's, so Dictation, snippets and Quick Actions write into it in
+  process. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
   menu, the mode pill ([Agent](agent.md#the-session-scope-and-the-composer)), a context gauge,
-  and Send/Stop; reasoning, tools and web search live in the ⌘K menu. While a
+  a mic while [Dictation](dictation.md) is on, and Send/Stop; reasoning, tools and web search live in the ⌘K menu. While a
   question waits, Send is Answer, the placeholder reads "Answer the question…", and Stop gets a
   button of its own beside it.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the

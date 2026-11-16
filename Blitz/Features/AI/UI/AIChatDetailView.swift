@@ -117,6 +117,7 @@ private struct AIChatComposer: View {
     let chat: AIChatState
     let coordinator: AIChatCoordinator
     @Binding var showsContext: Bool
+    @State private var editor = ComposerTextViewHandle()
 
     private var canSend: Bool {
         if let question = chat.pendingQuestion { return question.answer(typing: chat.draft) != nil }
@@ -142,7 +143,9 @@ private struct AIChatComposer: View {
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                 }
-                ChatComposerTextView(text: $chat.draft, focusKey: chat.session.id, onSubmit: submit)
+                ChatComposerTextView(
+                    text: $chat.draft, focusKey: chat.session.id, handle: editor,
+                    onInvalidate: { coordinator.dictation.cancel(in: $0) }, onSubmit: submit)
             }
             controls
         }
@@ -184,6 +187,9 @@ private struct AIChatComposer: View {
             Spacer(minLength: 0)
             ContextGauge(
                 report: coordinator.contextReport(for: chat, detailed: false), hovered: $showsContext)
+            if coordinator.dictation.isEnabled {
+                DictationButton(dictation: coordinator.dictation, editor: editor)
+            }
             if isAnswering { stopButton }
             sendButton
         }
@@ -251,6 +257,41 @@ private struct ComposerIconButton: View {
         .buttonStyle(.borderless)
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+/// Only while Dictation is on: a click starts it into this field, another click inserts the text.
+private struct DictationButton: View {
+    let dictation: DictationCoordinator
+    let editor: ComposerTextViewHandle
+
+    var body: some View {
+        let field = dictation.field
+        let session = field?.editor == editor.textView.map(ObjectIdentifier.init) ? field : nil
+        Button {
+            if let textView = editor.textView { dictation.toggle(into: textView) }
+        } label: {
+            Group {
+                if session?.isTranscribing == true {
+                    ProgressView().controlSize(.small)
+                } else if session != nil {
+                    Image(systemName: "waveform")
+                        .symbolEffect(.variableColor.iterative)
+                        .foregroundStyle(Color.accentColor)
+                } else {
+                    Image(systemName: "mic")
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(session?.isTranscribing == true)
+        .help(help(session))
+        .accessibilityLabel(session == nil ? "Dictate" : "Stop Dictating")
+    }
+
+    private func help(_ session: DictationField?) -> String {
+        guard let session else { return "Dictate" }
+        return session.isTranscribing ? "Transcribing…" : "Stop and insert the text  ↵"
     }
 }
 
