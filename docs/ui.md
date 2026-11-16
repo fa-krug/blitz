@@ -917,10 +917,13 @@ See [features/window-layouts.md](features/window-layouts.md#the-editor).
 
 `ShortcutRecorder` is a `shortcutRecorder` (**120pt**) field showing only the binding — one cap per
 modifier and one for the key (`HotKeyBinding.keycaps`), with a Hyper chord's modifiers collapsed into
-the single ✦ cap. Recording is narrated by
+the single ✦ cap. A sided modifier, which only Dictation records, is one cap whose glyph carries a
+small `L` or `R` prefix (`KeyCapChip`'s `prefix`, `KeyCapChip.Label` in the field), and VoiceOver
+hears it as "Right Option". Recording is narrated by
 `ShortcutRecorderPopover`, a small **132 × 82** callout above it: caps, one label line, an `esc` cap in
 the top-left corner. Its fixed frame shows the prompt (`⌥ A` at half opacity, "Type a
-shortcut"), live held keys, a pending second Globe tap, or a conflict (rejected caps + owner, orange).
+shortcut"), live held keys, a pending second Globe tap, Dictation's held or tapped sided modifier
+("Release to record", "Tap again to double"), or a conflict (rejected caps + owner, orange).
 
 - **An ancestor draws it.** The open recorder publishes its bounds via `ShortcutRecorderAnchorKey`;
   `.shortcutRecorderPopoverHost()` sits on `SettingsDetailView` — one host above every pane's
