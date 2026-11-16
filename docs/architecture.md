@@ -31,7 +31,7 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ HotKeySpelling · WindowManagementFileFormat ·                              │
 │ MeetingLink · MeetingEvent · UpcomingWindow · MeetingDay · MenuBarSummary  │
 │ AutoJoinPolicy · EventDraft ·                                              │
-│ Reminders/Model/* · Contacts/Model/* ·                                     │
+│ Reminders/Model/* · Contacts/Model/* · Dictation/Model/* ·                 │
 │ MenuSearch{Item,Shortcut,Query,Target} · MenuTreeNode ·                    │
 │ MenuSnapshotPolicy ·                                                       │
 │ WindowSwitch{Entry,Order,Query}                                            │
@@ -52,7 +52,8 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ ContactsStore · ContactLauncher ·                                          │
 │ AXMenuAccess · WindowZOrder · WindowSwitchSweep ·                          │
 │ AppleShortcutRunner · SettingsFileRepository · SettingsFileMonitor ·       │
-│ WindowManagementSettingsFile                                               │
+│ WindowManagementSettingsFile · DictationCapture · DictationTranscriber ·   │
+│ DictationAudioDucker · DictationCueRunner                                  │
 └──────────────────────────────────┬─────────────────────────────────────────┘
                                    │ published through
 ┌─ OBSERVABLE STATE ───────────────▼─────────────────────────────────────────┐
@@ -192,6 +193,10 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
   join and doubles as auto join's confirmation; `CameraCoordinator`, owned by `AppCore`, is the
   standalone `Open Camera` and `Scan QR Code` commands. See [features/camera.md](features/camera.md) and
   [features/calendar.md](features/calendar.md).
+- **The dictation capsule** — a borderless, nonactivating `NSPanel` at `.floating`, owned by
+  `DictationCoordinator` through `DictationPanelController`. It becomes key so Return and Escape
+  reach it, while the app being dictated into stays active. See
+  [features/dictation.md](features/dictation.md).
 - **HUDs** are separate, because a dialog asks and a HUD reports: `MessageHUDController` (the pill) and
   `VolumeHUDController` (the level box), both over a shared `HUDPresenter` that owns the
   one-at-a-time, auto-dismiss and fade policy. See [ui.md](ui.md#dialogs--hud).
@@ -236,7 +241,7 @@ Blitz/
   Features/
     PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
     Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Camera/ Emoji/ Dictionary/
-    FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/
+    FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/ Dictation/
     AppleShortcuts/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ TextInjection/
     WindowManagement/ AI/ QuickActions/ MCP/ Backup/ Onboarding/ Updates/ Settings/
     Extensions/

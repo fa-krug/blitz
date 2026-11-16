@@ -221,6 +221,9 @@ final class AppCore {
         paletteCoordinator: paletteCoordinator)
     @ObservationIgnored private(set) lazy var updateCoordinator = UpdateCoordinator(
         store: updateChecker, core: self)
+    @ObservationIgnored private(set) lazy var dictationCoordinator = DictationCoordinator(
+        settings: settings, hotKeys: hotKeys, injector: textInjector,
+        settingsCoordinator: settingsCoordinator, core: self)
     @ObservationIgnored private(set) lazy var quickActionCoordinator = QuickActionCoordinator(
         settings: settings, store: quickActionSettings, customActions: customQuickActions,
         injector: textInjector, appIndex: appIndex, hotKeys: hotKeys, favorites: favorites,
@@ -439,6 +442,15 @@ final class AppCore {
                 guard settings.hyperKey != .none else { return nil }
                 return KeyShortcut.hyperChord(includesShift: settings.hyperKeyIncludesShift)
             }
+            hotKeys.onDictationPressed = { [weak self] in self?.dictationCoordinator.pressed() }
+            hotKeys.onDictationReleased = { [weak self] in self?.dictationCoordinator.released() }
+            hotKeys.onDictationCancelled = { [weak self] in
+                self?.dictationCoordinator.holdCancelled()
+            }
+            // Before the tap is armed, so a disabled Dictation never reserves its modifier.
+            dictationCoordinator.applyEnabled()
+            // Unconditional: a crash mid-dictation leaves the output ducked, Dictation on or off.
+            dictationCoordinator.recoverVolume()
             SystemActionRunner.onAsyncFailure = { [weak self] id, failure in
                 self?.systemActionCoordinator.presentSystemActionFailure(id: id, failure: failure)
             }
@@ -608,6 +620,8 @@ final class AppCore {
         windowLayoutCoordinator.prepareForTermination()
         roomCoordinator.prepareForTermination()
         inputSourceSwitcher.endSession()
+        // Before the injector: a pending insertion must not outlive the session that made it.
+        dictationCoordinator.prepareForTermination()
         textInjector.prepareForTermination()
         snippetListener.stop()
         snippetsStore.stop()
@@ -749,6 +763,15 @@ final class AppCore {
         track({ _ = $0.calendarEnabled }, reproject: { $0.calendarCoordinator.applyEnabled() })
         track({ _ = $0.remindersEnabled }, reproject: { $0.remindersCoordinator.applyEnabled() })
         track({ _ = $0.contactsEnabled }, reproject: { $0.contactsCoordinator.applyEnabled() })
+        track(
+            { _ = $0.dictationEnabled }, reproject: { $0.dictationCoordinator.applyEnabled() })
+        track({ _ = $0.dictationMode }, reproject: { $0.dictationCoordinator.applyMode() })
+        track(
+            { _ = $0.dictationLanguage },
+            reproject: {
+                guard $0.settings.dictationEnabled else { return }
+                $0.dictationCoordinator.refreshLanguage()
+            })
         track(
             {
                 _ = $0.calendarShowInLauncher

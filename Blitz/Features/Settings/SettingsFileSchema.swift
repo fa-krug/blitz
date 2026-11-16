@@ -81,6 +81,13 @@ enum SettingsFileSchema {
         case .notesFolder: return bind(settings, \.notesFolder, accept: folder)
         case .snippetsShowInLauncher: return bind(settings, \.snippetsShowInLauncher)
         case .snippetsFolder: return bind(settings, \.snippetsFolder, accept: folder)
+        case .dictationMode: return bind(settings, \.dictationMode)
+        case .dictationLanguage: return bind(settings, \.dictationLanguage, accept: language)
+        case .dictationDestination: return bind(settings, \.dictationDestination)
+        case .dictationPlaysSounds: return bind(settings, \.dictationPlaysSounds)
+        case .dictationLiveInsertion: return bind(settings, \.dictationLiveInsertion)
+        case .dictationAdaptsCapitalization:
+            return bind(settings, \.dictationAdaptsCapitalization)
         case .navigationEnabled: return bind(settings, \.navigationEnabled)
         case .menuSearchShowsAppleMenu: return bind(settings, \.menuSearchShowsAppleMenu)
         case .menuSearchDisabledApps: return bind(settings, \.menuSearchDisabledApps)
@@ -121,6 +128,12 @@ enum SettingsFileSchema {
         }
     }
 
+    /// A locale identifier, or null for the system's languages; an empty string is not one.
+    private static func language(_ identifier: String?) -> String?? {
+        guard let identifier else { return .some(nil) }
+        return identifier.isEmpty ? nil : identifier
+    }
+
     /// A folder is absolute or under `~/`; null puts it back in Application Support.
     private static func folder(_ path: String?) -> String?? {
         guard let path else { return .some(nil) }
@@ -143,6 +156,8 @@ extension ClipboardDefaultAction: SettingsFileRawValue {}
 extension EmojiSkinTone: SettingsFileRawValue {}
 extension EmojiGridColumns: SettingsFileRawValue {}
 extension JoinWindow: SettingsFileRawValue {}
+extension DictationMode: SettingsFileRawValue {}
+extension DictationDestination: SettingsFileRawValue {}
 
 extension ClipboardRetention: SettingsFileToken {
     var settingsToken: SettingsFileJSON {

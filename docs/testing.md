@@ -108,6 +108,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | hotkeys and deeplinks | `hotkey-test`, `hid-key-mapping-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
+| dictation | `dictation-test`, plus `hotkey-test` for hold to talk and `settings-*` for its keys |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-*` |
 | AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `syntax-highlight-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |

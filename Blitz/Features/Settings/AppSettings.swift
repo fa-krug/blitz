@@ -482,6 +482,46 @@ final class AppSettings {
         didSet { defaults.set(contactsEnabled, forKey: Key.contactsEnabled.rawValue) }
     }
 
+    /// Doubles as microphone consent, so only `DictationCoordinator` may write it.
+    var dictationEnabled: Bool {
+        didSet { defaults.set(dictationEnabled, forKey: Key.dictationEnabled.rawValue) }
+    }
+
+    var dictationMode: DictationMode {
+        didSet { defaults.set(dictationMode.rawValue, forKey: Key.dictationMode.rawValue) }
+    }
+
+    /// An `AVCaptureDevice.uniqueID`; nil follows the system's default input.
+    var dictationMicrophone: String? {
+        didSet { defaults.set(dictationMicrophone, forKey: Key.dictationMicrophone.rawValue) }
+    }
+
+    /// A locale identifier; nil follows the system's preferred languages.
+    var dictationLanguage: String? {
+        didSet { defaults.set(dictationLanguage, forKey: Key.dictationLanguage.rawValue) }
+    }
+
+    var dictationDestination: DictationDestination {
+        didSet {
+            defaults.set(dictationDestination.rawValue, forKey: Key.dictationDestination.rawValue)
+        }
+    }
+
+    var dictationPlaysSounds: Bool {
+        didSet { defaults.set(dictationPlaysSounds, forKey: Key.dictationPlaysSounds.rawValue) }
+    }
+
+    var dictationLiveInsertion: Bool {
+        didSet { defaults.set(dictationLiveInsertion, forKey: Key.dictationLiveInsertion.rawValue) }
+    }
+
+    var dictationAdaptsCapitalization: Bool {
+        didSet {
+            defaults.set(
+                dictationAdaptsCapitalization, forKey: Key.dictationAdaptsCapitalization.rawValue)
+        }
+    }
+
     var calendarShowInLauncher: Bool {
         didSet {
             defaults.set(calendarShowInLauncher, forKey: Key.calendarShowInLauncher.rawValue)
@@ -787,6 +827,22 @@ final class AppSettings {
         calendarEnabled = defaults.bool(forKey: Key.calendarEnabled.rawValue)
         remindersEnabled = defaults.bool(forKey: Key.remindersEnabled.rawValue)
         contactsEnabled = defaults.bool(forKey: Key.contactsEnabled.rawValue)
+        dictationEnabled = defaults.bool(forKey: Key.dictationEnabled.rawValue)
+        dictationMode =
+            defaults.string(forKey: Key.dictationMode.rawValue).flatMap(DictationMode.init)
+            ?? .toggle
+        dictationMicrophone = defaults.string(forKey: Key.dictationMicrophone.rawValue)
+        dictationLanguage = defaults.string(forKey: Key.dictationLanguage.rawValue)
+        dictationDestination =
+            defaults.string(forKey: Key.dictationDestination.rawValue)
+            .flatMap(DictationDestination.init) ?? .paste
+        dictationPlaysSounds =
+            defaults.object(forKey: Key.dictationPlaysSounds.rawValue) == nil
+            || defaults.bool(forKey: Key.dictationPlaysSounds.rawValue)
+        dictationLiveInsertion = defaults.bool(forKey: Key.dictationLiveInsertion.rawValue)
+        dictationAdaptsCapitalization =
+            defaults.object(forKey: Key.dictationAdaptsCapitalization.rawValue) == nil
+            || defaults.bool(forKey: Key.dictationAdaptsCapitalization.rawValue)
         calendarShowInLauncher =
             defaults.object(forKey: Key.calendarShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.calendarShowInLauncher.rawValue)

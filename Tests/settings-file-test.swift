@@ -47,8 +47,8 @@ struct SettingsFileTest {
             SettingsFileKey.sections == [
                 "general", "appearance", "hyperKey", "calculator", "search", "applications",
                 "commands", "quicklinks", "appleShortcuts", "fallbacks", "ai", "quickActions",
-                "fileSearch", "notes", "snippets", "navigation", "windowManagement", "clipboard",
-                "emoji", "calendar", "extensions"
+                "fileSearch", "notes", "snippets", "dictation", "navigation", "windowManagement",
+                "clipboard", "emoji", "calendar", "extensions"
             ])
 
         // A file that could switch one of these on would grant what only the app may ask for.
@@ -58,6 +58,7 @@ struct SettingsFileTest {
             "ai.mcpEnabled", "mcp.enabled", "clipboard.textSearchEnabled", "ai.calendarAccess",
             "ai.remindersAccess", "ai.shellCommands", "ai.shellCommandsEnabled", "ai.agentRules",
             "ai.agent", "agent.rules",
+            "dictation.enabled", "dictation.microphone",
             "fileSearch.screenshotTextSearch",
             "fileSearch.screenshotTextSearchEnabled"
         ]

@@ -80,7 +80,7 @@ struct SettingsBackupTest {
             .snippetsEnabled, .extensionsEnabled, .calendarEnabled, .autoJoinMeetings,
             .cameraPreview, .quickActionsEnabled, .remindersEnabled, .contactsEnabled,
             .aiAgentRules, .aiCalendarAccess, .aiRemindersAccess, .aiShellCommands,
-            .quicklinkPrefersExistingTabs
+            .quicklinkPrefersExistingTabs, .dictationEnabled
         ] {
             check(
                 "\(key.rawValue) stays out of a backup",
