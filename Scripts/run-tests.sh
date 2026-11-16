@@ -152,6 +152,7 @@ run app-installation-test  $L/SearchRelevance.swift $L/ScriptRomanization.swift 
                            Blitz/Features/Launcher/Service/AppLauncher.swift \
                            Blitz/Features/Launcher/Service/RunningAppsMonitor.swift \
                            Blitz/Features/Launcher/Service/FavoritesStore.swift \
+                           Blitz/Features/FileSearch/Model/FileSearchResult.swift \
                            Blitz/Features/Launcher/Service/AliasStore.swift \
                            Blitz/Features/Launcher/Service/VisibilityStore.swift \
                            Blitz/Features/Launcher/Service/BundleNameCache.swift \

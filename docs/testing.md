@@ -96,7 +96,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 
 | Touching | Run |
 | --- | --- |
-| launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
+| launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `app-installation-test` (the mixed favorites order), `fallback-test`, `app-name-test` |
 | the palette shell and shared views | `palette-*`, `compact-bar-test`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
@@ -656,6 +656,12 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Recording a shortcut opens the palette straight into File Search, hidden from the launcher or not
 - Search Files is absent from Settings ▸ Commands, and `Enable Commands` off leaves its shortcut live
 - Export, clear both lists and the shortcut, re-import: all three return, defaults undo not duplicated
+- ⌘K → Add to Favorites on a folder and ⇧⌘F on a file: with an empty launcher query both sit among
+  the app favorites in the order added, after a relaunch too; ↵ opens, ⌘↵ reveals, ⌥⌘↑/↓ and the menu's
+  Move rows reorder across apps and files, and held ⌘ shows each one's slot, which opens it
+- Trash a favorited file from its launcher row: the row leaves at once and Undo brings it back; delete
+  one in Finder and it is gone on the next summon. Disable File Search: file favorites disappear and
+  return in place when it is re-enabled; a backup import restores the mixed order
 
 ### Screenshots
 

@@ -361,6 +361,7 @@ final class AppCore {
             appleShortcutCoordinator.applyPresence()
             paletteCoordinator.onLauncherShown = { [weak self] in
                 self?.appleShortcutCoordinator.refresh()
+                self?.fileSearchCoordinator.refreshFavoriteAvailability()
             }
             paletteCoordinator.onScreenOpening = { [weak self] mode in
                 switch mode {

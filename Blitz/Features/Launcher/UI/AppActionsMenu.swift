@@ -3,16 +3,6 @@ import SwiftUI
 /// Actions menu for a launcher app, from right-click or the Actions pill.
 @MainActor
 enum AppActionsMenu {
-    /// Resolved by the screen that owns the visible order; every row runs its chord's call.
-    @MainActor
-    struct FavoriteActions {
-        let isFavorite: Bool
-        let canMoveUp: Bool
-        let canMoveDown: Bool
-        let toggle: () -> Void
-        let move: (Int) -> Void
-    }
-
     static func content(
         app: AppEntry, core: AppCore, running: Bool, primary: @escaping () -> Void,
         favorites: FavoriteActions, onResetRanking: @escaping () -> Void,
@@ -21,29 +11,7 @@ enum AppActionsMenu {
         var items = leadingItems(app: app, core: core, primary: primary)
         // A query-driven row lives only for its query, so no preference could outlive it.
         let isPersistent = !CommandCatalog.isQueryDriven(app)
-        if isPersistent {
-            items.append(
-                PopoverMenuItem(
-                    title: favorites.isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                    systemImage: favorites.isFavorite ? "star.slash" : "star", startsSection: true,
-                    shortcut: "⇧⌘F", action: favorites.toggle))
-        }
-        if favorites.canMoveUp {
-            items.append(
-                PopoverMenuItem(
-                    title: "Move Favorite Up", systemImage: "arrow.up", shortcut: "⌥⌘↑"
-                ) {
-                    favorites.move(-1)
-                })
-        }
-        if favorites.canMoveDown {
-            items.append(
-                PopoverMenuItem(
-                    title: "Move Favorite Down", systemImage: "arrow.down", shortcut: "⌥⌘↓"
-                ) {
-                    favorites.move(1)
-                })
-        }
+        if isPersistent { items.append(contentsOf: favorites.items) }
         if core.launcherRanking.hasRanking(for: app.preferenceKey) {
             items.append(
                 PopoverMenuItem(title: "Reset Ranking", systemImage: "arrow.counterclockwise") {

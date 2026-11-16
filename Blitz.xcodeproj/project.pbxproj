@@ -531,6 +531,7 @@
 		8B513299BDB225F03D737A7D /* ExtensionIconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0853ABE7FFC3C69DC1088C /* ExtensionIconCache.swift */; };
 		8B68EB9C74DFE47ED7982BEF /* AppIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11698B2F9EDF6720D631ABEE /* AppIndex.swift */; };
 		8B7926EE0DC2889654F04457 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7399E09009C2EFB83712CDA8 /* Assets.xcassets */; };
+		8BB5F4305F2FD439D0B43F2C /* FavoriteActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE45692379A553BB103DB61D /* FavoriteActions.swift */; };
 		8BD531E0C3A6D600F3FF3025 /* MenuSearchItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE06E73E4F9AD589051C647B /* MenuSearchItem.swift */; };
 		8CA6A33EDF91BAFD2D563F23 /* AIModelChecklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B99F6F218BD1450E75ACC /* AIModelChecklist.swift */; };
 		8CE1791940427F3A63A54CF5 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361B96B074A1A1A2E70B0053 /* Signposts.swift */; };
@@ -1779,6 +1780,7 @@
 		CD5E800AD819B7F674D4BF45 /* SymbolImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolImage.swift; sourceTree = "<group>"; };
 		CD9AE3213B670F6D01C1CA83 /* EmojiIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiIndex.swift; sourceTree = "<group>"; };
 		CDE7E401FCD04F45213C6F98 /* NoteDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDocument.swift; sourceTree = "<group>"; };
+		CE45692379A553BB103DB61D /* FavoriteActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoriteActions.swift; sourceTree = "<group>"; };
 		CEA382FB6A32D3613EF5E6A7 /* QuicklinkFaviconFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkFaviconFetcher.swift; sourceTree = "<group>"; };
 		CF60CE04B9790B944DE8FF39 /* CalcTimeZone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalcTimeZone.swift; sourceTree = "<group>"; };
 		CFAB07B2B29FB76CCC38ED6E /* SteadySegmentedPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteadySegmentedPicker.swift; sourceTree = "<group>"; };
@@ -3934,6 +3936,7 @@
 				E93C8140C86556C8D447AC57 /* CompactBar.swift */,
 				181EA1273D2CDA1F194B8961 /* FallbackActionsMenu.swift */,
 				D34C690FCBF1F27C723E9157 /* FallbackCoordinator.swift */,
+				CE45692379A553BB103DB61D /* FavoriteActions.swift */,
 				5F966DB21F20B5BEE59C9E44 /* LauncherCoordinator.swift */,
 				72A421A8C8F04F3CB1BB0D54 /* LauncherList.swift */,
 				92D7874E26A7045FC2AB0738 /* LauncherScreen.swift */,
@@ -4796,6 +4799,7 @@
 				2923A7D36ECC62DDD580645C /* FallbackCoordinator.swift in Sources */,
 				151225E9559F3018456EFDD7 /* FallbackStore.swift in Sources */,
 				A1E56385A1ECCFE860D23DBD /* FallbacksSettingsView.swift in Sources */,
+				8BB5F4305F2FD439D0B43F2C /* FavoriteActions.swift in Sources */,
 				B07964B3FD312074F16FC7BE /* FavoriteSlots.swift in Sources */,
 				6A980CBAB18693554C802D0D /* FavoritesStore.swift in Sources */,
 				BD8791B063CC4EF24634DB45 /* FeatureCommandsSection.swift in Sources */,

@@ -300,6 +300,35 @@ struct FileSearchTests {
         expect(
             nested.parentName == "Documents" && result("Notes.txt").parentName == "test",
             "the parent's own name is what a folder row prefixes itself with")
+        let originals = [
+            nested, result("Documents/Résumé #1? 100%.txt"), result("Projects", folder: true),
+            result("Café/naïve", folder: true)
+        ]
+        for original in originals {
+            let restored = FileSearchResult(favoriteKey: original.favoriteKey, homeDirectory: home)
+            expect(restored?.id == original.id, "a favorite key keeps the exact path: \(original.id)")
+            expect(
+                restored?.isDirectory == original.isDirectory,
+                "a favorite key keeps the folder bit: \(original.id)")
+            expect(
+                restored?.favoriteKey == original.favoriteKey,
+                "a favorite key round-trips without disk access: \(original.id)")
+            expect(
+                restored?.parentPath == original.parentPath,
+                "a restored favorite still abbreviates its location: \(original.id)")
+        }
+        expect(
+            result("Projects", folder: true).favoriteKey.hasSuffix("/")
+                && !nested.favoriteKey.hasSuffix("/"),
+            "only a folder's key ends in a slash")
+        for key in [
+            "com.apple.finder", nested.id, "quicklink-1234", "https://example.com/file",
+            "file:///tmp/file?query=1", "file:///tmp/file#fragment", "file://host/tmp/file"
+        ] {
+            expect(
+                FileSearchResult(favoriteKey: key, homeDirectory: home) == nil,
+                "\(key) is never read as a file favorite")
+        }
     }
 
     static func ranking() {

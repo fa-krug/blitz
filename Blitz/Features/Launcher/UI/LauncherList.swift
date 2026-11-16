@@ -6,7 +6,8 @@ struct LauncherList: View {
     let results: [AppEntry]
     /// The flat row id the screen has selected, not an entry id: a fallback can repeat a result.
     let selectedRowID: String?
-    let favoriteCount: Int
+    /// The pinned section in stored order, ahead of `results`; empty unless the field is.
+    let favorites: [FavoritesStore.Item]
     let meetingCount: Int
     let suggestionCount: Int
     let matchCount: Int
@@ -19,6 +20,8 @@ struct LauncherList: View {
     var onCardActions: () -> Void = {}
     let onActivate: (AppEntry) -> Void
     let onActions: (AppEntry) -> Void
+    let onActivateFile: (FileSearchResult) -> Void
+    let onFileActions: (FileSearchResult) -> Void
     let onDropped: () -> Void
     /// The `Use "…" with` section, always last; nil when nothing is typed.
     var fallbacks: FallbackSection?
@@ -71,6 +74,7 @@ struct LauncherList: View {
         case card(LeadCard)
         /// `slot` is the row's ⌘-digit, carried from the section build rather than searched.
         case app(AppEntry, slot: Character?)
+        case file(FileSearchResult, slot: Character?)
         case fallback(AppEntry, index: Int)
         var id: String {
             switch self {
@@ -78,6 +82,7 @@ struct LauncherList: View {
             case .fallbackHeader: return "fallback-header"
             case .card(let card): return card.rowID
             case .app(let app, _): return app.id
+            case .file(let file, _): return FavoritesStore.Item.file(file).id
             case .fallback(let app, _): return "fallback-" + app.id
             }
         }
@@ -85,7 +90,8 @@ struct LauncherList: View {
 
     /// Whether the selection sits on flat index 0: the card, else the first result.
     private var firstRowSelected: Bool {
-        card != nil ? cardSelected : selectedRowID != nil && selectedRowID == results.first?.id
+        if card != nil { return cardSelected }
+        return selectedRowID != nil && selectedRowID == (favorites.first?.id ?? results.first?.id)
     }
 
     /// Every row the fallback section contributes, always after the results.
@@ -98,10 +104,9 @@ struct LauncherList: View {
     private var rows: [Row] {
         var rows: [Row] = []
         if let card { rows = [.header(card.sectionTitle), .card(card)] }
-        let favorites = results.prefix(favoriteCount)
-        let meetings = results.dropFirst(favoriteCount).prefix(meetingCount)
-        let suggestions = results.dropFirst(favoriteCount + meetingCount).prefix(suggestionCount)
-        let pinnedCount = favoriteCount + meetingCount + suggestionCount
+        let meetings = results.prefix(meetingCount)
+        let suggestions = results.dropFirst(meetingCount).prefix(suggestionCount)
+        let pinnedCount = meetingCount + suggestionCount
         let matches = results.dropFirst(pinnedCount).prefix(matchCount)
         let rest = results.dropFirst(pinnedCount + matchCount)
         var grouped: [AppEntry.Kind: [AppEntry]] = [:]
@@ -109,8 +114,12 @@ struct LauncherList: View {
         if !favorites.isEmpty {
             rows.append(.header("Favorites"))
             rows.append(
-                contentsOf: favorites.enumerated().map {
-                    .app($1, slot: FavoriteSlots.digit(at: $0))
+                contentsOf: favorites.enumerated().map { index, favorite in
+                    let slot = FavoriteSlots.digit(at: index)
+                    return switch favorite {
+                    case .entry(let entry): Row.app(entry, slot: slot)
+                    case .file(let file): Row.file(file, slot: slot)
+                    }
                 })
         }
         if !meetings.isEmpty {
@@ -142,7 +151,7 @@ struct LauncherList: View {
     var body: some View {
         let rows = rows
         return Group {
-            if results.isEmpty && card == nil && fallbacks == nil {
+            if results.isEmpty && favorites.isEmpty && card == nil && fallbacks == nil {
                 EmptyResults(text: "No apps found")
             } else {
                 ScrollViewReader { proxy in
@@ -175,6 +184,17 @@ struct LauncherList: View {
                                     .onRowTap(drag: drag(for: app)) { onActivate(app) }
                                     .onRightClick { onActions(app) }
                                     .selectionFrame(app.id == selectedRowID)
+                                case .file(let file, let slot):
+                                    FileSearchRow(
+                                        result: file, selected: row.id == selectedRowID,
+                                        showsLocation: true, slot: slot
+                                    )
+                                    .contentShape(Rectangle())
+                                    .onRowTap(drag: file.rowDrag(dropped: onDropped)) {
+                                        onActivateFile(file)
+                                    }
+                                    .onRightClick { onFileActions(file) }
+                                    .selectionFrame(row.id == selectedRowID)
                                 case .fallback(let app, let index):
                                     AppRow(
                                         app: app, selected: row.id == selectedRowID, running: false,

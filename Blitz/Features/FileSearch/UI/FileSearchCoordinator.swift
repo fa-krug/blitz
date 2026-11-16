@@ -1,6 +1,7 @@
 import AppKit
 
 @MainActor
+@Observable
 final class FileSearchCoordinator {
     private let settings: AppSettings
     private let appIndex: AppIndex
@@ -9,6 +10,8 @@ final class FileSearchCoordinator {
     private let paletteCoordinator: PaletteCoordinator
     private let windowController: PaletteWindowController
     private unowned let core: AppCore
+    /// Hidden rather than unfavorited, so a remounted volume brings its favorites back.
+    private var missingFavorites: Set<String> = []
 
     init(
         settings: AppSettings, appIndex: AppIndex, session: FileSearchSession,
@@ -41,6 +44,35 @@ final class FileSearchCoordinator {
     func show(query: String = "") {
         guard settings.fileSearchEnabled else { return }
         paletteCoordinator.togglePalette(mode: .fileSearch, seeding: query.isEmpty ? nil : query)
+    }
+
+    var favoriteFiles: [FileSearchResult] {
+        guard settings.fileSearchEnabled else { return [] }
+        return core.favorites.files(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+            .filter { !missingFavorites.contains($0.id) }
+    }
+
+    func isFavorite(_ result: FileSearchResult) -> Bool { core.favorites.isFavorite(result) }
+
+    func toggleFavorite(_ result: FileSearchResult) {
+        missingFavorites.remove(result.id)
+        core.favorites.toggle(result)
+    }
+
+    /// Once per launcher show and off the main actor: a `fileExists` per render is too much.
+    func refreshFavoriteAvailability() {
+        guard settings.fileSearchEnabled else { return }
+        let paths = core.favorites.files(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+            .map(\.id)
+        guard !paths.isEmpty || !missingFavorites.isEmpty else { return }
+        Task {
+            let missing = await Task.detached(priority: .userInitiated) { Self.missing(paths) }.value
+            if missing != missingFavorites { missingFavorites = missing }
+        }
+    }
+
+    nonisolated private static func missing(_ paths: [String]) -> Set<String> {
+        Set(paths.filter { !FileManager.default.fileExists(atPath: $0) })
     }
 
     func open(_ result: FileSearchResult) {
@@ -104,6 +136,7 @@ final class FileSearchCoordinator {
                     return trashed as URL?
                 }.value
                 session.remove(result)
+                missingFavorites.insert(result.id)
                 guard let trashed else {
                     core.showMessage("Moved to Trash")
                     return
@@ -129,6 +162,7 @@ final class FileSearchCoordinator {
                 try await Task.detached(priority: .userInitiated) {
                     try FileManager.default.moveItem(at: trashed, to: result.url)
                 }.value
+                missingFavorites.remove(result.id)
                 session.refresh()
             } catch {
                 await core.showNotice(

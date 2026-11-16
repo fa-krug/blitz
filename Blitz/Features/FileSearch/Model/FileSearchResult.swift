@@ -9,6 +9,19 @@ struct FileSearchResult: Identifiable, Equatable, Sendable {
     let parentName: String
     let isDirectory: Bool
 
+    /// A favorite's stored key: a `file:///` URL, which no bundle ID or entry ID can spell.
+    var favoriteKey: String {
+        URL(filePath: id, directoryHint: isDirectory ? .isDirectory : .notDirectory).absoluteString
+    }
+
+    /// Nil for any other favorite key; the trailing slash carries the folder bit without a stat.
+    init?(favoriteKey: String, homeDirectory: URL) {
+        guard favoriteKey.hasPrefix("file:///"), let url = URL(string: favoriteKey),
+            url.query == nil, url.fragment == nil
+        else { return nil }
+        self.init(url: url, isDirectory: url.hasDirectoryPath, homeDirectory: homeDirectory)
+    }
+
     init(url: URL, isDirectory: Bool, homeDirectory: URL) {
         let url = url.standardizedFileURL
         let parent = url.deletingLastPathComponent()
