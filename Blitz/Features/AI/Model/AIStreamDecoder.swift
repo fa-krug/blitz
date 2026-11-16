@@ -67,6 +67,9 @@ struct AIStreamDecoder: Sendable {
     /// Anthropic's server-run searches, kept apart so one can never reach Blitz's tool loop.
     private var partialSearches: [Int: PartialToolCall] = [:]
     private var searchQueries: [String: String] = [:]
+    private var citations = AICitationLinker()
+    /// A text block's citations can arrive before its text, so they are linked once it closes.
+    private var citedURLs: [Int: [String]] = [:]
     private(set) var isTerminal = false
 
     init(shape: AIHTTPConfiguration.APIShape, secrets: [String] = []) {
@@ -195,7 +198,7 @@ struct AIStreamDecoder: Sendable {
             return []
         case "content_block_stop":
             guard let search = partialSearches.removeValue(forKey: event.index ?? 0) else {
-                return []
+                return citationLinks(closing: event.index ?? 0)
             }
             let query = try? JSONDecoder().decode(
                 AnthropicSearchInput.self, from: Data(search.arguments.utf8)
@@ -204,12 +207,17 @@ struct AIStreamDecoder: Sendable {
             return [.searching(query)]
         case "content_block_delta":
             if event.delta?.type == "text_delta", let text = event.delta?.text, !text.isEmpty {
+                citations.record(text)
                 return [.text(text)]
             }
             if event.delta?.type == "input_json_delta" {
                 let fragment = event.delta?.partialJSON ?? ""
                 partialSearches[event.index ?? 0]?.arguments += fragment
                 partialToolCalls[event.index ?? 0]?.arguments += fragment
+                return []
+            }
+            if event.delta?.type == "citations_delta", let url = event.delta?.citation?.url {
+                citedURLs[event.index ?? 0, default: []].append(url)
                 return []
             }
             guard event.delta?.type == "thinking_delta" else { return [] }
@@ -239,6 +247,13 @@ struct AIStreamDecoder: Sendable {
         default:
             return []
         }
+    }
+
+    private mutating func citationLinks(closing index: Int) -> [AIStreamEvent] {
+        let links = (citedURLs.removeValue(forKey: index) ?? []).compactMap {
+            citations.link(to: $0)
+        }
+        return links.isEmpty ? [] : [.text(links.joined())]
     }
 
     private static func anthropicErrorMessage(_ type: String?) -> String {
@@ -329,14 +344,17 @@ private struct OpenAIChunk: Decodable {
 
 private struct AnthropicEvent: Decodable {
     struct Delta: Decodable {
+        struct Citation: Decodable { let url: String? }
+
         let type: String?
         let text: String?
         let thinking: String?
         let partialJSON: String?
         let stopReason: String?
+        let citation: Citation?
 
         enum CodingKeys: String, CodingKey {
-            case type, text, thinking
+            case type, text, thinking, citation
             case partialJSON = "partial_json"
             case stopReason = "stop_reason"
         }

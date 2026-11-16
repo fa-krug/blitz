@@ -126,6 +126,9 @@ struct AIProviderTests {
         responsesBodiesCarryTurnsAttachmentsAndTools()
         responsesStreamsReleaseOnlyCompletedCalls()
         responsesFailuresNeverReleaseTools()
+        responsesSearchAndCite()
+        webSearchStaysOnTheVendorsOwnHost()
+        anthropicCitationsLinkOnce()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -251,7 +254,9 @@ struct AIProviderTests {
                 if case .toolCallRequested = $0 { return true } else { return false }
             },
             "a server tool never reaches Blitz's own tool loop")
-        expect(answerText(events) == "Swift 6 is out.", "the answer text arrives untouched")
+        expect(
+            answerText(events) == "Swift 6 is out. ([swift.org](https://swift.org))",
+            "the answer arrives untouched, its cited source linked once the block closes")
         expect(events.last == .finished, "a searched turn still finishes")
 
         var failing = AIStreamDecoder(shape: .anthropic)
@@ -808,6 +813,121 @@ struct AIProviderTests {
         }
     }
 
+    static func responsesSearchAndCite() {
+        let searching = AIRequestBody.make(
+            AIRequest(messages: [], webSearch: true, tools: [readTool]), configuration: responses)
+        expect(
+            (searching["tools"] as? [[String: Any]])?.compactMap { $0["type"] as? String }
+                == ["function", "web_search"],
+            "web search is a hosted tool beside the functions")
+
+        let cited = "https://example.com/report"
+        let linked = "https://news.example/story"
+        let frames =
+            responsesFrame(["type": "response.output_item.added", "item": ["type": "web_search_call"]])
+            + responsesFrame([
+                "type": "response.output_item.done",
+                "item": [
+                    "type": "web_search_call", "action": ["type": "search", "queries": ["rates"]]
+                ]
+            ])
+            + responsesFrame([
+                "type": "response.output_text.delta", "delta": "Rates rose ([news](\(linked)))."
+            ])
+            + responsesFrame([
+                "type": "response.output_text.annotation.added",
+                "annotation": ["type": "url_citation", "url": linked, "title": "News"]
+            ])
+            + responsesFrame([
+                "type": "response.output_text.annotation.added",
+                "annotation": ["type": "url_citation", "url": cited, "title": "Report"]
+            ])
+            + responsesFrame([
+                "type": "response.output_text.annotation.added",
+                "annotation": ["type": "url_citation", "url": cited, "title": "Report"]
+            ])
+            + responsesCompleted([])
+        var decoder = AIStreamDecoder(shape: .openAIResponses)
+        let events = feed(frames, slice: 9, decoder: &decoder)
+        expect(
+            events == [
+                .searching(nil), .searched("rates"), .text("Rates rose ([news](\(linked)))."),
+                .text(" ([example.com](\(cited)))"), .usage(AIUsage()), .finished
+            ],
+            "a search reports its query, and only a source the text lacks is linked, once")
+        let single = feed(
+            responsesFrame([
+                "type": "response.output_item.done",
+                "item": ["type": "web_search_call", "action": ["type": "search", "query": "q"]]
+            ]), slice: 64, decoder: &decoder)
+        expect(single.isEmpty, "a finished response decodes nothing further")
+        var older = AIStreamDecoder(shape: .openAIResponses)
+        expect(
+            feed(
+                responsesFrame([
+                    "type": "response.output_item.done",
+                    "item": ["type": "web_search_call", "action": ["type": "search", "query": "q"]]
+                ]), slice: 64, decoder: &older) == [.searched("q")],
+            "a single query is read too")
+    }
+
+    /// A vendor's own search tool exists only on its own host; OpenRouter's plugin rides any.
+    static func webSearchStaysOnTheVendorsOwnHost() {
+        let routes: [(AIProviderKind, String?, Bool)] = [
+            (.openAI, nil, true),
+            (.anthropic, nil, true),
+            (.openRouter, nil, true),
+            (.openRouter, "https://proxy.example/v1", true),
+            (.openAI, "https://gateway.example/v1", false),
+            (.anthropic, "https://gateway.example/anthropic", false),
+            (.gemini, nil, false),
+            (.openAICompatible, nil, false)
+        ]
+        for (provider, baseURL, searches) in routes {
+            let connection = AIConnection(provider: provider, baseURL: baseURL, models: ["m"])
+            expect(
+                connection.capabilities(for: "m").webSearch == searches,
+                "\(provider) at \(connection.baseURL) offers web search: \(searches)")
+        }
+    }
+
+    /// Anthropic cites beside its text; each page is linked once, after the block that cited it.
+    static func anthropicCitationsLinkOnce() {
+        let cite = #"{"type":"citations_delta","citation":{"url":"https://swift.org/a_(b)"}}"#
+        let payloads = [
+            #"{"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"s1","name":"web_search"}}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","# +
+                #""partial_json":"{\"query\":\"swift 6\"}"}}"#,
+            #"{"type":"content_block_stop","index":0}"#,
+            #"{"type":"content_block_start","index":1,"content_block":{"# +
+                #""type":"web_search_tool_result","tool_use_id":"s1","content":[]}}"#,
+            #"{"type":"content_block_stop","index":1}"#,
+            #"{"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}"#,
+            #"{"type":"content_block_delta","index":2,"delta":"# + cite + "}",
+            #"{"type":"content_block_delta","index":2,"delta":"# + cite + "}",
+            #"{"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"Swift 6 shipped."}}"#,
+            #"{"type":"content_block_stop","index":2}"#,
+            #"{"type":"content_block_start","index":3,"content_block":{"type":"text","text":""}}"#,
+            #"{"type":"content_block_delta","index":3,"delta":"# + cite + "}",
+            #"{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":" Again."}}"#,
+            #"{"type":"content_block_stop","index":3}"#,
+            #"{"type":"message_stop"}"#
+        ]
+        var decoder = AIStreamDecoder(shape: .anthropic)
+        let events = (try? decoder.feed(Data(payloads.map { "data: \($0)\n\n" }.joined().utf8))) ?? []
+        let link = " ([swift.org](https://swift.org/a_%28b%29))"
+        expect(
+            events == [
+                .searching("swift 6"), .searched("swift 6"), .text("Swift 6 shipped."), .text(link),
+                .text(" Again."), .finished
+            ],
+            "a block's sources follow it once, and a page already linked is not linked again")
+        expect(
+            ChatReferences.extract(from: "Swift 6 shipped." + link).map(\.url.absoluteString)
+                == ["https://swift.org/a_%28b%29"],
+            "a URL with parentheses stays one source the transcript reads")
+    }
+
     static func responsesFrame(_ value: [String: Any]) -> Data {
         let json = (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]))
         return Data("data: ".utf8) + (json ?? Data()) + Data("\n\n".utf8)
@@ -955,11 +1075,11 @@ struct AIProviderTests {
                 && router.capabilities(for: "model-b").images
                 && router.capabilities(for: "model-a").webSearch,
             "OpenRouter gates images by the catalog and searches for every model")
-        let direct = AIConnection(provider: .openAI, models: ["model-a"])
+        let direct = AIConnection(provider: .gemini, models: ["model-a"])
         expect(
             direct.capabilities(for: "model-a").images
                 && !direct.capabilities(for: "model-a").webSearch,
-            "a vendor API takes images and has no search switch")
+            "a vendor API takes images, and Gemini has no search switch")
 
         let gemini = Data(
             """

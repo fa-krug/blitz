@@ -1123,9 +1123,9 @@ transport code at all.
 | OpenCode command | never | a private file per picture, through `--file`, only for models whose catalog lists `image` input | never | the global config still loads — the `blitz` agent's deny-all rule drops every tool |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
 | OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
-| OpenAI | not offered | `input_image` part, assumed supported; `image_url` on a gateway | `input_file` part with `filename` and a `file_data` data URL; a `file` part on a gateway | flat `function` tools + `function_call_output` items; `tools` + `role: "tool"` turns on a gateway |
+| OpenAI | the hosted `{type: "web_search"}` tool beside the functions, at `api.openai.com` only — never on a gateway | `input_image` part, assumed supported; `image_url` on a gateway | `input_file` part with `filename` and a `file_data` data URL; a `file` part on a gateway | flat `function` tools + `function_call_output` items; `tools` + `role: "tool"` turns on a gateway |
 | Gemini / compatible | not offered | `image_url` part, assumed supported | never — a gateway that has not implemented the part bills the upload before rejecting it | `tools` + `role: "tool"` turns |
-| Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
+| Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise; at `api.anthropic.com` only | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
 
 A search is part of the reply, not a status: `item/started` for a `webSearch` item appends a
 `ChatSearch` to the streaming message pinned at the text length so far, `item/completed` (or the
@@ -1137,8 +1137,24 @@ to the stream, so it shows none. Anthropic's arrives as a `server_tool_use` bloc
 from the tool loop's calls, and its `web_search_tool_result` completes the row; the Claude command's
 is a `WebSearch` `tool_use` and its `tool_result`, never a tool row. A paused server loop
 (`pause_turn`) ends the reply where it stopped: Blitz keeps no server blocks to resume it with.
-Anthropic's own citation blocks are ignored, since sources come from the reply's links. The web-search instructions ask for citations linked by the
-publication's name — the model otherwise labels them "Read more".
+OpenAI's search is a `web_search_call` output item: its `output_item.added` opens the row and its
+`output_item.done` completes it with the action's `query`, or the first of its `queries`.
+
+Sources still come from the reply's links, and both APIs report citations beside the text rather
+than in it — OpenAI as `url_citation` annotations, Anthropic as `citations_delta`s on a text
+block. `AICitationLinker` inlines each cited page as ` ([host](url))`, labelled by
+`ChatReference.host(of:)` as the Sources list labels it: OpenAI's after the span that cited it,
+Anthropic's once its text block closes, since a block's citations can arrive before its text. A
+page the reply already links is skipped, each page is linked once a reply, and `(` and `)` in its
+URL are percent-encoded so the Markdown link survives `ChatReferences`. The web-search
+instructions ask for citations linked by the publication's name — the model otherwise labels them
+"Read more".
+
+`AIProviderKind.offersWebSearch(at:)` decides which connections get the switch: OpenRouter at any
+address, OpenAI only where it speaks Responses, Anthropic only at `api.anthropic.com`, and neither
+Gemini, whose OpenAI-compatible endpoint documents no search option, nor OpenAI Compatible. A
+vendor's hosted search exists only on the vendor's own endpoint, so a gateway behind either preset
+is never offered one.
 
 `AIModelCapabilities` says what the footer may offer for the selected model. OpenRouter is the only
 catalog that reports `architecture.input_modalities`, so it is the only provider gated on it:

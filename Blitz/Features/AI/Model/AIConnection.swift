@@ -37,6 +37,16 @@ enum AIProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
         }
         return .openAICompatible
     }
+
+    /// A vendor's search tool exists only on its own host; OpenRouter's plugin rides any model.
+    func offersWebSearch(at baseURL: URL?) -> Bool {
+        switch self {
+        case .openRouter: return true
+        case .openAI: return apiShape(for: baseURL) == .openAIResponses
+        case .anthropic: return baseURL?.host()?.lowercased() == "api.anthropic.com"
+        case .gemini, .openAICompatible: return false
+        }
+    }
 }
 
 struct AIConnection: Codable, Equatable, Identifiable, Sendable {
@@ -144,7 +154,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
             images: provider != .openRouter || visionModels.contains(model),
             // Only the two shapes whose bodies Blitz writes; a gateway bills the upload first.
             documents: provider == .openAI || provider == .anthropic,
-            webSearch: provider == .openRouter || provider == .anthropic, tools: true)
+            webSearch: provider.offersWebSearch(at: URL(string: baseURL)), tools: true)
     }
 }
 

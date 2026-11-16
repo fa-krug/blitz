@@ -3,6 +3,7 @@ import Foundation
 /// OpenAI's Responses events; a call is released only from the completed response, never a delta.
 struct AIResponsesDecoder: Sendable {
     private let secrets: [String]
+    private var citations = AICitationLinker()
     private(set) var isTerminal = false
 
     init(secrets: [String]) {
@@ -21,10 +22,27 @@ struct AIResponsesDecoder: Sendable {
             guard let delta = event["delta"] as? String else {
                 throw AIProviderError.malformedResponse
             }
-            return delta.isEmpty ? [] : [.text(delta)]
+            guard !delta.isEmpty else { return [] }
+            citations.record(delta)
+            return [.text(delta)]
         case "response.output_item.added":
-            let item = event["item"] as? [String: Any]
-            return item?["type"] as? String == "reasoning" ? [.thinking] : []
+            switch (event["item"] as? [String: Any])?["type"] as? String {
+            case "reasoning": return [.thinking]
+            case "web_search_call": return [.searching(nil)]
+            default: return []
+            }
+        case "response.output_item.done":
+            guard let item = event["item"] as? [String: Any],
+                item["type"] as? String == "web_search_call"
+            else { return [] }
+            return [.searched(Self.query(of: item))]
+        case "response.output_text.annotation.added":
+            guard let annotation = event["annotation"] as? [String: Any],
+                annotation["type"] as? String == "url_citation",
+                let url = annotation["url"] as? String,
+                let link = citations.link(to: url)
+            else { return [] }
+            return [.text(link)]
         case "response.completed":
             return try completed(event["response"] as? [String: Any])
         case "response.failed", "response.incomplete", "error":
@@ -59,6 +77,12 @@ struct AIResponsesDecoder: Sendable {
         }
         isTerminal = true
         return events + [.finished]
+    }
+
+    /// A search action names one `query` or, newer, a list of `queries`.
+    private static func query(of item: [String: Any]) -> String? {
+        let action = item["action"] as? [String: Any]
+        return action?["query"] as? String ?? (action?["queries"] as? [String])?.first
     }
 
     /// Cached input is already inside `input_tokens`, unlike Anthropic's, so it is not added.

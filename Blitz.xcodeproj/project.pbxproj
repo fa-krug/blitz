@@ -322,6 +322,7 @@
 		5A49CB3A206E23C0112EF388 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF0BF674B6056D572320976C /* SyntaxHighlighter.swift */; };
 		5A695F0484F30062D68758CD /* InjectableTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F46E24EC488C65DFA67AA8E /* InjectableTextView.swift */; };
 		5AF23BA00444A10A1FCC26DD /* SettingsEditorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FADFEB23E1B7BF8D9B1DDDD /* SettingsEditorPresenter.swift */; };
+		5B00421C1935A0E780DFB379 /* AICitationLinker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B4DA6A1559BCB312E78130 /* AICitationLinker.swift */; };
 		5B1B0B9C5959B68D2D1F7833 /* AgentNameMatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98DCF47CF9B0A2EB9B88431 /* AgentNameMatch.swift */; };
 		5B3F4EDFF87BCF33D082A815 /* NoteSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288C6FD1A9CF0F13C2DC12E6 /* NoteSearch.swift */; };
 		5B4A527FB59D91D17444D800 /* AIChatCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE3BB6BCD2B269F7CDD62CF /* AIChatCoordinator.swift */; };
@@ -1020,6 +1021,7 @@
 		128CAD070BA1271CCB330880 /* FileSearchMediaPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSearchMediaPlayer.swift; sourceTree = "<group>"; };
 		1296854D264CCBA800B81B7C /* ExtensionPaletteModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionPaletteModifiers.swift; sourceTree = "<group>"; };
 		12A5288C28C5A6AF34E05844 /* HyperKeyTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperKeyTap.swift; sourceTree = "<group>"; };
+		12B4DA6A1559BCB312E78130 /* AICitationLinker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICitationLinker.swift; sourceTree = "<group>"; };
 		12BE604FC45965A453B051B3 /* FileSearchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSearchSession.swift; sourceTree = "<group>"; };
 		12DC600FCE99F8F2D45BFBBE /* QuicklinkListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicklinkListView.swift; sourceTree = "<group>"; };
 		12DE90A39A3189C4D241ED98 /* CalendarToolEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarToolEvent.swift; sourceTree = "<group>"; };
@@ -3596,6 +3598,7 @@
 				5892D7DC4AFAD00E620D54FB /* AgentWaitNotice.swift */,
 				8417BE5240A4698CCE36344B /* AIAttachmentPolicy.swift */,
 				E8A4B079D1C6A03EE1CF1EB8 /* AIBrand.swift */,
+				12B4DA6A1559BCB312E78130 /* AICitationLinker.swift */,
 				40C103E9EBF40F5704652563 /* AIConnection.swift */,
 				81BB1FF8D275B2C349D98999 /* AIConnectionKeyPolicy.swift */,
 				3E258E87098A2A5D27E52C9D /* AIConversationOpenPolicy.swift */,
@@ -4197,6 +4200,7 @@
 				FD2692A276AF663A9ED06DE0 /* AIChatState.swift in Sources */,
 				1F260274984D0C23B2C8D495 /* AIChatSurfacesState.swift in Sources */,
 				CB170817802D3631AAB60C4C /* AIChatWindowChrome.swift in Sources */,
+				5B00421C1935A0E780DFB379 /* AICitationLinker.swift in Sources */,
 				757F9E147D4B084DD9BB6D78 /* AIConnection.swift in Sources */,
 				1FA1F074B820BE926CD9F3A6 /* AIConnectionEditorPanel.swift in Sources */,
 				1424D60AE114C7B524B202FA /* AIConnectionKeyPolicy.swift in Sources */,

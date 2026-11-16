@@ -28,13 +28,14 @@ enum AIRequestBody {
         {
             body["reasoning"] = ["effort": effort]
         }
-        let tools: [[String: Any]] = input.tools.map {
+        var tools: [[String: Any]] = input.tools.map {
             // Not strict: strict mode would make every optional MCP parameter required.
             [
                 "type": "function", "name": $0.name, "description": $0.description,
                 "parameters": $0.parameters.jsonObject, "strict": false
             ]
         }
+        if input.webSearch { tools.append(["type": "web_search"]) }
         if !tools.isEmpty { body["tools"] = tools }
         return body
     }
