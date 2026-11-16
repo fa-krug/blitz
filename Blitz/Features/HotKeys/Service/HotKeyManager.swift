@@ -110,6 +110,9 @@ final class HotKeyManager {
             guard let self, let action = modifierTaps[binding] else { return }
             perform(action)
         }
+        modifierTapMonitor.onHoldPressed = { [weak self] in self?.perform(.dictation) }
+        modifierTapMonitor.onHoldReleased = { [weak self] in self?.onDictationReleased?() }
+        modifierTapMonitor.onHoldCancelled = { [weak self] in self?.onDictationCancelled?() }
         modifierTapMonitor.start()
         syncModifierTaps()
     }
@@ -228,9 +231,10 @@ final class HotKeyManager {
         }
         candidateActionsCache = nil
         // A rebuild walks every candidate; only a modifier-only binding changes this map.
-        if previous?.usesModifierTapMonitor == true || binding?.usesModifierTapMonitor == true {
-            syncModifierTaps()
-        }
+        let touchesTap =
+            previous?.usesModifierTapMonitor == true || binding?.usesModifierTapMonitor == true
+        // A hold's reservation turns on conflicts, so any dictation change can free or block it.
+        if touchesTap || action == .dictation { syncModifierTaps() }
     }
 
     /// Include Shift redefines the chord, and a stored combo has the old one baked in.
@@ -246,11 +250,17 @@ final class HotKeyManager {
         }
     }
 
-    /// What else holds `binding`, or nil. Whole-binding comparison covers every kind alike.
+    /// What else holds `binding`, or nil; a dictation hold also claims its key's tap gestures.
     func conflictOwner(of binding: HotKeyBinding, excluding action: HotKeyAction) -> String? {
-        for candidate in candidateActions
-        where candidate != action && self.binding(for: candidate) == binding {
-            return displayName(of: candidate)
+        for candidate in candidateActions where candidate != action {
+            guard let other = self.binding(for: candidate) else { continue }
+            let holdsModifier =
+                dictationHoldsToTalk
+                && (action == .dictation && binding.holdKey != nil
+                    || candidate == .dictation && other.holdKey != nil)
+            if binding.conflicts(with: other, holdsModifier: holdsModifier) {
+                return displayName(of: candidate)
+            }
         }
         return nil
     }
@@ -314,20 +324,31 @@ final class HotKeyManager {
     /// Hands a combo to Carbon; a modifier-only binding has no per-action registration.
     private func register(_ action: HotKeyAction) {
         guard let shortcut = binding(for: action)?.shortcut else { return }
-        center.register(id: action.defaultsKey, shortcut: shortcut) { [weak self] in
-            self?.perform(action)
-        }
+        center.register(
+            id: action.defaultsKey, shortcut: shortcut,
+            onKeyDown: { [weak self] in self?.perform(action) },
+            onKeyUp: action == .dictation ? { [weak self] in self?.onDictationReleased?() } : nil)
     }
 
     /// Rebuilt wholesale, so the map can't drift from what is on disk.
     private func syncModifierTaps() {
         modifierTaps = [:]
+        var holdKey: ModifierKey?
         for action in candidateActions {
             guard let binding = binding(for: action), binding.usesModifierTapMonitor else { continue }
-            if action == .dictation, !dictationEnabled { continue }
+            if action == .dictation {
+                guard dictationEnabled else { continue }
+                // A hold is never a tap; a conflicting one stays unarmed and the pane says why.
+                if dictationHoldsToTalk {
+                    if conflictOwner(of: binding, excluding: action) == nil {
+                        holdKey = binding.holdKey
+                    }
+                    continue
+                }
+            }
             modifierTaps[binding] = action
         }
-        modifierTapMonitor.update(bound: Set(modifierTaps.keys))
+        modifierTapMonitor.update(bound: Set(modifierTaps.keys), holdKey: holdKey)
     }
 
     /// Every chord's funnel, and a `blitz://run/` deep link's; only a link carries `arguments`.

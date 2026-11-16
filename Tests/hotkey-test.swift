@@ -70,6 +70,10 @@ struct DoubleTapDetectorTests {
         interruptions()
         repeats()
         resetting()
+        modifierKeys()
+        modifierKeyDetector()
+        sidedBindings()
+        holdConflicts()
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }
@@ -108,6 +112,8 @@ struct DoubleTapDetectorTests {
         roundTrips(.doubleTap(.control), as: "double-tap ctrl", plain)
         roundTrips(.globe, as: "globe", plain)
         roundTrips(.doubleGlobe, as: "double-tap globe", plain)
+        expect(plain.text(for: .modifier(.rightOption)) == "right option", "a sided key spells")
+        expect(plain.text(for: .modifier(.leftCommand)) == "left cmd", "the side comes first")
         roundTrips(combo(kVK_ANSI_K, hyperModifiers), as: "hyper+k", hyper)
         roundTrips(combo(kVK_ANSI_K, controlKey | optionKey | cmdKey), as: "ctrl+option+cmd+k", hyper)
 
@@ -135,6 +141,10 @@ struct DoubleTapDetectorTests {
         expect(plain.binding(from: "cmd+nope") == nil, "an unknown key is refused")
         expect(plain.binding(from: "cmd+key-999") == nil, "a raw key code must be a real one")
         expect(plain.binding(from: "double-tap fn") == nil, "fn has no double-tap")
+        expect(
+            plain.binding(from: "right option") == nil,
+            "a sided modifier is refused: only Dictation holds one, and the file cannot bind it")
+        expect(plain.binding(from: "option") == nil, "a bare modifier is refused")
     }
 
     // MARK: - Spotlight's shortcut
@@ -653,5 +663,150 @@ struct DoubleTapDetectorTests {
         stuck.tap(.command, at: 0.10)
         stuck.tap(.command, at: 0.25)
         expect(stuck.fired, [.command], "reset clears a half-held press")
+    }
+
+    // MARK: - Hold to talk
+
+    /// The `NX_DEVICE…KEYMASK` bits a `flagsChanged` carries for each physical key.
+    private static let deviceBits: [ModifierKey: UInt64] = [
+        .leftControl: 0x0001, .rightControl: 0x2000, .leftOption: 0x0020, .rightOption: 0x0040,
+        .leftShift: 0x0002, .rightShift: 0x0004, .leftCommand: 0x0008, .rightCommand: 0x0010
+    ]
+
+    static func modifierKeys() {
+        for (key, bit) in deviceBits {
+            let generic = UInt64(NSEvent.ModifierFlags.option.rawValue)
+            expect(
+                ModifierKey.held(in: bit | generic, globeDown: false) == [key],
+                "\(key) reads from its own device bit, whatever generic mask rides along")
+        }
+        expect(
+            ModifierKey.held(in: 0x0020 | 0x0040, globeDown: false) == [.leftOption, .rightOption],
+            "both sides held read as two keys")
+        expect(
+            ModifierKey.held(in: UInt64(NSEvent.ModifierFlags.function.rawValue), globeDown: false)
+                .isEmpty,
+            "an F-key's fn flag alone is not Globe")
+        expect(ModifierKey.held(in: 0, globeDown: true) == [.globe], "Globe is its own keycode")
+        expect(ModifierKey.globe.binding == .globe, "Globe keeps its existing binding")
+        expect(
+            ModifierKey.rightOption.binding == .modifier(.rightOption),
+            "a sided key records as a single modifier")
+        expect(
+            ModifierKey.allCases.filter { $0 != .globe }.allSatisfy { $0.modifier != nil },
+            "every sided key belongs to a double-tappable modifier")
+        expect(ModifierKey.rightOption.spokenName == "Right Option", "VoiceOver hears the side")
+        expect(ModifierKey.globe.spokenName == "Globe", "Globe has no side to speak")
+    }
+
+    static func modifierKeyDetector() {
+        var detector = ModifierKeyDetector()
+        func keys(_ keys: Set<ModifierKey>, at time: TimeInterval) -> ModifierKeyDetector.Event? {
+            detector.handle(keys, at: time)
+        }
+
+        expect(keys([.rightOption], at: 0) == .pressed(.rightOption), "a lone press is reported")
+        expect(keys([.rightOption], at: 0.1) == nil, "an unchanged set reports nothing")
+        expect(
+            keys([], at: 0.1) == .released(.rightOption, doubleTap: false, held: false),
+            "a quick release is a tap")
+        _ = keys([.rightOption], at: 0.3)
+        expect(
+            keys([], at: 0.35) == .released(.rightOption, doubleTap: true, held: false),
+            "a second quick tap within the gap is a double tap")
+
+        _ = keys([.rightOption], at: 2)
+        expect(
+            keys([], at: 2.3) == .released(.rightOption, doubleTap: false, held: true),
+            "past maxHold the release ends a hold")
+        _ = keys([.rightOption], at: 2.4)
+        expect(
+            keys([], at: 2.45) == .released(.rightOption, doubleTap: false, held: false),
+            "a hold never opens a double tap")
+
+        _ = keys([.rightOption], at: 3)
+        expect(keys([.rightOption, .leftCommand], at: 3.1) == .cancelled, "a second key cancels")
+        expect(
+            keys([.rightOption], at: 3.15) == .cancelled, "unwinding a chord is not a fresh press")
+        expect(keys([], at: 3.2) == nil, "the cancelled press releases silently")
+
+        _ = keys([.leftOption], at: 4)
+        _ = keys([], at: 4.05)
+        _ = keys([.rightOption], at: 4.1)
+        expect(
+            keys([], at: 4.15) == .released(.rightOption, doubleTap: false, held: false),
+            "the other side's tap does not double the first")
+
+        _ = keys([.rightOption], at: 5)
+        detector.cancel()
+        expect(keys([], at: 5.05) == nil, "a key press or click drops the press in flight")
+
+        _ = keys([.globe], at: 6)
+        expect(
+            keys([], at: 6.4) == .released(.globe, doubleTap: false, held: true),
+            "Globe holds like any modifier")
+
+        _ = keys([.leftShift], at: 7)
+        detector.reset()
+        expect(keys([.leftShift], at: 7.1) == .pressed(.leftShift), "reset forgets what was held")
+    }
+
+    private static let optionSpace = HotKeyBinding.combo(
+        KeyShortcut(carbonKeyCode: kVK_Space, carbonModifiers: optionKey))
+
+    static func sidedBindings() {
+        let binding = HotKeyBinding.modifier(.rightOption)
+        let encoded = try? JSONEncoder().encode(binding)
+        expect(
+            encoded.flatMap { try? JSONDecoder().decode(HotKeyBinding.self, from: $0) } == binding,
+            "a sided modifier round-trips through the synthesised Codable")
+        expect(
+            encoded.flatMap { String(data: $0, encoding: .utf8) }
+                == #"{"modifier":{"_0":"rightOption"}}"#,
+            "a sided modifier persists by its case name")
+        expect(binding.keycaps == ["⌥"], "one cap, the modifier's glyph")
+        expect(binding.recorderPrefix == "R", "the side rides as a prefix")
+        expect(binding.accessibilityLabel == "Right Option", "the side is spoken in full")
+        expect(HotKeyBinding.globe.recorderPrefix == nil, "Globe has no side")
+        expect(binding.usesModifierTapMonitor, "only the tap can see a lone modifier")
+
+        let combo = optionSpace
+        expect(combo.supportsHold && combo.holdKey == nil, "a combo holds through Carbon's key-up")
+        expect(binding.supportsHold && binding.holdKey == .rightOption, "a sided modifier holds")
+        expect(HotKeyBinding.globe.holdKey == .globe, "Globe holds")
+        expect(
+            !HotKeyBinding.doubleTap(.option).supportsHold
+                && !HotKeyBinding.doubleGlobe.supportsHold,
+            "a double tap has no release to hold")
+    }
+
+    static func holdConflicts() {
+        let hold = HotKeyBinding.modifier(.rightOption)
+        expect(hold.conflicts(with: hold), "the same binding always conflicts")
+        expect(
+            !hold.conflicts(with: .doubleTap(.option)),
+            "a sided tap and a double tap coexist; the monitor waits out the double")
+        expect(
+            hold.conflicts(with: .doubleTap(.option), holdsModifier: true),
+            "a hold reserves its key from the double tap of either side")
+        expect(
+            !hold.conflicts(with: .doubleTap(.command), holdsModifier: true),
+            "a hold leaves other modifiers alone")
+        expect(
+            !hold.conflicts(with: .modifier(.leftOption), holdsModifier: true),
+            "a hold on one side leaves the other side free")
+        expect(
+            HotKeyBinding.globe.conflicts(with: .doubleGlobe, holdsModifier: true),
+            "holding Globe reserves double Globe")
+        expect(
+            !HotKeyBinding.globe.conflicts(with: .doubleGlobe),
+            "tapped Globe and double Globe still coexist")
+        expect(
+            !HotKeyBinding.globe.conflicts(with: hold, holdsModifier: true),
+            "Globe and a sided modifier are different keys")
+        let combo = optionSpace
+        expect(
+            !combo.conflicts(with: hold, holdsModifier: true),
+            "a combo shares no physical modifier gesture with a hold")
     }
 }

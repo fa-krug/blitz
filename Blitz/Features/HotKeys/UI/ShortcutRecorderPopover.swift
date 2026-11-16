@@ -21,6 +21,16 @@ struct ShortcutRecorderPopover: View {
         let label: String
         var isExample = false
         var tint: Color?
+        var prefix: String?
+        var spoken: String?
+
+        @MainActor static func binding(
+            _ binding: HotKeyBinding, label: String, tint: Color? = nil
+        ) -> Self {
+            Self(
+                caps: binding.keycaps, label: label, tint: tint, prefix: binding.recorderPrefix,
+                spoken: binding.accessibilityLabel)
+        }
     }
 
     var body: some View {
@@ -28,10 +38,12 @@ struct ShortcutRecorderPopover: View {
         VStack(spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
                 ForEach(Array(state.caps.enumerated()), id: \.offset) { _, cap in
-                    KeyCapChip(text: cap, scale: .hero)
+                    KeyCapChip(text: cap, scale: .hero, prefix: state.prefix)
                 }
             }
             .frame(height: Theme.Size.heroKeyCap)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(state.spoken ?? state.caps.joined(separator: " "))
             .opacity(state.isExample ? 0.5 : 1)
 
             Text(state.label)
@@ -64,7 +76,16 @@ struct ShortcutRecorderPopover: View {
 
     private var state: State {
         if let conflict = capture.conflict {
-            return State(caps: conflict.binding.keycaps, label: conflict.owner, tint: .orange)
+            return .binding(conflict.binding, label: conflict.owner, tint: .orange)
+        }
+        if let key = capture.awaitingModifierKey, let modifier = key.modifier {
+            guard capture.heldModifierKey == key else {
+                return .binding(key.binding, label: "Tap again to double")
+            }
+            return .binding(.doubleTap(modifier), label: "Release to double")
+        }
+        if let key = capture.heldModifierKey {
+            return .binding(key.binding, label: "Release to record")
         }
         if capture.awaitingSecondGlobe {
             let secondPress = capture.heldGlobe
