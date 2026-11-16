@@ -259,11 +259,10 @@ final class AppSettings {
         didSet { defaults.set(compactMode, forKey: Key.compactMode.rawValue) }
     }
 
-    /// Pin favorite app icons to the right of the compact search bar (⌘1–⌘5 to launch).
-    var showFavoritesInCompactMode: Bool {
+    /// The compact bar's buttons, in order; an empty list is a deliberately bare bar.
+    var compactBarCommands: [CommandID] {
         didSet {
-            defaults.set(
-                showFavoritesInCompactMode, forKey: Key.showFavoritesInCompactMode.rawValue)
+            defaults.set(compactBarCommands.map(\.rawValue), forKey: Key.compactBarCommands.rawValue)
         }
     }
 
@@ -285,6 +284,11 @@ final class AppSettings {
     /// Lets the panel be dragged by its top edge; off by default, so most launches never grab it.
     var paletteDraggable: Bool {
         didSet { defaults.set(paletteDraggable, forKey: Key.paletteDraggable.rawValue) }
+    }
+
+    /// Off, every surface changes at once; on, Reduce Motion still trims movement where it did.
+    var animationsEnabled: Bool {
+        didSet { defaults.set(animationsEnabled, forKey: Key.animationsEnabled.rawValue) }
     }
 
     /// Where a drag left the panel's top-left, per display and relative to it.
@@ -370,6 +374,10 @@ final class AppSettings {
         didSet { defaults.set(notesShowsFormattingBar, forKey: Key.notesShowsFormattingBar.rawValue) }
     }
 
+    var notesShowsInMenuBar: Bool {
+        didSet { defaults.set(notesShowsInMenuBar, forKey: Key.notesShowsInMenuBar.rawValue) }
+    }
+
     /// The notes folder as the user wrote it, `~` allowed; nil keeps it in Application Support.
     var notesFolder: String? {
         didSet { defaults.set(notesFolder, forKey: Key.notesFolder.rawValue) }
@@ -417,6 +425,12 @@ final class AppSettings {
     /// The snippets folder as the user wrote it, `~` allowed; nil keeps it in Application Support.
     var snippetsFolder: String? {
         didSet { defaults.set(snippetsFolder, forKey: Key.snippetsFolder.rawValue) }
+    }
+
+    var snippetDefaultAction: SnippetDefaultAction {
+        didSet {
+            defaults.set(snippetDefaultAction.rawValue, forKey: Key.snippetDefaultAction.rawValue)
+        }
     }
 
     var navigationEnabled: Bool {
@@ -480,6 +494,46 @@ final class AppSettings {
     /// Doubles as contacts-access consent, so only `ContactsCoordinator` may write it.
     var contactsEnabled: Bool {
         didSet { defaults.set(contactsEnabled, forKey: Key.contactsEnabled.rawValue) }
+    }
+
+    /// Doubles as microphone consent, so only `DictationCoordinator` may write it.
+    var dictationEnabled: Bool {
+        didSet { defaults.set(dictationEnabled, forKey: Key.dictationEnabled.rawValue) }
+    }
+
+    var dictationMode: DictationMode {
+        didSet { defaults.set(dictationMode.rawValue, forKey: Key.dictationMode.rawValue) }
+    }
+
+    /// An `AVCaptureDevice.uniqueID`; nil follows the system's default input.
+    var dictationMicrophone: String? {
+        didSet { defaults.set(dictationMicrophone, forKey: Key.dictationMicrophone.rawValue) }
+    }
+
+    /// A locale identifier; nil follows the system's preferred languages.
+    var dictationLanguage: String? {
+        didSet { defaults.set(dictationLanguage, forKey: Key.dictationLanguage.rawValue) }
+    }
+
+    var dictationDestination: DictationDestination {
+        didSet {
+            defaults.set(dictationDestination.rawValue, forKey: Key.dictationDestination.rawValue)
+        }
+    }
+
+    var dictationPlaysSounds: Bool {
+        didSet { defaults.set(dictationPlaysSounds, forKey: Key.dictationPlaysSounds.rawValue) }
+    }
+
+    var dictationLiveInsertion: Bool {
+        didSet { defaults.set(dictationLiveInsertion, forKey: Key.dictationLiveInsertion.rawValue) }
+    }
+
+    var dictationAdaptsCapitalization: Bool {
+        didSet {
+            defaults.set(
+                dictationAdaptsCapitalization, forKey: Key.dictationAdaptsCapitalization.rawValue)
+        }
     }
 
     var calendarShowInLauncher: Bool {
@@ -708,11 +762,13 @@ final class AppSettings {
         interfaceSize =
             defaults.string(forKey: Key.interfaceSize.rawValue).flatMap(InterfaceSize.init)
             ?? .standard
-        compactMode = defaults.bool(forKey: Key.compactMode.rawValue)
-        // Defaults to true, so absence must be distinguished from a stored `false`.
-        showFavoritesInCompactMode =
-            defaults.object(forKey: Key.showFavoritesInCompactMode.rawValue) == nil
-            || defaults.bool(forKey: Key.showFavoritesInCompactMode.rawValue)
+        // Compact is the default, so only an explicit Expanded is ever stored as `false`.
+        compactMode =
+            defaults.object(forKey: Key.compactMode.rawValue) == nil
+            || defaults.bool(forKey: Key.compactMode.rawValue)
+        compactBarCommands =
+            defaults.stringArray(forKey: Key.compactBarCommands.rawValue)
+            .flatMap(CommandID.compactBarCommands(from:)) ?? CommandID.defaultCompactBarCommands
         // Unset seeds the defaults; a stored empty array is a deliberately cleared list.
         searchScopes =
             defaults.stringArray(forKey: Key.searchScopes.rawValue) ?? SearchScopes.defaults
@@ -730,6 +786,9 @@ final class AppSettings {
             || defaults.bool(forKey: Key.openOnCursorScreen.rawValue)
         autoSwitchInputSourceID = defaults.string(forKey: Key.autoSwitchInputSource.rawValue)
         paletteDraggable = defaults.bool(forKey: Key.paletteDraggable.rawValue)
+        animationsEnabled =
+            defaults.object(forKey: Key.animationsEnabled.rawValue) == nil
+            || defaults.bool(forKey: Key.animationsEnabled.rawValue)
         palettePositions =
             defaults.dictionary(forKey: Key.palettePosition.rawValue)
             as? [String: [Double]] ?? [:]
@@ -753,6 +812,7 @@ final class AppSettings {
         notesShowsFormattingBar =
             defaults.object(forKey: Key.notesShowsFormattingBar.rawValue) == nil
             || defaults.bool(forKey: Key.notesShowsFormattingBar.rawValue)
+        notesShowsInMenuBar = defaults.bool(forKey: Key.notesShowsInMenuBar.rawValue)
         notesFolder = defaults.string(forKey: Key.notesFolder.rawValue)
         aiEnabled = defaults.bool(forKey: Key.aiEnabled.rawValue)
         mcpEnabled = defaults.bool(forKey: Key.mcpEnabled.rawValue)
@@ -770,6 +830,9 @@ final class AppSettings {
             defaults.object(forKey: Key.snippetsShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.snippetsShowInLauncher.rawValue)
         snippetsFolder = defaults.string(forKey: Key.snippetsFolder.rawValue)
+        snippetDefaultAction =
+            defaults.string(forKey: Key.snippetDefaultAction.rawValue)
+            .flatMap(SnippetDefaultAction.init) ?? .paste
         // Opt-in, unlike its siblings: until it is asked for, nothing about extensions is loaded.
         extensionsEnabled = defaults.bool(forKey: Key.extensionsEnabled.rawValue)
         extensionsShowInLauncher =
@@ -787,6 +850,22 @@ final class AppSettings {
         calendarEnabled = defaults.bool(forKey: Key.calendarEnabled.rawValue)
         remindersEnabled = defaults.bool(forKey: Key.remindersEnabled.rawValue)
         contactsEnabled = defaults.bool(forKey: Key.contactsEnabled.rawValue)
+        dictationEnabled = defaults.bool(forKey: Key.dictationEnabled.rawValue)
+        dictationMode =
+            defaults.string(forKey: Key.dictationMode.rawValue).flatMap(DictationMode.init)
+            ?? .toggle
+        dictationMicrophone = defaults.string(forKey: Key.dictationMicrophone.rawValue)
+        dictationLanguage = defaults.string(forKey: Key.dictationLanguage.rawValue)
+        dictationDestination =
+            defaults.string(forKey: Key.dictationDestination.rawValue)
+            .flatMap(DictationDestination.init) ?? .paste
+        dictationPlaysSounds =
+            defaults.object(forKey: Key.dictationPlaysSounds.rawValue) == nil
+            || defaults.bool(forKey: Key.dictationPlaysSounds.rawValue)
+        dictationLiveInsertion = defaults.bool(forKey: Key.dictationLiveInsertion.rawValue)
+        dictationAdaptsCapitalization =
+            defaults.object(forKey: Key.dictationAdaptsCapitalization.rawValue) == nil
+            || defaults.bool(forKey: Key.dictationAdaptsCapitalization.rawValue)
         calendarShowInLauncher =
             defaults.object(forKey: Key.calendarShowInLauncher.rawValue) == nil
             || defaults.bool(forKey: Key.calendarShowInLauncher.rawValue)

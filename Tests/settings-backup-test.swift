@@ -61,13 +61,22 @@ struct SettingsBackupTest {
         check(
             "screenshot text recognition never rides a backup",
             excluded[AppSettingsKey.screenshotTextSearchEnabled.rawValue] != nil)
+        check(
+            "Show animations rides the settings backup",
+            mirrored["animationsEnabled"] == .animationsEnabled)
         check("notes enablement rides the settings backup", mirrored["notesEnabled"] == .notesEnabled)
+        check(
+            "compact shortcuts ride the settings backup",
+            mirrored["compactBarCommands"] == .compactBarCommands)
         check(
             "Markdown rendering rides the settings backup",
             mirrored["notesRendersMarkdown"] == .notesRendersMarkdown)
         check(
             "the formatting bar rides the settings backup",
             mirrored["notesShowsFormattingBar"] == .notesShowsFormattingBar)
+        check(
+            "the Notes menu bar item rides the settings backup",
+            mirrored["notesShowsInMenuBar"] == .notesShowsInMenuBar)
         check(
             "clipboard enablement rides the settings backup",
             mirrored["clipboardEnabled"] == .clipboardEnabled)
@@ -80,7 +89,7 @@ struct SettingsBackupTest {
             .snippetsEnabled, .extensionsEnabled, .calendarEnabled, .autoJoinMeetings,
             .cameraPreview, .quickActionsEnabled, .remindersEnabled, .contactsEnabled,
             .aiAgentRules, .aiCalendarAccess, .aiRemindersAccess, .aiShellCommands,
-            .quicklinkPrefersExistingTabs
+            .quicklinkPrefersExistingTabs, .dictationEnabled
         ] {
             check(
                 "\(key.rawValue) stays out of a backup",

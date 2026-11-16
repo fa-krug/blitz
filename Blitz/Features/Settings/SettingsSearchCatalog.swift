@@ -108,7 +108,7 @@ enum SettingsSearchCatalog {
 
     static let entries: [SettingsSearchEntry] =
         general + appearance + hyperKey + applications + systemSettings + systemActions + commands
-        + quicklinks + appleShortcuts + fallbacks + clipboard + snippets + fileSearch
+        + quicklinks + appleShortcuts + fallbacks + clipboard + snippets + dictation + fileSearch
         + windowManagement + navigation + notes + calendar + reminders + contacts + emoji + ai
         + agent + agentRules + agentMemory + aiProviders + mcpServers + quickActions + extensions
         + permissions + backup + about
@@ -165,14 +165,19 @@ enum SettingsSearchCatalog {
             .appearanceAppearance, "Theme",
             keywords: ["dark", "light", "mode", "appearance"]),
         .init(
+            .appearanceAppearance, "Show animations",
+            keywords: ["motion", "transitions", "reduce motion", "effects", "instant"]),
+        .init(
             .appearanceAppearance, "Interface size",
             keywords: ["text size", "font size", "scale", "zoom", "bigger", "larger", "legible"]),
         .init(
             .appearanceAppearance, "Window mode",
             keywords: ["compact", "expanded", "slim", "search bar", "small"]),
         .init(
-            .appearanceAppearance, "Show favorites in compact mode",
-            keywords: ["pinned", "apps", "compact"]),
+            group: .appearanceCompactShortcuts, "Compact Shortcuts",
+            keywords: [
+                "slots", "buttons", "reorder", "clipboard", "emoji", "notes", "schedule", "quick ai"
+            ]),
         .init(
             .appearanceAppearance, "Follow the cursor across displays",
             keywords: ["monitor", "screen", "pointer", "multi display"]),
@@ -507,6 +512,9 @@ enum SettingsSearchCatalog {
             .notesOptions, "Show Formatting Bar",
             keywords: ["toolbar", "format bar", "buttons", "bold", "heading", "markdown"]),
         .init(
+            .notesOptions, "Show in Menu Bar",
+            keywords: ["status bar", "menu bar icon", "status item", "toolbar icon"]),
+        .init(
             .notesOptions, "Notes Folder",
             keywords: ["location", "path", "dotfiles", "files", "markdown"]),
         .init(
@@ -522,6 +530,9 @@ enum SettingsSearchCatalog {
             .snippetsSnippets, "Enable snippets",
             keywords: ["expansion", "keystrokes", "accessibility"]),
         .init(
+            .snippetsSnippets, "Default action",
+            keywords: ["enter", "return", "paste", "copy", "primary"]),
+        .init(
             group: .snippetsCommands, "Snippet commands",
             keywords: ["shortcut", "hotkey", "launcher", "browser"]),
         .init(
@@ -530,6 +541,35 @@ enum SettingsSearchCatalog {
         .init(
             .snippetsLibrary, "Snippets Folder",
             keywords: ["reveal", "finder", "markdown", "files", "location", "path", "dotfiles"])
+    ]
+
+    private static let dictation: [SettingsSearchEntry] = [
+        .init(
+            pane: .dictation,
+            keywords: ["speech", "voice", "talk", "transcribe", "microphone", "speak"]),
+        .init(
+            .dictationDictation, "Enable Dictation",
+            keywords: ["speech to text", "voice", "microphone", "permission"]),
+        .init(
+            .dictationShortcut, "Shortcut behavior",
+            keywords: ["hold to talk", "push to talk", "toggle", "mode"]),
+        .init(.dictationShortcut, "Shortcut", keywords: ["hotkey", "key", "globe", "fn"]),
+        .init(
+            .dictationShortcut, "Play sounds",
+            keywords: ["sound", "chime", "beep", "audio", "feedback"]),
+        .init(
+            .dictationLanguage, "Language",
+            keywords: ["locale", "speech model", "download", "on-device"]),
+        .init(.dictationOutput, "Microphone", keywords: ["input", "headset", "device"]),
+        .init(
+            .dictationOutput, "When finished",
+            keywords: ["paste", "copy", "clipboard", "destination"]),
+        .init(
+            .dictationOutput, "Insert while recording",
+            keywords: ["live", "streaming", "chunk", "pause"]),
+        .init(
+            .dictationOutput, "Adapt capitalization",
+            keywords: ["uppercase", "lowercase", "sentence", "spacing"])
     ]
 
     private static let navigation: [SettingsSearchEntry] = [
@@ -798,7 +838,10 @@ enum SettingsSearchCatalog {
             keywords: ["todo", "tasks", "privacy", "grant", "eventkit"]),
         .init(
             .permissionsContacts, "Contacts",
-            keywords: ["address book", "people", "privacy", "grant"])
+            keywords: ["address book", "people", "privacy", "grant"]),
+        .init(
+            .permissionsMicrophone, "Microphone",
+            keywords: ["dictation", "voice", "audio", "privacy", "grant"])
     ]
 
     private static let backup: [SettingsSearchEntry] = [

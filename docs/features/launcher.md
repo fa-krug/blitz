@@ -491,7 +491,7 @@ only while the score is above 1 and the entry was opened in the last 17 days, wh
 stale habit stop overriding the alignment.
 
 Every pick through `LauncherCoordinator.launch` is a visit, with the query as it was typed: a list
-click, a result, a favorite by ⌘-digit or from the compact bar, the ⌘K Open row. A global shortcut
+click, a result, a favorite by ⌘-digit, the ⌘K Open row. A global shortcut
 is not a visit, and neither is a fallback or a query-driven row. A category listing records the visit
 and not the word. `rank` reads the store once per pass through `snapshot()` — one clock read, not one
 per candidate — and the memos key on the ranking, alias, visibility, favorites and shortcut revisions
@@ -556,7 +556,8 @@ never suggested, however often they are opened:
 
 A suggested entry leaves its kind section below, so no row appears twice. `AppIndex.Results` carries
 `favoriteCount`, `meetingCount`, `suggestionCount` and, for a typed query, `matchCount`, which
-`LauncherScreen` hands to `LauncherList` for its leading headers. **Show suggestions** in Settings › General › Search turns the section
+`LauncherScreen` hands to `LauncherList` for its leading headers — the favorites prefix as
+`pinnedFavorites`, merged with file favorites (see [Favorites](#favorites)). **Show suggestions** in Settings › General › Search turns the section
 off (`launcherShowsSuggestions`, carried by a settings backup). `HotKeyManager.revision` is part of
 `AppIndex`'s results key, because binding a shortcut takes an entry out of the section.
 
@@ -685,7 +686,7 @@ internals live in [navigation.md](navigation.md) and [menu-search.md](menu-searc
 The ranking harness covers the frecency curve, search-term retention and its 17-day gate, pruning,
 persistence and both reset paths; see the command in `development.md`.
 
-Launcher rows and compact favorites ask for the point size they actually draw at, scaled by the
+Launcher rows ask for the point size they actually draw at, scaled by the
 view's `displayScale`: 24/26/29pt becomes 48/52/58px at 2×. `IconCache` still rasterizes through its
 96px canvas first — AppKit picks the representation and the drop shadow from that size — and then
 keeps only the row-sized bitmap, in a 6 MB cost-capped row cache separate from the 12 MB one.
@@ -731,29 +732,41 @@ than raising the dialog. See [Agent](agent.md#opening).
 ## Favorites
 
 `FavoritesStore.keys` is the order — the array *is* the ranking, and it only shows while the query is
-empty, where `AppIndex.orderedResults` pins it as a prefix of the results and counts it in
-`Results.favoriteCount`. `LauncherScreen` reads that count once in `init`, and the list, the reorder
-rows and the chord guards all read that one number, so the visible section and what a move acts on
-can't disagree.
+empty. It holds entries' `preferenceKey`s and, interleaved with them, files and folders favorited
+from [Search Files](file-search.md#favorites): their key is a `file:///` URL, which no bundle ID or
+entry ID can spell, with a trailing slash for a folder. The one `favoriteApps` preference and the
+settings backup's `favoriteApps` field carry the whole mixed list.
+
+`AppIndex.orderedResults` pins the entry favorites as a prefix of the results and counts it in
+`Results.favoriteCount`; a file is not an `AppEntry`, so the index never sees one. `LauncherScreen`
+splits that prefix off in `init` and merges it with `FileSearchCoordinator.favoriteFiles` through
+`FavoritesStore.orderedItems`, in key order, into `pinnedFavorites: [FavoritesStore.Item]`. The
+list, the reorder rows, the chord guards and the ⌘-digit slots all read that one array, so the
+visible section and what a move acts on can't disagree. A file row is `LauncherScreen.Row.file`,
+id-prefixed `file-` because an application's entry ID is its bundle path, drawn by the Search Files
+`FileSearchRow` with its location, and answered by Search Files' own actions (see
+[file-search.md](file-search.md#favorites)).
 
 The ⌘K menu carries **Add / Remove from Favorites** (⇧⌘F) plus **Move Favorite Up / Down** (⌥⌘↑ /
 ⌥⌘↓). A move row is only built in a direction that exists, so the first favorite has no Up row and
 the last has no Down.
 
-**Every one of those rows runs the same call its chord does** — the menu is handed an
-`AppActionsMenu.FavoriteActions` built by `LauncherScreen` and never touches `FavoritesStore` itself.
-A row that mutates the store directly looks identical on screen and then behaves differently from its
-chord, because the store knows nothing about where the highlight should land.
+**Every one of those rows runs the same call its chord does** — the menu is handed a
+`FavoriteActions` built by `LauncherScreen` and never touches `FavoritesStore` itself. A row that
+mutates the store directly looks identical on screen and then behaves differently from its chord,
+because the store knows nothing about where the highlight should land. `FavoriteActions.items`
+builds the rows for both `AppActionsMenu` and `FileSearchActionsMenu`.
 
 `FavoritesStore.exchange` swaps two stored positions rather than removing and re-inserting. `keys`
-retains entries that `VisibilityStore` hides or that aren't currently indexed — `ordered(_:)` drops
-them with `compactMap` and never prunes them, which is how a favorite survives an unmounted volume —
-so exchanging the two *visible* keys leaves every such key on its own slot.
+retains entries that `VisibilityStore` hides or that aren't currently indexed, and files that are
+missing or whose feature is off — `orderedItems` drops them with `compactMap` and never prunes them,
+which is how a favorite survives an unmounted volume — so exchanging the two *visible* keys leaves
+every such key on its own slot.
 
 Both actions re-ask `orderedResults` afterwards and restate `vm.selection` against it; the mutation
 already invalidated the memo, so that call warms the exact key the next render reads. Where the
-highlight lands differs on purpose: a **move** follows the entry, since the point of the action is
-where that entry now sits, while a **toggle** stays with the section rather than chasing an entry
+highlight lands differs on purpose: a **move** follows the row, since the point of the action is
+where that row now sits, while a **toggle** stays with the section rather than chasing a row
 across the list — the top of Favorites on add, the neighbour above the one that left on remove.
 
 ### ⌘-digit slots
@@ -764,18 +777,17 @@ so the same positions work on QWERTY and AZERTY. The same slots address pinned C
 that screen; the eleventh favorite is still listed and reorderable, and simply has no slot.
 
 Both palette sizes serve the chords from the same prefix, because `paletteIsCollapsed` already
-requires an empty query: **compact implies empty implies `favoriteCount` is the pinned prefix**. That
-is why `LauncherScreen.pinnedFavorites` feeds the strip, the chords and the numbered rows alike,
-rather than the compact bar re-deriving an empty-query order of its own. In compact the strip draws
-the first five; ⌘6–⌘0 still launch favorites it has no room for, and the "…" is a button after them
-rather than a slot, so no favorite loses its digit to the overflow.
+requires an empty query: **compact implies empty implies `pinnedFavorites` is the visible section**. That
+is why `LauncherScreen.pinnedFavorites` feeds the chords and the numbered rows alike, rather than
+the compact bar re-deriving an empty-query order of its own. The compact bar draws no favorites, yet
+every slot still launches one.
 
 Holding ⌘ swaps each numbered row's kind label for its chord. `PalettePanel` publishes the modifier
 into `PaletteState.commandHeld` from `.flagsChanged` and clears it in `resignKey` — not in `prepare`,
 which a re-show that preserves state skips entirely. The flag flips **400 ms after** the press, not
 on it: every ⌘ chord in the palette starts as a ⌘ press, so revealing on the down edge flashed the
 numbering under ⌘↵ and ⌘K. `noteCommandHeld` schedules the reveal and any release cancels it, so a
-chord's own tap never outlives its keystroke while a deliberate hold still lights every row. **`AppRow` observes that flag itself**: reading
+chord's own tap never outlives its keystroke while a deliberate hold still lights every row. **`AppRow` (and a file favorite's `FileSearchRow`) observes that flag itself**: reading
 it any higher would attach it to `RootPaletteView`'s body and rebuild the whole palette on every ⌘
 press, where a row-level read re-runs only the handful of rows the `LazyVStack` has realized. The
 digit each row shows is carried on its `Row` case from the section build, so no row searches for its
@@ -892,8 +904,7 @@ and the lead card keep SwiftUI's own gesture. The operation is **copy only**, as
 [clipboard.md](clipboard.md#dragging-out) explains: on the boot volume a file-URL drag would default
 to a move, and moving an app out of `/Applications` is never what a launcher should do. The image is
 the shared icon bitmap when it is warm and `NSWorkspace`'s otherwise, never a decode, and a landed
-drop hides the palette through `PaletteCoordinator.dragLanded()`. Compact mode's favorite buttons do
-not drag.
+drop hides the palette through `PaletteCoordinator.dragLanded()`.
 
 ## Quitting and restarting apps
 
@@ -903,7 +914,7 @@ running dot and the availability of the running-only actions:
 - **Quit Application** — a row of an app's ⌘K Actions menu, shown only while that app is
   running, also bound to **⌃⇧Q** on the selected row. The chord guard mirrors the menu row's
   condition (an `.application` entry that `RunningAppsMonitor` reports running) so the key never
-  swallows a press it won't act on, and it's skipped in the compact bar, which shows no selection.
+  swallows a press it won't act on, and it's skipped in the compact bar, which shows no row selection.
   `AppLauncher.quit(bundleID:url:)` terminates the instances running from the selected path (a nil
   `url`, which Switch Windows passes, means every instance) and reports whether anything was
   running; the palette only dismisses when something was, and it restores focus unless the app it

@@ -9,6 +9,7 @@ struct AIProviderPage: View {
     let route: AIProviderRoute
     @Binding var tab: AIProviderTab
     let keyStatuses: [UUID: Bool]
+    let connectionsWithHeaders: Set<UUID>
     let keyError: Bool
     let onEdit: (AIConnection) -> Void
     let onRemove: (AIConnection) -> Void
@@ -208,6 +209,7 @@ struct AIProviderPage: View {
 
     private func connectionSection(_ connection: AIConnection) -> some View {
         let hasStoredKey = keyStatuses[connection.id] == true
+        let hasHeaders = connectionsWithHeaders.contains(connection.id)
         return Section {
             LabeledContent("Provider", value: connection.provider.title)
             LabeledContent("Base URL") {
@@ -219,10 +221,15 @@ struct AIProviderPage: View {
                     .textSelection(.enabled)
             }
             LabeledContent("API key") {
-                Text(keyStatus(connection, hasStoredKey: hasStoredKey))
+                Text(keyStatus(connection, hasStoredKey: hasStoredKey, hasHeaders: hasHeaders))
                     .foregroundStyle(
-                        connection.isMissingKey(hasStoredKey: hasStoredKey)
+                        connection.isMissingKey(hasStoredKey: hasStoredKey, hasHeaders: hasHeaders)
                             ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+            }
+            if hasHeaders {
+                LabeledContent("Request headers") {
+                    Text("Stored in Keychain").foregroundStyle(.secondary)
+                }
             }
             if keyError {
                 Label("The login Keychain could not be accessed.", systemImage: "exclamationmark.triangle")
@@ -237,9 +244,12 @@ struct AIProviderPage: View {
         }
     }
 
-    private func keyStatus(_ connection: AIConnection, hasStoredKey: Bool) -> String {
+    private func keyStatus(
+        _ connection: AIConnection, hasStoredKey: Bool, hasHeaders: Bool
+    ) -> String {
         if hasStoredKey { return "Stored in Keychain" }
-        return AIEndpointPolicy.isLoopback(connection.baseURL) ? "None needed locally" : "Missing"
+        if AIEndpointPolicy.isLoopback(connection.baseURL) { return "None needed locally" }
+        return hasHeaders ? "Not set" : "Missing"
     }
 
     // MARK: - Models

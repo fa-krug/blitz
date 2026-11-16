@@ -237,6 +237,7 @@ not outlive the window.
 | Show in Finder | ⌘↵ | reveals and dismisses |
 | Quick Look | ⌘Y | the in-panel overlay above |
 | Share… | — | `NSSharingServicePicker`, anchored to the palette's trailing edge so the row it was opened from stays visible beside it. Escape or a click elsewhere dismisses it, and the palette is never hidden, so the flow returns to the same row. There is no chord: the destinations are the system's, and it is the only place a system popover is right |
+| Add / Remove from Favorites | ⇧⌘F | `FileSearchCoordinator.toggleFavorite`; see [Favorites](#favorites) |
 | Copy File | ⇧⌘C | the file itself on the pasteboard through `PasteboardFiles.write`, which declares `.fileURL` and the path as `.string` |
 | Copy Name | ⌥⌘C | through `Paster`, palette stays open |
 | Copy Path | ⌃⌘C | the standardized path, palette stays open |
@@ -258,6 +259,28 @@ The first in-flight query says nothing — the rows it is about to replace would
 empty completed query says what the active filter admits ("No files found", "No images found"), a blank
 screen with no recents says "Type to search files and folders", and query creation or execution failure
 says "File search is unavailable" inline.
+
+### Favorites
+
+A file or folder joins the launcher's Favorites from its ⌘K row or ⇧⌘F, both through
+`FileSearchCoordinator.toggleFavorite`. It is stored in the launcher's own `FavoritesStore` list as
+`FileSearchResult.favoriteKey`, a `file:///` URL whose trailing slash marks a folder, so it shares the
+section's order, its reorder rows and its ⌘-digit slots with app and command favorites, and the
+settings backup's `favoriteApps` field carries it unchanged. `FileSearchResult(favoriteKey:)` reads it
+back without touching the disk or Spotlight, and answers nil for every other kind of key. See
+[launcher.md](launcher.md#favorites) for the section itself.
+
+In root search a file favorite draws `FileSearchRow` full width, with its parent path and a trailing
+File or Folder that holding ⌘ turns into its slot, and answers this screen's actions — ↵, ⌘↵, the
+copy, paste and trash chords — through the shared `FileSearchActionsMenu.perform`, with the launcher's
+Move Favorite rows added and no Quick Look, which needs this screen's overlay.
+
+A favorite keeps its saved path: moving or renaming the file means favoriting the new location.
+`favoriteFiles` hides a path rather than unfavoriting it in two cases, so its key and slot survive:
+**File Search is off**, and **the path was missing** when `refreshFavoriteAvailability` last looked.
+That check runs once per launcher show, off the main actor — a `fileExists` per render is too much —
+and a trash from either screen hides the row at once, its Undo bringing it back. A file on an
+unmounted volume therefore returns with the volume, as an app favorite does.
 
 ### Dragging out
 

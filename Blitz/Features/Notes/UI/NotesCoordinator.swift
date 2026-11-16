@@ -19,9 +19,11 @@ final class NotesCoordinator {
         coordinator: self)
     @ObservationIgnored private lazy var headingMenuController = NoteHeadingMenuWindowController(
         coordinator: self)
+    @ObservationIgnored private var menuBarController: NotesMenuBarController?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var issueTask: Task<Void, Never>?
     @ObservationIgnored private var operationTask: Task<Void, Never>?
+    @ObservationIgnored private var wordCountTask: Task<Int, Never>?
     @ObservationIgnored private var operationID = 0
     @ObservationIgnored private var pendingIssue: NotesStore.Issue?
     private var pendingPresentation: Presentation?
@@ -30,6 +32,7 @@ final class NotesCoordinator {
     private(set) var switcherSelection: NoteID?
     private(set) var switcherFocusRevision = 0
     private(set) var characterCount = 0
+    private(set) var wordCount = 0
     private(set) var formatting = NoteFormatting.plain
     private(set) var isFormattingBarExpanded: Bool
     private(set) var isHeadingMenuPresented = false
@@ -71,6 +74,9 @@ final class NotesCoordinator {
     var characterCountLabel: String {
         characterCount == 1 ? "1 character" : "\(characterCount) characters"
     }
+    var wordCountLabel: String {
+        wordCount == 1 ? "1 word" : "\(wordCount) words"
+    }
 
     var searchQueryBinding: Binding<String> {
         Binding(
@@ -98,6 +104,7 @@ final class NotesCoordinator {
         enablementGeneration &+= 1
         let generation = enablementGeneration
         appIndex.setCommandsVisible([.showNotes, .createNote, .searchNotes], settings.notesEnabled)
+        applyMenuBarItem()
         guard !settings.notesEnabled else { return }
         presentationGeneration &+= 1
         pendingPresentation = nil
@@ -113,6 +120,14 @@ final class NotesCoordinator {
             guard generation == enablementGeneration, !settings.notesEnabled else { return }
             store.stop()
         }
+    }
+
+    /// Removed rather than hidden, so a switched-off item holds no status-bar slot.
+    func applyMenuBarItem() {
+        let shows = settings.notesEnabled && settings.notesShowsInMenuBar
+        guard shows != (menuBarController != nil) else { return }
+        menuBarController?.remove()
+        menuBarController = shows ? NotesMenuBarController(coordinator: self) : nil
     }
 
     /// Quit waits on this so the 300 ms autosave debounce cannot swallow the last edit.
@@ -376,9 +391,19 @@ final class NotesCoordinator {
         store.updateSource(source)
     }
 
-    func updateCharacterCount(_ input: NoteEditorInput, _ count: Int) {
+    func updateCounts(_ input: NoteEditorInput, _ characterCount: Int) {
         guard input == editorInput else { return }
-        characterCount = count
+        self.characterCount = characterCount
+        wordCountTask?.cancel()
+        let source = input.source
+        // A pass over the whole note: at 100k characters it would eat the typing frame's budget.
+        let worker = Task.detached(priority: .userInitiated) { NoteWordCount.count(in: source) }
+        wordCountTask = worker
+        Task { [weak self] in
+            let wordCount = await worker.value
+            guard let self, !worker.isCancelled, input == self.editorInput else { return }
+            self.wordCount = wordCount
+        }
     }
 
     /// Id and epoch, not the whole input: comparing a long source on every caret move is not free.

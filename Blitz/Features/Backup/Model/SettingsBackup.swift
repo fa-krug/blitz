@@ -38,7 +38,7 @@ struct SettingsBackup: Codable {
         var calcNumberStyle: String?
         var interfaceSize: String?
         var compactMode: Bool?
-        var showFavoritesInCompactMode: Bool?
+        var compactBarCommands: [String]?
         var searchScopes: [String]?
         var launcherShowsSuggestions: Bool?
         var launcherSavesSearchHistory: Bool?
@@ -46,6 +46,7 @@ struct SettingsBackup: Codable {
         var openOnCursorScreen: Bool?
         // Safe to carry: it grants no permission class, just repositions the window.
         var paletteDraggable: Bool?
+        var animationsEnabled: Bool?
         var fileSearchEnabled: Bool?
         var fileSearchScopes: [String]?
         var fileSearchIgnorePatterns: [String]?
@@ -54,10 +55,12 @@ struct SettingsBackup: Codable {
         var notesEnabled: Bool?
         var notesRendersMarkdown: Bool?
         var notesShowsFormattingBar: Bool?
+        var notesShowsInMenuBar: Bool?
         // `snippetsEnabled` is absent: an import must not enable keystroke listening.
         var customCommandsEnabled: Bool?
         var customCommandsShowInLauncher: Bool?
         var snippetsShowInLauncher: Bool?
+        var snippetDefaultAction: String?
         // Safe to carry: it grants no permission class paste doesn't already prompt for.
         var navigationEnabled: Bool?
         var menuSearchDisabledApps: [String]?
@@ -94,6 +97,14 @@ struct SettingsBackup: Codable {
         var menuBarLinkedEventsOnly: Bool?
         var calendarMenuBarHidesWhenEmpty: Bool?
         var hideCurrentEvent: Int?
+        // `dictationEnabled` and the microphone are absent: an import must not arm a recording.
+        var dictationMode: String?
+        /// Empty is the system's own language, which an absent field could not say.
+        var dictationLanguage: String?
+        var dictationDestination: String?
+        var dictationPlaysSounds: Bool?
+        var dictationLiveInsertion: Bool?
+        var dictationAdaptsCapitalization: Bool?
     }
 
     /// One entry per bindable action. docs/features/hotkeys.md#persistence
@@ -155,13 +166,14 @@ extension SettingsBackup {
             calcNumberStyle: s.calcNumberStyle.rawValue,
             interfaceSize: s.interfaceSize.rawValue,
             compactMode: s.compactMode,
-            showFavoritesInCompactMode: s.showFavoritesInCompactMode,
+            compactBarCommands: s.compactBarCommands.map(\.rawValue),
             searchScopes: s.searchScopes,
             launcherShowsSuggestions: s.launcherShowsSuggestions,
             launcherSavesSearchHistory: s.launcherSavesSearchHistory,
             rootSearchSensitivity: s.rootSearchSensitivity.rawValue,
             openOnCursorScreen: s.openOnCursorScreen,
             paletteDraggable: s.paletteDraggable,
+            animationsEnabled: s.animationsEnabled,
             fileSearchEnabled: s.fileSearchEnabled,
             fileSearchScopes: s.fileSearchScopes,
             fileSearchIgnorePatterns: s.fileSearchIgnorePatterns,
@@ -170,9 +182,11 @@ extension SettingsBackup {
             notesEnabled: s.notesEnabled,
             notesRendersMarkdown: s.notesRendersMarkdown,
             notesShowsFormattingBar: s.notesShowsFormattingBar,
+            notesShowsInMenuBar: s.notesShowsInMenuBar,
             customCommandsEnabled: s.customCommandsEnabled,
             customCommandsShowInLauncher: s.customCommandsShowInLauncher,
             snippetsShowInLauncher: s.snippetsShowInLauncher,
+            snippetDefaultAction: s.snippetDefaultAction.rawValue,
             navigationEnabled: s.navigationEnabled,
             menuSearchDisabledApps: s.menuSearchDisabledApps,
             menuSearchShowsAppleMenu: s.menuSearchShowsAppleMenu,
@@ -201,7 +215,13 @@ extension SettingsBackup {
             calendarMenuBarDisplay: s.calendarMenuBarDisplay.rawValue,
             menuBarLinkedEventsOnly: s.menuBarLinkedEventsOnly,
             calendarMenuBarHidesWhenEmpty: s.calendarMenuBarHidesWhenEmpty,
-            hideCurrentEvent: s.hideCurrentEvent.rawValue)
+            hideCurrentEvent: s.hideCurrentEvent.rawValue,
+            dictationMode: s.dictationMode.rawValue,
+            dictationLanguage: s.dictationLanguage ?? "",
+            dictationDestination: s.dictationDestination.rawValue,
+            dictationPlaysSounds: s.dictationPlaysSounds,
+            dictationLiveInsertion: s.dictationLiveInsertion,
+            dictationAdaptsCapitalization: s.dictationAdaptsCapitalization)
 
         let hk = core.hotKeys
         var hotkeys = HotkeyBackup()
@@ -387,8 +407,10 @@ extension SettingsBackup {
             settings.compactMode = flag
             count += 1
         }
-        if let flag = s.showFavoritesInCompactMode {
-            settings.showFavoritesInCompactMode = flag
+        if let identifiers = s.compactBarCommands,
+            let commands = CommandID.compactBarCommands(from: identifiers)
+        {
+            settings.compactBarCommands = commands
             count += 1
         }
         if let scopes = s.searchScopes {
@@ -413,6 +435,10 @@ extension SettingsBackup {
         }
         if let flag = s.paletteDraggable {
             settings.paletteDraggable = flag
+            count += 1
+        }
+        if let flag = s.animationsEnabled {
+            settings.animationsEnabled = flag
             count += 1
         }
         // Writing through AppSettings is enough; AppCore's sinks re-project the rest.
@@ -448,6 +474,10 @@ extension SettingsBackup {
             settings.notesShowsFormattingBar = flag
             count += 1
         }
+        if let flag = s.notesShowsInMenuBar {
+            settings.notesShowsInMenuBar = flag
+            count += 1
+        }
         if let flag = s.customCommandsEnabled {
             settings.customCommandsEnabled = flag
             count += 1
@@ -458,6 +488,10 @@ extension SettingsBackup {
         }
         if let flag = s.snippetsShowInLauncher {
             settings.snippetsShowInLauncher = flag
+            count += 1
+        }
+        if let raw = s.snippetDefaultAction, let action = SnippetDefaultAction(rawValue: raw) {
+            settings.snippetDefaultAction = action
             count += 1
         }
         if let flag = s.navigationEnabled {
@@ -578,6 +612,35 @@ extension SettingsBackup {
         }
         if let raw = s.hideCurrentEvent, let hide = HideCurrentEvent(rawValue: raw) {
             settings.hideCurrentEvent = hide
+            count += 1
+        }
+        return count + applyDictation(s, to: settings)
+    }
+
+    private func applyDictation(_ s: SettingsData, to settings: AppSettings) -> Int {
+        var count = 0
+        if let raw = s.dictationMode, let mode = DictationMode(rawValue: raw) {
+            settings.dictationMode = mode
+            count += 1
+        }
+        if let raw = s.dictationLanguage {
+            settings.dictationLanguage = raw.isEmpty ? nil : raw
+            count += 1
+        }
+        if let raw = s.dictationDestination, let destination = DictationDestination(rawValue: raw) {
+            settings.dictationDestination = destination
+            count += 1
+        }
+        if let flag = s.dictationPlaysSounds {
+            settings.dictationPlaysSounds = flag
+            count += 1
+        }
+        if let flag = s.dictationLiveInsertion {
+            settings.dictationLiveInsertion = flag
+            count += 1
+        }
+        if let flag = s.dictationAdaptsCapitalization {
+            settings.dictationAdaptsCapitalization = flag
             count += 1
         }
         return count

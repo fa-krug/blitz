@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Borderless floating panel that hosts the SwiftUI command palette.
-final class PalettePanel: NSPanel {
+final class PalettePanel: NSPanel, AnimatedPanel {
     enum HeaderFieldBoundary {
         case leading
         case trailing
@@ -17,7 +17,7 @@ final class PalettePanel: NSPanel {
     var onCommandShortcut: ((NSEvent) -> Bool)?
     /// The palette's typing context, handed over each time a field takes focus.
     var onFieldEditorFocused: ((NSTextInputContext) -> Void)?
-    /// Inline argument fields use arrows at their text boundaries to continue their focus ring.
+    /// Arrows at the search text's ends: an argument field's focus ring, or the compact bar's buttons.
     var onHeaderFieldBoundaryArrow: ((HeaderFieldBoundary) -> Bool)?
     /// A bare space with the caret after the last character, before it is typed into the text.
     var onTrailingSpace: (() -> Bool)?
@@ -49,7 +49,7 @@ final class PalettePanel: NSPanel {
     /// Nil while a selection can still collapse normally, or when the caret is not at an edge.
     private func headerFieldBoundary(for event: NSEvent) -> HeaderFieldBoundary? {
         guard event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
-            let editor = fieldEditor, editor.selectedRange().length == 0
+            let editor = fieldEditor, !editor.hasMarkedText(), editor.selectedRange().length == 0
         else { return nil }
         switch Int(event.keyCode) {
         case kVK_LeftArrow where editor.selectedRange().location == 0: return .leading
@@ -272,7 +272,7 @@ final class PalettePanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        animationBehavior = .documentWindow
+        followMotion()
         isReleasedWhenClosed = false
 
         let hosting = NSHostingView(rootView: rootView)

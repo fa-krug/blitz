@@ -96,8 +96,8 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 
 | Touching | Run |
 | --- | --- |
-| launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `fallback-test`, `app-name-test` |
-| the palette shell and shared views | `palette-*`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
+| launcher search and ranking | `fuzz-test` — **a new ranking complaint is a new case in its `denseIndex`** — plus `ranking-test`, `scopes-test`, `query-history-test`, `favorites-test`, `app-installation-test` (the mixed favorites order), `fallback-test`, `app-name-test` |
+| the palette shell and shared views | `palette-*`, `compact-bar-test`, `command-escape-tap-test`, `action-menu-search-test`, `hover-arming-test`, `scroll-reveal-test`, `keyboard-focus-test`, `ascii-layout-test`, `interface-size-test`, `appearance-test`, `redaction-test`, `callout-test` |
 | icons | `icon-cache-test`, `entry-icon-test`, `ext-icon-test` |
 | clipboard | `clipboard-*`, `paste-sequence-test`, `pasteboard-test`, `personal-tool-test` |
 | file search and screenshots | `file-search-*`, `screenshot-test` |
@@ -108,6 +108,7 @@ While iterating, run the harnesses for the area you touched; the full suite stil
 | hotkeys and deeplinks | `hotkey-test`, `hid-key-mapping-test`, `deeplink-test` |
 | system actions and dialogs | `system-action-test`, `volume-test`, `microphone-mute-test`, `dialog-draft-test`, `mac-tool-test` |
 | notes and snippets | `notes-*`, `snippets-test`, `personal-tool-test` |
+| dictation | `dictation-test`, plus `hotkey-test` for hold to talk and `settings-*` for its keys |
 | quicklinks, Apple Shortcuts, custom commands, uninstall | `quicklink-*`, `apple-shortcut-test`, `mac-tool-test`, `personal-tool-test`, `custom-command-test`, `uninstall-*` |
 | AI, the agent, Quick Actions and MCP | `ai-*`, `agent-policy-test`, `agent-wait-test`, `chat-markdown-test`, `syntax-highlight-test`, `codex-turn-test`, `installed-ai-test`, `apple-intelligence-test`, `shell-tool-test`, `file-tool-test`, `web-fetch-test`, `session-tool-test`, `mac-tool-test`, `personal-tool-test`, `memory-test`, `quick-action-test`, `text-diff-test`, `mcp-*` |
 | extensions and Raycast import | `ext-*`, `symbols-test`, `raycast-test` |
@@ -445,13 +446,27 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A bare ⌫ in an empty field walks the same path Escape does
 - General ▸ Escape Key Behavior set to `Close window and pop to root`: Escape on any screen closes
   the window, and reopening lands on the root search whatever Pop to Root Search says
+- Compact mode: Escape at the expanded launcher root clears the text, then collapses, then closes,
+  under both Escape preferences
 - Reopening focuses the search field with an empty query, in the same position and at the same size
 - Compact mode: typing expands it, and the search bar does **not** shift vertically during the swap
+- Compact mode: a round button per enabled configured shortcut beads out of the capsule on summon;
+  ←/→ walk Search and the buttons without wrapping, ↓ expands Search or opens the selected button, ↵
+  opens only a button, and typing, pasting or clicking Search returns to Search. Show Notes opens its
+  own window
+- Compact mode: with an argument field focused on an expanded row, ←/→ at the text's ends still walk
+  the Tab ring, and ← / → with text typed move the caret
+- Appearance ▸ Compact Shortcuts: add, replace, remove and reorder zero to four shortcuts, in Light
+  and Dark; the section disappears while Expanded is the window mode. Turning a feature off hides
+  its button without losing its position, and Settings marks it Off in the list and lists it under
+  Off in both menus
+- A fresh install opens compact, with Clipboard History and Search Emoji & Symbols on the bar
 - With a CJK IME: the placeholder clears as soon as composition starts and the composing text never
   overlaps it; cancelling composition brings the placeholder back, and the list filters only once the
   candidate is committed — check on a second summon too, where first responder never moved
 - Typing filters instantly; ↑/↓ move the highlight and scroll it into view without yanking the list
-- ⌃N/⌃P move the highlight as ↓/↑ do; ⌃F/⌃B step the emoji grid's selection, and the caret elsewhere
+- ⌃N/⌃P move the highlight as ↓/↑ do; ⌃F/⌃B step compact shortcuts or the emoji grid's selection,
+  and the caret elsewhere
 - The highlight always sits on the row the footer pill describes
 - With a calculation typed, the calculator card is first and is selected first
 - ⌘↵ on a number, unit or money card puts the answer in the search bar with the caret after it, so
@@ -641,6 +656,12 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Recording a shortcut opens the palette straight into File Search, hidden from the launcher or not
 - Search Files is absent from Settings ▸ Commands, and `Enable Commands` off leaves its shortcut live
 - Export, clear both lists and the shortcut, re-import: all three return, defaults undo not duplicated
+- ⌘K → Add to Favorites on a folder and ⇧⌘F on a file: with an empty launcher query both sit among
+  the app favorites in the order added, after a relaunch too; ↵ opens, ⌘↵ reveals, ⌥⌘↑/↓ and the menu's
+  Move rows reorder across apps and files, and held ⌘ shows each one's slot, which opens it
+- Trash a favorited file from its launcher row: the row leaves at once and Undo brings it back; delete
+  one in Finder and it is gone on the next summon. Disable File Search: file favorites disappear and
+  return in place when it is re-enabled; a backup import restores the mixed order
 
 ### Screenshots
 
@@ -705,16 +726,17 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Edit one note, switch to a shorter note, then Undo and Redo: the new note remains intact and the app
   does not terminate
 - With rendering on and off, ⌘Z undoes and ⇧⌘Z redoes typing, deletion and paste while another app's
-  menu bar is visible; both update the footer count and autosave the restored source. Editing after
+  menu bar is visible; both update the footer counts and autosave the restored source. Editing after
   an undo discards redo
 - Marked-text input, emoji, combining marks, Copy, Cut, Paste, Select All, Undo, and Redo preserve
   exact source; ⌘F finds occurrences in the active note with rendering on and off, and Escape closes
   the find bar before hiding Notes
 - An empty note shows `Start writing…`; ⌘F moves it below the find bar without overlap, and closing Find
-  restores its position. The footer count is right after typing, pasting and undoing
-- With Render Markdown and Show Formatting Bar on, the band under a note holds the character count on
-  the left and the round formatting button on the right; with either setting off, the centred count
-  footer shows instead and nothing else moved
+  restores its position. The footer's word and character counts are right after typing, pasting and
+  undoing, and after switching notes
+- With Render Markdown and Show Formatting Bar on, the band under a note holds the word and character
+  counts on the left and the round formatting button on the right; with either setting off, the
+  centred counts footer shows instead and nothing else moved
 - The bar starts collapsed, ⌥⌘T and the round button both expand and collapse it, the buttons slide out
   from behind that button, and the state survives switching notes, hiding the window and a relaunch
 - Every bar button applies its formatting, undoes in one step with ⌘Z, and autosaves; clicking keeps the
@@ -726,12 +748,15 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - The heading menu opens above the capsule, aligned to its left edge, shows the current level checked,
   and applies a level on click; it closes on Escape, on a click anywhere in the note window (including
   the heading button itself, which must not reopen it), on typing, on ⌘P, and when another app is clicked
-- At the smallest window size all eleven controls show and the count is hidden, the note's text keeps
+- At the smallest window size all eleven controls show and the counts are hidden, the note's text keeps
   its inset in both states, the heading menu still opens in full above the capsule, and widening the
-  window brings the count back
+  window brings the counts back
 - ⌥⌘C and ⇧⌘B toggle a code block and a quote; with Render Markdown off they do nothing special
 - Settings > Notes > Show Formatting Bar is disabled while Render Markdown is off, Settings search for
   "formatting" lands on it, and a backup round trip restores it
+- With Show in Menu Bar on, the Notes icon appears at once; a click shows Notes and a second click
+  hides it, and right-, Control- and Option-click open Create Note and Search Notes. Turning the
+  setting or Notes off removes the icon, and a ⌘-dragged position survives a relaunch
 - With VoiceOver, the bar reads as "Formatting" with each button named, lit ones as selected, the round
   button announcing Expanded or Collapsed, and the heading button its level; menu rows read their titles
   and the current one as selected
@@ -743,7 +768,7 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - Command-Q does nothing anywhere; with Settings in front, Command-W closes Settings
 - Hiding restores the previous external app or Blitz window
 - Open Notes Folder opens Finder with the active Markdown file selected, or the folder with no note
-- Deleting every note closes the browse list and leaves one clean empty state with no character count;
+- Deleting every note closes the browse list and leaves one clean empty state with no counts;
   Command-N from there creates and selects one note
 - The browse list fades only at its bottom edge and rests opaque once it reaches the end
 - Quitting inside the debounce window saves the last edit
@@ -759,6 +784,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 - A snippet's shortcut pressed with Settings key, right after recording it, shows **Click into a text
   field first** rather than doing nothing
 - Editing a snippet file externally reloads it
+- In Search Snippets, ⌘. pins a snippet under **Pinned** and the highlight follows it; editing it in
+  Settings keeps the pin. ⌘↵ copies (asking for arguments first) and the copy lands in clipboard
+  history; with **Default action** on Copy, ↵ copies and ⌘↵ pastes. ⌘F shows the file in Finder
 - `{browser-tab}` expands to the front tab's URL in Safari and in Chrome, Automation prompt included;
   denied, the expansion is abandoned and the dialog offers System Settings; no browser running
   expands to nothing
@@ -996,6 +1024,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Settings and backup
 
 - Every pane renders and the sidebar switches without flicker
+- Appearance › Show animations off: the palette, its ⌘K menu, a dialog, a HUD, Notes and a Settings
+  editor appear and leave at once, with no row or expansion animation; back on, they animate again
+  without a relaunch, and spinners keep turning either way
 - Closing and reopening Settings lands on the pane it was on, with Back disabled and the sidebar
   search empty;
   an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)

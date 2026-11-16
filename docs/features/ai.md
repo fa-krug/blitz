@@ -79,7 +79,12 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   through `KeychainSecretStore.aiAPIKeys`, and never enter logs, errors or settings backups. A key is issued for one
   endpoint and never follows a connection retargeted at another — change the provider or base URL and
   both model discovery and Save ask for a new key, rather than introduce the saved one to a host it
-  was never meant to reach (`AIEndpointPolicy.sameDestination`).
+  was never meant to reach (`AIEndpointPolicy.sameDestination`). A connection's custom request
+  headers live there too, never in `AIConnection`: one JSON item per connection under
+  `KeychainSecretStore.aiRequestHeaders`, so neither a settings backup nor `settings.json` carries
+  them, and removing a connection deletes them with its key. Unlike the key they are visible rows in
+  the editor rather than a hidden saved value, so they are saved with whatever endpoint the
+  connection is saved with. Their values are redacted from provider errors as the key is.
 - **Remote endpoints require HTTPS.** Plain HTTP is accepted only for `localhost`, `127.0.0.1` and
   `::1`, where a key is optional, and any other scheme is rejected outright — a loopback host does
   not excuse `ftp://`. `AIEndpointPolicy` is the one place that decides this.
@@ -276,8 +281,9 @@ bottom with the model picker. ⌘J hands a Quick AI conversation to the window.
   only a message that is still whole. The connection's key, bearer tokens and key-shaped strings are
   replaced with `[redacted]`, and then the message is cut at `messageLimit` (600 characters). A key
   under eight characters is redacted only as a whole word, so it cannot eat into a longer one; a
-  local server's placeholder key is redacted like any other. A mid-stream error is treated the same
-  way: the decoder is handed the key, an Anthropic `error` event shows its message under its line,
+  local server's placeholder key is redacted like any other, and so is each custom header value. A
+  mid-stream error is treated the same way: the decoder is handed the key and the header values, an
+  Anthropic `error` event shows its message under its line,
   and an OpenAI-compatible one reads through `metadata.raw` too, or says the provider stopped the
   response when there is no sentence to show.
 - **Wire shapes live in `Model/`, where a harness reaches them.** `ai-provider-test` compiles the
@@ -451,7 +457,7 @@ custom OpenAI-compatible route.
 | Grok | installed `grok --prompt-file` | user's Grok login |
 | OpenCode | installed `opencode run --standalone` (OpenCode 2) | providers already configured in OpenCode |
 | Cursor | installed `agent -p --mode ask` | user's Cursor login |
-| OpenAI API | OpenAI Chat Completions | `https://api.openai.com/v1` |
+| OpenAI API | OpenAI Responses at `api.openai.com`, Chat Completions anywhere else | `https://api.openai.com/v1` |
 | Anthropic Claude | Anthropic Messages | `https://api.anthropic.com` |
 | Google Gemini | Gemini's OpenAI-compatible API | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` |
@@ -461,6 +467,24 @@ The base URL stays editable for every preset because gateways and organization p
 destinations. `AIHTTPConfiguration.endpointURL` accepts a complete endpoint or appends the transport's
 completion path. Gemini requests identify Blitz through `x-goog-api-client`; OpenRouter requests
 carry the app title.
+
+Only the OpenAI preset pointed at `api.openai.com` speaks Responses (`APIShape.openAIResponses`):
+OpenAI's reasoning models refuse function tools on Chat Completions, which the agent's tools need.
+The same preset pointed at a gateway, and OpenAI Compatible at any address, keep Chat Completions,
+since a gateway is not known to implement Responses. A saved `/chat/completions` endpoint on
+OpenAI's own host resolves to `/responses` without rewriting the connection, and model discovery
+strips a full `/responses` endpoint back to `/models`.
+
+A connection can also carry custom request headers, for a gateway that routes or authenticates by
+header — the editor's **Request Headers** rows, each value a `RevealableSecureField`. They go to model
+discovery and to every chat request after the route's own headers, so a custom name replaces a
+default in any case. With headers set the API key is optional (`AIConnectionKeyPolicy`,
+`AIProviderFactory` and the editor's discovery all agree), and an empty key sends no
+`Authorization`, `x-api-key` or `x-goog-api-key` header rather than an empty one.
+`AIRequestHeaders.validated` drops blank rows and refuses a name outside RFC 9110's token set, a
+name repeated in any case, and a value with a line break or control character, both before
+discovery and on Save. Opening the editor reads the saved headers, and if that read fails the editor
+stays closed on the Keychain error rather than open without them and erase them on Save.
 
 Each connection has an ordered, deduplicated list of exact model identifiers. While its editor is open,
 Blitz asks the configured provider for the models available to the entered key and uses the result
@@ -515,6 +539,20 @@ into answer text. `AIThinkTagDecoder` holds back a tag split across deltas, drop
 between the closing tag and the answer, and flushes an unclosed block as reasoning. Anthropic
 system messages are lifted into its top-level `system` field; the other HTTP routes keep system
 messages in the OpenAI message array.
+
+The Responses route is stateless: every request sets `store: false` and resends the turn as
+`input` items — text, `input_image` and `input_file` parts, `function_call` items by `call_id` and
+`function_call_output` results — with the instructions top-level and function tools flat, with
+`strict: false` so an MCP server's optional parameters stay optional. No output item is replayed:
+with nothing stored an item id points at nothing, and a reasoning item could only travel encrypted,
+so between tool rounds the model keeps its calls and text but not its reasoning. A `reasoning`
+object goes out only for an effort the route is handed, and since OpenAI's own host is a vendor
+API, which is offered no levels, it keeps the model's default. `AIResponsesDecoder` turns text and
+refusal deltas into text and a reasoning item into `.thinking` — no summary is requested, since
+OpenAI gates summaries on a verified organization — and releases function calls only from
+`response.completed`, never from argument deltas. A failed or incomplete response, an `error`
+event, a `[DONE]` or a stream that ends before completion fails the turn and releases no call.
+Its usage reports cached input inside `input_tokens`, so none is added on top.
 
 `AIProviderFactory` resolves the selection, validates an API endpoint, reads an API key at the last
 possible moment and returns `AppleIntelligenceProvider`, `HTTPAIProvider`, `CodexInstalledProvider`
@@ -706,10 +744,12 @@ and the Actions menu's own chords, and dies with the window.
   The title bar keeps the system's own band, as a native document window's does.
   Transcript text runs `spacing.chatLine` apart, both surfaces. `ChatComposerTextView` is an `NSTextView`, not a `TextEditor`: its delegate sees
   `insertNewline:` only outside input-method composition, so Return sends and ⇧↩ or ⌥↩ breaks the
-  line without Return ever stealing an IME's confirm. It grows with its text to
+  line without Return ever stealing an IME's confirm. Its text view is a `ComposerTextView`, an
+  `InjectableTextView` like a note's, so Dictation, snippets and Quick Actions write into it in
+  process. It grows with its text to
   `aiChatComposerMaxHeight`, then scrolls. Under it: the paperclip (an `NSOpenPanel`), the model
   menu, the mode pill ([Agent](agent.md#the-session-scope-and-the-composer)), a context gauge,
-  and Send/Stop; reasoning, tools and web search live in the ⌘K menu. While a
+  a mic while [Dictation](dictation.md) is on, and Send/Stop; reasoning, tools and web search live in the ⌘K menu. While a
   question waits, Send is Answer, the placeholder reads "Answer the question…", and Stop gets a
   button of its own beside it.
   One paperclip takes every kind; its help names what this chat's model can read. The gauge is the
@@ -1102,9 +1142,9 @@ transport code at all.
 | OpenCode command | never | a private file per picture, through `--file`, only for models whose catalog lists `image` input | never | the global config still loads — the `blitz` agent's deny-all rule drops every tool |
 | Cursor command | never | never | never | the global config still loads — ask mode and withheld approval refuse the call |
 | OpenRouter | `plugins: [{id: "web"}]` — OpenRouter's own layer, any model | `image_url` part, only for models whose catalog lists the `image` modality | never yet — its catalog publishes a `file` modality Blitz does not read | `tools` + `role: "tool"` turns |
-| OpenAI | not offered | `image_url` part, assumed supported | `file` part with `filename` and a `file_data` data URL | `tools` + `role: "tool"` turns |
+| OpenAI | the hosted `{type: "web_search"}` tool beside the functions, at `api.openai.com` only — never on a gateway | `input_image` part, assumed supported; `image_url` on a gateway | `input_file` part with `filename` and a `file_data` data URL; a `file` part on a gateway | flat `function` tools + `function_call_output` items; `tools` + `role: "tool"` turns on a gateway |
 | Gemini / compatible | not offered | `image_url` part, assumed supported | never — a gateway that has not implemented the part bills the upload before rejecting it | `tools` + `role: "tool"` turns |
-| Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
+| Anthropic | the server `web_search` tool, `max_uses` 5 — `web_search_20260209` from Opus and Sonnet 4.6 on, `web_search_20250305` otherwise; at `api.anthropic.com` only | base64 `image` block | base64 `document` block, ahead of the text block | `tools` + `tool_use` / `tool_result` blocks |
 
 A search is part of the reply, not a status: `item/started` for a `webSearch` item appends a
 `ChatSearch` to the streaming message pinned at the text length so far, `item/completed` (or the
@@ -1116,8 +1156,24 @@ to the stream, so it shows none. Anthropic's arrives as a `server_tool_use` bloc
 from the tool loop's calls, and its `web_search_tool_result` completes the row; the Claude command's
 is a `WebSearch` `tool_use` and its `tool_result`, never a tool row. A paused server loop
 (`pause_turn`) ends the reply where it stopped: Blitz keeps no server blocks to resume it with.
-Anthropic's own citation blocks are ignored, since sources come from the reply's links. The web-search instructions ask for citations linked by the
-publication's name — the model otherwise labels them "Read more".
+OpenAI's search is a `web_search_call` output item: its `output_item.added` opens the row and its
+`output_item.done` completes it with the action's `query`, or the first of its `queries`.
+
+Sources still come from the reply's links, and both APIs report citations beside the text rather
+than in it — OpenAI as `url_citation` annotations, Anthropic as `citations_delta`s on a text
+block. `AICitationLinker` inlines each cited page as ` ([host](url))`, labelled by
+`ChatReference.host(of:)` as the Sources list labels it: OpenAI's after the span that cited it,
+Anthropic's once its text block closes, since a block's citations can arrive before its text. A
+page the reply already links is skipped, each page is linked once a reply, and `(` and `)` in its
+URL are percent-encoded so the Markdown link survives `ChatReferences`. The web-search
+instructions ask for citations linked by the publication's name — the model otherwise labels them
+"Read more".
+
+`AIProviderKind.offersWebSearch(at:)` decides which connections get the switch: OpenRouter at any
+address, OpenAI only where it speaks Responses, Anthropic only at `api.anthropic.com`, and neither
+Gemini, whose OpenAI-compatible endpoint documents no search option, nor OpenAI Compatible. A
+vendor's hosted search exists only on the vendor's own endpoint, so a gateway behind either preset
+is never offered one.
 
 `AIModelCapabilities` says what the footer may offer for the selected model. OpenRouter is the only
 catalog that reports `architecture.input_modalities`, so it is the only provider gated on it:
@@ -1238,7 +1294,9 @@ chosen tab is kept from one provider to the next:
 - **Overview** reports an installed tool as checking, ready, sign-in required, missing or failed,
   with the account, Codex's usage windows and the command that ran (`AIInstalledStatusRows`). It
   never contains a credential field: installation and sign-in happen in each command's own flow. For
-  a connection it shows the provider, base URL and whether a key is stored; **Edit…** in the header
+  a connection it shows the provider, base URL, whether a key is stored and whether request headers
+  are — with headers and no key, the key reads Not set rather than an orange Missing, and the list
+  row is not marked Key missing; **Edit…** in the header
   opens the connection editor panel, which remains the explicit Keychain-backed path.
 - **Models** is the checklist behind the second invariant above, with Show All, Hide All and a
   filter once a route offers more than eight. The rows are an `NSTableView` in one `Form` row

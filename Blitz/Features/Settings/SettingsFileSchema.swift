@@ -35,9 +35,13 @@ enum SettingsFileSchema {
         case .escapeKeyBehavior: return bind(settings, \.escapeKeyBehavior)
         case .autoSwitchInputSource: return bind(settings, \.autoSwitchInputSourceID)
         case .appearance: return bind(settings, \.appearance)
+        case .animationsEnabled: return bind(settings, \.animationsEnabled)
         case .interfaceSize: return bind(settings, \.interfaceSize)
         case .compactMode: return bind(settings, \.compactMode)
-        case .showFavoritesInCompactMode: return bind(settings, \.showFavoritesInCompactMode)
+        case .compactBarCommands:
+            return bind(settings, \.compactBarCommands) {
+                CommandID.validCompactBarCommands($0) ? $0 : nil
+            }
         case .openOnCursorScreen: return bind(settings, \.openOnCursorScreen)
         case .paletteDraggable: return bind(settings, \.paletteDraggable)
         case .hyperKey: return bind(settings, \.hyperKey)
@@ -78,9 +82,18 @@ enum SettingsFileSchema {
         case .notesEnabled: return bind(settings, \.notesEnabled)
         case .notesRendersMarkdown: return bind(settings, \.notesRendersMarkdown)
         case .notesShowsFormattingBar: return bind(settings, \.notesShowsFormattingBar)
+        case .notesShowsInMenuBar: return bind(settings, \.notesShowsInMenuBar)
         case .notesFolder: return bind(settings, \.notesFolder, accept: folder)
         case .snippetsShowInLauncher: return bind(settings, \.snippetsShowInLauncher)
         case .snippetsFolder: return bind(settings, \.snippetsFolder, accept: folder)
+        case .snippetDefaultAction: return bind(settings, \.snippetDefaultAction)
+        case .dictationMode: return bind(settings, \.dictationMode)
+        case .dictationLanguage: return bind(settings, \.dictationLanguage, accept: language)
+        case .dictationDestination: return bind(settings, \.dictationDestination)
+        case .dictationPlaysSounds: return bind(settings, \.dictationPlaysSounds)
+        case .dictationLiveInsertion: return bind(settings, \.dictationLiveInsertion)
+        case .dictationAdaptsCapitalization:
+            return bind(settings, \.dictationAdaptsCapitalization)
         case .navigationEnabled: return bind(settings, \.navigationEnabled)
         case .menuSearchShowsAppleMenu: return bind(settings, \.menuSearchShowsAppleMenu)
         case .menuSearchDisabledApps: return bind(settings, \.menuSearchDisabledApps)
@@ -121,6 +134,12 @@ enum SettingsFileSchema {
         }
     }
 
+    /// A locale identifier, or null for the system's languages; an empty string is not one.
+    private static func language(_ identifier: String?) -> String?? {
+        guard let identifier else { return .some(nil) }
+        return identifier.isEmpty ? nil : identifier
+    }
+
     /// A folder is absolute or under `~/`; null puts it back in Application Support.
     private static func folder(_ path: String?) -> String?? {
         guard let path else { return .some(nil) }
@@ -130,6 +149,7 @@ enum SettingsFileSchema {
 
 extension PopToRootTimeout: SettingsFileRawValue {}
 extension EscapeKeyBehavior: SettingsFileRawValue {}
+extension CommandID: SettingsFileRawValue {}
 extension AppAppearance: SettingsFileRawValue {}
 extension InterfaceSize: SettingsFileRawValue {}
 extension HyperKeyPhysicalKey: SettingsFileRawValue {}
@@ -140,9 +160,12 @@ extension QuicklinkSelectionFallback: SettingsFileRawValue {}
 extension WebSearchEngine: SettingsFileRawValue {}
 extension WindowCycle: SettingsFileRawValue {}
 extension ClipboardDefaultAction: SettingsFileRawValue {}
+extension SnippetDefaultAction: SettingsFileRawValue {}
 extension EmojiSkinTone: SettingsFileRawValue {}
 extension EmojiGridColumns: SettingsFileRawValue {}
 extension JoinWindow: SettingsFileRawValue {}
+extension DictationMode: SettingsFileRawValue {}
+extension DictationDestination: SettingsFileRawValue {}
 
 extension ClipboardRetention: SettingsFileToken {
     var settingsToken: SettingsFileJSON {

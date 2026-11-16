@@ -51,10 +51,6 @@ if [ "${1:-}" = "--exec" ]; then
     exit 0
 fi
 
-QUEUE="$BIN/queue"
-: > "$QUEUE"
-rm -f "$BIN"/*.failed "$BIN"/*.running
-
 failed=()
 ran=0
 only="${1:-}"
@@ -68,6 +64,13 @@ if [ "$only" = "--index" ]; then
     emit_db=1
     only=""
     printf '[' > "$DB"
+fi
+
+QUEUE="$BIN/queue"
+# `--index` queues nothing, so it must never reset the state of a suite already running.
+if [ "$emit_db" -eq 0 ]; then
+    : > "$QUEUE"
+    rm -f "$BIN"/*.failed "$BIN"/*.running
 fi
 
 # run [slow] [-O] [index] <name> <source...> — queue the harness. `slow` dispatches it in the first
@@ -149,6 +152,7 @@ run app-installation-test  $L/SearchRelevance.swift $L/ScriptRomanization.swift 
                            Blitz/Features/Launcher/Service/AppLauncher.swift \
                            Blitz/Features/Launcher/Service/RunningAppsMonitor.swift \
                            Blitz/Features/Launcher/Service/FavoritesStore.swift \
+                           Blitz/Features/FileSearch/Model/FileSearchResult.swift \
                            Blitz/Features/Launcher/Service/AliasStore.swift \
                            Blitz/Features/Launcher/Service/VisibilityStore.swift \
                            Blitz/Features/Launcher/Service/BundleNameCache.swift \
@@ -355,6 +359,7 @@ run palette-menu-click-test Blitz/Platform/Appearance.swift \
                            Blitz/Platform/WindowLevel.swift \
                            Blitz/Platform/NotificationToken.swift \
                            Blitz/DesignSystem/Interaction/KeyboardFocus.swift \
+                           Blitz/DesignSystem/Motion.swift \
                            Blitz/Palette/PalettePanel.swift
 run scroll-reveal-test     Blitz/DesignSystem/Scrolling/SelectionReveal.swift
 run redaction-test         Blitz/DesignSystem/RedactedPlaceholder.swift
@@ -414,6 +419,19 @@ run palette-tab-test       Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run compact-bar-test       Blitz/Features/Launcher/Model/CompactBarSelection.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/Settings/Model/*.swift \
+                           Blitz/Features/Launcher/Model/CommandID.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyAction.swift \
+                           Blitz/Features/QuickActions/Model/QuickAction.swift \
+                           Blitz/Features/QuickActions/Model/BuiltInQuickAction.swift \
+                           Blitz/Features/QuickActions/Model/CustomQuickAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/SystemActions/Model/SystemAction.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift
 run fallback-test          Blitz/Features/Launcher/Model/Fallback.swift \
                            Blitz/Features/Launcher/Model/WebSearchEngine.swift \
                            Blitz/Features/Launcher/Model/CommandID.swift \
@@ -442,10 +460,18 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run dictation-test         Blitz/Features/Dictation/Model/*.swift \
+                           Blitz/Features/Dictation/Service/DictationAudioDucker.swift \
+                           Blitz/Platform/AppPaths.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/Settings/Model/SettingsFileKey.swift \
+                           Blitz/Features/Backup/Model/SettingsBackupCoverage.swift
 run hid-key-mapping-test   Blitz/Features/HotKeys/Model/HIDKeyMapping.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
                            Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKey.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKeyDetector.swift \
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HotKeySpelling.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
@@ -508,6 +534,7 @@ run window-command-test    Blitz/Features/WindowManagement/Model/WindowCommand.s
 run window-preset-test     Blitz/Features/WindowManagement/Model/WindowCommand.swift \
                            Blitz/Features/WindowManagement/Model/WindowShortcutPreset.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKey.swift \
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
                            Blitz/Platform/ASCIIKeyboardLayout.swift \
@@ -915,6 +942,9 @@ run mcp-oauth-test         Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIResponsesDecoder.swift \
+                           Blitz/Features/AI/Model/AICitationLinker.swift \
+                           Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \
@@ -935,6 +965,9 @@ run slow mcp-stdio-test    Blitz/Platform/ExecutableLocator.swift \
                            Blitz/Features/AI/Model/AITool.swift \
                            Blitz/Features/AI/Model/AIToolServer.swift \
                            Blitz/Features/AI/Model/AIStreamDecoder.swift \
+                           Blitz/Features/AI/Model/AIResponsesDecoder.swift \
+                           Blitz/Features/AI/Model/AICitationLinker.swift \
+                           Blitz/Features/AI/Model/ChatReferences.swift \
                            Blitz/Features/AI/Model/AIProviderFailure.swift \
                            Blitz/Features/AI/Model/AIThinkTagDecoder.swift \
                            Blitz/Features/AI/Model/AIRequest.swift \

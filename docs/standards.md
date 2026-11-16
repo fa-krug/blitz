@@ -245,6 +245,11 @@ Every custom control carries a label and the traits that describe it. The palett
 control surface, so nothing comes for free — a row, a keycap chip, a footer pill and a dialog button all
 need saying explicitly. Adding it as the view is written costs a line; retrofitting it costs a rewrite.
 
+A label on a stack lands on each child, so a labelled stack is made one element first with
+`.accessibilityElement(children:)`. Inside `.textSelection(.enabled)` a `Text` given a label is an
+AppKit element whose label lookup calls itself until the stack overflows — the crash an attached
+file's chip in a chat bubble once caused.
+
 ## What is actually checked
 
 Everything above is guidance. The mechanical bar — the harnesses, the purity grep, lint, a

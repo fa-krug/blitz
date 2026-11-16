@@ -142,6 +142,8 @@ last-wins.
 
 A benchmark that stays out of the suite still needs flags, so `run-tests.sh` registers it as
 `run index <name> <source...>`: `--index` emits its compile command and the runner never queues it.
+`--index` shares `.build/harness` with a full run, so it leaves the queue and the failure markers
+alone: an editor sync during a suite can no longer make it skip harnesses and report a pass.
 
 Re-run it after adding a harness, then **Swift: Restart LSP Server** from the Command Palette — an
 already-running server does not re-read `.compile`.

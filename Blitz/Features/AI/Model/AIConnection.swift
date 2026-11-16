@@ -29,8 +29,23 @@ enum AIProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
         }
     }
 
-    var apiShape: AIHTTPConfiguration.APIShape {
-        self == .anthropic ? .anthropic : .openAICompatible
+    /// Only OpenAI's own host speaks Responses; a gateway behind the preset keeps Chat Completions.
+    func apiShape(for baseURL: URL?) -> AIHTTPConfiguration.APIShape {
+        if self == .anthropic { return .anthropic }
+        if self == .openAI, baseURL?.host()?.lowercased() == "api.openai.com" {
+            return .openAIResponses
+        }
+        return .openAICompatible
+    }
+
+    /// A vendor's search tool exists only on its own host; OpenRouter's plugin rides any model.
+    func offersWebSearch(at baseURL: URL?) -> Bool {
+        switch self {
+        case .openRouter: return true
+        case .openAI: return apiShape(for: baseURL) == .openAIResponses
+        case .anthropic: return baseURL?.host()?.lowercased() == "api.anthropic.com"
+        case .gemini, .openAICompatible: return false
+        }
     }
 }
 
@@ -88,7 +103,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
 
     /// A preset pointed away from its own API is a gateway; only a gateway takes a thinking field.
     var takesThinkingField: Bool {
-        provider.apiShape == .openAICompatible
+        provider.apiShape(for: URL(string: baseURL)) == .openAICompatible
             && baseURL.trimmingCharacters(in: .whitespacesAndNewlines) != provider.defaultBaseURL
     }
 
@@ -139,7 +154,7 @@ struct AIConnection: Codable, Equatable, Identifiable, Sendable {
             images: provider != .openRouter || visionModels.contains(model),
             // Only the two shapes whose bodies Blitz writes; a gateway bills the upload first.
             documents: provider == .openAI || provider == .anthropic,
-            webSearch: provider == .openRouter || provider == .anthropic, tools: true)
+            webSearch: provider.offersWebSearch(at: URL(string: baseURL)), tools: true)
     }
 }
 
@@ -361,6 +376,7 @@ enum AIModelSelection: Codable, Equatable, Hashable, Sendable {
 struct AIHTTPConfiguration: Equatable, Sendable {
     enum APIShape: String, Sendable {
         case openAICompatible
+        case openAIResponses
         case anthropic
     }
 
@@ -369,22 +385,32 @@ struct AIHTTPConfiguration: Equatable, Sendable {
     let model: String
     let effort: String?
     let disablesThinking: Bool
+    /// The connection's own, from the Keychain; never part of `AIConnection`, so never backed up.
+    let headers: [String: String]
 
     init(
         provider: AIProviderKind, baseURL: URL, model: String, effort: String? = nil,
-        disablesThinking: Bool = false
+        disablesThinking: Bool = false, headers: [String: String] = [:]
     ) {
         self.provider = provider
         self.baseURL = baseURL
         self.model = model
         self.effort = effort
         self.disablesThinking = disablesThinking
+        self.headers = headers
     }
 
-    var shape: APIShape { provider.apiShape }
+    var shape: APIShape { provider.apiShape(for: baseURL) }
 
     var endpointURL: URL {
         switch shape {
+        case .openAIResponses:
+            if baseURL.path.hasSuffix("/responses") { return baseURL }
+            if baseURL.path.hasSuffix("/chat/completions") {
+                return baseURL.deletingLastPathComponent().deletingLastPathComponent()
+                    .appending(path: "responses")
+            }
+            return baseURL.appending(path: "responses")
         case .openAICompatible:
             if baseURL.path.hasSuffix("/chat/completions") { return baseURL }
             return baseURL.appending(path: "chat/completions")

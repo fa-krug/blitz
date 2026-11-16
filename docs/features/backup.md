@@ -112,7 +112,7 @@ anything a day old on the next run, since a run killed mid-flight leaves its tre
 claims a key twice, that every exclusion names a real key and carries a non-empty reason, and that each
 capability-granting key — `snippetsEnabled`, `extensionsEnabled`, `calendarEnabled`,
 `autoJoinMeetings`, `cameraPreview`, `quickActionsEnabled`, `remindersEnabled`, `contactsEnabled`,
-`quicklinkPrefersExistingTabs` and the chat-access levels — is named individually as excluded. The duplication between
+`dictationEnabled`, `quicklinkPrefersExistingTabs` and the chat-access levels — is named individually as excluded. The duplication between
 `AppSettings` and this file is the point: it forces a decision about every new setting rather than
 defaulting it into a backup.
 

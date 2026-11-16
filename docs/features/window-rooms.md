@@ -117,7 +117,7 @@ room starts with every member picked, a closed window standing as its app rather
 behind the window and dimmed, and one card per window — a title bar with the app and window name,
 the app's icon, an accent stroke. The cards are keyed by the window's number, so a card that
 exists before and after a change glides: `Theme.RoomMotion.glide`, 0.32 s on (0.2, 0, 0, 1). New
-cards fade in over 0.2 s, removed ones fade out over 0.18 s. Reduce Motion drops every animation.
+cards fade in over 0.2 s, removed ones fade out over 0.18 s. Reduce Motion, or **Show animations** off, drops every animation.
 
 The screen previews its selected room on every change of selection, of the room's value (a Tab's
 new layout rides in it) and of the desk read. After ↵ the preview stays while the windows move in

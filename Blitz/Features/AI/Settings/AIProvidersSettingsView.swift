@@ -99,9 +99,9 @@ enum AIProviderTab: String, CaseIterable, Identifiable {
 }
 
 extension AIConnection {
-    /// A loopback endpoint needs no key, so only a remote one without a stored key is missing it.
-    func isMissingKey(hasStoredKey: Bool) -> Bool {
-        !hasStoredKey && !AIEndpointPolicy.isLoopback(baseURL)
+    /// Loopback needs no key and headers may stand in for one, so only a bare remote one lacks it.
+    func isMissingKey(hasStoredKey: Bool, hasHeaders: Bool) -> Bool {
+        !hasStoredKey && !hasHeaders && !AIEndpointPolicy.isLoopback(baseURL)
     }
 }
 
@@ -114,19 +114,22 @@ struct AIProvidersSettingsView: View {
     @Environment(SettingsNavigationState.self) private var navigation
 
     @State private var keyStatuses: [UUID: Bool] = [:]
+    @State private var connectionsWithHeaders: Set<UUID> = []
     @State private var keyError = false
     @State private var editor: AIConnectionEditorTarget?
     /// Kept across providers, as Mail keeps its tab across accounts; one without it shows Overview.
     @State private var tab = AIProviderTab.overview
 
     private let keyStore = KeychainSecretStore.aiAPIKeys
+    private let headerStore = KeychainSecretStore.aiRequestHeaders
 
     var body: some View {
         let shown = shownRoute
         SettingsPagedPane(showsPage: shown != nil) {
             if let shown {
                 AIProviderPage(
-                    route: shown, tab: $tab, keyStatuses: keyStatuses, keyError: keyError,
+                    route: shown, tab: $tab, keyStatuses: keyStatuses,
+                    connectionsWithHeaders: connectionsWithHeaders, keyError: keyError,
                     onEdit: edit, onRemove: confirmRemoval)
                     // Fresh per route, so the models filter never carries over to another.
                     .id(shown)
@@ -185,7 +188,8 @@ struct AIProvidersSettingsView: View {
                     AIProviderRow(
                         route: .api(connection.id),
                         isMissingKey: connection.isMissingKey(
-                            hasStoredKey: keyStatuses[connection.id] == true))
+                            hasStoredKey: keyStatuses[connection.id] == true,
+                            hasHeaders: connectionsWithHeaders.contains(connection.id)))
                 }
                 LabeledContent {
                     Menu("Add…") {
@@ -218,22 +222,29 @@ struct AIProvidersSettingsView: View {
 
     private func add(_ provider: AIProviderKind) {
         editor = AIConnectionEditorTarget(
-            connection: AIConnection(provider: provider), hasStoredKey: false, isNew: true)
+            connection: AIConnection(provider: provider), hasStoredKey: false, headers: [:],
+            isNew: true)
     }
 
     private func edit(_ connection: AIConnection) {
-        editor = AIConnectionEditorTarget(
-            connection: connection,
-            hasStoredKey: keyStatuses[connection.id] == true,
-            isNew: false)
+        do {
+            editor = AIConnectionEditorTarget(
+                connection: connection,
+                hasStoredKey: keyStatuses[connection.id] == true,
+                headers: try headerStore.values(for: connection.id),
+                isNew: false)
+        } catch {
+            // An editor opened without the saved headers would erase them on Save.
+            keyError = true
+        }
     }
 
     private func saveConnection(
-        _ connection: AIConnection, key: String, isNew: Bool
+        _ connection: AIConnection, key: String, headers: [String: String], isNew: Bool
     ) -> String? {
         let outcome = AIConnectionKeyPolicy.resolve(
             enteredKey: key, connection: connection, saved: settings.connection(id: connection.id),
-            hasStoredKey: keyStatuses[connection.id] == true)
+            hasStoredKey: keyStatuses[connection.id] == true, hasHeaders: !headers.isEmpty)
         do {
             switch outcome {
             case .store(let key): try keyStore.setSecret(key, for: connection.id)
@@ -241,6 +252,7 @@ struct AIProvidersSettingsView: View {
             case .keep: break
             case .reject(let message): return message
             }
+            try headerStore.setValues(headers, for: connection.id)
             settings.save(connection)
             editor = nil
             if isNew { navigation.select(navigation.tab, page: AIProviderRoute.api(connection.id).page) }
@@ -250,8 +262,8 @@ struct AIProvidersSettingsView: View {
         } catch {
             keyError = true
             return isNew
-                ? "The key could not be saved to Keychain."
-                : "The saved key could not be updated in Keychain."
+                ? "The key or headers could not be saved to Keychain."
+                : "The saved key or headers could not be updated in Keychain."
         }
     }
 
@@ -260,7 +272,7 @@ struct AIProvidersSettingsView: View {
             guard
                 await core.confirm(
                     title: "Remove “\(connection.title)”?",
-                    message: "Its saved API key will also be deleted from Keychain.",
+                    message: "Its saved API key and request headers will also be deleted from Keychain.",
                     symbol: PaletteMode.ai.systemImage, confirmTitle: "Remove Connection")
             else { return }
             removeConnection(connection)
@@ -270,6 +282,7 @@ struct AIProvidersSettingsView: View {
     private func removeConnection(_ connection: AIConnection) {
         do {
             try keyStore.removeSecret(for: connection.id)
+            try headerStore.removeSecret(for: connection.id)
             settings.removeConnection(id: connection.id)
             loadKeyStatuses()
         } catch {
@@ -279,16 +292,18 @@ struct AIProvidersSettingsView: View {
 
     private func loadKeyStatuses() {
         var statuses: [UUID: Bool] = [:]
+        var withHeaders: Set<UUID> = []
         do {
             for connection in settings.connections {
                 statuses[connection.id] = try keyStore.hasSecret(for: connection.id)
+                if try headerStore.hasSecret(for: connection.id) { withHeaders.insert(connection.id) }
             }
-            keyStatuses = statuses
             keyError = false
         } catch {
-            keyStatuses = statuses
             keyError = true
         }
+        keyStatuses = statuses
+        connectionsWithHeaders = withHeaders
     }
 }
 

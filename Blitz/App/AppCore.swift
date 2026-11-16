@@ -221,6 +221,9 @@ final class AppCore {
         paletteCoordinator: paletteCoordinator)
     @ObservationIgnored private(set) lazy var updateCoordinator = UpdateCoordinator(
         store: updateChecker, core: self)
+    @ObservationIgnored private(set) lazy var dictationCoordinator = DictationCoordinator(
+        settings: settings, hotKeys: hotKeys, injector: textInjector,
+        settingsCoordinator: settingsCoordinator, core: self)
     @ObservationIgnored private(set) lazy var quickActionCoordinator = QuickActionCoordinator(
         settings: settings, store: quickActionSettings, customActions: customQuickActions,
         injector: textInjector, appIndex: appIndex, hotKeys: hotKeys, favorites: favorites,
@@ -294,6 +297,7 @@ final class AppCore {
             UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 250])
             NSApp.setActivationPolicy(.accessory)
             applyAppearance()
+            applyMotion()
             observeEffectiveAppearance()
             pinnedEmoji.onPersistenceFailure = { [weak self] in
                 self?.showMessage("Couldn't save Emoji & Symbols pins", tone: .danger)
@@ -357,6 +361,7 @@ final class AppCore {
             appleShortcutCoordinator.applyPresence()
             paletteCoordinator.onLauncherShown = { [weak self] in
                 self?.appleShortcutCoordinator.refresh()
+                self?.fileSearchCoordinator.refreshFavoriteAvailability()
             }
             paletteCoordinator.onScreenOpening = { [weak self] mode in
                 switch mode {
@@ -407,7 +412,7 @@ final class AppCore {
                 self?.windowCommandCoordinator.runCustomWindowSize(id: id)
             }
             hotKeys.onOpenQuicklink = { [weak self] id, arguments in
-                self?.quicklinkCoordinator.openQuicklink(id: id, values: arguments)
+                self?.quicklinkCoordinator.openQuicklinkFromHotKey(id: id, values: arguments)
             }
             hotKeys.onRunQuickAction = { [weak self] id, arguments in
                 self?.quickActionCoordinator.run(id: id, values: arguments)
@@ -439,6 +444,15 @@ final class AppCore {
                 guard settings.hyperKey != .none else { return nil }
                 return KeyShortcut.hyperChord(includesShift: settings.hyperKeyIncludesShift)
             }
+            hotKeys.onDictationPressed = { [weak self] in self?.dictationCoordinator.pressed() }
+            hotKeys.onDictationReleased = { [weak self] in self?.dictationCoordinator.released() }
+            hotKeys.onDictationCancelled = { [weak self] in
+                self?.dictationCoordinator.holdCancelled()
+            }
+            // Before the tap is armed, so a disabled Dictation never reserves its modifier.
+            dictationCoordinator.applyEnabled()
+            // Unconditional: a crash mid-dictation leaves the output ducked, Dictation on or off.
+            dictationCoordinator.recoverVolume()
             SystemActionRunner.onAsyncFailure = { [weak self] id, failure in
                 self?.systemActionCoordinator.presentSystemActionFailure(id: id, failure: failure)
             }
@@ -531,7 +545,7 @@ final class AppCore {
             return snippetsStore.record(id: id)?.snippet.name
         case .extensionCommand(let entryID):
             return appIndex.apps.first { $0.kind == .extensionCommand && $0.id == entryID }?.name
-        case .togglePalette, .command, .systemAction, .windowCommand:
+        case .togglePalette, .dictation, .command, .systemAction, .windowCommand:
             return nil
         }
     }
@@ -608,6 +622,8 @@ final class AppCore {
         windowLayoutCoordinator.prepareForTermination()
         roomCoordinator.prepareForTermination()
         inputSourceSwitcher.endSession()
+        // Before the injector: a pending insertion must not outlive the session that made it.
+        dictationCoordinator.prepareForTermination()
         textInjector.prepareForTermination()
         snippetListener.stop()
         snippetsStore.stop()
@@ -733,6 +749,8 @@ final class AppCore {
             })
         track({ _ = $0.notesEnabled }, reproject: { $0.notesCoordinator.applyEnabled() })
         track(
+            { _ = $0.notesShowsInMenuBar }, reproject: { $0.notesCoordinator.applyMenuBarItem() })
+        track(
             { _ = $0.aiEnabled },
             reproject: {
                 $0.aiChatCoordinator.applyEnabled()
@@ -749,6 +767,15 @@ final class AppCore {
         track({ _ = $0.calendarEnabled }, reproject: { $0.calendarCoordinator.applyEnabled() })
         track({ _ = $0.remindersEnabled }, reproject: { $0.remindersCoordinator.applyEnabled() })
         track({ _ = $0.contactsEnabled }, reproject: { $0.contactsCoordinator.applyEnabled() })
+        track(
+            { _ = $0.dictationEnabled }, reproject: { $0.dictationCoordinator.applyEnabled() })
+        track({ _ = $0.dictationMode }, reproject: { $0.dictationCoordinator.applyMode() })
+        track(
+            { _ = $0.dictationLanguage },
+            reproject: {
+                guard $0.settings.dictationEnabled else { return }
+                $0.dictationCoordinator.refreshLanguage()
+            })
         track(
             {
                 _ = $0.calendarShowInLauncher
@@ -778,6 +805,7 @@ final class AppCore {
             { _ = $0.snippetsShowInLauncher },
             reproject: { $0.snippetCoordinator.applySnippetsLauncherPresence() })
         track({ _ = $0.appearance }, reproject: { $0.applyAppearance() })
+        track({ _ = $0.animationsEnabled }, reproject: { $0.applyMotion() })
         track({ _ = $0.interfaceSize }, reproject: { $0.windowController.applyInterfaceSize() })
         // Settings panes did these on change; settings.json can change them with no pane open.
         track(
@@ -805,6 +833,14 @@ final class AppCore {
     /// `.system` resolves to `nil`, so AppKit follows macOS with nothing polling.
     private func applyAppearance() {
         NSApp.appearance = settings.appearance.nsAppearance
+    }
+
+    /// A built panel keeps the behaviour it was made with, so the live ones are re-pointed.
+    private func applyMotion() {
+        Motion.isEnabled = settings.animationsEnabled
+        for case let panel as any AnimatedPanel in NSApp.windows {
+            panel.followMotion()
+        }
     }
 
     /// IconCache is told here, not from `applyAppearance()`, which never fires under `.system`.

@@ -2,7 +2,7 @@
 
 The one way Blitz writes text into something the user is typing in — another app, or one of its own
 editors. Snippets expand through it, Quick Actions read and replace a selection through it, and
-Quicklinks read `{selection}` through it. It has no Settings pane and no launcher rows of its own.
+Quicklinks read `{selection}` through it, and Dictation types its transcript through it. It has no Settings pane and no launcher rows of its own.
 
 The full five-rule delivery contract for another app — renderer surfaces, keyword convergence,
 read-back, the event fallback and its four-unit keystrokes, the pasteboard loan — is written down
@@ -12,7 +12,8 @@ lives. This page is the map.
 ## Invariants
 
 - **One injector, owned by `AppCore`.** `TextInjector` is built once and handed to
-  `SnippetCoordinator`, `QuickActionCoordinator` / `QuickActionRunner` and `QuicklinkCoordinator`.
+  `SnippetCoordinator`, `QuickActionCoordinator` / `QuickActionRunner`, `QuicklinkCoordinator` and
+  `DictationCoordinator`.
   Its serial `DeliveryQueue` is what stops two features fighting over the pasteboard, so no feature
   posts paste events or borrows the pasteboard on its own.
 - **The target is where the caret is, not the frontmost app.** Blitz's panels never activate, so a
@@ -22,7 +23,7 @@ lives. This page is the map.
   resolves to no target at all. From the palette, `PaletteWindowController.previousTarget` resolves
   what the palette covered through `InjectionTarget.behindPalette`.
 - **Our own editors opt in, and only by protocol.** `InjectableTextView` is an empty protocol on
-  `NSTextView`; adopting it is the whole contract. `NoteTextView` is the one adopter. In process
+  `NSTextView`; adopting it is the whole contract. `NoteTextView` and the AI composer's `ComposerTextView` are the adopters. In process
   there is nothing to grant, activate, lend or post: `inject(_:over:)` calls
   `insertText(_:replacementRange:)`, so the edit is undoable in the view's own manager.
 - **Blitz never injects into itself over events.** `targetAcceptsInjection` refuses a terminated
@@ -36,8 +37,10 @@ lives. This page is the map.
 
 ## How a delivery runs
 
-`TextInjector.deliver(_:target:expectedKeyword:keywordLength:automaticGeneration:…)` is the entry
-point; `replaceSelection(with:in:…)` is the same call with no keyword.
+`TextInjector.deliver(_:target:expectedKeyword:keywordLength:automaticGeneration:isValid:…)` is
+the entry point; `replaceSelection(with:in:…)` is the same call with no keyword. `isValid` is checked
+again when the delivery's turn comes and before it writes, so a caller can withdraw text it queued —
+Dictation's session token does. `drain()` waits for everything already queued.
 
 1. **Gate.** An automatic expansion checks its generation, `snippetsEnabled`, Accessibility and the
    target; an interactive one (`prepareInteractiveExpansion`) checks the target and asks for

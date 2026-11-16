@@ -224,8 +224,9 @@ carries only the wire name; the loop consumes it and never forwards it. `.toolCa
 emits in its place, already carrying what a transcript row has to show.
 
 `AIRequestBody` builds each provider's JSON. It is pure and harness-pinned because the shapes are
-unforgiving: OpenAI takes a catalog of `{type: "function", function: {…}}` and results as their own
-`role: "tool"` turns, while Anthropic takes `input_schema` with no wrapper, a `tool_use` content
+unforgiving: Chat Completions takes a catalog of `{type: "function", function: {…}}` and results as
+their own `role: "tool"` turns, OpenAI's own Responses API flat `{type: "function", name, …}` tools
+and results as `function_call_output` items naming their `call_id`, while Anthropic takes `input_schema` with no wrapper, a `tool_use` content
 block whose `input` is the arguments parsed back into an object, and results as `tool_result` blocks
 that must arrive as **one** user turn however many of them there are.
 

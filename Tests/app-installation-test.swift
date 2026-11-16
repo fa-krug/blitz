@@ -28,6 +28,8 @@ struct AppInstallationTest {
             .appendingPathComponent("blitz-installations-\(UUID())").resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        // First: the argument domain `testIndex` sets over `favoriteApps` outlives its removal.
+        testFileFavorites(root)
         try await testIndex(root)
         if ProcessInfo.processInfo.environment["BLITZ_TEST_APP_LAUNCH"] == "1"
             || CommandLine.arguments.contains("--launch")
@@ -187,6 +189,64 @@ struct AppInstallationTest {
             "the last installation regains single-app actions",
             index.apps.first { $0.bundleID == id }?.primaryInstallationID == nil)
         await ranking.flush()
+    }
+
+    /// A private suite, so mixed favorites never touch the developer's own list.
+    private static func testFileFavorites(_ root: URL) {
+        let domain = "blitz.file-favorites-test.\(UUID())"
+        guard let defaults = UserDefaults(suiteName: domain) else {
+            return check("a scratch defaults suite opens", false)
+        }
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = FavoritesStore(defaults: defaults)
+        let app = AppEntry(
+            id: root.appendingPathComponent("Fixture.app").path, name: "Fixture",
+            url: root.appendingPathComponent("Fixture.app"), bundleID: "com.example.fixture",
+            kind: .application)
+        let folder = FileSearchResult(
+            url: root.appendingPathComponent("Projects"), isDirectory: true, homeDirectory: root)
+        let file = FileSearchResult(
+            url: root.appendingPathComponent("Résumé #1? 100%.txt"), isDirectory: false,
+            homeDirectory: root)
+        store.toggle(folder)
+        store.toggle(app)
+        store.toggle(file)
+        check("files and folders become favorites", store.isFavorite(folder) && store.isFavorite(file))
+        check("an app favorite keeps its bundle identity", store.keys[1] == app.bundleID)
+        check(
+            "mixed favorites keep insertion order",
+            store.orderedItems(entries: [app], files: [file, folder]).map(\.key)
+                == [folder.favoriteKey, app.preferenceKey, file.favoriteKey])
+        check(
+            "a file row cannot collide with an application's path identity",
+            FavoritesStore.Item.file(folder).id != folder.id)
+        check(
+            "a relaunch restores paths and folder bits without the index",
+            FavoritesStore(defaults: defaults).files(homeDirectory: root).map(\.favoriteKey)
+                == [folder.favoriteKey, file.favoriteKey])
+        check(
+            "app-only ordering ignores file keys",
+            store.ordered([app]).favorites == [app] && store.ordered([app]).rest.isEmpty)
+        store.replace(keys: [folder.favoriteKey, "unavailable-app", app.preferenceKey, file.favoriteKey])
+        store.exchange(folder.favoriteKey, with: app.preferenceKey)
+        check(
+            "reordering mixed favorites leaves hidden slots in place",
+            store.keys == [app.preferenceKey, "unavailable-app", folder.favoriteKey, file.favoriteKey])
+        check(
+            "a hidden app and missing files leave no visible row but keep their keys",
+            store.orderedItems(entries: [], files: []).isEmpty && store.keys.count == 4)
+        let restored = FavoritesStore(defaults: defaults)
+        restored.replace(keys: store.keys)
+        check(
+            "the backup's key list restores the mixed order",
+            restored.orderedItems(entries: [app], files: restored.files(homeDirectory: root)).map(\.key)
+                == [app.preferenceKey, folder.favoriteKey, file.favoriteKey])
+        restored.toggle(folder)
+        check(
+            "removing a folder leaves the other favorites",
+            !restored.isFavorite(folder) && restored.isFavorite(file) && restored.isFavorite(app))
+        restored.remove(keys: [file.favoriteKey])
+        check("a file favorite is removable by key", !restored.isFavorite(file))
     }
 
     private static func testLaunch(_ root: URL) async throws {
@@ -407,7 +467,7 @@ enum CommandCatalog {
     static func isQueryDriven(_ entry: AppEntry) -> Bool { false }
 }
 enum HotKeyAction: Hashable, Sendable {
-    case togglePalette, command(CommandID)
+    case togglePalette, dictation, command(CommandID)
     case app(bundleID: String), settingsPane(bundleID: String), quickAction(id: UUID)
     case customCommand(id: UUID), systemAction(id: SystemAction.ID), windowCommand(id: WindowCommand.ID)
     case customWindowSize(id: UUID), windowLayout(id: UUID), windowRoom(id: UUID), quicklink(id: UUID)

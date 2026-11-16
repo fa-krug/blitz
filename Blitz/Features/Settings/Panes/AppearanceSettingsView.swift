@@ -14,13 +14,17 @@ struct AppearanceSettingsView: View {
                 } label: {
                     SettingsRowTitle(.appearanceAppearance, "Theme")
                 }
+                Toggle(isOn: $settings.animationsEnabled) {
+                    SettingsRowTitle(.appearanceAppearance, "Show animations")
+                }
                 InterfaceSizeRow()
                 WindowModeRow()
-                Toggle(isOn: $settings.showFavoritesInCompactMode) {
-                    SettingsRowTitle(.appearanceAppearance, "Show favorites in compact mode")
-                    Text("Launch them with ⌘1–⌘5.")
-                }
-                .settingsEnabled(settings.compactMode)
+                    // The section is gone while expanded, so a search for it lands on the mode.
+                    .background {
+                        if !settings.compactMode {
+                            Color.clear.settingsAnchor(.appearanceCompactShortcuts)
+                        }
+                    }
                 Toggle(isOn: $settings.openOnCursorScreen) {
                     SettingsRowTitle(.appearanceAppearance, "Follow the cursor across displays")
                 }
@@ -30,6 +34,8 @@ struct AppearanceSettingsView: View {
                 }
             }
             .settingsAnchor(.appearanceAppearance)
+
+            if settings.compactMode { CompactShortcutsSection() }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.appearance)

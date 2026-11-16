@@ -102,6 +102,7 @@ final class AIChatCoordinator {
     /// The window's views read these through the coordinator, never through `AppCore`.
     var history: ChatHistoryStore { core.chatHistory }
     var aiSettings: AISettingsStore { core.aiSettings }
+    var dictation: DictationCoordinator { core.dictationCoordinator }
 
     func focusExisting() -> Bool {
         window.focus()

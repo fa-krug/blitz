@@ -31,7 +31,7 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ HotKeySpelling · WindowManagementFileFormat ·                              │
 │ MeetingLink · MeetingEvent · UpcomingWindow · MeetingDay · MenuBarSummary  │
 │ AutoJoinPolicy · EventDraft ·                                              │
-│ Reminders/Model/* · Contacts/Model/* ·                                     │
+│ Reminders/Model/* · Contacts/Model/* · Dictation/Model/* ·                 │
 │ MenuSearch{Item,Shortcut,Query,Target} · MenuTreeNode ·                    │
 │ MenuSnapshotPolicy ·                                                       │
 │ WindowSwitch{Entry,Order,Query}                                            │
@@ -52,7 +52,8 @@ Independently of the folder tree, every mature subsystem follows the same four l
 │ ContactsStore · ContactLauncher ·                                          │
 │ AXMenuAccess · WindowZOrder · WindowSwitchSweep ·                          │
 │ AppleShortcutRunner · SettingsFileRepository · SettingsFileMonitor ·       │
-│ WindowManagementSettingsFile                                               │
+│ WindowManagementSettingsFile · DictationCapture · DictationTranscriber ·   │
+│ DictationAudioDucker · DictationCueRunner                                  │
 └──────────────────────────────────┬─────────────────────────────────────────┘
                                    │ published through
 ┌─ OBSERVABLE STATE ───────────────▼─────────────────────────────────────────┐
@@ -138,6 +139,8 @@ each inserted by one preference and independent of the other, Blitz's carrying o
 state, the agent's waiting dot ([ui.md](ui.md#the-app-icon)); everything else visible is driven
 imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owned entirely by
 `Features/Extensions/`, through `ExtensionManager`, with no scene or lifecycle wiring in the core.
+Notes' optional item is an `NSStatusItem` too, owned by `NotesCoordinator`
+([features/notes.md](features/notes.md)), since a `MenuBarExtra` cannot act on a plain click.
 
 - **Command palette** — a borderless floating `NSPanel` (`Palette/PalettePanel.swift`) hosting SwiftUI
   via `NSHostingView`, managed by `PaletteWindowController`. It toggles between a compact bar and the
@@ -192,13 +195,19 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
   join and doubles as auto join's confirmation; `CameraCoordinator`, owned by `AppCore`, is the
   standalone `Open Camera` and `Scan QR Code` commands. See [features/camera.md](features/camera.md) and
   [features/calendar.md](features/calendar.md).
+- **The dictation capsule** — a borderless, nonactivating `NSPanel` at `.floating`, owned by
+  `DictationCoordinator` through `DictationPanelController`. It becomes key so Return and Escape
+  reach it, while the app being dictated into stays active. See
+  [features/dictation.md](features/dictation.md).
 - **HUDs** are separate, because a dialog asks and a HUD reports: `MessageHUDController` (the pill) and
   `VolumeHUDController` (the level box), both over a shared `HUDPresenter` that owns the
   one-at-a-time, auto-dismiss and fade policy. See [ui.md](ui.md#dialogs--hud).
 
 `NSAlert` is never used, and that is load-bearing. Appearance is a setting: `AppCore.applyAppearance()`
 assigns `NSApp.appearance` from `AppSettings.appearance`, and `.system` assigns `nil` so AppKit follows
-macOS by itself. Nothing else in the app sets an appearance.
+macOS by itself. Nothing else in the app sets an appearance. Animations take the same shape:
+`AppCore.applyMotion()` projects `AppSettings.animationsEnabled` into `Motion.isEnabled` and re-points
+every live `AnimatedPanel` (see [ui.md](ui.md#non-negotiable-invariants)).
 
 ## Observation and concurrency
 
@@ -220,8 +229,8 @@ everything that feature owns.
 Blitz/
   App/              @main, AppDelegate, AppCore — the composition root
   DesignSystem/     Theme (the token source), InterfaceMetrics, KeyCapChip, BarButton, Tooltip,
-                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/,
-                    Interaction/
+                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Motion,
+                    Scrolling/, Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
                     AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
                     HealthTicker, Memo, ActivationPolicy, AppActivation, ProcessExit,
@@ -236,7 +245,7 @@ Blitz/
   Features/
     PaletteRowIndex.swift   the flat selection index and its section/page maths — palette-owned
     Launcher/ Clipboard/ Calculator/ Calendar/ Reminders/ Contacts/ Camera/ Emoji/ Dictionary/
-    FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/
+    FileSearch/ Screenshots/ MenuSearch/ WindowSwitcher/ Notes/ Quicklinks/ Snippets/ Dictation/
     AppleShortcuts/ Uninstall/ SystemActions/ CustomCommands/ HotKeys/ TextInjection/
     WindowManagement/ AI/ QuickActions/ MCP/ Backup/ Onboarding/ Updates/ Settings/
     Extensions/
