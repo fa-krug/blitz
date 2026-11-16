@@ -61,16 +61,21 @@ struct AIStreamDecoder: Sendable {
     private let secrets: [String]
     private var parser = SSEParser()
     private var thinkTags = AIThinkTagDecoder()
+    private var responses: AIResponsesDecoder
     private var usage = AIUsage()
     private var partialToolCalls: [Int: PartialToolCall] = [:]
     /// Anthropic's server-run searches, kept apart so one can never reach Blitz's tool loop.
     private var partialSearches: [Int: PartialToolCall] = [:]
     private var searchQueries: [String: String] = [:]
+    private var citations = AICitationLinker()
+    /// A text block's citations can arrive before its text, so they are linked once it closes.
+    private var citedURLs: [Int: [String]] = [:]
     private(set) var isTerminal = false
 
     init(shape: AIHTTPConfiguration.APIShape, secrets: [String] = []) {
         self.shape = shape
         self.secrets = secrets
+        responses = AIResponsesDecoder(secrets: secrets)
     }
 
     /// Assembled in index order, so a turn's calls reach the loop as the model listed them.
@@ -98,7 +103,8 @@ struct AIStreamDecoder: Sendable {
     private mutating func decode(_ payloads: [String]) throws -> [AIStreamEvent] {
         var events: [AIStreamEvent] = []
         for payload in payloads where !isTerminal {
-            if payload == "[DONE]" {
+            // Responses ends on `response.completed`; a `[DONE]` there is malformed, not success.
+            if payload == "[DONE]", shape != .openAIResponses {
                 isTerminal = true
                 if shape == .openAICompatible { events += thinkTags.finish() }
                 events.append(contentsOf: flushToolCalls())
@@ -108,6 +114,14 @@ struct AIStreamDecoder: Sendable {
             switch shape {
             case .openAICompatible:
                 events.append(contentsOf: try decodeOpenAI(payload))
+            case .openAIResponses:
+                do {
+                    events.append(contentsOf: try responses.decode(payload))
+                    isTerminal = responses.isTerminal
+                } catch {
+                    isTerminal = true
+                    throw error
+                }
             case .anthropic:
                 events.append(contentsOf: try decodeAnthropic(payload))
             }
@@ -128,7 +142,8 @@ struct AIStreamDecoder: Sendable {
             isTerminal = true
             throw AIProviderError.responseFailed(
                 AIProviderFailure.providerMessage(in: data)
-                    .map { AIProviderFailure.kept($0, secrets: secrets) } ?? Self.stopped)
+                    .map { AIProviderFailure.kept($0, secrets: secrets) }
+                    ?? AIProviderFailure.stopped)
         }
         var events: [AIStreamEvent] = []
         if let choice = chunk.choices?.first {
@@ -183,7 +198,7 @@ struct AIStreamDecoder: Sendable {
             return []
         case "content_block_stop":
             guard let search = partialSearches.removeValue(forKey: event.index ?? 0) else {
-                return []
+                return citationLinks(closing: event.index ?? 0)
             }
             let query = try? JSONDecoder().decode(
                 AnthropicSearchInput.self, from: Data(search.arguments.utf8)
@@ -192,12 +207,17 @@ struct AIStreamDecoder: Sendable {
             return [.searching(query)]
         case "content_block_delta":
             if event.delta?.type == "text_delta", let text = event.delta?.text, !text.isEmpty {
+                citations.record(text)
                 return [.text(text)]
             }
             if event.delta?.type == "input_json_delta" {
                 let fragment = event.delta?.partialJSON ?? ""
                 partialSearches[event.index ?? 0]?.arguments += fragment
                 partialToolCalls[event.index ?? 0]?.arguments += fragment
+                return []
+            }
+            if event.delta?.type == "citations_delta", let url = event.delta?.citation?.url {
+                citedURLs[event.index ?? 0, default: []].append(url)
                 return []
             }
             guard event.delta?.type == "thinking_delta" else { return [] }
@@ -229,13 +249,18 @@ struct AIStreamDecoder: Sendable {
         }
     }
 
-    private static let stopped = "The provider stopped the response with an error."
+    private mutating func citationLinks(closing index: Int) -> [AIStreamEvent] {
+        let links = (citedURLs.removeValue(forKey: index) ?? []).compactMap {
+            citations.link(to: $0)
+        }
+        return links.isEmpty ? [] : [.text(links.joined())]
+    }
 
     private static func anthropicErrorMessage(_ type: String?) -> String {
         switch type {
         case "authentication_error": return "API key rejected — check it in Settings."
         case "rate_limit_error": return "Rate limit reached — try again later."
-        default: return stopped
+        default: return AIProviderFailure.stopped
         }
     }
 }
@@ -319,14 +344,17 @@ private struct OpenAIChunk: Decodable {
 
 private struct AnthropicEvent: Decodable {
     struct Delta: Decodable {
+        struct Citation: Decodable { let url: String? }
+
         let type: String?
         let text: String?
         let thinking: String?
         let partialJSON: String?
         let stopReason: String?
+        let citation: Citation?
 
         enum CodingKeys: String, CodingKey {
-            case type, text, thinking
+            case type, text, thinking, citation
             case partialJSON = "partial_json"
             case stopReason = "stop_reason"
         }

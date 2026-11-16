@@ -7,8 +7,68 @@ enum AIRequestBody {
     ) -> [String: Any] {
         switch configuration.shape {
         case .openAICompatible: return openAI(input, configuration: configuration)
+        case .openAIResponses: return responses(input, configuration: configuration)
         case .anthropic: return anthropic(input, configuration: configuration)
         }
+    }
+
+    /// Stateless: `store: false` keeps nothing server-side, so every round resends the whole turn.
+    private static func responses(
+        _ input: AIRequest, configuration: AIHTTPConfiguration
+    ) -> [String: Any] {
+        var body: [String: Any] = [
+            "model": configuration.model,
+            "input": input.messages.flatMap(responseItems),
+            "stream": true,
+            "store": false
+        ]
+        if let instructions = input.instructions?.nonEmpty { body["instructions"] = instructions }
+        if let effort = configuration.effort,
+            effort != AIConnection.ReasoningOptions.providerDefault
+        {
+            body["reasoning"] = ["effort": effort]
+        }
+        var tools: [[String: Any]] = input.tools.map {
+            // Not strict: strict mode would make every optional MCP parameter required.
+            [
+                "type": "function", "name": $0.name, "description": $0.description,
+                "parameters": $0.parameters.jsonObject, "strict": false
+            ]
+        }
+        if input.webSearch { tools.append(["type": "web_search"]) }
+        if !tools.isEmpty { body["tools"] = tools }
+        return body
+    }
+
+    /// No output item is replayed: with nothing stored, an item id would point at nothing.
+    private static func responseItems(_ message: AIMessage) -> [[String: Any]] {
+        if let result = message.toolResult {
+            return [
+                [
+                    "type": "function_call_output", "call_id": result.callID,
+                    "output": result.content
+                ]
+            ]
+        }
+        var items: [[String: Any]] = []
+        let text = message.text.nonEmpty
+        if !message.images.isEmpty || !message.documents.isEmpty {
+            var parts: [[String: Any]] = text.map { [["type": "input_text", "text": $0]] } ?? []
+            parts += message.images.map { ["type": "input_image", "image_url": $0.dataURL] }
+            parts += message.documents.map {
+                ["type": "input_file", "filename": $0.name, "file_data": $0.dataURL]
+            }
+            items.append(["role": message.role.rawValue, "content": parts])
+        } else if let text {
+            items.append(["role": message.role.rawValue, "content": text])
+        }
+        items += message.toolCalls.map {
+            [
+                "type": "function_call", "call_id": $0.id, "name": $0.name,
+                "arguments": $0.arguments
+            ]
+        }
+        return items
     }
 
     private static func openAI(
