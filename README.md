@@ -68,8 +68,8 @@ use**, rendered as native SwiftUI.
 
 ### Windows
 
-- **Window management** — 35 Rectangle-style actions: halves, quarters, thirds, sizing, nudging,
-  display moves, fullscreen and Spaces, plus custom sizes of your own.
+- **Window management** — 39 Rectangle-style actions: halves, quarters, thirds, sizing, nudging,
+  edge moves, display moves, fullscreen and Spaces, plus custom sizes of your own.
 - **Layouts and rooms** — save an arrangement of apps and restore it in one press, or walk into a
   room: its windows tiled on your display, everything else stepped back.
 
