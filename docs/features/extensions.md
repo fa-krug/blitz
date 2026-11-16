@@ -882,10 +882,13 @@ runs that command when it's installed, anything else reopens the palette. Handin
 would launch Raycast itself.
 
 **Node built-ins** — `path`, `fs` (+ `fs/promises`, `createReadStream`/`createWriteStream`, a snapshot-backed `opendir`, and
-the descriptor calls `tar` unpacks through), `os`,
+the descriptor calls `tar` unpacks through; `stat` carries the owner's `uid`/`gid`), `os`
+(`networkInterfaces` reports every MAC as zeros; `userInfo` and `process.getuid`/`getgid`/`geteuid`/
+`getegid`/`getgroups` report ids read once at boot — `which`'s `isexe` checks them against `stat`),
 `child_process` (`exec`, `execFile`, `execSync`, `execFileSync`, `spawnSync`, and a streaming `spawn`,
 each async form reporting the child's real `pid` for `process.kill` — Timers pauses that way),
-`crypto` (hashes, HMAC, PBKDF2, AES-CBC/ECB, random, UUID), `zlib` (gzip/zlib/raw deflate, both
+`crypto` (hashes, HMAC, PBKDF2, AES-CBC/ECB, AES-GCM with 16-byte tags and nonces of 12 bytes or
+more — CryptoKit's limits, narrower than Node's — random, UUID), `zlib` (gzip/zlib/raw deflate, both
 directions, plus `create*` streams that buffer until `end`), `http`/`https` (`request`, `get` and `Agent`, buffered over the same URLSession bridge
 as `fetch`, with `socketPath` for Unix-socket HTTP), `stream` (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`,
 `finished`, plus `stream/promises` and `stream/web`), `util`, `events`, `buffer`, `url`, `querystring`, `punycode`, `assert`,
