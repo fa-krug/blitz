@@ -106,6 +106,14 @@ failed flush retains the draft for retry.
 - **Create Note** creates and selects one unique Untitled note, including from an empty channel.
 - **Search Notes** shows the same panel with the switcher open and its search field focused.
 
+Settings > Notes > **Show in Menu Bar** is `AppSettings.notesShowsInMenuBar`, off when absent and
+carried by settings backups. While it and Notes are both on, `NotesCoordinator.applyMenuBarItem()`
+keeps a `NotesMenuBarController`: an AppKit `NSStatusItem`, because a SwiftUI `MenuBarExtra` cannot
+act on a plain click. A click on it is Show Notes, and a right-, Control- or Option-click opens an
+`NSMenu` of Create Note and Search Notes, attached only for that click. Turning either setting off
+removes the status item rather than hiding it; the sink runs from `AppCore`'s `track`, so a
+`settings.json` edit lands with no pane open.
+
 Command-N creates, Command-P opens or refocuses the switcher, Command-O opens the Notes folder, and
 Command-F opens AppKit's find bar in the active note. Escape closes the find bar or switcher before
 hiding; Command-W and the red traffic light both hide directly. Hiding

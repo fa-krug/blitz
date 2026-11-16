@@ -138,6 +138,8 @@ each inserted by one preference and independent of the other, Blitz's carrying o
 state, the agent's waiting dot ([ui.md](ui.md#the-app-icon)); everything else visible is driven
 imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owned entirely by
 `Features/Extensions/`, through `ExtensionManager`, with no scene or lifecycle wiring in the core.
+Notes' optional item is an `NSStatusItem` too, owned by `NotesCoordinator`
+([features/notes.md](features/notes.md)), since a `MenuBarExtra` cannot act on a plain click.
 
 - **Command palette** — a borderless floating `NSPanel` (`Palette/PalettePanel.swift`) hosting SwiftUI
   via `NSHostingView`, managed by `PaletteWindowController`. It toggles between a compact bar and the
