@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Borderless floating panel that hosts the SwiftUI command palette.
-final class PalettePanel: NSPanel {
+final class PalettePanel: NSPanel, AnimatedPanel {
     enum HeaderFieldBoundary {
         case leading
         case trailing
@@ -272,7 +272,7 @@ final class PalettePanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        animationBehavior = .documentWindow
+        followMotion()
         isReleasedWhenClosed = false
 
         let hosting = NSHostingView(rootView: rootView)

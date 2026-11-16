@@ -999,6 +999,9 @@ caches, TCC grants and login item, so this cannot disturb an installed copy.
 ### Settings and backup
 
 - Every pane renders and the sidebar switches without flicker
+- Appearance › Show animations off: the palette, its ⌘K menu, a dialog, a HUD, Notes and a Settings
+  editor appear and leave at once, with no row or expansion animation; back on, they animate again
+  without a relaunch, and spinners keep turning either way
 - Closing and reopening Settings lands on the pane it was on, with Back disabled and the sidebar
   search empty;
   an editor panel open at close is gone; a pane that reads on appear (Permissions after a grant)

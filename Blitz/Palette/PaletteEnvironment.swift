@@ -42,5 +42,6 @@ extension View {
             .environment(core.meetingClock)
             .environment(core.remindersStore)
             .environment(core.contactsStore)
+            .motionScope()
     }
 }

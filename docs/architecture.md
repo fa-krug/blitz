@@ -198,7 +198,9 @@ imperatively from AppKit. Extension menu extras are dynamic `NSStatusItem`s owne
 
 `NSAlert` is never used, and that is load-bearing. Appearance is a setting: `AppCore.applyAppearance()`
 assigns `NSApp.appearance` from `AppSettings.appearance`, and `.system` assigns `nil` so AppKit follows
-macOS by itself. Nothing else in the app sets an appearance.
+macOS by itself. Nothing else in the app sets an appearance. Animations take the same shape:
+`AppCore.applyMotion()` projects `AppSettings.animationsEnabled` into `Motion.isEnabled` and re-points
+every live `AnimatedPanel` (see [ui.md](ui.md#non-negotiable-invariants)).
 
 ## Observation and concurrency
 
@@ -220,8 +222,8 @@ everything that feature owns.
 Blitz/
   App/              @main, AppDelegate, AppCore — the composition root
   DesignSystem/     Theme (the token source), InterfaceMetrics, KeyCapChip, BarButton, Tooltip,
-                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Scrolling/,
-                    Interaction/
+                    SymbolImage, GlassEffectView, PopoverMenu, SettingsComponents, Motion,
+                    Scrolling/, Interaction/
   Platform/         system shims: Permissions, LaunchAtLogin, InputSourceSwitcher, ScreenTarget,
                     AppDisplayName, SymbolicHotKeys, NotificationToken, AppPaths, Signposts,
                     HealthTicker, Memo, ActivationPolicy, AppActivation, ProcessExit,

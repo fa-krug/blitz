@@ -14,6 +14,9 @@ struct AppearanceSettingsView: View {
                 } label: {
                     SettingsRowTitle(.appearanceAppearance, "Theme")
                 }
+                Toggle(isOn: $settings.animationsEnabled) {
+                    SettingsRowTitle(.appearanceAppearance, "Show animations")
+                }
                 InterfaceSizeRow()
                 WindowModeRow()
                 Toggle(isOn: $settings.showFavoritesInCompactMode) {
