@@ -58,6 +58,9 @@ struct RootPaletteView: View {
     /// Compact vs. full; the source of truth is on `AppCore`, so the two can't disagree.
     private var isCollapsed: Bool { core.paletteCoordinator.paletteIsCollapsed }
 
+    /// Compact glass draws its contour past its shapes, so the window leaves it this margin.
+    private var renderingOutset: CGFloat { isCollapsed ? Theme.Size.paletteGlassOutset : 0 }
+
     /// The current mode's screen: its rows are the visible order the flat selection indexes.
     private var screen: any PaletteScreen {
         switch vm.mode {
@@ -342,7 +345,12 @@ struct RootPaletteView: View {
                         value: core.isDimmingPaletteForDialog
                     )
                     .clipShape(
-                        RoundedRectangle(cornerRadius: metrics.radius.panel, style: .continuous))))
+                        RoundedRectangle(
+                            cornerRadius: isCollapsed ? 0 : metrics.radius.panel, style: .continuous
+                        )
+                        .inset(by: -renderingOutset)))
+        )
+        .padding(renderingOutset)
     }
 
     /// Everything a keystroke or selection step changes; `PaletteSurface` is its only reader.

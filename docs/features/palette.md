@@ -326,6 +326,11 @@ arrows over only at the text's ends, and `moveCompactSelection` takes them only 
 with a truly empty field, so marked IME text, a selection, modified arrows, whitespace and the
 expanded header's Tab-ring navigation through inline argument fields keep their behavior.
 
+Keyboard selection tints the button's own glass (`compactShortcutSelectionTint`) and draws its
+glyph in white, so the system material draws the selected face and contour together. The bar lays
+`panelScrim` over its glass through a mask of the same animated shapes, as the expanded panel lays
+it over its glass; the selected button stays out of that mask, so its tint reads undimmed.
+
 Mouse and keyboard activation synchronously call `LauncherCoordinator.runCommand` in a transaction
 with animations disabled. No merge animation or delayed activation survives beneath the destination
 screen. Palette screens push over root search as before; Show Notes closes the palette and opens
@@ -342,6 +347,12 @@ layer would fill it. See [ui.md](../ui.md#panel-structure) for the shapes and th
 `PaletteWindowController` resolves an anchor (left edge + top edge) **once per summon** and reuses it
 for every compact↔expanded resize, so only the height changes and the top edge never drifts. The
 anchor is dropped on hide, so the next summon re-resolves for wherever the user is then.
+
+The anchor is the **visible** surface's corner, not the window's. While compact the window is
+`Theme.Size.paletteGlassOutset` larger on every side, because native glass draws its contour and
+press effects past its shapes and the window edge would clip them. `PalettePlacement.frame(at:size:outset:)`
+and `anchor(of:outset:)` convert both ways, and the controller remembers the outset it laid out, so a
+drag, a snap and the compact↔expanded swap all keep the visible edge where it was.
 
 All of the arithmetic lives in `PalettePlacement`, which is CoreGraphics-only and takes every screen
 fact as a parameter, so `palette-placement-test` drives the shipped rules rather than a copy of them.

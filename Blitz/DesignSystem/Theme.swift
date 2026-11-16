@@ -98,6 +98,8 @@ enum Theme {
         static let headerPadding: CGFloat = 10
         /// Collapsed compact bar: the search row centered in symmetric `headerPadding` slack.
         static let compactHeight: CGFloat = headerHeight + headerPadding * 2
+        /// Native glass contours and interaction effects draw outside their layout bounds.
+        static let paletteGlassOutset: CGFloat = 4
         /// How close a dragged palette must be to the invisible vertical centre line.
         static let paletteSnapDistance: CGFloat = 8
         /// A restored position needs this much bar on a display to still be grabbable.
@@ -464,8 +466,9 @@ enum Theme {
         static let controlHover = ramp(dark: 0.16, light: 0.14)
         /// A held control is stronger than hover, so mouse-down always reads.
         static let controlPressed = ramp(dark: 0.24, light: 0.20)
-        static let compactShortcutGlassSelection = ramp(dark: 1, light: 0)
-        static let compactShortcutSelection = ramp(dark: 0.20, light: 0.55)
+        /// Tints the selected button's own glass, so the material draws face and contour together.
+        static let compactShortcutSelectionTint = adaptive(
+            dark: .srgbInk(0.55, alpha: 1), light: .srgbInk(0, alpha: 0.40))
         static let compactShortcutSelectedInk = adaptive(
             dark: .srgbInk(1, alpha: 1), light: .srgbInk(1, alpha: 1))
         /// Control borders: outlined kbd chips.
