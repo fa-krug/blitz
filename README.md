@@ -56,6 +56,8 @@ use**, rendered as native SwiftUI.
 - **Quicklinks** — turn a URL, search, file or deeplink into a command, with placeholders for typed
   input, the selection, the clipboard or the date.
 - **Emoji picker** — a searchable emoji grid, one keystroke away.
+- **Dictation** — press or hold a shortcut and speak; Apple's on-device speech model types it into
+  the app you were using, or into AI Chat from its own mic button.
 - **Camera and QR codes** — a live, mirrored preview to check yourself before a call, a photo to the
   clipboard, or a QR code read and opened.
 
@@ -124,8 +126,8 @@ Blitz asks for each permission the first time you use a feature that needs it, n
 presses a menu item. Grant it in **System Settings → Privacy & Security → Accessibility**. Snippets
 ship disabled, and keystrokes are matched locally, never stored and never sent anywhere.
 
-Calendar, Reminders, Contacts, the camera and screen recording are each requested only by the
-feature that reads them.
+Calendar, Reminders, Contacts, the camera, the microphone and screen recording are each requested
+only by the feature that reads them.
 
 ## Using it
 
