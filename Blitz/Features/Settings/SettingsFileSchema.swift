@@ -38,7 +38,10 @@ enum SettingsFileSchema {
         case .animationsEnabled: return bind(settings, \.animationsEnabled)
         case .interfaceSize: return bind(settings, \.interfaceSize)
         case .compactMode: return bind(settings, \.compactMode)
-        case .showFavoritesInCompactMode: return bind(settings, \.showFavoritesInCompactMode)
+        case .compactBarCommands:
+            return bind(settings, \.compactBarCommands) {
+                CommandID.validCompactBarCommands($0) ? $0 : nil
+            }
         case .openOnCursorScreen: return bind(settings, \.openOnCursorScreen)
         case .paletteDraggable: return bind(settings, \.paletteDraggable)
         case .hyperKey: return bind(settings, \.hyperKey)
@@ -133,6 +136,7 @@ enum SettingsFileSchema {
 
 extension PopToRootTimeout: SettingsFileRawValue {}
 extension EscapeKeyBehavior: SettingsFileRawValue {}
+extension CommandID: SettingsFileRawValue {}
 extension AppAppearance: SettingsFileRawValue {}
 extension InterfaceSize: SettingsFileRawValue {}
 extension HyperKeyPhysicalKey: SettingsFileRawValue {}

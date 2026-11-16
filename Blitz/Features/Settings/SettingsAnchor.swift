@@ -13,6 +13,7 @@ extension SettingsAnchor {
     static let generalGeneral = Self(tab: .general, title: "General")
 
     static let appearanceAppearance = Self(tab: .appearance, title: "Appearance")
+    static let appearanceCompactShortcuts = Self(tab: .appearance, title: "Compact Shortcuts")
 
     static let hyperKeyHyperKey = Self(tab: .hyperKey, title: "Hyper Key")
 

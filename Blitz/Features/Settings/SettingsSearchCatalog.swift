@@ -174,8 +174,10 @@ enum SettingsSearchCatalog {
             .appearanceAppearance, "Window mode",
             keywords: ["compact", "expanded", "slim", "search bar", "small"]),
         .init(
-            .appearanceAppearance, "Show favorites in compact mode",
-            keywords: ["pinned", "apps", "compact"]),
+            group: .appearanceCompactShortcuts, "Compact Shortcuts",
+            keywords: [
+                "slots", "buttons", "reorder", "clipboard", "emoji", "notes", "schedule", "quick ai"
+            ]),
         .init(
             .appearanceAppearance, "Follow the cursor across displays",
             keywords: ["monitor", "screen", "pointer", "multi display"]),

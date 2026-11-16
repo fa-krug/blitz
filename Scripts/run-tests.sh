@@ -415,6 +415,19 @@ run palette-tab-test       Blitz/Palette/PaletteMode.swift \
                            Blitz/Features/Quicklinks/Model/Quicklink.swift \
                            Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
+run compact-bar-test       Blitz/Features/Launcher/Model/CompactBarSelection.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/Settings/Model/*.swift \
+                           Blitz/Features/Launcher/Model/CommandID.swift \
+                           Blitz/Features/HotKeys/Model/HotKeyAction.swift \
+                           Blitz/Features/QuickActions/Model/QuickAction.swift \
+                           Blitz/Features/QuickActions/Model/BuiltInQuickAction.swift \
+                           Blitz/Features/QuickActions/Model/CustomQuickAction.swift \
+                           Blitz/Features/Quicklinks/Model/Quicklink.swift \
+                           Blitz/Features/Quicklinks/Model/QuicklinkDestination.swift \
+                           Blitz/Features/SystemActions/Model/SystemAction.swift \
+                           Blitz/Features/WindowManagement/Model/WindowCommand.swift \
+                           Blitz/Features/Snippets/Model/Snippet.swift
 run fallback-test          Blitz/Features/Launcher/Model/Fallback.swift \
                            Blitz/Features/Launcher/Model/WebSearchEngine.swift \
                            Blitz/Features/Launcher/Model/CommandID.swift \

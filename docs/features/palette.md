@@ -188,11 +188,14 @@ still there to be cleared by the next press. A bare backspace in an empty field 
 is the step Escape would have taken had that screen been reached by typing its name. ⌘⎋ skips the
 whole stack for that same root search from any depth.
 
-**The compact bar's ↓ and "…" expansion is a rung of its own.** `PaletteState.forceExpanded` holds
-the launcher open with an empty field; Escape and a bare backspace fold it back into the bar before
-either would hide or step back, and it never outlives the summon — `hidePalette` clears it, so a
-re-summon inside the Pop to Root window still opens compact. Typing a search hands the expansion over
-to the query, so clearing the field afterwards collapses the bar like any search would.
+**In compact mode the expanded launcher root is a rung of its own.** `PaletteState.forceExpanded`
+holds the launcher open with an empty field: ↓ on the bar sets it, and so does an Escape that clears
+the query there, so clearing and collapsing stay separate presses — Escape clears, the next collapses
+(`PaletteEscapeAction.collapsePalette`), and only another closes, under either Escape preference.
+A bare backspace in the empty field folds the expansion back too. It never outlives the summon —
+`hidePalette` clears it, so a re-summon inside the Pop to Root window still opens compact. Typing a
+search hands the expansion over to the query, so deleting the text afterwards collapses the bar like
+any search would.
 
 `EscapeKeyBehavior` (General settings) can trade the walk for a close: under
 `closeAndPopToRoot` an empty field closes the window and resets it immediately, whatever Pop to Root
@@ -299,6 +302,40 @@ refocus from a mode change can take the caret back.
 The flat `selection` index is the single source of truth for highlight / activation and **must always
 match the visible row order**, including the card at index 0 when present — the calculator's (see
 [calculator.md](calculator.md)) or the meeting join card (see [calendar.md](calendar.md)), never both.
+
+## The compact bar
+
+Compact is the launcher with an empty query, drawn as glass shapes over a bare window: the header
+row in a capsule, then one round button per configured `AppSettings.compactBarCommands` entry whose
+feature `AppIndex.isCommandEnabled` reports on. Appearance settings shows **Compact Shortcuts** only
+when Compact is selected: an ordered list of zero to four unique commands
+(`CommandID.compactBarOptions`), with add, replace, remove and move controls. The default is
+Clipboard History, Search Files, Search Snippets and Search Quicklinks; Search Emoji & Symbols, Show
+Notes, My Schedule and Quick AI are also available. Disabled features retain their configured
+positions but disappear from the bar until re-enabled. The ordered command identifiers persist in
+preferences, backups and `appearance.compactBarCommands` in settings.json. Invalid lists are
+rejected whole, and an empty array deliberately removes all slots. Favorites no longer show on the
+bar; ⌘1–⌘0 still launch them.
+
+Search starts selected on every presentation (`CompactBarSelection`, nil for Search). ←/→ traverse
+Search and the visible buttons, stopping at either end; ↓ expands Search or opens the selected
+button, and ↵ opens only a selected button. ↑ is unchanged: it recalls the last search, which expands
+the bar like typing. Typing, pasting, IME composition, a click on Search or a collapse resets the
+selection. The field editor keeps focus throughout: `PalettePanel`'s boundary-arrow hook hands the
+arrows over only at the text's ends, and `moveCompactSelection` takes them only while the bar is up
+with a truly empty field, so marked IME text, a selection, modified arrows, whitespace and the
+expanded header's Tab-ring navigation through inline argument fields keep their behavior.
+
+Mouse and keyboard activation synchronously call `LauncherCoordinator.runCommand` in a transaction
+with animations disabled. No merge animation or delayed activation survives beneath the destination
+screen. Palette screens push over root search as before; Show Notes closes the palette and opens
+its own window. The summon reveal still animates independently.
+
+The glass is a background of the header, not a wrapper around it: the field keeps its one structural
+position, and a container never paints its merged glass over the row. While compact the row is
+narrowed to the capsule, and so is the top drag strip, so neither reaches under a button. The dialog
+dimming is skipped while compact, since the window between the shapes is transparent and a dimming
+layer would fill it. See [ui.md](../ui.md#panel-structure) for the shapes and the reveal.
 
 ## Window placement
 
@@ -600,8 +637,8 @@ handled in `PalettePanel.sendEvent` before `super` hands the event to the respon
 - **Chords with no main menu item** — ⌘, and ⌘w, which an app with a menu bar would never see here.
 - **The physical number-row slots.** `FavoriteSlots` matches ⌘1…⌘0 by key code before fixed command
   chords, then publishes the resolved position to the active screen. Only the launcher and clipboard
-  screens intercept these slots; other screens keep their own ⌘-number shortcuts. The launcher's
-  compact visibility setting is visual only and does not disable its favorite slots.
+  screens intercept these slots; other screens keep their own ⌘-number shortcuts. The compact bar
+  shows no favorites, but its slots still launch them.
 - **Chords AppKit has already bound to a selector.** `⌘.` is the one that bites: AppKit binds it to
   `cancelOperation:` alongside Escape, so `interpretKeyEvents` hands it to the field editor and
   `onKeyPress(keys: ["."])` never fires. Pin (⌘.) therefore arrives through `onCommandShortcut`,
@@ -629,9 +666,9 @@ whether macOS has claimed the chord, before assuming the handler is wrong.
 
 ## Emacs navigation chords
 
-⌃N/⌃P and ⌃F/⌃B navigate exactly as ↓/↑ and →/← do — on the emoji grid all four step the selection,
-and everywhere else the horizontal pair falls through to the caret, which is what a native search field
-does.
+⌃N/⌃P and ⌃F/⌃B navigate exactly as ↓/↑ and →/← do — the collapsed bar uses the horizontal pair to
+select Search or a shortcut, on the emoji grid all four step the selection, and everywhere else the
+horizontal pair falls through to the caret, which is what a native search field does.
 
 None of them reach `onKeyPress` on their own: AppKit's key-binding table hands the field editor
 `moveDown:` / `moveUp:` / `moveForward:` / `moveBackward:` first, and in a one-line field the vertical
@@ -639,7 +676,7 @@ pair walks the caret to the end or the start rather than moving anything.
 
 `PalettePanel.sendEvent` therefore rewrites each chord into its arrow and re-dispatches, ahead of every
 other rule it applies. Nothing else changes: the arrow handlers in `RootPaletteView` are the only
-navigation code, so the compact bar's expand-on-↓, the grid's row and column steps, menu highlight
+navigation code, so compact shortcut selection, expand-on-↓, the grid's row and column steps, menu highlight
 movement and the scroll-into-view intent all follow for free. The caret keeps ⌃F/⌃B off the grid
 because `moveHorizontally` leaves →/← `.ignored` there, and the field editor then moves by a character
 exactly as the chord natively would. A chord carrying any modifier beyond ⌃ — ⌃⇧Q, say — is left alone,

@@ -58,7 +58,7 @@ final class PaletteState {
     private(set) var emojiGridZoomToken = UUID()
     /// The last zoom from `noteEmojiGridZoom`, consumed by the SwiftUI layer.
     private(set) var emojiGridZoom: EmojiGridZoom?
-    /// Set by the compact bar's ↓ or overflow; cleared by typing, Escape, backspace, hide or `prepare`.
+    /// Held open by ↓ or a clearing Escape; typing, Escape, backspace, hide and `prepare` drop it.
     var forceExpanded = false
     /// The paste target, mirrored on every show; `prepare` resets the screen, not this.
     var pasteTarget: PasteTarget?
@@ -159,7 +159,7 @@ final class PaletteState {
         return true
     }
 
-    /// Undo a ↓ or "…" expansion; false when there was none to undo.
+    /// Undo a held-open expansion; false when there was none to undo.
     @discardableResult
     func collapseToCompact() -> Bool {
         guard forceExpanded, mode == .launcher else { return false }
