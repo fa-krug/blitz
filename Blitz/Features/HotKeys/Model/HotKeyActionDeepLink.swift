@@ -41,6 +41,7 @@ extension HotKeyAction {
     /// The inverse of `defaultsKey`; a command no chord may run, such as Quit, no link runs either.
     private static func action(token: String) -> HotKeyAction? {
         if token == "togglePalette" { return .togglePalette }
+        if token == "dictation" { return .dictation }
         if let command = CommandID(rawValue: token) { return command.hotKeyAction }
         guard let dot = token.firstIndex(of: ".") else { return nil }
         let value = String(token[token.index(after: dot)...])

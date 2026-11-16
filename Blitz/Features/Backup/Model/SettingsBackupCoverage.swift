@@ -70,7 +70,13 @@ enum SettingsBackupCoverage {
         "calendarMenuBarDisplay": .calendarMenuBarDisplay,
         "menuBarLinkedEventsOnly": .menuBarLinkedEventsOnly,
         "calendarMenuBarHidesWhenEmpty": .calendarMenuBarHidesWhenEmpty,
-        "hideCurrentEvent": .hideCurrentEvent
+        "hideCurrentEvent": .hideCurrentEvent,
+        "dictationMode": .dictationMode,
+        "dictationLanguage": .dictationLanguage,
+        "dictationDestination": .dictationDestination,
+        "dictationPlaysSounds": .dictationPlaysSounds,
+        "dictationLiveInsertion": .dictationLiveInsertion,
+        "dictationAdaptsCapitalization": .dictationAdaptsCapitalization
     ]
 
     /// The `SettingsData` fields no `AppSettings` key stands behind, and what they read instead.
@@ -109,6 +115,11 @@ enum SettingsBackupCoverage {
             "Doubles as consent to read and edit your reminders; an import must not grant that.",
         AppSettingsKey.contactsEnabled.rawValue:
             "Doubles as consent to read and edit your contacts; an import must not grant that.",
+        AppSettingsKey.dictationEnabled.rawValue:
+            "Doubles as consent to record from the microphone and arms a global shortcut that "
+            + "does; an import must not switch that on.",
+        AppSettingsKey.dictationMicrophone.rawValue:
+            "Names an audio input on this Mac; the one a backup lands on may not have it.",
         AppSettingsKey.autoJoinMeetings.rawValue:
             "Arms the app to open meeting links unattended; an import must not switch that on.",
         AppSettingsKey.cameraPreview.rawValue:

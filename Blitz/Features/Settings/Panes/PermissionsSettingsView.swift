@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// The four statuses, read together off the main actor: each read is a round trip to TCC.
+/// The statuses, read together off the main actor: each read is a round trip to TCC.
 private struct PermissionStatuses: Equatable, Sendable {
     let accessibilityTrusted: Bool
     let calendar: CalendarAccess
     let reminders: CalendarAccess
     let contacts: CalendarAccess
+    let microphone: CalendarAccess
 
     nonisolated static func read() -> Self {
         Self(
             accessibilityTrusted: Permissions.isAccessibilityTrusted(),
             calendar: Permissions.calendarAccess(), reminders: Permissions.remindersAccess(),
-            contacts: Permissions.contactsAccess())
+            contacts: Permissions.contactsAccess(), microphone: Permissions.microphoneAccess())
     }
 }
 
@@ -25,6 +26,7 @@ struct PermissionsSettingsView: View {
     private var calendarAccess: CalendarAccess? { statuses?.calendar }
     private var remindersAccess: CalendarAccess? { statuses?.reminders }
     private var contactsAccess: CalendarAccess? { statuses?.contacts }
+    private var microphoneAccess: CalendarAccess? { statuses?.microphone }
 
     var body: some View {
         Form {
@@ -165,6 +167,42 @@ struct PermissionsSettingsView: View {
             } header: {
                 SettingsSectionHeader(.permissionsContacts)
             }
+
+            Section {
+                LabeledContent {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: Self.status(of: microphoneAccess).symbol)
+                                .accessibilityHidden(true)
+                            Text(Self.status(of: microphoneAccess).title)
+                        }
+                        .foregroundStyle(Self.status(of: microphoneAccess).tint)
+                        Button(microphoneNeedsPrompt ? "Grant Access…" : "Open…") {
+                            if microphoneNeedsPrompt {
+                                core.dictationCoordinator.setEnabled(true)
+                            } else {
+                                Permissions.openMicrophoneSettings()
+                            }
+                        }
+                        .help(
+                            microphoneNeedsPrompt
+                                ? "Turns Dictation on, then asks macOS for access."
+                                : "Opens Privacy & Security › Microphone.")
+                    }
+                } label: {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        PermissionSettingsIcon(
+                            path: "/System/Library/ExtensionKit/Extensions/SecurityPrivacyExtension.appex")
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                            SettingsRowTitle(.permissionsMicrophone, "Microphone")
+                            Text("Records your voice while you dictate.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                SettingsSectionHeader(.permissionsMicrophone)
+            }
         }
         .formStyle(.grouped)
         .settingsScrollTarget(.permissions)
@@ -180,6 +218,7 @@ struct PermissionsSettingsView: View {
     private var calendarNeedsPrompt: Bool { calendarAccess == .notDetermined }
     private var remindersNeedsPrompt: Bool { remindersAccess == .notDetermined }
     private var contactsNeedsPrompt: Bool { contactsAccess == .notDetermined }
+    private var microphoneNeedsPrompt: Bool { microphoneAccess == .notDetermined }
 
     private var accessibilityStatus: (title: String, symbol: String, tint: Color) {
         switch accessibilityTrusted {

@@ -14,7 +14,7 @@ in `Features/WindowManagement/`.
 - **Off by default, and only the pane turns it on.** `settingsFileEnabled` has no key in the file and is
   excluded from backups: a file or an import must never switch on something that reads a file.
 - **A capability grant never has a key.** Snippets, Extensions, Calendar, Reminders and Contacts
-  access, Auto Join, Camera Preview, Quick Actions, MCP, chat access to the calendar and reminders,
+  access, Dictation (microphone), Auto Join, Camera Preview, Quick Actions, MCP, chat access to the calendar and reminders,
   and clipboard and screenshot text recognition are switched on only in the app, which asks first.
   `settings-file-test` checks those paths stay absent.
 - **`SettingsFileSchema`'s switch is exhaustive.** A new `SettingsFileKey` case fails to build until it
@@ -127,7 +127,8 @@ Where a number has a special case, the case is a word:
 shows ✦. The key is the lowercase character this Mac's keyboard types, or a name: `space`, `return`,
 `enter`, `tab`, `delete`, `forward-delete`, `escape`, `left`, `right`, `up`, `down`, `home`, `end`,
 `page-up`, `page-down`, `help`, `f1`–`f20`, `keypad-0`…; any other key is `key-<code>`. `cmd++` is the
-plus key. Keyless bindings are `double-tap ctrl|option|shift|cmd`, `globe` and `double-tap globe`. The
+plus key. Keyless bindings are `double-tap ctrl|option|shift|cmd`, `globe` and `double-tap globe`;
+a sided modifier such as `right option` is refused, since only Dictation's shortcut may hold one. The
 recorder's rule holds: a chord needs ⌘, ⌥, ⌃ or fn unless its key is an F-key.
 
 ## Window management

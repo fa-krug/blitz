@@ -29,6 +29,7 @@ struct HotKeySpelling: Sendable {
         switch binding {
         case .combo(let shortcut): text(for: shortcut)
         case .doubleTap(let modifier): "double-tap " + Self.name(of: modifier)
+        case .modifier(let key): Self.name(of: key)
         case .globe: "globe"
         case .doubleGlobe: "double-tap globe"
         }
@@ -158,6 +159,12 @@ struct HotKeySpelling: Sendable {
         case .shift: "shift"
         case .command: "cmd"
         }
+    }
+
+    /// Never read back: only Dictation holds one, and the file has no key for its shortcut.
+    private static func name(of key: ModifierKey) -> String {
+        guard let side = key.side, let modifier = key.modifier else { return "globe" }
+        return side.lowercased() + " " + name(of: modifier)
     }
 
     private static func doubleTapModifier(named name: String) -> DoubleTapModifier? {

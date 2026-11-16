@@ -4,17 +4,19 @@
 
 - `KeyShortcut` — Sendable model, Carbon keycode + modifiers, layout-aware glyphs via `UCKeyTranslate`.
 - `HotKeyBinding` — what an action is bound to: `.combo(KeyShortcut)`,
-  `.doubleTap(DoubleTapModifier)`, `.globe`, or `.doubleGlobe`.
-- `HotKeyCenter` — the Carbon `RegisterEventHotKey` layer, pausable.
+  `.doubleTap(DoubleTapModifier)`, `.modifier(ModifierKey)`, `.globe`, or `.doubleGlobe`.
+- `HotKeyCenter` — the Carbon `RegisterEventHotKey` layer, pausable, reporting key-up where asked.
 - `DoubleTapModifier` / `DoubleTapDetector` — the double-tap recognizer.
 - `GlobeTapDetector` / `ModifierTapMonitor` — Globe recognition and the shared modifier-only tap.
+- `ModifierKey` / `ModifierKeyDetector` — one sided physical modifier, followed alone; what
+  Dictation's hold-to-talk watches. See [Hold to talk](#hold-to-talk).
 - `SpotlightShortcut` / `SpotlightHandoffSession` — whether macOS still takes ⌘Space, and binding it
   once the user frees it. See [Taking ⌘Space from Spotlight](#taking-space-from-spotlight).
 - `HyperKeyTap` and its Settings pane, `Settings/HyperKeySettingsView` — see
   [The Hyper Key](#the-hyper-key).
 
 `HotKeyManager` owns them all: persistence, conflict lookup, and dispatch. Every action reads and
-writes one `HotKeyBinding`, so the four cases share persistence, conflict detection, the recorder and
+writes one `HotKeyBinding`, so the five cases share persistence, conflict detection, the recorder and
 the keycap rendering — only the _engine_ differs.
 
 ## Invariants
@@ -29,10 +31,14 @@ the keycap rendering — only the _engine_ differs.
 - **A command that opens a palette mode toggles it.** Every one of them enters through
   `PaletteCoordinator.togglePalette(mode:)`, so a second press closes what the first opened. From a
   launcher row the palette is in `.launcher`, so the row always re-points instead.
-- **`HotKeyBinding` is the one thing an action is bound to, with four cases and two engines.** A
-  `.combo` is a Carbon registration; `.doubleTap`, `.globe` and `.doubleGlobe` are recognized by
-  `ModifierTapMonitor`, because Carbon cannot see a lone modifier at all. Its `Codable` is the
-  synthesised one.
+- **`HotKeyBinding` is the one thing an action is bound to, with five cases and two engines.** A
+  `.combo` is a Carbon registration; `.doubleTap`, `.modifier`, `.globe` and `.doubleGlobe` are
+  recognized by `ModifierTapMonitor`, because Carbon cannot see a lone modifier at all. Its
+  `Codable` is the synthesised one.
+- **Only Dictation holds, and only Dictation records a single sided modifier.** Every other
+  action records exactly as it always has. A hold reserves its physical key: in hold mode
+  `conflictOwner` refuses any other binding that starts with the same key, a double tap of either
+  side included, and an unarmed hold is left unarmed rather than stealing it.
 - **macOS's own shortcut table is read, never written.** Blitz guides the user to free ⌘Space in
   System Settings and binds it afterwards; nothing writes `com.apple.symbolichotkeys`.
 - `KeyShortcut`'s hand-written `init(from:)` is a correctness seam, not a format one: it routes every
@@ -91,8 +97,8 @@ outright. The list is a deny-list rather than an allow-list, so a new command st
 there. A binding therefore persists under `hotkey.<command raw value>`, as in
 `hotkey.command:clipboard-history`, which is also what puts a recorder on the command's row and a
 keycap on every launcher row. That row is in exactly one pane — Settings ▸ Commands, or the feature's
-own pane when `SettingsTab.ownedCommands` names it. `hotkey.togglePalette` is the one fixed action with
-no command row. `HotKeyManager` names them all through `CommandID`, so a conflict callout spells an
+own pane when `SettingsTab.ownedCommands` names it. `hotkey.togglePalette` and `hotkey.dictation` are the
+two fixed actions with no command row; Dictation's recorder sits in its own pane. `HotKeyManager` names them all through `CommandID`, so a conflict callout spells an
 action exactly as its command row does.
 
 Like a window command, the chord registers regardless of the launcher row. Search Files and Notes both
@@ -121,6 +127,42 @@ check the physical `kVK_Function` keycode, not just the fn flag, because F-keys 
 It shares the double-tap's listen-only monitor, permission warning, lifecycle and pause while
 recording. macOS may perform its own Globe action too; set “Press fn/Globe key to” to “Do Nothing” in
 Keyboard settings if it conflicts. Globe+key chords use Carbon registration, like other combos.
+
+## Hold to talk
+
+Dictation's shortcut can be **held** instead of pressed: speak while it is down, release to
+finish. `HotKeyManager` learns which from `dictationHoldsToTalk`, set by `AppCore` from the mode
+setting, and reports through three hooks — `onDictationPressed`, `onDictationReleased` and
+`onDictationCancelled`. A hold needs a release to watch for (`HotKeyBinding.supportsHold`), so a
+double tap only works in toggle mode.
+
+- **A combo** registers with Carbon as usual and asks `HotKeyCenter` for its key-up too
+  (`kEventHotKeyReleased`). Every other chord leaves its key-up unhandled, as before.
+- **A single modifier** — `.modifier(ModifierKey)`, a sided ⌃⌥⇧⌘, or `.globe` — is the tap's.
+  `ModifierKey.held(in:globeDown:)` reads which physical keys are down from the
+  `NX_DEVICE…KEYMASK` bits, since the generic mask cannot tell the sides apart, and Globe from its
+  own keycode, since F-keys carry fn too. `ModifierKeyDetector` follows a key pressed alone from
+  nothing held. While Dictation holds, `syncModifierTaps` keeps its binding out of the tap map and
+  arms `ModifierTapMonitor.update(bound:holdKey:)` instead: after `DoubleTapDetector.maxHold`
+  (250 ms) alone the hold begins, and its release ends it. A quicker tap does nothing, so typing
+  past the key costs nothing. The tap installs while a hold is armed even with nothing else bound.
+- **Interruptions cancel.** Another modifier, any key or a click while the hold is armed or active
+  ends it through `onDictationCancelled`, which inserts nothing. Return, keypad Enter and Escape
+  are the exception during an active hold: the dictation panel owns them. Opening a recorder,
+  rebinding Dictation, switching modes or turning Dictation off cancels a hold as well, because a
+  paused engine would never report its release.
+- **In toggle mode** a `.modifier` binding is a tap, fired on release like a single Globe tap; it
+  waits out `ModifierKeyDetector.resolutionWindow` only while a double tap of the same modifier is
+  bound to something else.
+- **Recording.** Only while Dictation records does `ShortcutCaptureSession` feed a
+  `ModifierKeyDetector` too: a sided modifier held past 250 ms and released alone records
+  `.modifier` at once, a quick tap records it once the double-tap window has passed, and Globe held
+  records `.globe`. The callout says "Release to record" and "Tap again to double"; the keycap shows
+  the modifier with a small `L` or `R`.
+
+`.modifier` persists as `{"modifier":{"_0":"rightOption"}}`. `HotKeySpelling` writes it as
+`right option` but never reads one back: settings.json binds only window management, which may not
+hold a single modifier.
 
 ## Double-tap modifiers
 
@@ -277,8 +319,8 @@ stops until this session is active again. The HID remap outlives the process, so
 
 The settings recorder (`Features/HotKeys/UI/ShortcutRecorder.swift`) is deliberately **not** a focusable
 control: the active recorder is `HotKeyManager.recordingAction` state, and keys are captured by local
-NSEvent monitors while both engines are paused. It records combos, double-tapped modifiers and single
-or double Globe taps by feeding its `.flagsChanged` / `.keyDown` monitors into the same pure detectors
+NSEvent monitors while both engines are paused. It records combos, double-tapped modifiers, single
+or double Globe taps and, for Dictation alone, a single sided modifier, by feeding its `.flagsChanged` / `.keyDown` monitors into the same pure detectors
 as the global monitor, so recording needs no event tap and no permission. Its `.keyUp` monitor only
 tracks the Hyper key's F18 release; see [Secure Input](#secure-input).
 

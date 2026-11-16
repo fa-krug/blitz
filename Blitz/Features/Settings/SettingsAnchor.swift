@@ -75,6 +75,11 @@ extension SettingsAnchor {
     static let snippetsCommands = Self(tab: .snippets, title: "Commands")
     static let snippetsLibrary = Self(tab: .snippets, title: "Library")
 
+    static let dictationDictation = Self(tab: .dictation, title: "Dictation")
+    static let dictationShortcut = Self(tab: .dictation, title: "Shortcut")
+    static let dictationLanguage = Self(tab: .dictation, title: "Language")
+    static let dictationOutput = Self(tab: .dictation, title: "Output")
+
     static let navigationNavigation = Self(tab: .navigation, title: "Navigation")
     static let navigationCommands = Self(tab: .navigation, title: "Commands")
     static let navigationMenuSearch = Self(tab: .navigation, title: "Search Menu Bar Items")
@@ -124,6 +129,7 @@ extension SettingsAnchor {
     static let permissionsCalendars = Self(tab: .permissions, title: "Calendars")
     static let permissionsReminders = Self(tab: .permissions, title: "Reminders")
     static let permissionsContacts = Self(tab: .permissions, title: "Contacts")
+    static let permissionsMicrophone = Self(tab: .permissions, title: "Microphone")
 
     static let backupExport = Self(tab: .backup, title: "Export")
     static let backupImport = Self(tab: .backup, title: "Import")
@@ -153,8 +159,8 @@ extension SettingsAnchor {
         case .contacts: return .contactsCommands
         case .extensions: return .extensionsCommands
         case .general, .appearance, .hyperKey, .applications, .systemSettings, .systemActions,
-            .commands, .appleShortcuts, .fallbacks, .agent, .agentRules, .agentMemory, .aiProviders,
-            .mcpServers, .permissions, .backup, .about:
+            .commands, .appleShortcuts, .fallbacks, .dictation, .agent, .agentRules, .agentMemory,
+            .aiProviders, .mcpServers, .permissions, .backup, .about:
             return nil
         }
     }

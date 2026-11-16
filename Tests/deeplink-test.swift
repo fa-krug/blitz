@@ -30,8 +30,8 @@ struct DeepLinkTests {
     /// Fails to compile when `HotKeyAction` gains a case, so `samples` cannot quietly miss it.
     static func sampled(_ action: HotKeyAction) -> Bool {
         switch action {
-        case .togglePalette, .command, .app, .settingsPane, .customCommand, .systemAction,
-            .windowCommand, .windowLayout, .windowRoom, .customWindowSize, .quicklink, .quickAction,
+        case .togglePalette, .dictation, .command, .app, .settingsPane, .customCommand,
+            .systemAction, .windowCommand, .windowLayout, .windowRoom, .customWindowSize, .quicklink, .quickAction,
             .appleShortcut, .snippet, .extensionCommand:
             return true
         }
@@ -39,6 +39,7 @@ struct DeepLinkTests {
 
     static let samples: [HotKeyAction] = [
         .togglePalette,
+        .dictation,
         .command(.clipboardHistory),
         .app(bundleID: "com.apple.Safari"),
         .settingsPane(bundleID: "com.apple.Bluetooth-Settings.extension"),

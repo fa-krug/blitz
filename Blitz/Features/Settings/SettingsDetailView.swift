@@ -49,6 +49,7 @@ struct SettingsDetailView: View {
         case .fileSearch: FileSearchSettingsView()
         case .notes: NotesSettingsView()
         case .snippets: SnippetsSettingsView()
+        case .dictation: DictationSettingsView()
         case .navigation: NavigationSettingsView()
         case .windowManagement: WindowManagementSettingsView()
         case .clipboard: ClipboardSettingsView()

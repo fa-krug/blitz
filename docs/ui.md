@@ -456,6 +456,9 @@ Source: `Theme.frosted(in:)`, `DesignSystem/PopoverMenu.swift`.
 Glass is normally for floating controls. The dialog root is the one modal-surface exception.
 
 - `View.frosted(in:)` = `glassEffect(.regular.interactive(), in:)` — regular, interactive glass, so it follows the system Liquid Glass (clear ↔ tinted) setting; `.clear` ignores that setting. Used on the action-group capsule and the menu circle. Dialogs intentionally use untinted, non-interactive `.glassEffect(.regular)` on their root instead; HUDs retain the panel recipe (see "Dialogs & HUD"). Retune it in `frosted(in:)`, not per call site.
+- **The dictation capsule** is a floating control, not a readout: one system
+  `.glassEffect(.regular, in: .capsule)` at `dictationPanel` size, so it reads like the
+  system's own dictation pill rather than a HUD. Its bars are `textPrimary` at a ramped opacity.
 - **Menus are Blitz's own, not system popovers.** `.contextMenu`/`NSMenu` stall clicks for seconds inside a `LazyVStack` and draw nothing like the palette. A `PopoverMenu` is hosted in its own borderless `MenuPanel` (`Palette/MenuPanel.swift`), so its glass renders against the desktop and nothing clips it; `MenuPanelController` seats that window at one of the palette's `MenuPanelCorner`s, inset `Spacing.md` so the menu's edge lines up with the control it hangs off — the header menus take twice that, to meet the header button in its wider gutter.
 - **A menu's `width` is fixed, never intrinsic**, so it can't jitter as its rows change. Every header menu states its own at its `RootPaletteView.menuContent` case — `menuWidth 276`, or a token of its own where that reads too wide (`clipboardFilterMenuWidth`, `fileSearchFilterMenuWidth`, `emojiCategoryMenuWidth`) — so retuning one never moves another. Native footer menus add 30pt without changing those header widths; extension Actions states its own width inside the feature.
 - **`PopoverMenu`** uses `glassEffect(.regular)` with `menuPanel 16` corners and **no hand-tuned shadow** — Tahoe glass carries its own elevation; adding a drop shadow reads heavy and non-native. A footer menu raises only its attached bottom corner to the controls' 18-point radius, so the two silhouettes meet exactly.
@@ -929,10 +932,13 @@ See [features/window-layouts.md](features/window-layouts.md#the-editor).
 
 `ShortcutRecorder` is a `shortcutRecorder` (**120pt**) field showing only the binding — one cap per
 modifier and one for the key (`HotKeyBinding.keycaps`), with a Hyper chord's modifiers collapsed into
-the single ✦ cap. Recording is narrated by
+the single ✦ cap. A sided modifier, which only Dictation records, is one cap whose glyph carries a
+small `L` or `R` prefix (`KeyCapChip`'s `prefix`, `KeyCapChip.Label` in the field), and VoiceOver
+hears it as "Right Option". Recording is narrated by
 `ShortcutRecorderPopover`, a small **132 × 82** callout above it: caps, one label line, an `esc` cap in
 the top-left corner. Its fixed frame shows the prompt (`⌥ A` at half opacity, "Type a
-shortcut"), live held keys, a pending second Globe tap, or a conflict (rejected caps + owner, orange).
+shortcut"), live held keys, a pending second Globe tap, Dictation's held or tapped sided modifier
+("Release to record", "Tap again to double"), or a conflict (rejected caps + owner, orange).
 
 - **An ancestor draws it.** The open recorder publishes its bounds via `ShortcutRecorderAnchorKey`;
   `.shortcutRecorderPopoverHost()` sits on `SettingsDetailView` — one host above every pane's

@@ -443,10 +443,18 @@ run deeplink-test          Blitz/Features/HotKeys/Model/HotKeyActionDeepLink.swi
                            Blitz/Features/CustomCommands/Model/CustomCommand.swift
 run dictionary-test        Blitz/Features/Dictionary/Model/DictionaryEntry.swift \
                            Blitz/Features/Dictionary/Model/DictionaryMarkup.swift
+run dictation-test         Blitz/Features/Dictation/Model/*.swift \
+                           Blitz/Features/Dictation/Service/DictationAudioDucker.swift \
+                           Blitz/Platform/AppPaths.swift \
+                           Blitz/Features/Settings/AppSettingsKey.swift \
+                           Blitz/Features/Settings/Model/SettingsFileKey.swift \
+                           Blitz/Features/Backup/Model/SettingsBackupCoverage.swift
 run hid-key-mapping-test   Blitz/Features/HotKeys/Model/HIDKeyMapping.swift
 run hotkey-test            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapDetector.swift \
                            Blitz/Features/HotKeys/Model/GlobeTapDetector.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKey.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKeyDetector.swift \
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HotKeySpelling.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
@@ -509,6 +517,7 @@ run window-command-test    Blitz/Features/WindowManagement/Model/WindowCommand.s
 run window-preset-test     Blitz/Features/WindowManagement/Model/WindowCommand.swift \
                            Blitz/Features/WindowManagement/Model/WindowShortcutPreset.swift \
                            Blitz/Features/HotKeys/Model/DoubleTapModifier.swift \
+                           Blitz/Features/HotKeys/Model/ModifierKey.swift \
                            Blitz/Features/HotKeys/Model/HotKeyBinding.swift \
                            Blitz/Features/HotKeys/Model/HyperKey.swift \
                            Blitz/Platform/ASCIIKeyboardLayout.swift \

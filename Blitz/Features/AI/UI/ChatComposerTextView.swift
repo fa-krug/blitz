@@ -6,19 +6,26 @@ struct ChatComposerTextView: NSViewRepresentable {
     @Binding var text: String
     /// A new value pulls focus into the field: a switched chat is one you are about to type into.
     let focusKey: UUID
+    /// How a control beside the field reaches the text view this makes.
+    let handle: ComposerTextViewHandle
+    /// The view is about to show another chat or go away: whatever writes into it must stop.
+    let onInvalidate: (ComposerTextView) -> Void
     let onSubmit: () -> Void
 
     private static var font: NSFont { .preferredFont(forTextStyle: .body) }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text, onSubmit: onSubmit) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onInvalidate: onInvalidate, onSubmit: onSubmit)
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
+        let scroll = ComposerTextView.scrollableTextView()
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        guard let textView = scroll.documentView as? NSTextView else { return scroll }
+        guard let textView = scroll.documentView as? ComposerTextView else { return scroll }
+        handle.textView = textView
         textView.delegate = context.coordinator
         textView.drawsBackground = false
         textView.isRichText = false
@@ -36,9 +43,11 @@ struct ChatComposerTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let textView = scroll.documentView as? ComposerTextView else { return }
+        if context.coordinator.focusedKey != focusKey { onInvalidate(textView) }
         context.coordinator.text = $text
+        context.coordinator.onInvalidate = onInvalidate
         context.coordinator.onSubmit = onSubmit
-        guard let textView = scroll.documentView as? NSTextView else { return }
         // Only an outside write lands here; echoing the view's own text back would reset the caret.
         if textView.string != text { textView.string = text }
         guard context.coordinator.focusedKey != focusKey else { return }
@@ -48,6 +57,12 @@ struct ChatComposerTextView: NSViewRepresentable {
             guard let textView else { return }
             textView.window?.makeFirstResponder(textView)
         }
+    }
+
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        guard let textView = scroll.documentView as? ComposerTextView else { return }
+        coordinator.onInvalidate(textView)
+        textView.delegate = nil
     }
 
     /// Measured from the text rather than the text view, whose width lags the proposal by a pass.
@@ -71,11 +86,16 @@ struct ChatComposerTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var onInvalidate: (ComposerTextView) -> Void
         var onSubmit: () -> Void
         var focusedKey: UUID?
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void) {
+        init(
+            text: Binding<String>, onInvalidate: @escaping (ComposerTextView) -> Void,
+            onSubmit: @escaping () -> Void
+        ) {
             self.text = text
+            self.onInvalidate = onInvalidate
             self.onSubmit = onSubmit
         }
 
@@ -95,4 +115,13 @@ struct ChatComposerTextView: NSViewRepresentable {
             return true
         }
     }
+}
+
+/// One of Blitz's own editors, so dictation, snippets and Quick Actions write into it in process.
+final class ComposerTextView: NSTextView, InjectableTextView {}
+
+/// Lets the composer's mic reach the text view the representable made.
+@MainActor
+final class ComposerTextViewHandle {
+    weak var textView: ComposerTextView?
 }

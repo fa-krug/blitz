@@ -216,6 +216,13 @@ enum Theme {
         static let aiChatReadingWidth: CGFloat = 960
         /// The composer grows with its text up to this, then scrolls inside itself.
         static let aiChatComposerMaxHeight: CGFloat = 180
+        /// The dictation capsule: 21 bars and their gaps, with the capsule's own end rounding.
+        static let dictationPanel = CGSize(width: 160, height: 40)
+        static let dictationWaveBar: CGFloat = 3
+        static let dictationWaveGap: CGFloat = 3
+        /// Listening bars reach this tall at full level; the transcribing wave stays lower.
+        static let dictationWaveHeight: CGFloat = 25
+        static let dictationProcessingHeight: CGFloat = 9
         static let chatContextGauge: CGFloat = 14
         /// A source chip's title before it middle-truncates, so three chips share a row.
         static let chatSourceTitle: CGFloat = 200
