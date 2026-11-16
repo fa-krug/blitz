@@ -2,9 +2,15 @@ import Foundation
 
 struct CalcExpressionParser {
     static func scalar(_ tokens: [CalcToken]) -> Double? {
-        var parser = CalcExpressionParser(tokens: tokens, rates: nil)
-        guard let value = parser.parse(), case .scalar = value.kind, !value.isBoolean else { return nil }
+        guard let value = value(tokens), case .scalar = value.kind else { return nil }
         return value.effective
+    }
+
+    /// A phrase operand with its unit or currency kept; no exchange rates, so no conversion.
+    static func value(_ tokens: [CalcToken]) -> CalcValue? {
+        var parser = CalcExpressionParser(tokens: tokens, rates: nil)
+        guard let value = parser.parse(), !value.isBoolean else { return nil }
+        return value
     }
 
     let tokens: [CalcToken]
@@ -258,7 +264,9 @@ struct CalcExpressionParser {
                 unit: CalcUnits.baseUnits[dimension] ?? inverted)
         case (.unit(let lhs), .unit(let rhs)):
             if !lhs.isCompatible(with: rhs) || lhs.currency != nil || rhs.currency != nil {
-                return combine(left, right, dividing: true)
+                var ratio = combine(left, right, dividing: true)
+                ratio?.isFuelRatio = Set([lhs.category, rhs.category]) == [.volume, .length]
+                return ratio
             }
             guard lhs.category != .temperature else {
                 return fail("Division of temperature values is not supported.")
@@ -331,6 +339,18 @@ struct CalcExpressionParser {
         }
         let output = amount / unit.factor
         return output.isFinite ? CalcValue(amount: output, kind: .unit(unit)) : nil
+    }
+
+    /// Odd roots keep the sign, so `cube root of -8m3` is `-2 m` rather than no answer.
+    private func root(_ value: CalcValue, degree: Double) -> CalcValue? {
+        guard degree.truncatingRemainder(dividingBy: 2) == 1, value.effective < 0 else {
+            return power(value, exponent: 1 / degree)
+        }
+        var magnitude = value
+        magnitude.amount = -value.amount
+        guard var result = power(magnitude, exponent: 1 / degree) else { return nil }
+        result.amount = -result.amount
+        return result
     }
 
     private func power(_ value: CalcValue, exponent: Double) -> CalcValue? {
@@ -428,12 +448,16 @@ struct CalcExpressionParser {
                 if current == .ident("of") { position += 1 }
                 guard let value = parseOperand(), !value.isBoolean else { return nil }
                 operationCount += 1
-                if name == "square" { return power(value, exponent: 0.5) }
-                guard
-                    let result = power(
-                        CalcValue(amount: abs(value.effective), kind: value.kind), exponent: 1.0 / 3)
+                return root(value, degree: name == "square" ? 2 : 3)
+            }
+            if name == "root", let degree = number(at: position + 1), position + 2 < tokens.count,
+                tokens[position + 2] == .ident("of")
+            {
+                position += 3
+                guard degree >= 2, degree.rounded() == degree, let value = parseOperand(), !value.isBoolean
                 else { return nil }
-                return CalcValue(amount: value.amount < 0 ? -result.amount : result.amount, kind: result.kind)
+                operationCount += 1
+                return root(value, degree: degree)
             }
             if let constant = CalcMath.constants[name] {
                 position += 1
@@ -448,6 +472,14 @@ struct CalcExpressionParser {
                 position += 1
                 guard let argument = parseOperand(), !argument.isBoolean else { return nil }
                 operationCount += 1
+                if name == "log", current == .ident("base") {
+                    position += 1
+                    guard isScalar(argument.kind), let base = parseOperand(), isScalar(base.kind),
+                        !base.isBoolean,
+                        let result = CalcMath.evaluate("log", [argument.effective, base.effective])
+                    else { return nil }
+                    return derived(result, dimension: .scalar)
+                }
                 if isScalar(argument.kind) {
                     return derived(function(argument.effective), dimension: .scalar)
                 }
@@ -457,14 +489,7 @@ struct CalcExpressionParser {
                     return derived(function(argument.amount * unit.factor), dimension: .scalar)
                 }
                 if name == "sqrt" { return power(argument, exponent: 0.5) }
-                if name == "cbrt" {
-                    guard
-                        let result = power(
-                            CalcValue(amount: abs(argument.amount), kind: argument.kind), exponent: 1.0 / 3)
-                    else { return nil }
-                    return CalcValue(
-                        amount: argument.amount < 0 ? -result.amount : result.amount, kind: result.kind)
-                }
+                if name == "cbrt" { return root(argument, degree: 3) }
                 if ["abs", "floor", "ceil", "round", "trunc"].contains(name) {
                     return CalcValue(amount: function(argument.amount), kind: argument.kind)
                 }
@@ -616,6 +641,12 @@ struct CalcExpressionParser {
             return nil
         case .unit(let from):
             if let to = CalcUnits.byName[targetName] ?? compoundTarget(targetName) {
+                if !from.isCompatible(with: to), CalcUnits.reciprocal(from, to, fuelRatio: value.isFuelRatio)
+                {
+                    guard let output = CalcUnits.reciprocalValue(value.effective, from: from, to: to)
+                    else { return nil }
+                    return CalcValue(amount: output, kind: .unit(to))
+                }
                 guard from.isCompatible(with: to) else {
                     return fail(
                         "Cannot convert \(from.category.displayName) to \(to.category.displayName).")
@@ -672,6 +703,7 @@ struct CalcExpressionParser {
     ) -> Double? {
         recordCurrency(from.code)
         recordCurrency(to.code)
+        if from.code == to.code { return amount }
         guard let rates else {
             issue = "Exchange rates unavailable — check your connection."
             return nil
