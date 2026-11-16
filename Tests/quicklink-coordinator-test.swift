@@ -442,6 +442,7 @@ struct QuicklinkEditRequest {
     var quicklink: Quicklink?
     var browserTab: BrowserTab?
     var name = ""
+    var link = ""
 }
 enum DialogTone { case danger, neutral, success }
 
