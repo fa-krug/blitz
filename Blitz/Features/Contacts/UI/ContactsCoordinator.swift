@@ -120,25 +120,45 @@ final class ContactsCoordinator {
         paletteCoordinator.togglePalette(mode: .contacts, seeding: query.isEmpty ? nil : query)
     }
 
-    /// ↵ on a card in root search opens the list on that card, where every action is a key away.
+    /// ↵ on a card in root search; the card's page opens over it, one back step away.
     func showContact(entryID: String) {
         guard let contact = contact(entryID: entryID) else { return }
-        paletteCoordinator.showPalette(mode: .contacts, seeding: contact.title)
+        showCard(contact)
+    }
+
+    func showCard(_ contact: ContactItem) {
+        store.present(contact)
+        paletteCoordinator.navigate(to: .contactCard)
     }
 
     // MARK: - Row actions
 
-    /// ↵ on a row. The palette stays up behind the dialog, so the list shows the edit landing.
+    /// The editor page, over whatever opened it; saving or Escape steps back there.
     func edit(_ contact: ContactItem) {
-        Task {
-            let original = ContactDraft(editing: contact)
-            guard let draft = await core.editContact(original), draft != original else { return }
-            guard store.update(contact, with: draft) else {
-                await reportGone(contact)
-                return
-            }
-            core.showMessage("Contact saved")
+        store.beginEditing(contact)
+        paletteCoordinator.navigate(to: .contactEditor)
+    }
+
+    /// ↵ or ⌘↵ on the editor. An unchanged page writes nothing and simply steps back.
+    func saveEdit() {
+        guard let state = store.editor else { return }
+        let draft = state.draft
+        guard draft.isValid else {
+            core.showMessage("A contact needs a name, a number or an address", tone: .neutral)
+            return
         }
+        guard draft != state.original else {
+            paletteCoordinator.goBack()
+            return
+        }
+        guard let contact = store.contact(id: state.contactID), store.update(contact, with: draft)
+        else {
+            let title = store.contact(id: state.contactID)?.title ?? "this contact"
+            Task { await reportGone(title) }
+            return
+        }
+        paletteCoordinator.goBack()
+        core.showMessage("Contact saved")
     }
 
     /// The first number unless a menu row named one; the phone handler takes it from there.
@@ -171,6 +191,25 @@ final class ContactsCoordinator {
     func copy(_ field: ContactField) {
         paletteCoordinator.hidePalette(restoreFocus: false)
         Paster.copyPlainText(field.value)
+        core.showMessage("Copied \u{201C}\(field.value)\u{201D}")
+    }
+
+    /// ⇧⌘C — the first number unless a line was chosen, without opening the menu.
+    func copyPhone(_ contact: ContactItem, number: ContactField? = nil) {
+        guard let number = number ?? contact.phones.first else {
+            report("\(contact.title) has no phone number")
+            return
+        }
+        copy(number)
+    }
+
+    /// ⌥⌘C — the first address unless a line was chosen.
+    func copyEmail(_ contact: ContactItem, address: ContactField? = nil) {
+        guard let address = address ?? contact.emails.first else {
+            report("\(contact.title) has no email address")
+            return
+        }
+        copy(address)
     }
 
     func openInContacts(_ contact: ContactItem) {
@@ -214,9 +253,9 @@ final class ContactsCoordinator {
 
     // MARK: - Reports
 
-    private func reportGone(_ contact: ContactItem) async {
+    private func reportGone(_ title: String) async {
         _ = await core.reportFailure(
-            title: "Couldn't change \u{201C}\(contact.title)\u{201D}",
+            title: "Couldn't change \u{201C}\(title)\u{201D}",
             message: "It may have been changed or deleted somewhere else.",
             symbol: "person.crop.circle", recovery: nil)
     }

@@ -550,8 +550,8 @@ sole owner rule) and is the only presenter, so every confirmation in the app loo
 - **Click-away dismisses, but a form keeps what was typed.** `windowDidResignKey` resolves the dialog
   as its cancel rather than leaving it up: the panel floats at `.dialog` on every Space, so a dialog
   kept open after the user moved to another app would cover that app, keep the palette dimmed, and
-  refuse every other prompt while it waited. Losing an edit to a stray click is the cost, so New Event,
-  the reminder prompt and Edit Contact each keep a `FormDraftMemory`: a click-away that changed
+  refuse every other prompt while it waited. Losing an edit to a stray click is the cost, so New Event
+  and the reminder prompt each keep a `FormDraftMemory`: a click-away that changed
   something keeps that edit, and the next time the form opens **on the same opening draft** it starts
   from the edit instead. The opening draft is the subject — a blank `EventDraft()` for New Event, the
   record's own values for an edit, the prefill for a new reminder — so a kept edit never opens on a
@@ -714,7 +714,7 @@ bars, while a snippet's inline enumerated arguments remain `DialogChip`s. Two th
   default button's keycap says ⌘↵.
 - **An accessory can refuse its own primary action.** An invalid draft leaves the dialog up on ↵ and
   on a click alike, which is what a greyed-out button would say if `DialogAction` could carry one.
-- **A draft form survives a click-away.** `.eventDraft`, `.reminderDraft` and `.contactDraft` reopen
+- **A draft form survives a click-away.** `.eventDraft` and `.reminderDraft` reopen
   on the edit a click-away left behind, for the same subject only; see
   [Dialogs & HUD](#dialogs--hud).
 

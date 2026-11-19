@@ -1,8 +1,8 @@
 import Foundation
 
-/// What the contact prompt collects, before anything touches the address book.
+/// What the contact editor collects, before anything touches the address book.
 struct ContactDraft: Sendable, Equatable {
-    /// One phone or email row; `id` is nil for a value the prompt added.
+    /// One phone or email row; `id` is nil for a value the editor added.
     struct Field: Sendable, Equatable {
         var id: String?
         var label: String?

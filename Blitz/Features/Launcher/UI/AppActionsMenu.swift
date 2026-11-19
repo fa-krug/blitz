@@ -137,7 +137,7 @@ enum AppActionsMenu {
             return MeetingActionsMenu.content(meeting: meeting, core: core).items
         }
         if app.kind == .contact, let contact = core.contactsCoordinator.contact(entryID: app.id) {
-            return ContactActionsMenu.items(contact: contact, core: core, context: .launcher)
+            return ContactActionsMenu.items(contact: contact, core: core)
         }
         let primarySymbol =
             switch app.kind {

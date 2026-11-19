@@ -19,6 +19,10 @@ enum PaletteMode: String, CaseIterable, Identifiable {
     case meetingDetails
     case reminders
     case contacts
+    /// One contact's card, pushed from its row in root search or in Search Contacts.
+    case contactCard
+    /// The card's fields as a form; saving or Escape steps back to where it was opened from.
+    case contactEditor
     case uninstall
     case quicklinks
     case snippets
@@ -46,7 +50,7 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .schedule: return "calendar"
         case .meetingDetails: return "calendar"
         case .reminders: return "checklist"
-        case .contacts: return "person.crop.circle"
+        case .contacts, .contactCard, .contactEditor: return "person.crop.circle"
         case .uninstall: return "trash"
         case .quicklinks: return Quicklink.sfSymbol
         case .snippets: return "curlybraces"
@@ -73,6 +77,8 @@ enum PaletteMode: String, CaseIterable, Identifiable {
         case .meetingDetails: return "Meeting details"
         case .reminders: return "Search reminders…"
         case .contacts: return "Search contacts…"
+        case .contactCard: return "Search phone numbers and email addresses…"
+        case .contactEditor: return "Edit contact"
         case .uninstall: return "Filter files and folders by name…"
         case .quicklinks: return "Search quicklinks…"
         case .snippets: return "Search snippets…"

@@ -116,6 +116,11 @@ struct RootPaletteView: View {
         case .contacts:
             return ContactsScreen(
                 store: contactsStore, core: core, vm: vm, openActions: openActions)
+        case .contactCard:
+            return ContactCardScreen(
+                store: contactsStore, core: core, vm: vm, openActions: openActions)
+        case .contactEditor:
+            return ContactEditorScreen(store: contactsStore, core: core, vm: vm)
         case .clipboard:
             return ClipboardScreen(
                 store: store, core: core, vm: vm, openActions: openActions,
@@ -529,6 +534,11 @@ struct RootPaletteView: View {
                 if vm.mode != .menuSearch { menuSearch.reset() }
                 if vm.mode != .switchWindows { windowSwitch.reset() }
                 if vm.mode != .meetingDetails { calendarStore.clearDetails() }
+                if vm.mode != .contactCard, vm.mode != .contactEditor {
+                    contactsStore.endPresentation()
+                } else if vm.mode != .contactEditor {
+                    contactsStore.endEditing()
+                }
                 if vm.mode != .rooms, vm.mode != .roomWindows { core.roomCoordinator.screensDidClose() }
                 // Leaving the screen any other way than Escape still ends the command's session.
                 if vm.mode != .extensionCommand, extensions.running != nil, !extensions.isAuthorizing {

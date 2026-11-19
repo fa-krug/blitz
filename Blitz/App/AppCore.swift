@@ -1063,11 +1063,6 @@ final class AppCore {
         await dialogs.editReminder(draft, isNew: isNew)
     }
 
-    /// The contact prompt, for the same reason.
-    func editContact(_ draft: ContactDraft) async -> ContactDraft? {
-        await dialogs.editContact(draft)
-    }
-
     /// A one-line text prompt, for the same reason.
     func editText(
         title: String, message: String? = nil, symbol: String, text: String, placeholder: String,

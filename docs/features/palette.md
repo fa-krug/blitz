@@ -118,6 +118,8 @@ highlighted ([clipboard.md](clipboard.md#pinned-entries)), and Search Quicklinks
 | `.fileSearch` | `FileSearchScreen` | `FileSearchList` (see [file-search.md](file-search.md)) |
 | `.schedule` | `ScheduleScreen` | `ScheduleList` (see [calendar.md](calendar.md)) |
 | `.meetingDetails` | `MeetingDetailsScreen` | `MeetingDetailsView` (see [calendar.md](calendar.md#the-details-page)) |
+| `.contactCard` | `ContactCardScreen` | `ContactCardView` (see [contacts.md](contacts.md#the-card)) |
+| `.contactEditor` | `ContactEditorScreen` | `ContactEditorView` (see [contacts.md](contacts.md#the-editor)) |
 | `.uninstall` | `UninstallScreen` | `UninstallList` (see [uninstall.md](uninstall.md)) |
 | `.quicklinks` | `QuicklinkListScreen` | `QuicklinkList` + preview (see [quicklinks.md](quicklinks.md#search-quicklinks)) |
 | `.snippets` | `SnippetsScreen` | `SnippetsList` + preview (see [snippets.md](snippets.md#search-snippets)) |
