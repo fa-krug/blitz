@@ -41,7 +41,6 @@ enum DialogAccessory {
     case volume(VolumeState)
     case eventDraft(EventDraftState)
     case reminderDraft(ReminderDraftState)
-    case contactDraft(ContactDraftState)
     case snippetArguments(SnippetArgumentsState)
     case text(DialogTextState)
     case multilineText(DialogTextState)
@@ -69,7 +68,6 @@ enum DialogAccessory {
         switch self {
         case .eventDraft(let state): state.draft.isValid
         case .reminderDraft(let state): state.draft.isValid
-        case .contactDraft(let state): state.draft.isValid
         case .multilineText(let state): !state.isBlank
         case .volume, .snippetArguments, .text: true
         }

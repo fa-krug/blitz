@@ -12,7 +12,6 @@ final class DialogController: NSObject, NSWindowDelegate {
     private let newEventDrafts = FormDraftMemory<EventDraft>()
     private let newReminderDrafts = FormDraftMemory<ReminderDraft>()
     private let reminderEditDrafts = FormDraftMemory<ReminderDraft>()
-    private let contactEditDrafts = FormDraftMemory<ContactDraft>()
 
     init(settings: AppSettings, onPresentationChanged: @escaping (Bool) -> Void) {
         self.settings = settings
@@ -115,23 +114,6 @@ final class DialogController: NSObject, NSWindowDelegate {
             defaultIndex: 0, cancelIndex: 1, accessory: .reminderDraft(state))
         let choice = await present(request) { clickedAway in
             drafts.settle(state.draft, openedOn: draft, clickedAway: clickedAway)
-        }
-        guard choice == 0, state.draft.isValid else { return nil }
-        return state.draft
-    }
-
-    func editContact(_ draft: ContactDraft) async -> ContactDraft? {
-        let state = ContactDraftState(draft: contactEditDrafts.draft(openingOn: draft))
-        let request = DialogRequest(
-            title: "Edit Contact", message: "Saved to every device the card syncs to.",
-            symbol: "person.crop.circle", tone: .neutral,
-            actions: [
-                DialogAction(title: "Save"),
-                DialogAction(title: "Cancel", role: .cancel)
-            ],
-            defaultIndex: 0, cancelIndex: 1, accessory: .contactDraft(state))
-        let choice = await present(request) { [contactEditDrafts] clickedAway in
-            contactEditDrafts.settle(state.draft, openedOn: draft, clickedAway: clickedAway)
         }
         guard choice == 0, state.draft.isValid else { return nil }
         return state.draft

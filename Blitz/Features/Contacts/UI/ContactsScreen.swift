@@ -10,7 +10,7 @@ struct ContactsScreen: PaletteScreen {
     /// Filtering keeps the store's order, so these are exactly the rows the groups walk.
     var rows: [ContactItem] { ContactDirectory.matching(store.contacts, query: vm.query) }
 
-    var primaryActionTitle: String { "Edit Contact" }
+    var primaryActionTitle: String { "Show Contact" }
 
     private func contact(at selection: Int) -> ContactItem? {
         let rows = rows
@@ -19,12 +19,12 @@ struct ContactsScreen: PaletteScreen {
 
     func actions(at selection: Int) -> PopoverMenuContent? {
         guard let contact = contact(at: selection) else { return nil }
-        return ContactActionsMenu.content(contact: contact, core: core, context: .list)
+        return ContactActionsMenu.content(contact: contact, core: core)
     }
 
     func activate(at selection: Int) {
         guard let contact = contact(at: selection) else { return }
-        core.contactsCoordinator.edit(contact)
+        core.contactsCoordinator.showCard(contact)
     }
 
     /// ⌘↵ — call, the other thing a card is for.
@@ -42,8 +42,14 @@ struct ContactsScreen: PaletteScreen {
     }
 
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
-        guard shortcut == .openInApp, let contact = contact(at: selection) else { return false }
-        core.contactsCoordinator.openInContacts(contact)
+        guard let contact = contact(at: selection) else { return false }
+        switch shortcut {
+        case .edit: core.contactsCoordinator.edit(contact)
+        case .openInApp: core.contactsCoordinator.openInContacts(contact)
+        case .copyFile: core.contactsCoordinator.copyPhone(contact)
+        case .copyName: core.contactsCoordinator.copyEmail(contact)
+        default: return false
+        }
         return true
     }
 
@@ -62,7 +68,7 @@ struct ContactsScreen: PaletteScreen {
                 selectedID: rows.indices.contains(selection) ? rows[selection].id : nil,
                 searchableIDs: store.searchableIDs,
                 scroll: scroll,
-                onActivate: { core.contactsCoordinator.edit($0) },
+                onActivate: { core.contactsCoordinator.showCard($0) },
                 onActions: { contact in
                     if let index = rows.firstIndex(of: contact) { vm.selection = index }
                     openActions()
@@ -104,69 +110,89 @@ struct ContactsScreen: PaletteScreen {
     }
 }
 
-/// The ⌘K menu for a contact, from its own list or from its row in root search.
+/// The ⌘K menus for a contact: from its row in a list, or from a line on its own card.
 @MainActor
 enum ContactActionsMenu {
-    enum Context {
-        /// Search Contacts, where ↵ edits.
-        case list
-        /// A marked card in root search, where ↵ opens it in Search Contacts.
-        case launcher
+    /// From Search Contacts or a marked card in root search, where ↵ opens the card.
+    static func content(contact: ContactItem, core: AppCore) -> PopoverMenuContent {
+        PopoverMenuContent(header: contact.title, items: items(contact: contact, core: core))
     }
 
-    static func content(
-        contact: ContactItem, core: AppCore, context: Context
-    ) -> PopoverMenuContent {
-        PopoverMenuContent(
-            header: contact.title, items: items(contact: contact, core: core, context: context))
-    }
-
-    static func items(
-        contact: ContactItem, core: AppCore, context: Context
-    ) -> [PopoverMenuItem] {
+    static func items(contact: ContactItem, core: AppCore) -> [PopoverMenuItem] {
         let coordinator = core.contactsCoordinator
-        var items: [PopoverMenuItem] =
-            switch context {
-            case .list:
-                [
-                    PopoverMenuItem(title: "Edit Contact", systemImage: "pencil", shortcut: "↵") {
-                        coordinator.edit(contact)
-                    }
-                ]
-            case .launcher:
-                [
-                    PopoverMenuItem(
-                        title: "Show Contact", systemImage: "person.crop.circle", shortcut: "↵"
-                    ) {
-                        coordinator.showContact(entryID: contact.entryID)
-                    }
-                ]
+        var items = [
+            PopoverMenuItem(title: "Show Contact", systemImage: "person.crop.circle", shortcut: "↵") {
+                coordinator.showCard(contact)
             }
+        ]
         items += reachItems(contact: contact, coordinator: coordinator)
         items += copyItems(contact: contact, coordinator: coordinator)
-        items.append(
-            PopoverMenuItem(
-                title: "Open in Contacts", systemImage: "person.crop.rectangle.stack",
-                startsSection: true, shortcut: "⌘O"
-            ) {
-                coordinator.openInContacts(contact)
-            })
-        if context == .launcher {
+        items += cardItems(contact: contact, coordinator: coordinator)
+        return items
+    }
+
+    /// On the card, the selected line leads: ↵ reaches it and ⌘↵ copies it.
+    static func cardContent(
+        contact: ContactItem, row: ContactCardRow?, core: AppCore
+    ) -> PopoverMenuContent {
+        let coordinator = core.contactsCoordinator
+        var items: [PopoverMenuItem] = []
+        if let row {
+            let isPhone = row.kind == .phone
             items.append(
-                PopoverMenuItem(title: "Edit Contact", systemImage: "pencil") {
-                    coordinator.edit(contact)
+                PopoverMenuItem(
+                    title: "\(isPhone ? "Call" : "Email") \(row.field.value)",
+                    icon: .symbol(isPhone ? "phone" : "envelope"), shortcut: "↵"
+                ) {
+                    reach(row, of: contact, coordinator: coordinator)
+                })
+            items.append(
+                PopoverMenuItem(
+                    title: isPhone ? "Copy Phone Number" : "Copy Email Address",
+                    icon: .symbol("doc.on.doc"), shortcut: "⌘↵"
+                ) {
+                    coordinator.copy(row.field)
                 })
         }
+        items += cardItems(contact: contact, coordinator: coordinator)
+        return PopoverMenuContent(header: contact.title, items: items)
+    }
+
+    /// One line of the card, reached the way its kind is: a call or a new message.
+    static func reach(
+        _ row: ContactCardRow, of contact: ContactItem, coordinator: ContactsCoordinator
+    ) {
+        switch row.kind {
+        case .phone: coordinator.call(contact, number: row.field)
+        case .email: coordinator.email(contact, address: row.field)
+        }
+    }
+
+    /// The rows every menu ends on: the card itself, then whether root search lists it.
+    private static func cardItems(
+        contact: ContactItem, coordinator: ContactsCoordinator
+    ) -> [PopoverMenuItem] {
         let searchable = coordinator.isSearchable(contact)
-        items.append(
+        return [
+            PopoverMenuItem(
+                title: "Edit Contact", systemImage: "pencil", startsSection: true, shortcut: "⌘E"
+            ) {
+                coordinator.edit(contact)
+            },
+            PopoverMenuItem(
+                title: "Open in Contacts", systemImage: "person.crop.rectangle.stack",
+                shortcut: "⌘O"
+            ) {
+                coordinator.openInContacts(contact)
+            },
             PopoverMenuItem(
                 title: searchable ? "Remove from Launcher Search" : "Show in Launcher Search",
                 systemImage: searchable ? "minus.magnifyingglass" : "plus.magnifyingglass",
-                startsSection: context == .list
+                startsSection: true
             ) {
                 coordinator.toggleSearchable(contact)
-            })
-        return items
+            }
+        ]
     }
 
     /// One row per number and address, so a card's second line is as reachable as its first.
@@ -201,7 +227,7 @@ enum ContactActionsMenu {
             items.append(
                 PopoverMenuItem(
                     title: "Copy Phone Number", icon: .symbol("doc.on.doc"), startsSection: true,
-                    detail: phone.value
+                    shortcut: "⇧⌘C", detail: phone.value
                 ) {
                     coordinator.copy(phone)
                 })
@@ -210,7 +236,7 @@ enum ContactActionsMenu {
             items.append(
                 PopoverMenuItem(
                     title: "Copy Email Address", icon: .symbol("doc.on.doc"),
-                    startsSection: items.isEmpty, detail: email.value
+                    startsSection: items.isEmpty, shortcut: "⌥⌘C", detail: email.value
                 ) {
                     coordinator.copy(email)
                 })

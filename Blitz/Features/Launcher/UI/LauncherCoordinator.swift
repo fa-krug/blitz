@@ -147,7 +147,7 @@ final class LauncherCoordinator {
             calendarCoordinator.activateMeeting(id: id)
             return
         }
-        // Before the palette hides: the card opens in Search Contacts, in this same palette.
+        // Before the palette hides: the card's page opens in this same palette.
         if app.kind == .contact {
             core.contactsCoordinator.showContact(entryID: app.id)
             return

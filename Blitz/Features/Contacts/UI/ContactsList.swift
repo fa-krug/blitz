@@ -84,7 +84,9 @@ private struct ContactRow: View {
 
     var body: some View {
         HStack(spacing: metrics.spacing.lg) {
-            ContactMonogram(initials: contact.initials, size: metrics.size.resultRowIcon)
+            ContactMonogram(
+                initials: contact.initials, size: metrics.size.resultRowIcon,
+                font: metrics.typography.rowTrailing.weight(.semibold))
             Text(contact.title)
                 .font(metrics.typography.rowTitle)
                 .lineLimit(1)
@@ -133,15 +135,14 @@ private struct ContactRow: View {
 }
 
 /// The card's initials in a disc, standing in for a photo Blitz never reads.
-private struct ContactMonogram: View {
-    @Environment(\.metrics) private var metrics
+struct ContactMonogram: View {
     let initials: String
     let size: CGFloat
+    let font: Font
 
     var body: some View {
         Text(initials)
-            .font(metrics.typography.rowTrailing)
-            .fontWeight(.semibold)
+            .font(font)
             .foregroundStyle(Theme.Colors.textSecondary)
             .frame(width: size, height: size)
             .background(Circle().fill(Theme.Colors.controlSurface))

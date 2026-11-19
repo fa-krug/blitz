@@ -25,6 +25,10 @@ final class ContactsStore {
     private(set) var hasLoaded = false
     /// Cards the reader asked to find from root search; inclusions, since marking is the opt-in.
     private(set) var searchableIDs: Set<String>
+    /// The card the palette's card and editor pages show; nil once the palette leaves both.
+    private(set) var presentedID: ContactItem.ID?
+    /// Held here rather than by the view, so a palette hidden mid-edit re-summons on the same edit.
+    private(set) var editor: ContactDraftState?
 
     /// Fires after the snapshot or the marks move, so the launcher's slice follows both.
     @ObservationIgnored var onChange: (() -> Void)?
@@ -198,6 +202,34 @@ final class ContactsStore {
         byID[id]
     }
 
+    /// Read through `contacts`, so a page showing the card follows each reload.
+    var presented: ContactItem? {
+        guard let presentedID else { return nil }
+        access(keyPath: \.contacts)
+        return byID[presentedID]
+    }
+
+    // MARK: - Presentation
+
+    func present(_ contact: ContactItem) {
+        presentedID = contact.id
+        editor = nil
+    }
+
+    func beginEditing(_ contact: ContactItem) {
+        presentedID = contact.id
+        editor = ContactDraftState(contact: contact)
+    }
+
+    func endEditing() {
+        editor = nil
+    }
+
+    func endPresentation() {
+        presentedID = nil
+        editor = nil
+    }
+
     /// A chat search's cards, read fresh off main in `ids` order; nil without access.
     func toolCards(ids: [ContactItem.ID]) async -> [ContactToolCatalog.Card]? {
         refreshAccess()
@@ -254,7 +286,7 @@ final class ContactsStore {
 
     // MARK: - Writing
 
-    /// False when the card is gone or will not save; anything the prompt does not show is kept.
+    /// False when the card is gone or will not save; anything the editor does not show is kept.
     func update(_ item: ContactItem, with draft: ContactDraft) -> Bool {
         let store = currentStore()
         guard access == .granted,
@@ -281,7 +313,7 @@ final class ContactsStore {
         return true
     }
 
-    /// An existing value keeps its identifier and label; one the prompt added takes `newLabel`.
+    /// An existing value keeps its identifier and label; one the editor added takes `newLabel`.
     private static func labeled<Value: NSCopying & NSSecureCoding>(
         _ fields: [ContactDraft.Field], replacing existing: [CNLabeledValue<Value>],
         newLabel: String, value: (String) -> Value

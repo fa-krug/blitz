@@ -27,8 +27,13 @@ email or open in Contacts; the same list is a **fallback** for any launcher quer
 - **An edit writes only what changed.** Names and company always go back; the phone and email lists
   only when they differ from the card's, so fixing a typo never rewrites a number synced elsewhere.
   A kept value keeps its identifier and label; a cleared row removes that value; a new row takes
-  `mobile` or `home`. Anything the prompt does not show — photo, addresses, notes, dates — is never
+  `mobile` or `home`. Anything the editor does not show — photo, addresses, notes, dates — is never
   touched.
+- **The card and its editor are palette pages, never a window of their own.** Both are pushed with
+  `PaletteCoordinator.navigate`, so Escape or a save steps back to the row that opened them. Which card
+  they show, and the editor's fields, live on `ContactsStore` (`presentedID`, `editor`) — a palette
+  hidden mid-edit re-summons on the same edit — and `RootPaletteView` ends both once the palette
+  leaves the two pages.
 - **Marks live on `ContactsStore`, not `AppSettings`.** Contact identifiers are machine-specific, so
   they stay out of the backup, as reminder lists and calendars do. They store inclusions: a card is
   in root search only once someone asked for it, and an address book of thousands never floods it.
@@ -38,7 +43,7 @@ email or open in Contacts; the same list is a **fallback** for any launcher quer
 - **`ContactItem`** / **`ContactField`** — one card and one labelled number or address, flattened.
   The card titles itself by its formatted name, else its company, else its first address or number.
   Its entry id is `contact:` plus the identifier, colon and all.
-- **`ContactDraft`** — what the prompt collects, and whether its lists changed.
+- **`ContactDraft`** — what the editor collects, and whether its lists changed.
 - **`ContactDirectory`** — the order (title, case and accent aside), the letter runs, and the
   search: every word must hit a name, the company or an address, and a query that reads as a number
   matches phone digits with formatting and a trunk `0` ignored, so `0151 234` finds `+49 151 234…`.
@@ -53,13 +58,17 @@ a disc — Blitz never reads photos.
 
 | Key | Does |
 | --- | --- |
-| ↵ | Edit Contact — the prompt, filled in. The palette stays up behind it, so the edit lands in view. |
+| ↵ | Show Contact — the card's page, one back step from the list |
+| ⌘E | Edit Contact — the editor page |
 | ⌘↵ | Call the first number, through `tel:` and the Mac's phone handler |
 | ⌃⌘↵ | Email the first address, through `mailto:` and the default mail app |
 | ⌘O | Open in Contacts, through `addressbook://`, or the bare app with no handler |
+| ⇧⌘C | Copy the first phone number |
+| ⌥⌘C | Copy the first email address |
 
-⌘K lists every number and address as its own Call or Email row, then Copy Phone Number and Copy
-Email Address for the first of each, Open in Contacts, and Show in / Remove from Launcher Search. A
+⌘K lists Show Contact, every number and address as its own Call or Email row, then Copy Phone Number
+and Copy Email Address for the first of each, Edit Contact, Open in Contacts, and Show in / Remove
+from Launcher Search. A
 miss — no number, nothing to place calls — reports through the HUD, not a dialog.
 
 Without access the empty list offers the way back, as Calendar's and Reminders' do: a denial opens
@@ -74,8 +83,9 @@ move. It carries the company as its subtitle and its addresses as keywords, and 
 Contacts pane, so no category switch gates it. `canHideFromSearch` is false: unmarking is the way
 out, and both places that mark — the row's ⌘K menu and the pane — unmark too.
 
-↵ opens Search Contacts on that card, where every action is a key away; ⌘↵, ⌃⌘↵ and ⌘O call, email
-and open it straight from root search, and its ⌘K menu leads with the same rows as in the list.
+↵ opens the card's page over root search, so Escape comes back to the query; ⌘↵, ⌃⌘↵, ⌘O, ⌘E,
+⇧⌘C and ⌥⌘C call, email, open, edit and copy it straight from root search — a contact has no
+deeplink, so ⇧⌘C is free for its number — and its ⌘K menu is the list's own.
 
 ## Fallback
 
@@ -104,13 +114,33 @@ can reach a model; `contacts-test` and `personal-tool-test` compile the catalog.
 JSON, with how many cards matched in all. Without macOS's grant, or before the first read lands,
 the call is refused with a sentence.
 
-## The prompt
+## The card
 
-`ContactDraftFields` is a dialog accessory: first and last name, company, then one field per number
-and per address, each prompted with its label, and one blank row after each list to add a value. A
-dialog is measured once as it is presented, so the blank row is laid out up front rather than grown
-on demand. Clicking away keeps the edit: reopening the same card, unchanged since, starts from it,
-while Escape and Cancel discard it ([ui.md](../ui.md#dialogs--hud)).
+`.contactCard` is `ContactCardScreen`: the monogram, name and company, then a row per number under
+**Phone** and per address under **Email**, in the card's own order. The search field narrows those
+rows by value or label. A card with neither still answers ↵, by opening the editor.
+
+| Key | Does |
+| --- | --- |
+| ↵ | Call the selected number, or write to the selected address |
+| ⌘↵ | Copy the selected line |
+| ⌘E | Edit Contact |
+| ⌘O | Open in Contacts |
+| ⇧⌘C | Copy the selected number, else the first |
+| ⌥⌘C | Copy the selected address, else the first |
+
+A copy hides the palette and confirms through the HUD. ⌘K leads with the selected line's two actions, then Edit Contact, Open in Contacts and Show in /
+Remove from Launcher Search.
+
+## The editor
+
+`.contactEditor` is `ContactEditorScreen`: the search field steps aside and a labelled field per
+name part, company, number and address takes the keyboard. ↑/↓ and ⇥ walk the fields, wrapping as a
+form's do; ↵ in any field or ⌘↵ saves, and Escape steps back without writing. Each list ends on one
+blank row to add a value, and typing into it grows the next, so a card can gain any number of lines.
+An unchanged page writes nothing; a page with nothing left to name the card refuses through the HUD.
+`ContactDraftState` holds the fields and the card's draft as it opened, which is what an unchanged
+save is measured against.
 
 ## Settings
 

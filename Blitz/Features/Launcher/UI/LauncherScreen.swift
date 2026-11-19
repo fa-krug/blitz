@@ -442,9 +442,10 @@ struct LauncherScreen: PaletteScreen {
         case .hideFromSearch: return hideFromSearch(at: selection)
         case .quit, .forceQuit: return quit(at: selection, force: shortcut == .forceQuit)
         case .restart: return restart(at: selection)
-        case .copyFile: return copyDeepLink(at: selection)
+        case .copyFile: return copyDeepLink(at: selection) || copyContact(shortcut, at: selection)
+        case .copyName: return copyContact(shortcut, at: selection)
         case .configure: return configure(at: selection)
-        case .edit: return editQuicklink(at: selection)
+        case .edit: return editQuicklink(at: selection) || editContact(at: selection)
         case .copyPath: return copyQuicklink(at: selection)
         case .favoriteSlot(let index): return launchFavorite(at: index)
         case .copyCalculation: return copyCalculation(at: selection)
@@ -478,6 +479,24 @@ struct LauncherScreen: PaletteScreen {
             let quicklink = quicklink(for: app)
         else { return false }
         core.quicklinkCoordinator.editQuicklink(quicklink)
+        return true
+    }
+
+    /// ⇧⌘C and ⌥⌘C on a marked card copy its number and its address; a contact has no deeplink.
+    private func copyContact(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
+        guard let contact = contact(at: selection) else { return false }
+        if shortcut == .copyFile {
+            core.contactsCoordinator.copyPhone(contact)
+        } else {
+            core.contactsCoordinator.copyEmail(contact)
+        }
+        return true
+    }
+
+    /// ⌘E on a marked card opens its editor, as in Search Contacts.
+    private func editContact(at selection: Int) -> Bool {
+        guard let contact = contact(at: selection) else { return false }
+        core.contactsCoordinator.edit(contact)
         return true
     }
 

@@ -86,6 +86,11 @@ final class PaletteCoordinator {
         }
     }
 
+    /// A page's own way out, as Escape takes it: the screen under it, else the palette closes.
+    func goBack() {
+        if !palette.pop() { hidePalette() }
+    }
+
     /// Shows the palette, honoring Pop to Root Search. See docs/features/palette.md#state-flow.
     func showPalette(
         mode: PaletteMode, restoreAnyMode: Bool = false, seeding query: String? = nil
